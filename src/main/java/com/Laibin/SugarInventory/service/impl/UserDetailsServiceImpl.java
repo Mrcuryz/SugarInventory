@@ -27,19 +27,24 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     private PermissionMapper permissionMapper;
 
     @Override
-    public UserDetails loadUserByUsername(String employeeId) {
-        User user = userMapper.selectByEmployeeId(employeeId);
+    public UserDetails loadUserByUsername(String idOrEmployeeId) {
+        User user = null;
+        if (idOrEmployeeId.matches("\\d+")) {
+            user = userMapper.selectById(Integer.parseInt(idOrEmployeeId));  // 根据 userId 查询
+        } else {
+            user = userMapper.selectByEmployeeId(idOrEmployeeId);  // 根据 employeeId 查询
+        }
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
 
         // 查询权限列表
         List<Permission> permissions = permissionMapper.selectPermissionsByRoleCode(user.getRoleCode());
-
         // 构建权限集合
         List<SimpleGrantedAuthority> authorities = permissions.stream()
                 .map(p -> new SimpleGrantedAuthority(p.getPermCode()))
                 .collect(Collectors.toList());
+
         return new LoginUser(user, authorities);
     }
 }

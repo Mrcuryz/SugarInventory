@@ -1,8 +1,8 @@
 package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.PageResult;
-import com.Laibin.SugarInventory.domain.dto.EmployeeImportDTO;
 import com.Laibin.SugarInventory.domain.dto.EmployeeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.EmployeeUpdateDTO;
 import com.Laibin.SugarInventory.domain.po.EmployeeRoster;
 import com.Laibin.SugarInventory.mapper.EmployeeRosterMapper;
 import com.Laibin.SugarInventory.service.EmployeeService;
@@ -74,6 +74,26 @@ public class EmployeeServiceImpl extends ServiceImpl<EmployeeRosterMapper, Emplo
         // 查询总记录数
         Long total = rosterMapper.countEmployee(queryDTO);
         return new PageResult<>(total, list);
+    }
+
+    @Transactional
+    @Override
+    public EmployeeRoster updateEmployee(EmployeeUpdateDTO dto) {
+        int rows = rosterMapper.updateEmployee(dto);
+        if (rows < 1) {
+            throw new RuntimeException("更新失败，员工ID不存在或数据未变更");
+        }
+        return rosterMapper.selectById(dto.getId());
+    }
+
+    @Transactional
+    @Override
+    public int clearResignedEmployees() {
+        int rows = rosterMapper.deleteResignedEmployees();
+        if (rows < 1) {
+            throw new RuntimeException("没有离职员工可清理");
+        }
+        return rows;
     }
 
     private String getCellStringValue(Cell cell) {

@@ -35,11 +35,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 Integer userId = jwtUtils.getUserIdFromToken(token);
 
+                System.out.println("JWT Token :" + token);
+                System.out.println("User ID :" + userId);
                 // 检查用户是否存在
                 UserDetails userDetails = null;
                 if (userId != null) {
                     try {
                         userDetails = userDetailsService.loadUserByUsername(userId.toString());
+                        System.out.println("User Details :" + userDetails.toString());
                     } catch (BusinessException e) {
                         // 捕获用户不存在异常，返回 401 Unauthorized
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

@@ -1,12 +1,10 @@
 package com.Laibin.SugarInventory.mapper;
 
 import com.Laibin.SugarInventory.domain.dto.EmployeeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.EmployeeUpdateDTO;
 import com.Laibin.SugarInventory.domain.po.EmployeeRoster;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
@@ -24,11 +22,17 @@ public interface EmployeeRosterMapper extends BaseMapper<EmployeeRoster> {
     @Select("SELECT COUNT(*) FROM employee_roster WHERE employee_id = #{employeeId}")
     boolean existsByEmployeeId(@Param("employeeId") String employeeId);
 
+    @Select("SELECT * FROM employee_roster WHERE name = #{name}")
+    EmployeeRoster selectByName(@Param("name") String name);
+
     @Select("SELECT COUNT(*) FROM employee_roster WHERE mobile = #{mobile}")
     boolean existsByMobile(@Param("mobile") String mobile);
 
     @Select("SELECT * FROM employee_roster WHERE mobile = #{mobile}")
     EmployeeRoster selectByMobile(@Param("mobile") String mobile);
+
+    @Delete("DELETE FROM employee_roster WHERE status = '离职'")
+    int deleteResignedEmployees();
 
     @Select("<script>" +
             "SELECT * FROM employee_roster " +
@@ -59,4 +63,19 @@ public interface EmployeeRosterMapper extends BaseMapper<EmployeeRoster> {
             "</where>" +
             "</script>")
     Long countEmployee(@Param("query") EmployeeQueryDTO query);
+
+    @Update("<script>" +
+            "UPDATE employee_roster " +
+            "<set>" +
+            "   <if test='dto.employeeId != null'> employee_id = #{dto.employeeId}, </if>" +
+            "   <if test='dto.name != null'> name = #{dto.name}, </if>" +
+            "   <if test='dto.mobile != null'> mobile = #{dto.mobile}, </if>" +
+            "   <if test='dto.department != null'> department = #{dto.department}, </if>" +
+            "   <if test='dto.position != null'> position = #{dto.position}, </if>" +
+            "   <if test='dto.status != null'> status = #{dto.status}, </if>" +
+            "   <if test='dto.roleCode != null'> role_code = #{dto.roleCode}, </if>" +
+            "</set>" +
+            "WHERE id = #{dto.id}" +
+            "</script>")
+    int updateEmployee(@Param("dto") EmployeeUpdateDTO dto);
 }

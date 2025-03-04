@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.EmployeeVerifyDTO;
+import com.Laibin.SugarInventory.domain.dto.WebLoginDTO;
 import com.Laibin.SugarInventory.domain.dto.WechatLoginDTO;
 import com.Laibin.SugarInventory.domain.dto.WechatPhoneDTO;
 import com.Laibin.SugarInventory.domain.vo.AuthVO;
@@ -20,6 +21,12 @@ public class AuthController {
 
     @Autowired
     private AuthService authService;
+
+    @Operation(summary = "Web 端管理员登录", description = "使用姓名+统一口令登录")
+    @PostMapping("/web-login")
+    public Result<AuthVO> webLogin(@RequestBody WebLoginDTO dto) {
+        return authService.handleWebLogin(dto.getName(), dto.getPassword());
+    }
 
     @Operation(summary = "微信登录", description = "使用微信临时登录凭证进行登录，返回 JWT Token 和用户基本信息")
     @PostMapping("/wechat-login")
