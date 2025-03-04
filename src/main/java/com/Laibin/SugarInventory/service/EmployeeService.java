@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.service;
 
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.EmployeeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.EmployeeUpdateDTO;
 import com.Laibin.SugarInventory.domain.po.EmployeeRoster;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,4 +22,10 @@ public interface EmployeeService extends IService<EmployeeRoster> {
     void importEmployeeRoster(MultipartFile file);
 
     PageResult<EmployeeRoster> queryEmployee(EmployeeQueryDTO queryDTO);
+
+    @Transactional
+    EmployeeRoster updateEmployee(EmployeeUpdateDTO dto);
+
+    @Transactional
+    int clearResignedEmployees();
 }

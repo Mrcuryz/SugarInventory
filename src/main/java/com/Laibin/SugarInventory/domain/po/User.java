@@ -39,12 +39,11 @@ public class User extends BaseEntity implements UserDetails {
     private String openid;
     @TableField("role_code")
     private String roleCode;
-    private String group;
     private String employeeId;
-    private String mobile;
     private LocalDateTime createdAt;
     private BindStatus bindStatus;
     private BindMethod bindMethod;
+    private String loginType;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

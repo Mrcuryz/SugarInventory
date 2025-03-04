@@ -3,6 +3,7 @@ package com.Laibin.SugarInventory.service.impl;
 import com.Laibin.SugarInventory.SpringSecurity.JwtUtils;
 import com.Laibin.SugarInventory.SpringSecurity.WechatClient;
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.EmployeeVerifyDTO;
 import com.Laibin.SugarInventory.domain.dto.LoginStatusDTO;
 import com.Laibin.SugarInventory.domain.dto.SessionInfo;
@@ -41,6 +42,50 @@ public class AuthServiceImpl implements AuthService {
     private final WechatAuthService wechatAuth;
     @Autowired
     private final EmployeeRosterMapper rosterMapper;
+
+    private static final String WEB_LOGIN_PASSWORD = "AdminSecret";
+
+    @Override
+    public Result<AuthVO> handleWebLogin(String name, String password) {
+        if (!WEB_LOGIN_PASSWORD.equals(password)) {
+            throw new BusinessException("口令错误");
+        }
+
+        // 查询员工名册
+        EmployeeRoster employee = rosterMapper.selectByName(name);
+        if (employee == null) {
+            throw new BusinessException("用户不存在");
+        }
+        if ("离职".equals(employee.getStatus())) {
+            throw new BusinessException("该员工已离职，无法登录");
+        }
+
+        // 查询 `user` 表，看是否已有 Web 用户
+        User user = userMapper.selectByEmployeeId(employee.getEmployeeId());
+        if (user == null) {
+            // 新增用户
+            user = new User();
+            user.setName(employee.getName());
+            user.setEmployeeId(employee.getEmployeeId());
+            user.setRoleCode(employee.getRoleCode());
+            user.setLoginType("WEB");
+            userMapper.insert(user);
+        }
+
+        try {
+            // 生成 JWT Token
+            UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmployeeId());
+            String token = jwtUtils.generateToken(userDetails);
+            if (token != null && token.split("\\.").length == 3) {
+                System.out.println("Token format is correct! Token: " + token);
+            } else {
+                System.out.println("Token format is incorrect!");
+            }
+            return Result.success(new AuthVO(token, user.getName(), user.getRoleCode()));
+        } catch (UsernameNotFoundException e) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+    }
 
     @Override
     public AuthVO handleWechatLogin(String code) throws WxErrorException {
