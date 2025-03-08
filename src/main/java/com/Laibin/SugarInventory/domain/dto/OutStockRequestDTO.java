@@ -23,31 +23,11 @@ public class OutStockRequestDTO {
     @Schema(description = "库位ID", example = "101")
     private Integer warehouseId;
 
-    @NotNull(message = "产品ID不能为空")
-    @Schema(description = "产品ID", example = "57")
-    private Integer productId;
+    @NotNull(message = "出库数量不能为空")
+    @Min(value = 1, message = "出库数量不能小于1")
+    @Schema(description = "出库数量", example = "10")
+    private Integer quantity;
 
-    @NotNull(message = "入库日期不能为空")
-    @Schema(description = "入库日期", example = "2025-02-27")
-    private LocalDate inDate; // 入库日期
-
-    @NotNull(message = "库存位置列表不能为空")
-    @Valid
-    @Schema(description = "库存位置列表，每个位置包含坐标和出库数量")
-    private List<LocationQty> locations; // 出库位置明细
-
-    @NotNull(message = "筛网规格id不能为空")
-    @Schema(description = "产品使用的筛网规格id", example = "101")
-    private Integer screenMeshId; // 筛网规格id
-
-    @Data
-    public static class LocationQty {
-        @Valid
-        @Schema(description = "具体存放坐标, 格式为[x, y]", required = true)
-        @TableField(typeHandler = JsonTypeHandler.class)
-        private Coordinates coordinates; // 具体位置坐标
-        @Min(1)
-        @Schema(description = "该位置出库的数量", example = "100")
-        private Integer quantity;
-    }
+    @Schema(description = "先从左/右侧出库，默认为左", example = "LEFT")
+    private String side = "LEFT";
 }

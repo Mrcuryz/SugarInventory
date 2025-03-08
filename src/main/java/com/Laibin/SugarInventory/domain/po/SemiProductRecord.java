@@ -31,9 +31,10 @@ public class SemiProductRecord extends BaseEntity implements Serializable {
     private Integer id;
     private Integer productId;
     private Integer quantity;
-    private BigDecimal weightPerPiece;
     private LocalDate operationDate;
     private String operator;
     private LocalDateTime createdAt;
-    private Integer modifyCount;
+    private BigDecimal totalWeight;
+    private Integer warehouseId;
+    private Integer assayId;
 }

@@ -9,8 +9,10 @@ import com.Laibin.SugarInventory.domain.dto.InStockQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.InStockUpdateDTO;
 import com.Laibin.SugarInventory.domain.dto.InStockRequestDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
+import com.Laibin.SugarInventory.domain.po.InStock;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.InStockVO;
+import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.service.InStockService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,21 +40,27 @@ public class InStockController {
     @Autowired
     private InStockService inStockService;
 
-    @Operation(summary = "新增入库记录", description = "新增入库记录，包含产品、仓库、半成品信息、筛网规格及多个库存位置")
+    @Operation(summary = "新增成品入库记录", description = "新增入库记录，包含产品、仓库、半成品信息、筛网规格及多个库存位置")
     @PostMapping("/add")
-    public Result<Boolean> stockIn(
+    public Result<InVO> stockIn(
             @RequestBody @Valid InStockRequestDTO request,
             @AuthenticationPrincipal LoginUser loginUser
     ) {
         try {
-            inStockService.handleStockIn(request, loginUser.getUser().getId());
-            return Result.success(true);
+            InVO inVO = inStockService.stockIn(request, loginUser.getUser().getId());
+            return Result.success(inVO);
         } catch (BusinessException e) {
-            return Result.error(500, "商品入库失败：" + e.getMessage());
+            return Result.error(500, "商品入库出错：" + e.getMessage());
         }
     }
 
-    @Operation(summary = "查询入库记录", description = "根据查询条件分页查询入库记录")
+    @Operation(summary = "查询入库记录", description = "根据入库记录ID查询入库记录")
+    @GetMapping("/{id}")
+    public Result<InStock> getRecord(@PathVariable("id") Integer id) {
+        return Result.success(inStockService.getRecordById(id));
+    }
+
+    @Operation(summary = "批量查询入库记录", description = "根据查询条件分页查询入库记录")
     @PostMapping("/query")
     public Result<PageResult<InStockVO>> queryRecords(@RequestBody InStockQueryDTO queryDTO,
                                                       @AuthenticationPrincipal LoginUser loginUser) {

@@ -69,6 +69,6 @@ public class ScreenMeshServiceImpl implements ScreenMeshService, LoggableService
 
     @Override
     public String getTableName() {
-        return "screen_mesh";
+        return "筛网";
     }
 }

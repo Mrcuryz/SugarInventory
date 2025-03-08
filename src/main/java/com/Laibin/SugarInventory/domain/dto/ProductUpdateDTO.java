@@ -28,6 +28,9 @@ public class ProductUpdateDTO extends BaseDTO {
     @Schema(description = "每件产品重量（kg）", example = "1.5")
     private BigDecimal weightPerPiece;
 
+    @Schema(description = "每板数量", example = "25")
+    private Integer piecesPerPallet;
+
     @Override
     public Integer getId() {
         return productId;

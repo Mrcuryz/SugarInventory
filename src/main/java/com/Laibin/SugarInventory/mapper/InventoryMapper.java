@@ -6,12 +6,23 @@ import org.apache.ibatis.annotations.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Mapper
 public interface InventoryMapper {
 
     @Select("SELECT * FROM inventory WHERE in_stock_id = #{inStockId}")
     Inventory selectByInStockId(@Param("inStockId") Integer inStockId);
+
+    @Select("SELECT COUNT(DISTINCT `row_number`) " +
+            "FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
+            "AND side = #{side} " +
+            "AND layer = #{layer}")
+    int getUsedRows(@Param("warehouseId") int warehouseId,
+                    @Param("side") String side,
+                    @Param("layer") int layer);
+
 
     @Select("SELECT * FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
@@ -23,36 +34,28 @@ public interface InventoryMapper {
                                  @Param("entryDate") LocalDate entryDate,
                                  @Param("screenMeshId") Integer screenMeshId);
 
-    @Insert("INSERT INTO inventory (warehouse_id, product_id, entry_date, total_quantity, " +
-            "screen_mesh_id, assay_id, created_at, in_stock_id) " +
-            "VALUES (#{warehouseId}, #{productId}, #{entryDate}, #{totalQuantity}, " +
-            "#{screenMeshId}, #{assayId}, #{createdAt}, #{inStockId})")
+    @Insert("INSERT INTO inventory (warehouse_id, product_id, entry_date, side, `row_number`, layer, quantity, " +
+            "screen_mesh_id, assay_id, created_at, in_stock_id, semi_record_id, product_status) " +
+            "VALUES (#{warehouseId}, #{productId}, #{entryDate}, #{side}, #{rowNumber}, #{layer}, #{quantity}, " +
+            "#{screenMeshId}, #{assayId}, #{createdAt}, #{inStockId}, #{semiRecordId}, #{productStatus})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Inventory inventory);
 
-    @Update("<script>" +
-            "UPDATE inventory " +
-            "<set>" +
-            "   <if test='productId != null'>product_id = #{productId},</if>" +
-            "   <if test='totalQuantity != null'>total_quantity = #{totalQuantity},</if>" +
-            "   <if test='entryDate != null'>entry_date = #{entryDate},</if>" +
-            "   <if test='assayId != null'>assay_id = #{assayId},</if>" +
-            "   <if test='screenMeshId != null'>screen_mesh_id = #{screenMeshId},</if>" +
-            "</set>" +
-            "WHERE in_stock_id = #{inStockId}" +
-            "</script>")
-    void updateInventory(@Param("productId") Integer productId,
-                        @Param("totalQuantity") Integer totalQuantity,
-                        @Param("entryDate") LocalDate entryDate,
-                        @Param("assayId") Integer assayId,
-                        @Param("inStockId") Integer inStockId,
-                        @Param("screenMeshId") Integer screenMeshId);
+    @Select("SELECT * " +
+            "FROM inventory " +
+            "ORDER BY layer DESC LIMIT 1")
+    Inventory getLast();
 
+    // **查询库存（按先进后出）**
+    @Select("SELECT * FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
+            "AND side = #{side} AND layer = #{layer} " +
+            "ORDER BY `row_number` DESC")
+    List<Inventory> getInventoryForOutStock(@Param("warehouseId") int warehouseId,
+                                            @Param("side") String side,
+                                            @Param("layer") int layer);
 
-    @Update("UPDATE inventory SET total_quantity = total_quantity - #{quantity} " +
-            "WHERE id = #{inventoryId}")
-    void reduceTotalQuantity(
-            @Param("inventoryId") Integer inventoryId,
-            @Param("quantity") Integer quantity
-    );
+    // **删除某个格子的库存**
+    @Delete("DELETE FROM inventory WHERE id = #{id}")
+    void deleteInventoryById(@Param("id") int id);
 }

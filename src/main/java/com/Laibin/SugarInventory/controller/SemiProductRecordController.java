@@ -3,16 +3,12 @@ package com.Laibin.SugarInventory.controller;
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.Result;
-import com.Laibin.SugarInventory.domain.dto.AddSemiProductRecordDTO;
-import com.Laibin.SugarInventory.domain.dto.RecordQueryDTO;
-import com.Laibin.SugarInventory.domain.dto.RecordUpdateDTO;
-import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
+import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
 import com.Laibin.SugarInventory.domain.vo.*;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -44,21 +40,20 @@ public class SemiProductRecordController {
      * @param loginUser 登录用户信息
      * @return 半成品名称列表
      */
-    @Operation(summary = "新增半成品记录", description = "新增一条半成品记录，记录产品名称、数量、每件重量等信息。记录由当前登录用户录入。")
+    @Operation(summary = "半成品入库", description = "新增一条半成品记录，记录产品名称、数量等信息。记录由当前登录用户录入。")
     @PostMapping("/add")
     @PreAuthorize("hasAuthority('record:create')")
-    public Result<Boolean> addSemiProductRecord(
+    public Result<InVO> addSemiProductRecord(
             @RequestBody AddSemiProductRecordDTO dto,
             @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(semiProductRecordService.addSemiProductRecord(dto, loginUser.getUser().getName()));
     }
 
-    @Operation(summary = "查询半成品记录详情", description = "根据记录ID查询单条半成品记录的详细信息")
-    @GetMapping("/get/{id}")
-    public Result<RecordDetailVO> getSemiProductRecord(
-            @Parameter(description = "半成品记录ID", required = true, example = "1")
-            @PathVariable("id") Integer id) {
-        return Result.success(semiProductRecordService.getSemiProductRecord(id));
+    @Operation(summary = "批量查询半成品记录详情", description = "根据多个记录ID批量查询半成品记录的详细信息")
+    @PostMapping("/batch-get")
+    public Result<List<RecordDetailVO>> getSemiProductRecords(
+            @RequestBody BatchGetSemiProductRecordDTO dto) {
+        return Result.success(semiProductRecordService.getSemiProductRecordsByIds(dto.getIds()));
     }
 
     /**

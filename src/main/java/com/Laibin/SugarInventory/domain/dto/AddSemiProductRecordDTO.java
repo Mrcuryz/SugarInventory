@@ -4,25 +4,32 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
-@EqualsAndHashCode(callSuper = true)
 @Data
-@Schema(description = "新增半成品记录请求DTO")
-public class AddSemiProductRecordDTO extends BaseDTO {
-    @NotBlank(message = "产品名称不能为空")
-    @Schema(description = "产品名称", example = "正中冰")
-    private String productName;
+@Getter
+@Setter
+@Schema(description = "入库请求DTO")
+public class AddSemiProductRecordDTO {
+    @NotNull(message = "产品ID不能为空")
+    @Schema(description = "产品ID", example = "57")
+    private Integer productId;
 
-    @Min(value = 1, message = "数量必须大于0")
-    @Schema(description = "数量（件）", example = "100")
+    @NotNull(message = "仓库ID不能为空")
+    @Schema(description = "仓库ID", example = "101")
+    private Integer warehouseId;
+
+    @NotNull(message = "数量（板）不能为空")
+    @Schema(description = "数量（板）", example = "30")
     private Integer quantity;
 
-    @Override
-    public Integer getId() {
-        return null;
-    }
+    @Schema(description = "库位左/右列，默认为左", example = "LEFT")
+    private String side = "LEFT";  // 默认左侧
 }

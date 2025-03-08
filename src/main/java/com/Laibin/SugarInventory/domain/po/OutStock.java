@@ -27,14 +27,14 @@ public class OutStock extends BaseEntity {
     @TableField(value = "quantity")
     private Integer quantity;
 
-    @TableField(value = "weight_per_piece")
-    private BigDecimal weightPerPiece;
-
     @TableField(value = "in_date")
     private LocalDate inDate;
 
+    @TableField(value = "total_weight")
+    private BigDecimal totalWeight;
+
     @TableField(value = "out_date")
-    private LocalDateTime outDate;
+    private LocalDate outDate;
 
     @TableField(value = "operator_id")
     private Integer operatorId;

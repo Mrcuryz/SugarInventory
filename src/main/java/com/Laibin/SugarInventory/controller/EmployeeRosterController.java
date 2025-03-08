@@ -47,7 +47,7 @@ public class EmployeeRosterController {
     @PutMapping("/update")
     @Operation(summary = "更新员工信息", description = "根据ID修改员工信息，可选更新姓名、手机号、部门、职位、状态、角色等")
     @PreAuthorize("hasAuthority('user:update')")
-    @LogOperation(value = "employee_roster", type = OperationType.UPDATE)
+    @LogOperation(value = "员工名册", type = OperationType.UPDATE)
     public Result<EmployeeRoster> updateEmployee(@Validated @RequestBody EmployeeUpdateDTO dto) {
         try {
             return Result.success(employeeService.updateEmployee(dto));
@@ -59,7 +59,7 @@ public class EmployeeRosterController {
     @DeleteMapping("/clearResigned")
     @Operation(summary = "清理离职员工", description = "删除所有状态为“离职”的员工记录")
     @PreAuthorize("hasAuthority('user:delete')")
-    @LogOperation(value = "employee_roster", type = OperationType.DELETE)
+    @LogOperation(value = "员工名册", type = OperationType.DELETE)
     public Result<String> clearResignedEmployees() {
         try {
             int deletedRows = employeeService.clearResignedEmployees();

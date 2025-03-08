@@ -29,7 +29,7 @@ public class AssayController {
     private AssayService assayService;
 
     @PostMapping("/import")
-    @LogOperation(value = "assay", type = OperationType.INSERT)
+    @LogOperation(value = "化验数据", type = OperationType.INSERT)
     @Operation(summary = "导入化验记录", description = "批量导入化验记录")
     @PreAuthorize("hasAuthority('quality:test')")
     public Result<Boolean> importAssays(
@@ -53,7 +53,7 @@ public class AssayController {
     }
 
     @Operation(summary = "更新化验记录", description = "根据化验记录ID更新化验数据（更新时保留旧记录，以便历史对比）")
-    @LogOperation(value = "assay", type = OperationType.INSERT)
+    @LogOperation(value = "化验数据", type = OperationType.INSERT)
     @PostMapping("/{id}")
     public Result<AssayVO> updateAssay(
             @PathVariable("id") Integer id,

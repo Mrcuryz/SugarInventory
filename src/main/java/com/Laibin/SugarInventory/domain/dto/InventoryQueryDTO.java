@@ -8,8 +8,6 @@ import lombok.Data;
 public class InventoryQueryDTO {
     @Schema(description = "库位ID")
     private Integer warehouseId;
-    @Schema(description = "产品名称")
-    private String productName;
     @Schema(description = "页码")
     private Integer page = 1;
     @Schema(description = "每页数量")

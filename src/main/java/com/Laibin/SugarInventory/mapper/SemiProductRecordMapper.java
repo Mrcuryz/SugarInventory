@@ -20,12 +20,6 @@ import java.util.List;
 
 @Mapper
 public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
-    @Options(useGeneratedKeys = true, keyProperty = "id")
-    @Insert("INSERT INTO semi_product_record" +
-            "(product_id, quantity, weight_per_piece, operation_date, operator, create_at, modify_count) " +
-            "VALUES(#{productId}, #{quantity}, #{weightPerPiece}, #{operationDate}, #{operator}, #{createAt}, #{modifyCount})")
-    int insertRecord(SemiProductRecord record);
-
     @Select("SELECT s.*, p.product_name " +
             "FROM semi_product_record s " +
             "JOIN product p ON s.product_id = p.id " +
@@ -50,6 +44,17 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
             "AND operation_date = #{operationDate} ")
     SemiProductRecord selectByProductIdAndDate(@Param("productId") Integer productId,
                                                @Param("operationDate") LocalDate operationDate);
+
+    @Select("<script>" +
+            "SELECT s.*, p.product_name " +
+            "FROM semi_product_record s " +
+            "JOIN product p ON s.product_id = p.id " +
+            "WHERE s.id IN " +
+            "<foreach item='id' collection='ids' open='(' separator=',' close=')'>" +
+            "#{id}" +
+            "</foreach>" +
+            "</script>")
+    List<RecordDetailVO> selectSemiProductRecordsByIds(@Param("ids") List<Integer> ids);
 
     @Update("<script>" +
             "UPDATE semi_product_record " +

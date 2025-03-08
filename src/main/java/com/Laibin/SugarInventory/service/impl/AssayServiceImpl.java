@@ -106,6 +106,6 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
 
     @Override
     public String getTableName() {
-        return "assay";
+        return "化验数据";
     }
 }

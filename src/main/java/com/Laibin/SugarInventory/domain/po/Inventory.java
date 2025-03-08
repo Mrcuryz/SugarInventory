@@ -1,6 +1,5 @@
 package com.Laibin.SugarInventory.domain.po;
 
-import com.Laibin.SugarInventory.util.JsonTypeHandler;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -9,6 +8,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.commons.math3.geometry.partitioning.Side;
 
 import java.io.Serializable;
 import java.time.LocalDate;
@@ -29,11 +29,20 @@ public class Inventory extends BaseEntity implements Serializable {
     @TableField("product_id")
     private Integer productId;
 
+    @TableField(value = "side")
+    private String side;
+
+    @TableField("row_number")
+    private Integer rowNumber;
+
+    @TableField("layer")
+    private Integer layer;
+
     @TableField("entry_date")
     private LocalDate entryDate;
 
-    @TableField("total_quantity")
-    private Integer totalQuantity;
+    @TableField("quantity")
+    private Integer quantity;
 
     @TableField("assay_id")
     private Integer assayId;
@@ -46,5 +55,11 @@ public class Inventory extends BaseEntity implements Serializable {
 
     @TableField("screen_mesh_id")
     private Integer screenMeshId;
+
+    @TableField("semi_record_id")
+    private Integer semiRecordId;
+
+    @TableField("product_status")
+    private String productStatus;
 }
 

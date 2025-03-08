@@ -109,6 +109,6 @@ public class EmployeeServiceImpl extends ServiceImpl<EmployeeRosterMapper, Emplo
 
     @Override
     public String getTableName() {
-        return "employee_roster";
+        return "员工名册";
     }
 }

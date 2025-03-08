@@ -112,7 +112,7 @@ public class ProductController {
      * @return 成功或失败信息
      */
     @Operation(summary = "创建产品", description = "根据产品创建信息创建新产品，返回新创建产品的详细信息")
-    @LogOperation(value = "product", type = OperationType.INSERT)
+    @LogOperation(value = "产品", type = OperationType.INSERT)
     @PostMapping("/products")
     @PreAuthorize("hasAuthority('product:create')")
     public Result<Boolean> createProduct(
@@ -142,7 +142,7 @@ public class ProductController {
      * @return 成功或失败信息
      */
     @Operation(summary = "更新产品", description = "根据产品ID更新产品信息，允许部分字段更新（产品名称、类型、状态、包装方式、单件重量）")
-    @LogOperation(value = "product", type = OperationType.UPDATE)
+    @LogOperation(value = "产品", type = OperationType.UPDATE)
     @PutMapping("/products")
     @PreAuthorize("hasAuthority('product:update')")
     public Result<Product> updateProduct(
@@ -153,7 +153,7 @@ public class ProductController {
     }
 
     @Operation(summary = "删除产品", description = "根据产品ID删除产品")
-    @LogOperation(value = "product", type = OperationType.DELETE)
+    @LogOperation(value = "产品", type = OperationType.DELETE)
     @DeleteMapping("/products/{id}")
     @PreAuthorize("hasAuthority('product:delete')")
     public Result<Void> deleteProduct(

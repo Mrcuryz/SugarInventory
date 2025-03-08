@@ -99,24 +99,25 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Product updateProduct(ProductUpdateDTO vo, Integer currentUserId) {
+    public Product updateProduct(ProductUpdateDTO dto, Integer currentUserId) {
         // 1. 验证产品存在性
-        Product product = productMapper.selectById(vo.getProductId());
+        Product product = productMapper.selectById(dto.getProductId());
         if (product == null) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
 
         // 2. 验证枚举值合法性
-        validateEnums(vo.getProductType(), vo.getStatus(), vo.getPackagingMethod());
+        validateEnums(dto.getProductType(), dto.getStatus(), dto.getPackagingMethod());
 
         // 3. 执行动态更新
         int rows = productMapper.dynamicUpdate(
-                vo.getProductId(),
-                vo.getProductName(),
-                vo.getProductType(),
-                vo.getStatus(),
-                vo.getPackagingMethod(),
-                vo.getWeightPerPiece(),
+                dto.getProductId(),
+                dto.getProductName(),
+                dto.getProductType(),
+                dto.getStatus(),
+                dto.getPackagingMethod(),
+                dto.getWeightPerPiece(),
+                dto.getPiecesPerPallet(),
                 currentUserId,
                 LocalDateTime.now()
         );
@@ -126,7 +127,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         }
 
         // 4. 返回更新后的产品信息
-        return productMapper.selectById(vo.getProductId());
+        return productMapper.selectById(dto.getProductId());
     }
 
     private void validateEnums(String type, String status, String packaging) {
@@ -148,6 +149,6 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     @Override
     public String getTableName() {
-        return "product";
+        return "产品";
     }
 }

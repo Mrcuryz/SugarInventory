@@ -21,10 +21,12 @@ public class OutProductVO {
     private BigDecimal phValue;
     @Schema(description = "筛网名称")
     private String meshName;
-    @Schema(description = "坐标X")
-    private Double coordinateX;
-    @Schema(description = "坐标Y")
-    private Double coordinateY;
+    @Schema(description = "库位左/右侧")
+    private String side;
+    @Schema(description = "排数")
+    private Integer rowNumber;
+    @Schema(description = "层数")
+    private Integer layer;
     @Schema(description = "数量")
     private Integer quantity;
 }
