@@ -20,14 +20,14 @@ public class ProductCreateDTO extends BaseDTO {
 
     @NotNull(message = "产品类型不能为空")
     @Schema(description = "产品类型", example = "白冰糖")
-    private String type;
+    private String productType;
 
     @NotNull(message = "产品状态不能为空")
     @Schema(description = "产品状态（如半成品、成品）", example = "半成品")
     private String status;
 
     @Schema(description = "产品包装方式（如袋、箱、罐）", example = "箱")
-    private String packaging;
+    private String packagingMethod;
 
     @DecimalMin(value = "0.1", message = "重量必须大于0")
     @Schema(description = "每件产品重量（kg）", example = "40")

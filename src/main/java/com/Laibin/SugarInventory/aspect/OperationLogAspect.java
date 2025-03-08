@@ -7,9 +7,11 @@ import com.Laibin.SugarInventory.domain.dto.BaseDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.BaseEntity;
 import com.Laibin.SugarInventory.domain.po.OperationLog;
+import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.vo.BaseVO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.Laibin.SugarInventory.mapper.OperationLogMapper;
+import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -40,6 +42,9 @@ public class OperationLogAspect {
     private Map<String, LoggableService<?>> tableServiceMap;
     @Autowired
     private OperationLogMapper operationLogMapper;
+
+    @Autowired
+    private ProductMapper productMapper;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -183,16 +188,20 @@ public class OperationLogAspect {
         String changedFieldsJson = "{}";
         if (operationType == OperationType.UPDATE) {
             Map<String, Object> changedFields = getChangedFields(oldData, newData);
+            changedFields = convertProductIdToName(changedFields);
+            System.out.println("changedFields: " + changedFields);
             changedFieldsJson = convertToJson(changedFields);
+            System.out.println("changedFieldsJson: " + changedFieldsJson);
         } else if (operationType == OperationType.INSERT) {
-            changedFieldsJson = convertToJson(newData);
+            Map<String, Object> newDataMap = convertProductIdToName(objectToMap(newData));
+            changedFieldsJson = convertToJson(newDataMap);
         }
 
         log.setTableName(tableName);
         log.setOperationType(operationType.name());
         log.setOperationTime(LocalDateTime.now());
         log.setChangedFields(changedFieldsJson);
-        log.setOldData(convertToJson(oldData));
+        log.setOldData(convertToJson(convertProductIdToName(objectToMap(oldData))));
         log.setOperator(operator);
         return log;
     }
@@ -224,6 +233,45 @@ public class OperationLogAspect {
             return ((LocalDateTime) oldVal).isEqual((LocalDateTime) newVal);
         }
         return Objects.equals(oldVal, newVal);
+    }
+
+    // 转换 product_id 为 product_name
+    private Map<String, Object> convertProductIdToName(Map<String, Object> dataMap) {
+        if (dataMap == null) return null;
+
+        Map<String, Object> updatedMap = new HashMap<>(dataMap);
+        if (updatedMap.containsKey("productId") || updatedMap.containsKey("product_id")) {
+            Integer productId = (Integer) updatedMap.get("product_id");
+            if (productId == null) {
+                productId = (Integer) updatedMap.get("productId");
+            }
+            System.out.println("productId: " + productId);
+            if (productId != null) {
+                Product product = productMapper.selectById(productId);
+                if (product != null) {
+                    System.out.println("productName: " + product.getProductName());
+                    updatedMap.put("productName", product.getProductName()); // 替换 product_id 为 product_name
+                    updatedMap.remove("productId"); // 移除原 product_id
+                    System.out.println("updatedMap: " + updatedMap);
+                }
+            }
+        }
+        return updatedMap;
+    }
+
+    // 将对象转换为 Map
+    private Map<String, Object> objectToMap(Object obj) {
+        if (obj == null) return Collections.emptyMap();
+        Map<String, Object> map = new HashMap<>();
+        BeanWrapper beanWrapper = new BeanWrapperImpl(obj);
+        for (PropertyDescriptor pd : beanWrapper.getPropertyDescriptors()) {
+            String fieldName = pd.getName();
+            if (!"class".equals(fieldName)) {
+                Object fieldValue = beanWrapper.getPropertyValue(fieldName);
+                map.put(fieldName, fieldValue);
+            }
+        }
+        return map;
     }
 
     // 忽略自动填充字段（如 createdAt/updatedAt）
