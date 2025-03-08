@@ -45,6 +45,12 @@ public class Product extends BaseEntity implements Serializable {
     @TableField("weight_per_piece")
     private BigDecimal weightPerPiece;
 
+    @TableField("pieces_per_pallet")
+    private Integer piecesPerPallet;
+
+    @TableField("can_stack")
+    private Boolean canStack;
+
     @TableField("created_by")
     private Integer createdBy;
 

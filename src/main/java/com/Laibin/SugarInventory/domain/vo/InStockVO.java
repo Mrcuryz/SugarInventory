@@ -35,10 +35,10 @@ public class InStockVO {
     private String operatorName;
 
     @Schema(description = "筛网规格名称", example = "大筛网")
-    private String screenMeshName;
+    private String meshName;
 
     @Schema(description = "半成品记录ID", example = "5")
-    private Integer semiProductRecordId;
+    private String semiProductRecords;
 
     @Schema(description = "创建时间", example = "2025-02-25T16:00:00.000+00:00")
     private LocalDateTime createdAt;

@@ -39,7 +39,7 @@ public class ScreenMeshController {
     }
 
     @Operation(summary = "添加筛网", description = "新增一条筛网记录，包含筛网名称、描述、创建人等信息")
-    @LogOperation(value = "screen_mesh", type = OperationType.INSERT)
+    @LogOperation(value = "筛网", type = OperationType.INSERT)
     @PostMapping("/add")
     public Result<ScreenMesh> addScreenMesh(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "筛网对象，包含筛网名称、描述等必填字段", required = true)
@@ -53,7 +53,7 @@ public class ScreenMeshController {
     }
 
     @Operation(summary = "更新筛网", description = "更新一条筛网记录，需传入筛网ID以及更新后的数据")
-    @LogOperation(value = "screen_mesh", type = OperationType.UPDATE)
+    @LogOperation(value = "筛网", type = OperationType.UPDATE)
     @PutMapping("/update")
     public Result<ScreenMesh> updateScreenMesh(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "筛网对象，必须包含ID及需要更新的字段", required = true)
@@ -67,7 +67,7 @@ public class ScreenMeshController {
     }
 
     @Operation(summary = "删除筛网", description = "根据筛网ID删除筛网记录")
-    @LogOperation(value = "screen_mesh", type = OperationType.DELETE)
+    @LogOperation(value = "筛网", type = OperationType.DELETE)
     @DeleteMapping("/delete/{id}")
     public Result<String> deleteScreenMesh(
             @Parameter(description = "筛网ID", example = "1", required = true)

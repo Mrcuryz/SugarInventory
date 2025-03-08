@@ -21,33 +21,25 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "   a.reducing_sugar, " +
             "   a.ph_value, " +
             "   sm.mesh_name, " +
-            "   il.coordinate_x, " +
-            "   il.coordinate_y, " +
-            "   il.quantity " +
+            "   iv.side, " +
+            "   iv.`row_number`, " +
+            "   iv.layer, " +
+            "   iv.quantity " +
             "FROM product p " +
-
             // 获取最新检测记录
             "INNER JOIN (" +
             "   SELECT product_id, MAX(sample_date) AS latest_date " +
             "   FROM assay " +
             "   GROUP BY product_id" +
             ") latest_st ON p.id = latest_st.product_id " +
-
             "LEFT JOIN assay a " +
             "   ON a.product_id = latest_st.product_id " +
             "   AND a.sample_date = latest_st.latest_date " +
-
             "LEFT JOIN inventory iv " +
             "   ON p.id = iv.product_id " +
-
-            "LEFT JOIN inventory_location il " +
-            "   ON iv.id = il.inventory_id " +
-
             "LEFT JOIN screen_mesh sm " +
             "   ON iv.screen_mesh_id = sm.id " +
-
             "WHERE p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
-
             // 动态条件处理
             "<if test='query.startDate != null'>" +
             "   AND a.sample_date &gt;= #{query.startDate} " +
@@ -76,7 +68,8 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "<if test='query.screenMeshId != null'>" +
             "   AND sm.id = #{query.screenMeshId} " +
             "</if> " +
-            "ORDER BY a.sample_date DESC" +
+            // 按照先进后出的规则筛选
+            "ORDER BY iv.layer DESC, iv.side ASC, iv.row_number DESC, a.sample_date DESC " +
             "</script>")
     List<OutProductVO> selectProductsByQuery(@Param("query") OutProductQueryDTO query);
 }

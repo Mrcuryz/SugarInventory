@@ -21,5 +21,6 @@ public interface WarehouseMapper extends BaseMapper<Warehouse> {
     @Update("UPDATE warehouse SET status = '维护' WHERE id = #{id}")
     int updateStatusToMaintain(@Param("id") Integer id);
 
-
+    @Update("UPDATE warehouse SET cur_capacity = #{curCapacity} WHERE id = #{id}")
+    void updateCurCapacity(@Param("id") Integer id, @Param("curCapacity") BigDecimal curCapacity);
 }

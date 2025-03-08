@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.service;
 
 import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
 import com.Laibin.SugarInventory.domain.dto.AddSemiProductRecordDTO;
+import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
 import com.Laibin.SugarInventory.domain.dto.RecordUpdateDTO;
 import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
@@ -20,7 +21,7 @@ import java.util.List;
  * @since 2025-02-19
  */
 public interface SemiProductRecordService extends IService<SemiProductRecord> {
-    boolean addSemiProductRecord(AddSemiProductRecordDTO vo, String operator);
+    InVO addSemiProductRecord(AddSemiProductRecordDTO vo, String operator);
 
     List<RecordDetailVO> getRecordsByOperator(String openid, LocalDate date);
 
@@ -28,6 +29,8 @@ public interface SemiProductRecordService extends IService<SemiProductRecord> {
     SemiProductRecord updateRecord(RecordUpdateDTO vo, String operator);
 
     List<SemiProductRecord> getSemiProductRecords(SemiProductRecordDTO vo);
+
+    List<RecordDetailVO> getSemiProductRecordsByIds(List<Integer> ids);
 
     RecordDetailVO getSemiProductRecord(Integer id);
 }

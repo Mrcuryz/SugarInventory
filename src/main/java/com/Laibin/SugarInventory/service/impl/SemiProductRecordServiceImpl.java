@@ -1,16 +1,12 @@
 package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
-import com.Laibin.SugarInventory.domain.po.Assay;
-import com.Laibin.SugarInventory.domain.po.Product;
-import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
-import com.Laibin.SugarInventory.domain.dto.AddSemiProductRecordDTO;
+import com.Laibin.SugarInventory.domain.po.*;
+import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
-import com.Laibin.SugarInventory.domain.dto.RecordUpdateDTO;
-import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
-import com.Laibin.SugarInventory.mapper.ProductMapper;
-import com.Laibin.SugarInventory.mapper.SemiProductRecordMapper;
+import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -22,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -40,48 +38,146 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     private SemiProductRecordMapper recordMapper;
     @Autowired
     private ProductMapper productMapper;
+    @Autowired
+    private WarehouseMapper warehouseMapper;
+    @Autowired
+    private AssayMapper assayMapper;
+    @Autowired
+    private InventoryMapper inventoryMapper;
 
     @Transactional
-    public boolean addSemiProductRecord(AddSemiProductRecordDTO dto, String operator) {
-        // 校验产品存在性
-        Product product = productMapper.selectByName(dto.getProductName());
+    public InVO addSemiProductRecord(AddSemiProductRecordDTO dto, String operator) {
+        Product product = productMapper.selectById(dto.getProductId());
         if (product == null) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
 
-        // 构建持久化对象
-        SemiProductRecord record = new SemiProductRecord();
-        record.setProductId(product.getId());
-        record.setQuantity(dto.getQuantity());
-        record.setWeightPerPiece(product.getWeightPerPiece());
-        record.setOperationDate(LocalDate.now());  // 自动记录操作日期
-        record.setOperator(operator);              // 从登录用户获取
-        record.setCreatedAt(LocalDateTime.now());  // 自动记录创建时间
-
-        // 插入记录
-        try {
-            int rows = recordMapper.insert(record);
-            if (rows <= 0) {
-                throw new BusinessException(ErrorCode.RECORD_CREATE_FAILED);
-            }
-            return true;
-        } catch (BusinessException e) {
-            e.printStackTrace();
-            return false;
+        // 2. 获取库位信息
+        Warehouse warehouse = warehouseMapper.selectById(dto.getWarehouseId());
+        if (warehouse == null) {
+            throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
+
+        Assay assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), LocalDate.now());
+        if (assay == null) {
+            throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
+        }
+
+        int maxRows = warehouse.getMaxRows();
+        int remainingQuantity = dto.getQuantity();
+        String currentSide = dto.getSide(); // 默认从左侧存放
+        boolean canStack = product.getCanStack(); // 是否可堆积
+
+        // **3. 预获取当前库位的存储情况**
+        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "LEFT", 1);
+        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "RIGHT", 1);
+        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "LEFT", 2);
+        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "RIGHT", 2);
+
+        int currentLayer = (leftUsedRowsLayer2 > 0 || rightUsedRowsLayer2 > 0) ? 2 : 1;
+
+        // 计算库位剩余容量
+        int remainingCapacity = 2 * maxRows - leftUsedRowsLayer1 - rightUsedRowsLayer1;
+        if(product.getCanStack() && currentLayer == 1) {
+            remainingCapacity += 2 * maxRows;
+        }
+
+        if(remainingCapacity <= 0){
+            throw new BusinessException(ErrorCode.WAREHOUSE_FULL);
+        }
+
+        int quantity = dto.getQuantity() > remainingCapacity? remainingCapacity : dto.getQuantity();
+
+        BigDecimal totalWeight = product.getWeightPerPiece()
+                .multiply(new BigDecimal(quantity)
+                        .multiply(new BigDecimal(product.getPiecesPerPallet())));
+
+        // **4. 记录入库信息**
+        SemiProductRecord semiProductRecord = new SemiProductRecord();
+        semiProductRecord.setWarehouseId(dto.getWarehouseId());
+        semiProductRecord.setProductId(dto.getProductId());
+        semiProductRecord.setQuantity(quantity);
+        semiProductRecord.setOperator(operator);
+        semiProductRecord.setOperationDate(LocalDate.now());
+        semiProductRecord.setAssayId(assay.getId());
+        semiProductRecord.setTotalWeight(totalWeight);
+        semiProductRecord.setCreatedAt(LocalDateTime.now());
+
+        recordMapper.insert(semiProductRecord);
+
+        Integer inStockId = semiProductRecord.getId();
+
+        // **5. 开始存放**
+        while (remainingQuantity > 0) {
+            int usedRows = (currentSide.equals("LEFT")) ?
+                    (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
+                    : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
+
+            if (usedRows < maxRows) {
+                int rowNumber = usedRows + 1;
+
+                // **存储单板**
+                Inventory inventory = new Inventory();
+                inventory.setWarehouseId(dto.getWarehouseId());
+                inventory.setProductId(dto.getProductId());
+                inventory.setSide(currentSide);
+                inventory.setRowNumber(rowNumber);
+                inventory.setLayer(currentLayer);
+                inventory.setQuantity(1);
+                inventory.setEntryDate(LocalDate.now());
+                inventory.setAssayId(assay.getId());
+                inventory.setProductStatus(product.getStatus());
+                inventory.setSemiRecordId(inStockId);
+                inventory.setCreatedAt(LocalDateTime.now());
+
+                inventoryMapper.insert(inventory);
+                remainingQuantity--;
+
+                // **更新本地变量**
+                if (currentSide.equals("LEFT")) {
+                    if (currentLayer == 1) leftUsedRowsLayer1++;
+                    else leftUsedRowsLayer2++;
+                } else {
+                    if (currentLayer == 1) rightUsedRowsLayer1++;
+                    else rightUsedRowsLayer2++;
+                }
+            }
+
+            // **如果当前列满，尝试切换到另一侧**
+            if (remainingQuantity > 0 && usedRows >= maxRows) {
+                currentSide = currentSide.equals("LEFT") ? "RIGHT" : "LEFT";
+                usedRows = (currentSide.equals("LEFT")) ?
+                        (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
+                        : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
+            }
+
+            // **如果第一层满了，检查是否可以堆积**
+            if (remainingQuantity > 0 && leftUsedRowsLayer1 >= maxRows && rightUsedRowsLayer1 >= maxRows) {
+                if (canStack && currentLayer == 1) {
+                    // **切换到第二层**
+                    currentLayer = 2;
+                    leftUsedRowsLayer2 = 0;
+                    rightUsedRowsLayer2 = 0;
+                } else if (!canStack || (leftUsedRowsLayer2 >= maxRows && rightUsedRowsLayer2 >= maxRows)) {
+                    // **如果当前是第二层且满了，则提示库位已满**
+                    InVO inVO = new InVO();
+                    inVO.setRemainingQuantity(remainingQuantity);
+                    inVO.setMessage("库位已满！剩余 " + remainingQuantity + " 板产品，请选择新库位");
+                    return inVO;
+                }
+            }
+        }
+
+        // **6. 返回入库信息**
+        InVO inVO = new InVO();
+        inVO.setRemainingQuantity(remainingQuantity);
+        inVO.setMessage("入库成功！");
+        return inVO;
     }
 
     @Override
     public List<RecordDetailVO> getRecordsByOperator(String openid, LocalDate date) {
-        List<RecordDetailVO> records = recordMapper.selectByOperator(openid, date);
-        records.forEach(record -> {
-            record.calculateTotalWeight();
-            if(Objects.equals(record.getTotalWeight(), BigDecimal.ZERO)){
-                throw new BusinessException(ErrorCode.ZERO_WEIGHT_RECORD);
-            }
-        });
-
-        return records;
+        return recordMapper.selectByOperator(openid, date);
     }
 
     @Override
@@ -115,6 +211,15 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     }
 
     @Override
+    public List<RecordDetailVO> getSemiProductRecordsByIds(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return recordMapper.selectSemiProductRecordsByIds(ids);
+    }
+
+    @Override
     public List<SemiProductRecord> getSemiProductRecords(SemiProductRecordDTO vo) {
         String productName = vo.getProductName();
         LocalDate date = vo.getDate();
@@ -128,7 +233,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         if(vo == null){
             throw new BusinessException(ErrorCode.RECORD_NOT_FOUND);
         }
-        vo.calculateTotalWeight();
+
         return vo;
     }
 

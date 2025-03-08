@@ -24,7 +24,7 @@ public interface OperationLogMapper extends BaseMapper<OperationLog> {
     @Select("<script>" +
             "SELECT * FROM operation_log " +
             "<where>" +
-            "   <if test='query.tableName != null'> AND table_name = #{query.tableName} </if> " +
+            "   <if test='query.tableName != null'> AND table_name LIKE CONCAT('%', #{query.tableName}, '%') </if> " +
             "   <if test='query.operationType != null'> AND operation_type = #{query.operationType} </if> " +
             "   <if test='query.operator != null'> AND operator LIKE CONCAT('%', #{query.operator}, '%') </if> " +
             "   <if test='query.startTime != null'> AND operation_time &gt;= #{query.startTime} </if> " +
@@ -40,7 +40,7 @@ public interface OperationLogMapper extends BaseMapper<OperationLog> {
     @Select("<script>" +
             "SELECT COUNT(*) FROM operation_log " +
             "<where>" +
-            "   <if test='query.tableName != null'> AND table_name = #{query.tableName} </if> " +
+            "   <if test='query.tableName != null'> AND table_name LIKE CONCAT('%', #{query.tableName}, '%') </if> " +
             "   <if test='query.operationType != null'> AND operation_type = #{query.operationType} </if> " +
             "   <if test='query.operator != null'> AND operator LIKE CONCAT('%', #{query.operator}, '%') </if> " +
             "   <if test='query.startTime != null'> AND operation_time &gt;= #{query.startTime} </if> " +

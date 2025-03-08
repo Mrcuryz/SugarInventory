@@ -1,11 +1,13 @@
 package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
+import com.Laibin.SugarInventory.domain.vo.OutVO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.LoggableService;
@@ -14,7 +16,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -22,64 +27,109 @@ import java.util.List;
 public class OutStockServiceImpl implements OutStockService, LoggableService<OutStock> {
 
     private final InventoryMapper inventoryMapper;
-    private final InventoryLocationMapper locationMapper;
+    private final WarehouseMapper warehouseMapper;
     private final OutStockMapper outStockMapper;
     private final ProductMapper productMapper;
 
     @Transactional
     @Override
-    public void processOutStock(OutStockRequestDTO request, Integer operatorId) {
-        // 1. 获取产品信息
-        Product product = productMapper.selectById(request.getProductId());
-        if (product == null) throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+    public OutVO processOutStock(OutStockRequestDTO dto, Integer operatorId) {
+        // 1. 获取库存记录（按先进后出排序）
+        int remainingQuantity = dto.getQuantity(); // 需出库的总数量
+        String currentSide = dto.getSide(); // 当前出库侧
 
-        // 2. 获取库存批次
-        Inventory inventory = inventoryMapper.existSameInventory(
-                request.getWarehouseId(),
-                request.getProductId(),
-                request.getInDate(),
-                request.getScreenMeshId()
-        );
-        if (inventory == null) throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
-        // 3. 扣减库存位置
-        Integer totalDeduct = 0;
-        for (OutStockRequestDTO.LocationQty item : request.getLocations()) {
-            InventoryLocation location = locationMapper.selectForUpdate(
-                    inventory.getId(),
-                    item.getCoordinates().getX(),
-                    item.getCoordinates().getY()
-            );
+        Warehouse warehouse = warehouseMapper.selectById(dto.getWarehouseId());
 
-            if (location == null || location.getQuantity().compareTo(item.getQuantity()) < 0) {
-                throw new BusinessException(ErrorCode.INSUFFICIENT_STOCK);
-            }
-
-            int affected = locationMapper.deductQuantity(location.getId(), item.getQuantity());
-            if (affected <= 0) throw new BusinessException(ErrorCode.UPDATE_INVENTORY_FAILED);
-            totalDeduct += item.getQuantity();
+        Inventory curInventory = inventoryMapper.getLast();
+        if (curInventory == null) {
+            throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
         }
 
-        // 4. 更新库存总量
-        inventoryMapper.reduceTotalQuantity(
-                inventory.getId(),
-                totalDeduct
-        );
+        Product product = productMapper.selectById(curInventory.getProductId());
 
-        // 5. 记录出库
-        OutStock record = new OutStock();
-        record.setWarehouseId(request.getWarehouseId());
-        record.setProductId(request.getProductId());
-        record.setQuantity(totalDeduct);
-        record.setWeightPerPiece(product.getWeightPerPiece());
-        record.setInDate(request.getInDate());
-        record.setOutDate(LocalDateTime.now());
-        record.setOperatorId(operatorId);
-        outStockMapper.insert(record);
+        int curLayer = curInventory.getLayer(); // 当前堆积层数
+
+        int curCapacity = 0;
+
+        List<Inventory> inventoryList = new ArrayList<>();
+
+        String nextSide; // 下一个出库侧
+        if(currentSide.equals("LEFT"))
+            nextSide = "RIGHT";
+        else
+            nextSide = "LEFT";
+
+        // **1. 可堆积产品：先查找第二层**
+        if (curLayer == 2 && remainingQuantity > 0) {
+            inventoryList.addAll(inventoryMapper.
+                    getInventoryForOutStock(dto.getWarehouseId(), currentSide, 2));
+            inventoryList.addAll(inventoryMapper.
+                    getInventoryForOutStock(dto.getWarehouseId(), nextSide, 2));
+        }
+
+        // **2. 查找第一层**
+        inventoryList.addAll(inventoryMapper.
+                getInventoryForOutStock(dto.getWarehouseId(), currentSide, 1));
+        inventoryList.addAll(inventoryMapper.
+                getInventoryForOutStock(dto.getWarehouseId(), nextSide, 1));
+
+        curCapacity = inventoryList.size();
+
+        if(curCapacity == 0) {
+            throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
+        }
+
+        // **3. 开始逐个出库**
+        for (Inventory inventory : inventoryList) {
+            if (remainingQuantity <= 0) break;
+
+            // **直接删除该板**
+            inventoryMapper.deleteInventoryById(inventory.getId());
+            remainingQuantity--;
+        }
+
+        // **4. 如果出库数量不足，返回错误**
+        if (remainingQuantity > 0) {
+            OutVO outVO = new OutVO();
+            outVO.setRemainingQuantity(remainingQuantity);
+            outVO.setMessage("当前库存不足！还差 " + remainingQuantity + " 板");
+            return outVO;
+        }
+
+        int quantity = dto.getQuantity() > curCapacity? curCapacity : dto.getQuantity();
+
+        BigDecimal totalWeight = product.getWeightPerPiece()
+                .multiply(new BigDecimal(quantity)
+                        .multiply(new BigDecimal(product.getPiecesPerPallet())));
+
+        // **5. 记录出库信息**
+        OutStock outStock = new OutStock();
+        outStock.setWarehouseId(dto.getWarehouseId());
+        outStock.setProductId(curInventory.getProductId());
+        outStock.setQuantity(quantity);
+        outStock.setTotalWeight(totalWeight);
+        outStock.setOperatorId(operatorId);
+        outStock.setInDate(curInventory.getEntryDate());
+        outStock.setOutDate(LocalDate.now());
+        outStock.setCreatedAt(LocalDateTime.now());
+        outStockMapper.insert(outStock);
+
+        // **6. 同步更新库位信息**
+        warehouseMapper.updateCurCapacity(dto.getWarehouseId(),
+                warehouse.getCurCapacity().subtract(totalWeight));
+
+        // **7. 返回出库结果**
+        OutVO outVO = new OutVO();
+        outVO.setRemainingQuantity(0);
+        outVO.setMessage("出库成功！");
+        return outVO;
     }
 
     @Override
     public List<OutProductVO> searchProducts(OutProductQueryDTO query) {
-        return outStockMapper.selectProductsByQuery(query);
+        List<OutProductVO> productVOList = outStockMapper.selectProductsByQuery(query);
+        System.out.println(productVOList);
+        return productVOList;
     }
 
     @Override

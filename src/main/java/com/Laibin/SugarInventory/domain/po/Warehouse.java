@@ -9,6 +9,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -26,17 +27,27 @@ import lombok.Setter;
 @Getter
 @Setter
 @Data
+@Schema(description = "库位实体")
 @TableName("warehouse")
 public class Warehouse extends BaseEntity implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Integer id;
+
     private String warehouseId;
-    @TableField(typeHandler = JsonTypeHandler.class)
-    private Coordinates coordinates;
+
     private String status;
+
     private LocalDateTime createdAt;
+
+    @Schema(description = "最大库存量（板）")
     @TableField(value = "max_capacity")
     private BigDecimal maxCapacity;
+
+    @Schema(description = "当前库存量（板）")
     @TableField(value = "cur_capacity")
     private BigDecimal curCapacity;
+
+    @Schema(description = "最大排数")
+    @TableField(value = "max_rows")
+    private Integer maxRows;
 }

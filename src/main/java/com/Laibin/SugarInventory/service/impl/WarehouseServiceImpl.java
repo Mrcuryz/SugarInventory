@@ -81,6 +81,6 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
 
     @Override
     public String getTableName() {
-        return "warehouse";
+        return "库位";
     }
 }

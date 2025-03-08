@@ -29,7 +29,7 @@ public class WarehouseController {
     private WarehouseService warehouseService;
 
     @Operation(summary = "设置指定库位为维修状态")
-    @LogOperation(value = "warehouse", type = OperationType.UPDATE)
+    @LogOperation(value = "库位", type = OperationType.UPDATE)
     @PutMapping("/maintain/{id}")
     public Result<String> updateWarehouseToMaintain(
             @Parameter(description = "库位ID")
@@ -44,7 +44,7 @@ public class WarehouseController {
 
     // 新增仓库
     @Operation(summary = "新增库位")
-    @LogOperation(value = "warehouse", type = OperationType.INSERT)
+    @LogOperation(value = "库位", type = OperationType.INSERT)
     @PostMapping("/create")
     public Result<String> createWarehouse(@RequestBody Warehouse warehouse) {
         warehouseService.createWarehouse(warehouse);
@@ -60,7 +60,7 @@ public class WarehouseController {
 
     // 修改仓库信息
     @Operation(summary = "修改库位信息")
-    @LogOperation(value = "warehouse", type = OperationType.UPDATE)
+    @LogOperation(value = "库位", type = OperationType.UPDATE)
     @PutMapping("/update")
     public Result<Warehouse> updateWarehouse(@RequestBody Warehouse warehouse) {
         try {
@@ -72,7 +72,7 @@ public class WarehouseController {
 
     // 删除仓库
     @Operation(summary = "删除库位")
-    @LogOperation(value = "warehouse", type = OperationType.DELETE)
+    @LogOperation(value = "库位", type = OperationType.DELETE)
     @DeleteMapping("/delete/{id}")
     public Result<String> deleteWarehouse(@PathVariable Integer id) {
         warehouseService.deleteWarehouse(id);

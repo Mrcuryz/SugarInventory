@@ -28,7 +28,7 @@ public interface ProductMapper extends BaseMapper<Product> {
     @Select("SELECT COUNT(*) FROM product WHERE product_name = #{name}")
     boolean existsByName(@Param("name") String name);
 
-    // 根据名称或类型查询产品
+    // 根据名称查询产品
     @Select("<script>" +
             "SELECT * FROM product " +
             "<if test='name != null and name != \"\"'>" +
@@ -92,6 +92,8 @@ public interface ProductMapper extends BaseMapper<Product> {
             "   <if test='status != null'>status = #{status},</if>" +
             "   <if test='packagingMethod != null'>packaging_method = #{packagingMethod},</if>" +
             "   <if test='weightPerPiece != null'>weight_per_piece = #{weightPerPiece},</if>" +
+            "   <if test='piecesPerPallet != null'>pieces_per_pallet = #{piecesPerPallet},</if>" +
+            "   <if test='canStack != null'>can_stack = #{canStack},</if>" +
             "   updated_by = #{updatedBy}, " +
             "   updated_at = #{updatedAt} " +
             "</set>" +
@@ -104,8 +106,10 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("status") String status,
             @Param("packagingMethod") String packagingMethod,
             @Param("weightPerPiece") BigDecimal weightPerPiece,
+            @Param("piecesPerPallet") Integer piecesPerPallet,
             @Param("updatedBy") Integer updatedBy,
-            @Param("updatedAt") LocalDateTime updatedAt
+            @Param("updatedAt") LocalDateTime updatedAt,
+            @Param("canStack") Boolean canStack
     );
 
     // 根据id删除产品

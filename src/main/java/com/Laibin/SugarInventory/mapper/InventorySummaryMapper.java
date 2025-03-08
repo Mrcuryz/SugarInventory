@@ -14,10 +14,11 @@ import java.util.List;
 public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
 
     @Select("<script>" +
-            "SELECT * FROM v_inventory_product_summary " +
+            "SELECT * FROM v_warehouse_inventory_summary " +
             "<where>" +
-            "   <if test='query.warehouseId != null'> AND warehouse_id = #{query.warehouseId} </if>" + // 精确匹配数字库位
-            "   <if test='query.productName != null'> AND product_name LIKE CONCAT('%', #{query.productName}, '%') </if>" + "</where>" +
+            "   1=1" +
+            "   <if test='query.warehouseId != null'> AND warehouse_id = #{query.warehouseId} </if>" +
+            "</where>" + // 精确匹配数字库位
             "ORDER BY warehouse_id, product_name " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
@@ -27,11 +28,16 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             @Param("size") int size
     );
 
+    @Select("SELECT * FROM v_warehouse_inventory_summary " +
+            "ORDER BY entry_date " +
+            "LIMIT 1")
+    VInventorySummary selectFirstEntry();
+
     @Select("<script>" +
-            "SELECT COUNT(*) FROM v_inventory_product_summary " +
+            "SELECT COUNT(*) FROM v_warehouse_inventory_summary " +
             "<where>" +
+            "   1=1" +
             "   <if test='query.warehouseId != null'> AND warehouse_id = #{query.warehouseId} </if>" +
-            "   <if test='query.productName != null'> AND product_name LIKE CONCAT('%', #{query.productName}, '%') </if>" +
             "</where>" +
             "</script>")
     Long countSummary(@Param("query") InventoryQueryDTO query);

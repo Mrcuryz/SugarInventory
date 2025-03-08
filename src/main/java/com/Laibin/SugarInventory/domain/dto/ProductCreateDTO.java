@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.domain.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -19,18 +20,25 @@ public class ProductCreateDTO extends BaseDTO {
 
     @NotNull(message = "产品类型不能为空")
     @Schema(description = "产品类型", example = "白冰糖")
-    private String type;
+    private String productType;
 
     @NotNull(message = "产品状态不能为空")
     @Schema(description = "产品状态（如半成品、成品）", example = "半成品")
     private String status;
 
     @Schema(description = "产品包装方式（如袋、箱、罐）", example = "箱")
-    private String packaging;
+    private String packagingMethod;
 
     @DecimalMin(value = "0.1", message = "重量必须大于0")
     @Schema(description = "每件产品重量（kg）", example = "40")
     private BigDecimal weightPerPiece;
+
+    @Min(value = 1, message = "数量必须大于0")
+    @Schema(description = "每板产品数量", example = "100")
+    private Integer piecesPerPallet;
+
+    @Schema(description = "是否可堆叠", example = "true")
+    private Boolean canStack;
 
     @Override
     public Integer getId() {

@@ -19,11 +19,11 @@ public class RecordDetailVO {
     @Schema(description = "产品名称", example = "正中冰")
     private String productName;
 
-    @Schema(description = "数量（件）", example = "100")
-    private Integer quantity;
+    @Schema(description = "库位号", example = "101")
+    private Integer warehouseId;
 
-    @Schema(description = "单件重量（kg）", example = "15.0")
-    private BigDecimal weightPerPiece;
+    @Schema(description = "数量（板）", example = "100")
+    private Integer quantity;
 
     @Schema(description = "总重量（kg）", example = "1500.0")
     private BigDecimal totalWeight;
@@ -34,16 +34,6 @@ public class RecordDetailVO {
     @Schema(description = "操作员姓名", example = "张三")
     private String operator;
 
-    @Schema(description = "修改次数", example = "0")
-    private Integer modifyCount;
-
-    public void calculateTotalWeight() {
-        // 将数量转换为 BigDecimal 并计算总重量
-        if (this.quantity != null && this.weightPerPiece != null) {
-            BigDecimal quantityBigDecimal = new BigDecimal(this.quantity);  // 转换 quantity 为 BigDecimal
-            this.totalWeight = quantityBigDecimal.multiply(this.weightPerPiece);  // 计算总重量
-        } else {
-            this.totalWeight = BigDecimal.ZERO;  // 如果 quantity 或 weightPerPiece 为空，则设置为 0
-        }
-    }
+    @Schema(description = "化验记录id")
+    private Integer assayId;
 }
