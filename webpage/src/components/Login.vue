@@ -2,24 +2,37 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import {login} from '@/api/login.js'
+import {useTokenStore} from '@/stores/token'
+import rememberMeStore from '@/stores/rememberMe'
+const tokenStore = useTokenStore();
+const rememberStore = rememberMeStore();
 
 const router = useRouter()
 
 // 表单数据
 const form = reactive({
-  username: '',
+  name: '',
   password: '',
   rememberMe: false
 })
-
+// 记住我
+let rememberMe = ref('')
+const rememberMeData = async () => {
+  form.name = rememberStore.info.name;
+  form.password = rememberStore.info.password;
+}
+if(rememberStore.info){
+  rememberMeData();
+}
 // 验证规则
 const rules = reactive({
-  username: [
+  name: [
     { required: true, message: '用户名不能为空', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '密码不能为空', trigger: 'blur' },
-    { min: 6, max: 18, message: '长度在6到18个字符', trigger: 'blur' }
+    { min: 3, max: 18, message: '长度在3到18个字符', trigger: 'blur' }
   ]
 })
 
@@ -28,16 +41,25 @@ const loading = ref(false)
 
 // 提交处理
 const handleSubmit = async () => {
+  if(rememberMe){
+    rememberStore.setInfo(form);
+  }
+  else {
+    rememberStore.removeInfo();
+  }
   try {
     loading.value = true
-    await router.push('/dashboard')
+    let result = await login(form);
     ElMessage.success('登录成功')
+    tokenStore.setToken(result.data.token);
+    await router.push('/home')
   } catch (error) {
-    ElMessage.error('登录失败：' + error.message)
+    rememberStore.removeInfo();
   } finally {
     loading.value = false
   }
 }
+
 
 </script>
 <template>
@@ -64,7 +86,7 @@ const handleSubmit = async () => {
           <el-form-item prop="username">
             <el-input
                 style="height: 40px;margin-top: 10px;"
-                v-model="form.username"
+                v-model="form.name"
                 placeholder="请输入用户名"
                 prefix-icon="User"
                 clearable
@@ -84,8 +106,7 @@ const handleSubmit = async () => {
           </el-form-item>
 
           <el-form-item>
-            <el-checkbox v-model="form.rememberMe">记住登录</el-checkbox>
-            <el-link type="primary" class="fr">忘记密码?</el-link>
+            <el-checkbox v-model="rememberMe">记住登录</el-checkbox>
           </el-form-item>
 
           <el-form-item>

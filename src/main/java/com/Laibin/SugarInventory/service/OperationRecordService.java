@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
  * @author Mrcury
  * @since 2025-02-19
  */
+
 public interface OperationRecordService extends IService<OperationRecordPO> {
 
 }

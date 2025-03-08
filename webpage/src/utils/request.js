@@ -1,12 +1,11 @@
 //定制请求的实例
-
 //导入axios  npm install axios
 import axios from 'axios';
 
 import { ElMessage } from 'element-plus'
 //定义一个变量,记录公共的前缀  ,  baseURL
-const baseURL = 'http://localhost:8080';
-// const baseURL = '/api';
+// const baseURL = 'http://localhost:8080/api';
+const baseURL = '/api';
 const instance = axios.create({ baseURL })
 
 import {useTokenStore} from '@/stores/token.js'
@@ -18,11 +17,16 @@ instance.interceptors.request.use(
         const tokenStore = useTokenStore();
         //判断有没有token
         if(tokenStore.token){
-            config.headers.Authorization = tokenStore.token
+            let Bearer='Bearer '
+            config.headers.Authorization = Bearer + tokenStore.token
         }
         return config;
     },
     (err)=>{
+        if(err.response.code===401){
+            ElMessage.error('认证失败,请重新登录')
+            router.push('/login')
+        }
         //请求错误的回调
         Promise.reject(err)
     }
@@ -36,7 +40,7 @@ import router from '@/router'
 instance.interceptors.response.use(
     result => {
         //判断业务状态码
-        if(result.data.code===1){
+        if(result.data.code===200){
             return result.data;
         }
         //操作失败
@@ -48,22 +52,6 @@ instance.interceptors.response.use(
     },
     err => {
         //判断响应状态码,如果为401,则证明未登录,提示请登录,并跳转到登录页面
-        if(err.response.status===999){
-            ElMessage.error('请先登录')
-            router.push('/')
-        }
-        else if(err.response.status===998){
-            ElMessage.error('请先登录用户端')
-            router.push('/')
-        }
-        else if(err.response.status===997){
-            ElMessage.error('请先登录管理端')
-            router.push('/')
-        }
-        else{
-            ElMessage.error('服务异常')
-        }
-
         return Promise.reject(err);//异步的状态转化成失败的状态
     }
 )

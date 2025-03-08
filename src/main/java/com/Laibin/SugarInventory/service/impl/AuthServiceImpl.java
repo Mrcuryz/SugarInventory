@@ -43,7 +43,7 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private final EmployeeRosterMapper rosterMapper;
 
-    private static final String WEB_LOGIN_PASSWORD = "AdminSecret";
+    private static final String WEB_LOGIN_PASSWORD = "123";
 
     @Override
     public Result<AuthVO> handleWebLogin(String name, String password) {
