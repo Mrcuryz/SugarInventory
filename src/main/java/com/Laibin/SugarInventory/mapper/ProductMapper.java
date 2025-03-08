@@ -93,6 +93,7 @@ public interface ProductMapper extends BaseMapper<Product> {
             "   <if test='packagingMethod != null'>packaging_method = #{packagingMethod},</if>" +
             "   <if test='weightPerPiece != null'>weight_per_piece = #{weightPerPiece},</if>" +
             "   <if test='piecesPerPallet != null'>pieces_per_pallet = #{piecesPerPallet},</if>" +
+            "   <if test='canStack != null'>can_stack = #{canStack},</if>" +
             "   updated_by = #{updatedBy}, " +
             "   updated_at = #{updatedAt} " +
             "</set>" +
@@ -107,7 +108,8 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("weightPerPiece") BigDecimal weightPerPiece,
             @Param("piecesPerPallet") Integer piecesPerPallet,
             @Param("updatedBy") Integer updatedBy,
-            @Param("updatedAt") LocalDateTime updatedAt
+            @Param("updatedAt") LocalDateTime updatedAt,
+            @Param("canStack") Boolean canStack
     );
 
     // 根据id删除产品

@@ -119,7 +119,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
                 dto.getWeightPerPiece(),
                 dto.getPiecesPerPallet(),
                 currentUserId,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                dto.getCanStack()
         );
 
         if (rows == 0) {
