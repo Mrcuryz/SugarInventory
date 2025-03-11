@@ -31,13 +31,23 @@ public interface ProductMapper extends BaseMapper<Product> {
     // 根据名称查询产品
     @Select("<script>" +
             "SELECT * FROM product " +
+            "WHERE 1=1 " +  // 确保 WHERE 存在
             "<if test='name != null and name != \"\"'>" +
-            "   WHERE product_name LIKE CONCAT('%', #{name}, '%') " +
+            "   AND product_name LIKE CONCAT('%', #{name}, '%') " +
+            "</if>" +
+            "<if test='type != null'>" +
+            "   AND product_type = #{type} " +
+            "</if>" +
+            "<if test='status != null'>" +
+            "   AND status = #{status} " +
             "</if>" +
             "</script>")
     List<Product> selectProductsByName(
-            @Param("name") String name
+            @Param("name") String name,
+            @Param("type") String type,
+            @Param("status") String status
     );
+
 
     // 查询所有半成品名称
     @Select("SELECT DISTINCT id AS productId, product_name AS productName " +

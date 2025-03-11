@@ -27,6 +27,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
@@ -140,27 +142,49 @@ public class AuthServiceImpl implements AuthService {
     }
 
     // 处理工号验证绑定
-    public Object handleManualBind(EmployeeVerifyDTO dto, String openid) {
+    public Object handleManualBind(EmployeeVerifyDTO dto) throws WxErrorException {
+        String openid = wechatClient.getOpenid(dto.getCode());
+        System.out.println("openid: " + openid);
+        System.out.println("employeeId: " + dto.getEmployeeId() + ", name: " + dto.getNamePart());
         // 1. 验证工号存在性
-        EmployeeRoster roster = rosterMapper.selectById(dto.getEmployeeId());
+        EmployeeRoster roster = rosterMapper.selectByEmployeeId(dto.getEmployeeId());
+        System.out.println("roster: " + roster);
         if (roster == null) {
             throw new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND);
         }
 
-        // 2. 验证姓名匹配（示例：验证姓名的首尾字符）
-        if (!validateNamePart(roster.getName(), dto.getNamePart())) {
+        // 2. 验证姓名匹配
+        if (!roster.getName().equals(dto.getNamePart())) {
             throw new BusinessException(ErrorCode.NAME_VALIDATION_FAILED);
         }
 
-        // 3. 执行绑定
+        // 3. 执行绑定前，检查是否已存在
+        User existingUser = userMapper.selectByEmployeeId(roster.getEmployeeId());
         User user = new User();
-        user.setOpenid(openid);
-        user.setEmployeeId(roster.getEmployeeId());
-        user.setBindStatus(BindStatus.MANUAL_BOUND);
-        user.setBindMethod(BindMethod.MANUAL);
-        userMapper.insert(user);
 
-        return jwtUtils.generateToken(user);
+        if (existingUser == null) {
+            // 用户不存在，执行插入
+            user.setName(roster.getName());
+            user.setOpenid(openid);
+            user.setRoleCode(roster.getRoleCode());
+            user.setCreatedAt(LocalDateTime.now());
+            user.setEmployeeId(roster.getEmployeeId());
+            user.setBindStatus(BindStatus.MANUAL_BOUND);
+            user.setBindMethod(BindMethod.MANUAL);
+            user.setLoginType("WECHAT");
+
+            userMapper.insert(user);
+        } else {
+            // 用户已存在，执行更新
+            existingUser.setOpenid(openid);
+            existingUser.setBindStatus(BindStatus.MANUAL_BOUND);
+            existingUser.setBindMethod(BindMethod.MANUAL);
+            existingUser.setLoginType("WECHAT");
+
+            userMapper.updateById(existingUser);
+        }
+
+        return jwtUtils.generateToken(existingUser != null ? existingUser : user);
     }
 
     private Object processWechatBind(SessionInfo session, EmployeeRoster roster) {
@@ -170,26 +194,33 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException("该员工已绑定其他微信账号");
         }
 
-        // 创建/更新用户记录
+        // 3. 执行绑定前，检查是否已存在
+        User existingUser = userMapper.selectByEmployeeId(roster.getEmployeeId());
         User user = new User();
-        user.setOpenid(session.getOpenid());
-        user.setEmployeeId(roster.getEmployeeId());
-        user.setBindStatus(BindStatus.WECHAT_BOUND);
-        user.setBindMethod(BindMethod.WECHAT);
 
-        if (user.getId() == null) {
+        if (existingUser == null) {
+            // 用户不存在，执行插入
+            user.setName(roster.getName());
+            user.setOpenid(session.getOpenid());
+            user.setRoleCode(roster.getRoleCode());
+            user.setCreatedAt(LocalDateTime.now());
+            user.setEmployeeId(roster.getEmployeeId());
+            user.setBindStatus(BindStatus.MANUAL_BOUND);
+            user.setBindMethod(BindMethod.MANUAL);
+            user.setLoginType("WECHAT");
+
             userMapper.insert(user);
         } else {
-            userMapper.updateById(user);
+            // 用户已存在，执行更新
+            existingUser.setOpenid(session.getOpenid());
+            existingUser.setBindStatus(BindStatus.MANUAL_BOUND);
+            existingUser.setBindMethod(BindMethod.MANUAL);
+            existingUser.setLoginType("WECHAT");
+
+            userMapper.updateById(existingUser);
         }
 
-        return jwtUtils.generateToken(user);
-    }
-
-    private boolean validateNamePart(String realName, String inputPart) {
-        // 示例验证逻辑：输入"张*三" 匹配 "张三丰"
-        String regex = realName.charAt(0) + ".*" + realName.charAt(realName.length()-1);
-        return inputPart.matches(regex);
+        return jwtUtils.generateToken(existingUser != null ? existingUser : user);
     }
 
     private String maskPhone(String phone) {

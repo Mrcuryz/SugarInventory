@@ -12,4 +12,7 @@ public class EmployeeVerifyDTO {
 
     @Schema(description = "部分姓名验证，例如 '张*三'", example = "张*三")
     private String namePart;
+
+    @Schema(description = "微信登录凭证", example = "0c3uP8ll2TZU8f4ganml266lf83uP8l2")
+    private String code;
 }

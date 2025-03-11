@@ -200,17 +200,15 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         }
 
         // **6. 同步更新库位信息**
-        warehouseMapper.updateCurCapacity(dto.getWarehouseId(), warehouse.getCurCapacity().add(totalWeight));
+        warehouseMapper.updateCurCapacity(
+                dto.getWarehouseId(), warehouse.getCurCapacity() + (quantity * product.getPiecesPerPallet()));
+        if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
+            warehouseMapper.updateMaxCapacity(dto.getWarehouseId(), warehouse.getMaxRows() * 2 * 2);
 
         InVO inVO = new InVO();
         inVO.setRemainingQuantity(0);
         inVO.setMessage("入库成功！");
         return inVO;
-    }
-
-    @Override
-    public InStock getRecordById(Integer id) {
-        return inStockMapper.selectById(id);
     }
 
     // 入库操作（使用坐标方式）
@@ -318,8 +316,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
     @Override
     public PageResult<InStockVO> queryInStockRecords(InStockQueryDTO queryDTO, User currentUser) {
+        System.out.println(currentUser.getRoleCode());
+        System.out.println("DTO:" + queryDTO);
         // 计算分页偏移量
-        int offset = (page - 1) * size;
+        int offset = (queryDTO.getPage() - 1) * queryDTO.getSize();
 
         // 判断是否为员工
         Boolean isStaff = currentUser.getRoleCode().equals("STAFF");
@@ -330,8 +330,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                 currentUser.getId(),
                 isStaff,
                 offset,
-                size
+                queryDTO.getSize()
         );
+
+        System.out.println("records:" + records);
 
         // 获取总记录数
         Long total = inStockMapper.countInStockRecords(
@@ -339,6 +341,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                 currentUser.getId(),
                 isStaff
         );
+        System.out.println("total:" + total);
 
         return new PageResult<>(total, records);
     }

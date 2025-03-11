@@ -12,24 +12,23 @@ import java.util.Date;
 @Data
 @Schema(description = "入库记录返回VO")
 public class InStockVO {
-
     @Schema(description = "入库记录ID", example = "1")
     private Integer id;
 
     @Schema(description = "产品名称", example = "中冰")
     private String productName;
 
-    @Schema(description = "仓库编号", example = "101")
-    private String warehouseId;
+    @Schema(description = "库位名称", example = "101")
+    private String warehouseName;
 
     @Schema(description = "数量", example = "250")
-    private BigDecimal quantity;
+    private Integer quantity;
 
     @Schema(description = "总重量（kg）", example = "3750.00")
     private BigDecimal totalWeight;
 
     @Schema(description = "入库日期", example = "2025-02-25")
-    private Date entryDate;
+    private LocalDate entryDate;
 
     @Schema(description = "操作员名称", example = "张三")
     private String operatorName;

@@ -21,16 +21,18 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * @author Mrcury
- * @since 2025-02-19
- */
 @RestController
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
 @Tag(name = "产品管理", description = "产品管理相关接口，包括产品查询、创建、更新、删除等")
 public class ProductController {
     private final ProductService productService;
+
+    @Operation(summary = "查询产品信息", description = "根据产品ID查询产品信息，返回产品详细信息")
+    @GetMapping("/{id}")
+    public Result<Product> getProduct(@PathVariable Integer id) {
+        return Result.success(productService.getById(id));
+    }
 
     /**
      * 根据名称查询产品信息
@@ -39,10 +41,20 @@ public class ProductController {
      */
     @Operation(summary = "根据名称查询产品信息", description = "根据产品名称支持模糊查询，返回产品列表")
     @GetMapping("/product")
-    public Result<List<Product>> getProductsByName(
+    public Result<List<Product>> getProductsByCondition(
             @Parameter(description = "产品名称，支持模糊查询", example = "冰", required = false)
-            @RequestParam(required = false) String name) {
-        return Result.success(productService.getProductsByName(name));
+            @RequestParam(required = false) String name,
+            @Parameter(description = "产品类型，例如 '白冰糖' 或 '黄冰糖'", required = false)
+            @RequestParam(required = false) String type,
+            @Parameter(description = "产品状态，例如 '半成品' 或 '成品'", required = false)
+            @RequestParam(required = false) String status
+            ) {
+        try {
+            System.out.println(name + " " + type + " " + status);
+            return Result.success(productService.getProductsByCondition(name, type, status));
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
     }
 
     /**

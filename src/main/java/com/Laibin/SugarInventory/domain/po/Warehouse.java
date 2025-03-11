@@ -33,7 +33,7 @@ public class Warehouse extends BaseEntity implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Integer id;
 
-    private String warehouseId;
+    private String warehouseName;
 
     private String status;
 
@@ -41,13 +41,17 @@ public class Warehouse extends BaseEntity implements Serializable {
 
     @Schema(description = "最大库存量（板）")
     @TableField(value = "max_capacity")
-    private BigDecimal maxCapacity;
+    private Integer maxCapacity;
 
     @Schema(description = "当前库存量（板）")
     @TableField(value = "cur_capacity")
-    private BigDecimal curCapacity;
+    private Integer curCapacity;
 
     @Schema(description = "最大排数")
     @TableField(value = "max_rows")
     private Integer maxRows;
+
+    public String getWarehouseId(){
+        return String.valueOf(id);
+    }
 }

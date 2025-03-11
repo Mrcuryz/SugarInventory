@@ -36,8 +36,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     private ProductMapper productMapper;
 
     @Override
-    public List<Product> getProductsByName(String name) {
-        return productMapper.selectProductsByName(name);
+    public List<Product> getProductsByCondition(String name, String type, String status) {
+        return productMapper.selectProductsByName(name, type, status);
     }
 
     @Override

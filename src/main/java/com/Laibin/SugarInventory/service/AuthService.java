@@ -13,5 +13,5 @@ public interface AuthService {
 
     public Object handleLogin(WechatPhoneDTO wechatDto);
 
-    public Object handleManualBind(EmployeeVerifyDTO dto, String openid);
+    public Object handleManualBind(EmployeeVerifyDTO dto) throws WxErrorException;
 }

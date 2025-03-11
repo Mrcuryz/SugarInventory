@@ -22,6 +22,9 @@ public interface EmployeeRosterMapper extends BaseMapper<EmployeeRoster> {
     @Select("SELECT COUNT(*) FROM employee_roster WHERE employee_id = #{employeeId}")
     boolean existsByEmployeeId(@Param("employeeId") String employeeId);
 
+    @Select("SELECT * FROM employee_roster WHERE employee_id = #{employeeId}")
+    EmployeeRoster selectByEmployeeId(@Param("employeeId") String employeeId);
+
     @Select("SELECT * FROM employee_roster WHERE name = #{name}")
     EmployeeRoster selectByName(@Param("name") String name);
 

@@ -28,7 +28,5 @@ public interface InStockService extends IService<InStock> {
     @Transactional
     InVO stockIn(InStockRequestDTO dto, Integer operatorId);
 
-    InStock getRecordById(Integer id);
-
     PageResult<InStockVO> queryInStockRecords(InStockQueryDTO queryDTO, User currentUser);
 }

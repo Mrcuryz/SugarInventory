@@ -54,17 +54,15 @@ public class InStockController {
         }
     }
 
-    @Operation(summary = "查询入库记录", description = "根据入库记录ID查询入库记录")
-    @GetMapping("/{id}")
-    public Result<InStock> getRecord(@PathVariable("id") Integer id) {
-        return Result.success(inStockService.getRecordById(id));
-    }
-
     @Operation(summary = "批量查询入库记录", description = "根据查询条件分页查询入库记录")
     @PostMapping("/query")
     public Result<PageResult<InStockVO>> queryRecords(@RequestBody InStockQueryDTO queryDTO,
                                                       @AuthenticationPrincipal LoginUser loginUser) {
         User user = loginUser.getUser();
-        return Result.success(inStockService.queryInStockRecords(queryDTO, user));
+        try {
+            return Result.success(inStockService.queryInStockRecords(queryDTO, user));
+        } catch (BusinessException e) {
+            return Result.error(500, "查询入库记录出错：" + e.getMessage());
+        }
     }
 }

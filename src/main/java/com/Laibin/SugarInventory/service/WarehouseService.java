@@ -1,5 +1,7 @@
 package com.Laibin.SugarInventory.service;
 
+import com.Laibin.SugarInventory.domain.dto.WarehouseDTO;
+import com.Laibin.SugarInventory.domain.dto.WarehouseUpdateDTO;
 import com.Laibin.SugarInventory.domain.po.Warehouse;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,16 +22,16 @@ public interface WarehouseService extends IService<Warehouse> {
     void setWarehouseToMaintain(Integer id);
 
     // 新增库位
-    void createWarehouse(Warehouse warehouse);
+    Warehouse createWarehouse(WarehouseDTO warehouse);
 
     // 根据ID查询库位
     Warehouse getWarehouseById(Integer id);
 
     // 修改库位信息（不允许直接修改 status、curCapacity、createdAt，由触发器和系统自动管理）
-    Warehouse updateWarehouse(Warehouse warehouse);
+    Warehouse updateWarehouse(WarehouseUpdateDTO warehouse);
 
     // 删除库位
     void deleteWarehouse(Integer id);
 
-    List<Warehouse> listAllWarehouses();
+    List<Warehouse> listAllWarehouses(String name);
 }

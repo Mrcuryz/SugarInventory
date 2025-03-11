@@ -43,8 +43,9 @@ public interface InventoryMapper {
 
     @Select("SELECT * " +
             "FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
             "ORDER BY layer DESC LIMIT 1")
-    Inventory getLast();
+    Inventory getLast(Integer warehouseId);
 
     // **查询库存（按先进后出）**
     @Select("SELECT * FROM inventory " +
