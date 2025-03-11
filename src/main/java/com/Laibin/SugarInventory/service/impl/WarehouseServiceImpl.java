@@ -92,7 +92,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
 
             // 检查是否有重复的warehouseId
         Warehouse warehouseByWarehouseId = warehouseMapper.selectByWarehouseName(warehouse.getWarehouseName());
-        if(warehouseByWarehouseId != null) {
+        if(warehouseByWarehouseId != null && !warehouseByWarehouseId.getId().equals(warehouse.getId())) {
             throw new BusinessException("库位名称已存在");
         }
         newWarehouse.setWarehouseName(warehouse.getWarehouseName());
@@ -108,7 +108,8 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         newWarehouse.setCurCapacity(oldWarehouse.getCurCapacity());
         newWarehouse.setStatus(oldWarehouse.getStatus());
         newWarehouse.setCreatedAt(oldWarehouse.getCreatedAt());
-
+        newWarehouse.setId(warehouse.getId());
+        newWarehouse.setCreatedAt(oldWarehouse.getCreatedAt());
         // 更新时，不允许用户直接修改 status、curCapacity、createdAt 等字段
         int result = warehouseMapper.updateById(newWarehouse);
         if(result < 1){

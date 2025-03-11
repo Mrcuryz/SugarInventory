@@ -89,7 +89,6 @@ public class WarehouseController {
     @GetMapping("/query")
     public Result<List<Warehouse>> queryWarehouse(@RequestParam(required = false) String name) {
         try{
-            System.out.println(name);
             return Result.success(warehouseService.listAllWarehouses(name));
         } catch (Exception e){
             return Result.error(500,"查询库位失败:" + e.getMessage());

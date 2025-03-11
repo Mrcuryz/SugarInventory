@@ -45,7 +45,7 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private final EmployeeRosterMapper rosterMapper;
 
-    private static final String WEB_LOGIN_PASSWORD = "AdminSecret";
+    private static final String WEB_LOGIN_PASSWORD = "123";
 
     @Override
     public Result<AuthVO> handleWebLogin(String name, String password) {
@@ -120,7 +120,9 @@ public class AuthServiceImpl implements AuthService {
             // 2. 检查现有绑定
             User user = userMapper.selectByOpenidWithRole(session.getOpenid());
             if (user != null && user.getBindStatus() != BindStatus.UNBOUND) {
-                return jwtUtils.generateToken(user); // 已绑定直接返回令牌
+                UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmployeeId());
+                String token = jwtUtils.generateToken(userDetails);
+                return new AuthVO(token, user.getName(), user.getRoleCode());
             }
 
             // 3. 尝试微信手机号绑定
@@ -142,7 +144,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     // 处理工号验证绑定
-    public Object handleManualBind(EmployeeVerifyDTO dto) throws WxErrorException {
+    public AuthVO handleManualBind(EmployeeVerifyDTO dto) throws WxErrorException {
         String openid = wechatClient.getOpenid(dto.getCode());
         System.out.println("openid: " + openid);
         System.out.println("employeeId: " + dto.getEmployeeId() + ", name: " + dto.getNamePart());
@@ -183,8 +185,8 @@ public class AuthServiceImpl implements AuthService {
 
             userMapper.updateById(existingUser);
         }
-
-        return jwtUtils.generateToken(existingUser != null ? existingUser : user);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(roster.getEmployeeId());
+        return new AuthVO(jwtUtils.generateToken(userDetails), user.getName(), user.getRoleCode());
     }
 
     private Object processWechatBind(SessionInfo session, EmployeeRoster roster) {
@@ -219,8 +221,8 @@ public class AuthServiceImpl implements AuthService {
 
             userMapper.updateById(existingUser);
         }
-
-        return jwtUtils.generateToken(existingUser != null ? existingUser : user);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(roster.getEmployeeId());
+        return new AuthVO(jwtUtils.generateToken(userDetails), user.getName(), user.getRoleCode());
     }
 
     private String maskPhone(String phone) {
