@@ -52,6 +52,10 @@ instance.interceptors.response.use(
     },
     err => {
         //判断响应状态码,如果为401,则证明未登录,提示请登录,并跳转到登录页面
+        if(err.response.status===401){
+            ElMessage.error(err.response.data)
+            router.push('/login')
+        }
         return Promise.reject(err);//异步的状态转化成失败的状态
     }
 )

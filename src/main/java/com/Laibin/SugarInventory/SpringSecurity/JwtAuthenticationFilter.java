@@ -31,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain) throws IOException, ServletException {
         String token = jwtUtils.parseToken(request);
+        response.setCharacterEncoding("utf-8");
         if (token != null) {
             try {
                 Integer userId = jwtUtils.getUserIdFromToken(token);

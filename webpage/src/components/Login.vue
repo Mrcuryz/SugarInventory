@@ -49,6 +49,7 @@ const handleSubmit = async () => {
   }
   try {
     loading.value = true
+    tokenStore.removeToken();
     let result = await login(form);
     ElMessage.success('登录成功')
     tokenStore.setToken(result.data.token);

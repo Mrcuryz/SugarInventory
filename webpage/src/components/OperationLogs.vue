@@ -185,7 +185,6 @@ const handleSearch = async () => {
   }
   loading.value = true
   let res = await getOperationLogs(params)
-  loading.value = false
   if (res.code === 200) {
     total.value = res.data.total
     filteredLogs.value = res.data.records
@@ -208,6 +207,7 @@ const handleSearch = async () => {
         item.operationTime = item.operationTime.replace('T',' ').replace('Z',' ')
       }
     })
+    loading.value = false
   } else {
     console.error(res.msg)
   }
