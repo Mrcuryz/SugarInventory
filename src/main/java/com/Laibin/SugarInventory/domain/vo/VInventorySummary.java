@@ -14,6 +14,8 @@ import java.util.Date;
 public class VInventorySummary {
     @Schema(description = "库位ID")
     private Integer warehouseId;
+    @Schema(description = "库位名称")
+    private String warehouseName;
     @Schema(description = "产品id")
     private Integer productId;
     @Schema(description = "产品名称")

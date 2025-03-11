@@ -42,14 +42,22 @@ public class AuthController {
     @Operation(summary = "手机号绑定", description = "微信登录后绑定手机号接口")
     @PostMapping("/phone-bind")
     public Result<?> wechatLogin(@RequestBody WechatPhoneDTO dto) {
-        return Result.success(authService.handleLogin(dto));
+        try {
+            return Result.success(authService.handleLogin(dto));
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
     }
 
     // 工号验证绑定
     @Operation(summary = "工号验证绑定", description = "通过工号验证并绑定用户与微信账号")
     @PostMapping("/manual-bind")
-    public Result<?> manualBind(@RequestBody EmployeeVerifyDTO dto,
-                                @RequestParam String openid) {
-        return Result.success(authService.handleManualBind(dto, openid));
+    public Result<?> manualBind(@RequestBody EmployeeVerifyDTO dto) {
+        try {
+            return Result.success(authService.handleManualBind(dto));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error(e.getMessage());
+        }
     }
 }

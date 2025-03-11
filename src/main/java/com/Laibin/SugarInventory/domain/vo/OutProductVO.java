@@ -9,8 +9,10 @@ import java.time.LocalDate;
 @Data
 @Schema(description = "符合条件的产品VO")
 public class OutProductVO {
-    @Schema(description = "产品ID")
+    @Schema(description = "产品名称")
     private String productName;
+    @Schema(description = "库位名称")
+    private String warehouseName;
     @Schema(description = "检测日期（入库日期）")
     private LocalDate sampleDate; // 对应检测日期
     @Schema(description = "色值")

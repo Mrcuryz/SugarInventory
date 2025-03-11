@@ -1,12 +1,15 @@
 package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.OutRecordQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
+import com.Laibin.SugarInventory.domain.vo.OutStockRecordVO;
 import com.Laibin.SugarInventory.domain.vo.OutVO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.Laibin.SugarInventory.mapper.*;
@@ -40,7 +43,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
 
         Warehouse warehouse = warehouseMapper.selectById(dto.getWarehouseId());
 
-        Inventory curInventory = inventoryMapper.getLast();
+        Inventory curInventory = inventoryMapper.getLast(dto.getWarehouseId());
         if (curInventory == null) {
             throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
         }
@@ -90,6 +93,8 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
 
         // **4. 如果出库数量不足，返回错误**
         if (remainingQuantity > 0) {
+            if(warehouse.getMaxRows() * 2 != warehouse.getMaxCapacity())
+                warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2);
             OutVO outVO = new OutVO();
             outVO.setRemainingQuantity(remainingQuantity);
             outVO.setMessage("当前库存不足！还差 " + remainingQuantity + " 板");
@@ -116,7 +121,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
 
         // **6. 同步更新库位信息**
         warehouseMapper.updateCurCapacity(dto.getWarehouseId(),
-                warehouse.getCurCapacity().subtract(totalWeight));
+                warehouse.getCurCapacity() - (quantity * product.getPiecesPerPallet()));
 
         // **7. 返回出库结果**
         OutVO outVO = new OutVO();
@@ -130,6 +135,19 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         List<OutProductVO> productVOList = outStockMapper.selectProductsByQuery(query);
         System.out.println(productVOList);
         return productVOList;
+    }
+
+    @Override
+    public PageResult<OutStockRecordVO> searchOutRecords(OutRecordQueryDTO query) {
+        int offset = (query.getPage() - 1) * query.getSize();
+
+        List<OutStockRecordVO> recordVOList = outStockMapper
+                .selectOutStockRecordsByQuery(query, offset, query.getSize());
+
+        Long total = outStockMapper.countOutStockRecordsByQuery(query);
+
+        return new PageResult<>(total, recordVOList);
+
     }
 
     @Override

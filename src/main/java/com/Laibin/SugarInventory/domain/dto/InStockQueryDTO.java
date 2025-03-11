@@ -13,7 +13,7 @@ public class InStockQueryDTO {
     private String productName;
 
     @Schema(description = "仓库ID", example = "101")
-    private Long warehouseId;
+    private String warehouseName;
 
     @Schema(description = "查询起始日期", example = "2025-01-01")
     private Date startDate;
@@ -23,4 +23,10 @@ public class InStockQueryDTO {
 
     @Schema(description = "操作员名称，支持模糊查询", example = "张三")
     private String operatorName;
+
+    @Schema(description = "当前页码", example = "1")
+    private Integer page;
+
+    @Schema(description = "每页记录数", example = "10")
+    private Integer size;
 }

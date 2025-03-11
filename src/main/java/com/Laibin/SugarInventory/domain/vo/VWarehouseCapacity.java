@@ -14,7 +14,7 @@ public class VWarehouseCapacity {
     @Schema(description = "库位ID")
     private int warehouseId;
     @Schema(description = "库位名称")
-    private String warehouseCode;
+    private String warehouseName;
     @Schema(description = "库位状态")
     private String status;
     @Schema(description = "当前库存量")

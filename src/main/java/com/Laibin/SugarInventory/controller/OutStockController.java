@@ -2,11 +2,14 @@ package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.annotation.LogOperation;
+import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.dto.OutRecordQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
+import com.Laibin.SugarInventory.domain.vo.OutStockRecordVO;
 import com.Laibin.SugarInventory.domain.vo.OutVO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.Laibin.SugarInventory.service.OutStockService;
@@ -44,5 +47,15 @@ public class OutStockController {
     public Result<List<OutProductVO>> searchProducts(@RequestBody OutProductQueryDTO query) {
         List<OutProductVO> products = outStockService.searchProducts(query);
         return Result.success(products);
+    }
+
+    @Operation(summary = "出库记录查询", description = "根据条件批量查询出库记录信息")
+    @PostMapping("/records")
+    public Result<PageResult<OutStockRecordVO>> searchOutRecords(@RequestBody OutRecordQueryDTO query) {
+        try {
+            return Result.success(outStockService.searchOutRecords(query));
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
     }
 }

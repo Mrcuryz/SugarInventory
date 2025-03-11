@@ -1,8 +1,11 @@
 package com.Laibin.SugarInventory.service;
 
+import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.OutRecordQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
+import com.Laibin.SugarInventory.domain.vo.OutStockRecordVO;
 import com.Laibin.SugarInventory.domain.vo.OutVO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,4 +17,6 @@ public interface OutStockService {
     OutVO processOutStock(OutStockRequestDTO request, Integer operatorId);
 
     public List<OutProductVO> searchProducts(OutProductQueryDTO query);
+
+    public PageResult<OutStockRecordVO> searchOutRecords(OutRecordQueryDTO query);
 }

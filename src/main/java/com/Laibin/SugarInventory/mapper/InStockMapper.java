@@ -28,21 +28,32 @@ public interface InStockMapper extends BaseMapper<InStock> {
     int insert(InStock inStock);
 
     @Select("<script>" +
-            "SELECT s.*, p.product_name, w.warehouse_id, u.name as operator_name, " +
+            "SELECT s.*, p.product_name, w.warehouse_name, u.name as operator_name, " +
             "sm.mesh_name " +
             "FROM in_stock s " +
             "LEFT JOIN product p ON s.product_id = p.id " +
             "LEFT JOIN warehouse w ON s.warehouse_id = w.id " +
             "LEFT JOIN user u ON s.created_by = u.id " +
             "LEFT JOIN screen_mesh sm ON s.screen_mesh_id = sm.id " +
-            "<where>" +
-            "   <if test='query.productName != null'> AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') </if>" +
-            "   <if test='query.warehouseId != null'> AND s.warehouse_id = #{query.warehouseId} </if>" +
-            "   <if test='query.startDate != null'> AND s.entry_date &gt;= #{query.startDate} </if>" +
-            "   <if test='query.endDate != null'> AND s.entry_date &lt;= #{query.endDate} </if>" +
-            "   <if test='query.operatorName != null'> AND u.name LIKE CONCAT('%', #{query.operatorName}, '%') </if>" +
-            "   <if test='isStaff'> AND s.created_by = #{userId} </if>" +
-            "</where>" +
+            "where 1=1 " +
+            "<if test='query.productName != null'> " +
+            "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
+            "</if>" +
+            "<if test='query.warehouseName != null'>" +
+            "   AND w.warehouse_name LIKE CONCAT('%', #{query.warehouseName}, '%') " +
+            "</if> " +
+            "<if test='query.startDate != null'> " +
+            "   AND s.entry_date &gt;= #{query.startDate} " +
+            "</if>" +
+            "<if test='query.endDate != null'> " +
+            "   AND s.entry_date &lt;= #{query.endDate} " +
+            "</if>" +
+            "<if test='query.operatorName != null'> " +
+            "   AND u.name LIKE CONCAT('%', #{query.operatorName}, '%') " +
+            "</if>" +
+            "<if test='isStaff'> " +
+            "   AND s.created_by = #{userId} " +
+            "</if>" +
             "ORDER BY s.entry_date DESC " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
@@ -59,14 +70,27 @@ public interface InStockMapper extends BaseMapper<InStock> {
             "FROM in_stock s " +
             "LEFT JOIN product p ON s.product_id = p.id " +
             "LEFT JOIN user u ON s.created_by = u.id " +
-            "<where>" +
-            "   <if test='query.productName != null'> AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') </if>" +
-            "   <if test='query.warehouseId != null'> AND s.warehouse_id = #{query.warehouseId} </if>" +
-            "   <if test='query.startDate != null'> AND s.entry_date &gt;= #{query.startDate} </if>" +
-            "   <if test='query.endDate != null'> AND s.entry_date &lt;= #{query.endDate} </if>" +
-            "   <if test='query.operatorName != null'> AND u.name LIKE CONCAT('%', #{query.operatorName}, '%') </if>" +
-            "   <if test='isStaff'> AND s.created_by = #{userId} </if>" +
-            "</where>" +
+            "LEFT JOIN warehouse w ON s.warehouse_id = w.id " +
+            "LEFT JOIN screen_mesh sm ON s.screen_mesh_id = sm.id " +
+            "where 1=1 " +
+            "<if test='query.productName != null'> " +
+            "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
+            "</if>" +
+            "<if test='query.warehouseName != null'>" +
+            "   AND w.warehouse_name LIKE CONCAT('%', #{query.warehouseName}, '%') " +
+            "</if> " +
+            "<if test='query.startDate != null'> " +
+            "   AND s.entry_date &gt;= #{query.startDate} " +
+            "</if>" +
+            "<if test='query.endDate != null'> " +
+            "   AND s.entry_date &lt;= #{query.endDate} " +
+            "</if>" +
+            "<if test='query.operatorName != null'> " +
+            "   AND u.name LIKE CONCAT('%', #{query.operatorName}, '%') " +
+            "</if>" +
+            "<if test='isStaff'> " +
+            "   AND s.created_by = #{userId} " +
+            "</if>" +
             "</script>")
     Long countInStockRecords(
             @Param("query") InStockQueryDTO query,

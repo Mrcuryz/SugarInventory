@@ -9,6 +9,7 @@ import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -20,7 +21,7 @@ import java.util.List;
  * @since 2025-02-19
  */
 public interface ProductService extends IService<Product> {
-    List<Product> getProductsByName(String name);
+    List<Product> getProductsByCondition(String name, String type, String status);
 
     List<ProductInfoVO> getSemiProductNames();
 
