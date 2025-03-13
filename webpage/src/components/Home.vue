@@ -27,11 +27,15 @@
   </div>
   <el-container class="h-screen">
     <!-- 左侧库位图 -->
-    <el-main class="p-4 bg-gray-50">
-      <div class="border rounded-lg bg-white p-4">
+    <el-main
+        class="p-4 bg-gray-50 transition-all duration-300"
+        :style="{ flex: `0 0 ${selectedLocation ? 'calc(100% - 360px)' : '100%'}`}"
+    >
+      <div class="border rounded-lg bg-white p-4 h-full">
         <svg
             :viewBox="`0 0 ${viewBoxWidth} ${viewBoxHeight}`"
-            class="warehouse-map"
+            class="warehouse-map w-full h-full"
+            @click.self.stop="handleCanvasClick"
         >
           <g v-for="location in locations" :key="location.id">
             <rect
@@ -63,9 +67,15 @@
     </el-main>
 
     <!-- 右侧信息面板 -->
-    <el-aside width="360px" class="border-l p-4 bg-white">
-      <div v-if="selectedLocation">
-        <h2 class="text-lg font-bold mb-4">{{ selectedLocation.id }} 详情</h2>
+    <transition name="slide-fade">
+      <el-aside
+          v-if="selectedLocation"
+          key="aside"
+          width="360px"
+          class="border-l p-4 bg-white h-full"
+      >
+      <div>
+        <h2 class="text-lg font-bold mb-4">{{ selectedLocation.warehouseName }} 详情</h2>
         <el-descriptions :column="1" border>
           <el-descriptions-item label="状态">
             <el-tag :type="statusTagMap[selectedLocation.status]">
@@ -89,8 +99,8 @@
           </el-descriptions-item>
         </el-descriptions>
       </div>
-      <el-empty v-else description="请点击库位查看详情" />
     </el-aside>
+    </transition>
   </el-container>
 </template>
 
@@ -242,7 +252,7 @@ onMounted(() => {
 const viewBoxWidth = ref(1200)
 const viewBoxHeight = ref(800)
 // 当前选中库位
-const selectedLocation = ref([])
+const selectedLocation = ref(null)
 
 // 状态映射配置
 const statusMap = reactive({
@@ -256,10 +266,10 @@ const statusMap = reactive({
 
 const statusTagMap = reactive({
   normal: 'success',
-  empty: 'warning',
+  empty: 'primary',
   full: 'danger',
-  danger: 'danger',
-  maintenance: 'warning',
+  danger: 'warning',
+  maintenance: 'info',
   default: 'info',
 })
 
@@ -831,7 +841,6 @@ const handleSelectLocation = async (location) => {
     size:1000
   }
   let result = await getWarehouseInfo(params)
-  console.log(result.data.records[0])
   if (result.code === 200) {
     selectedLocation.value.warehouseName = result.data.records[0].warehouseName
     selectedLocation.value.productName = result.data.records[0].productName
@@ -856,7 +865,7 @@ const statusColorMap = reactive({
   danger: '#fde047',
   full: '#ff3838',
   maintenance: '#727272',
-  default: '#e2e8f0'
+  default: '#ffffff'
 })
 // HEX转RGBA函数
 const hexToRgba = (hex, alpha) => {
@@ -904,12 +913,12 @@ const getAll = async () => {
     })
   }
 }
-// onBeforeMount(() => {
-//   getAll()
-//   setInterval(() => {
-//     getAll()
-//   }, 10000)
-// })
+const handleCanvasClick = () => {
+  console.log('canvas clicked')
+  if (selectedLocation.value) {
+    selectedLocation.value = null
+  }
+}
 </script>
 
 <style scoped>
@@ -983,11 +992,33 @@ const getAll = async () => {
   color: #409eff;
 }
 
+/* 添加过渡动画 */
+.slide-fade-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-fade-leave-active {
+  transition: all 0.3s cubic-bezier(1, 0.5, 0.8, 1);
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateX(20px);
+  opacity: 0;
+}
+
+/* 确保容器布局正确 */
+.el-container {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.el-main {
+  transition: flex 0.3s ease-in-out;
+}
 
 .warehouse-map {
-  width: 100%;
-  height: calc(100vh - 120px);
-  background-color: #f8fafc;
+  min-height: 500px; /* 根据实际需要调整 */
 }
 
 .location {
