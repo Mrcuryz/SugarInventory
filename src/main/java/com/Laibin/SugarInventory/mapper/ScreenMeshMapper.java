@@ -9,7 +9,14 @@ import java.util.List;
 @Mapper
 public interface ScreenMeshMapper extends BaseMapper<ScreenMesh> {
     // 查询筛网列表
-    @Select("SELECT * FROM screen_mesh WHERE mesh_name LIKE CONCAT('%', #{meshName}, '%')")
+    @Select({
+            "<script>",
+            "SELECT * FROM screen_mesh WHERE 1=1",
+            "<if test='meshName != null and meshName != \"\"'>",
+            " AND mesh_name LIKE CONCAT('%', #{meshName}, '%')",
+            "</if>",
+            "</script>"
+    })
     List<ScreenMesh> findByMeshName(@Param("meshName") String meshName);
 
     @Select("SELECT * FROM screen_mesh WHERE mesh_name = #{meshName}")

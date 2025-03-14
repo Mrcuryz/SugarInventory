@@ -16,7 +16,5 @@ public interface OutStockService {
     @Transactional
     OutVO processOutStock(OutStockRequestDTO request, Integer operatorId);
 
-    public List<OutProductVO> searchProducts(OutProductQueryDTO query);
-
     public PageResult<OutStockRecordVO> searchOutRecords(OutRecordQueryDTO query);
 }

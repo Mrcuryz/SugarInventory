@@ -3,6 +3,8 @@ package com.Laibin.SugarInventory.controller;
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.dto.ScreenMeshCreateDTO;
+import com.Laibin.SugarInventory.domain.dto.ScreenMeshUpdateDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.ScreenMesh;
 import com.Laibin.SugarInventory.service.ScreenMeshService;
@@ -26,10 +28,16 @@ public class ScreenMeshController {
 
     @Operation(summary = "查询筛网列表", description = "根据筛网名称模糊查询筛网列表，如果不传参数则返回全部匹配记录")
     @GetMapping("/list")
-    public List<ScreenMesh> getScreenMeshes(
+    public Result<List<ScreenMesh>> getScreenMeshes(
             @Parameter(description = "筛网名称，支持模糊查询", example = "大筛网", required = false)
             @RequestParam(required = false) String meshName) {
-        return screenMeshService.findScreenMeshes(meshName);
+        System.out.println("meshName: " + meshName);
+        try {
+            return Result.success(screenMeshService.findScreenMeshes(meshName));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error(e.getMessage());
+        }
     }
 
     @Operation(summary = "查询所有筛网", description = "返回所有筛网信息")
@@ -43,10 +51,10 @@ public class ScreenMeshController {
     @PostMapping("/add")
     public Result<ScreenMesh> addScreenMesh(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "筛网对象，包含筛网名称、描述等必填字段", required = true)
-            @Valid @RequestBody ScreenMesh screenMesh,
+            @Valid @RequestBody ScreenMeshCreateDTO dto,
             @AuthenticationPrincipal LoginUser loginUser) {
         try {
-            return Result.success(screenMeshService.addScreenMesh(screenMesh, loginUser.getUser().getId()));
+            return Result.success(screenMeshService.addScreenMesh(dto, loginUser.getUser().getId()));
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }
@@ -57,10 +65,10 @@ public class ScreenMeshController {
     @PutMapping("/update")
     public Result<ScreenMesh> updateScreenMesh(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "筛网对象，必须包含ID及需要更新的字段", required = true)
-            @Valid @RequestBody ScreenMesh screenMesh,
+            @Valid @RequestBody ScreenMeshUpdateDTO dto,
             @AuthenticationPrincipal LoginUser loginUser) {
         try {
-            return Result.success(screenMeshService.updateScreenMesh(screenMesh, loginUser.getUser().getId()));
+            return Result.success(screenMeshService.updateScreenMesh(dto, loginUser.getUser().getId()));
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }

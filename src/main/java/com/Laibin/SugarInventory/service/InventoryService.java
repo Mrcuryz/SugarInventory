@@ -2,6 +2,9 @@ package com.Laibin.SugarInventory.service;
 
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.InventoryQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
+import com.Laibin.SugarInventory.domain.vo.OutProductVO;
+import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
 
@@ -11,5 +14,11 @@ public interface InventoryService {
 
     PageResult<VInventorySummary> getInventorySummary(InventoryQueryDTO query);
 
+    List<OutWarehouseVO> getQualifiedWarehouses(OutProductQueryDTO queryDTO);
+
+    List<OutProductVO> getInventoryDetails(Integer warehouseId, OutProductQueryDTO queryDTO);
+
     List<VWarehouseCapacity> getWarehouses();
+
+
 }

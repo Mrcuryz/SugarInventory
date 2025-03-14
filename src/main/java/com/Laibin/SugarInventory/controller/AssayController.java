@@ -10,6 +10,7 @@ import com.Laibin.SugarInventory.domain.dto.AssaySubmitDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.vo.AssayVO;
 import com.Laibin.SugarInventory.service.AssayService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -49,11 +50,19 @@ public class AssayController {
     public Result<PageResult<AssayVO>> queryAssays(
             @RequestBody AssayQueryDTO query
     ) {
-        return Result.success(assayService.queryAssays(query));
+        try {
+            Result<PageResult<AssayVO>> result = Result.success(assayService.queryAssays(query));
+            System.out.println("result:" + result);
+            return result;
+        } catch (BusinessException e) {
+            e.printStackTrace();
+            return Result.error(500, "化验记录查询失败：" + e.getMessage());
+        }
     }
 
     @Operation(summary = "更新化验记录", description = "根据化验记录ID更新化验数据（更新时保留旧记录，以便历史对比）")
     @LogOperation(value = "化验数据", type = OperationType.INSERT)
+    @PreAuthorize("hasAuthority('quality:test')")
     @PostMapping("/{id}")
     public Result<AssayVO> updateAssay(
             @PathVariable("id") Integer id,
@@ -62,8 +71,8 @@ public class AssayController {
     ) {
         try {
             return Result.success(assayService.updateAssay(id, dto, loginUser.getUser()));
-        } catch (BusinessException e) {
+        } catch (BusinessException | JsonProcessingException e) {
             return Result.error(500, "化验记录更新失败：" + e.getMessage());
-            }
+        }
     }
 }

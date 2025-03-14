@@ -42,13 +42,6 @@ public class OutStockController {
         }
     }
 
-    @Operation(summary = "筛选出库产品", description = "根据条件查询符合条件的出库产品，返回符合条件的产品及位置信息")
-    @PostMapping("/search")
-    public Result<List<OutProductVO>> searchProducts(@RequestBody OutProductQueryDTO query) {
-        List<OutProductVO> products = outStockService.searchProducts(query);
-        return Result.success(products);
-    }
-
     @Operation(summary = "出库记录查询", description = "根据条件批量查询出库记录信息")
     @PostMapping("/records")
     public Result<PageResult<OutStockRecordVO>> searchOutRecords(@RequestBody OutRecordQueryDTO query) {

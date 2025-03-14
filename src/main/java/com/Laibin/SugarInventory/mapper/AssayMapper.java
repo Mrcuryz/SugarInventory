@@ -26,16 +26,16 @@ public interface AssayMapper extends BaseMapper<Assay> {
                                    @Param("date") LocalDate date);
 
     @Select("<script>" +
-            "SELECT a.id, p.product_name, a.sample_date, a.color_value, a.reducing_sugar, a.ph_value, u.name AS tester_name, a.created_at " +
+            "SELECT a.*, p.product_name, u.name AS tester_name, s.*" +
             "FROM assay a " +
             "LEFT JOIN product p ON a.product_id = p.id " +
             "LEFT JOIN user u ON a.tested_by = u.id " +
+            "LEFT JOIN quality_standards s ON p.product_type = s.product_type " +
             "<where> " +
-            "   <if test='query.productId != null'>AND a.product_id = #{query.productId}</if> " +
             "   <if test='query.productName != null'>AND p.product_name LIKE CONCAT('%', #{query.productName}, '%')</if> " +
             "   <if test='query.startDate != null'>AND a.sample_date &gt;= #{query.startDate}</if> " +
             "   <if test='query.endDate != null'>AND a.sample_date &lt;= #{query.endDate}</if> " +
-            "   <if test='query.testedBy != null'>AND a.tested_by = #{query.testedBy}</if> " +
+            "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, 'name'}, '%')</if> " +
             "</where> " +
             "ORDER BY a.sample_date DESC " +
             "LIMIT #{offset}, #{size} " +
@@ -48,24 +48,13 @@ public interface AssayMapper extends BaseMapper<Assay> {
             "SELECT COUNT(*) " +
             "FROM assay a " +
             "LEFT JOIN product p ON a.product_id = p.id " +
+            "LEFT JOIN user u ON a.tested_by = u.id " +
             "<where> " +
-            "   <if test='query.productId != null'>AND a.product_id = #{query.productId}</if> " +
             "   <if test='query.productName != null'>AND p.product_name LIKE CONCAT('%', #{query.productName}, '%')</if> " +
             "   <if test='query.startDate != null'>AND a.sample_date &gt;= #{query.startDate}</if> " +
             "   <if test='query.endDate != null'>AND a.sample_date &lt;= #{query.endDate}</if> " +
-            "   <if test='query.testedBy != null'>AND a.tested_by = #{query.testedBy}</if> " +
+            "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, 'name'}, '%')</if> " +
             "</where> " +
             "</script>")
     Long countAssay(@Param("query") AssayQueryDTO query);
-
-    @Insert("<script>" +
-            "INSERT INTO assay " +
-            "(product_id, sample_date, color_value, reducing_sugar, ph_value, tested_by, created_at) " +
-            "VALUES " +
-            "<foreach collection='list' item='item' separator=','>" +
-            "(#{item.productId}, #{item.sampleDate}, #{item.colorValue}, " +
-            "#{item.reducingSugar}, #{item.phValue}, #{item.testedBy}, #{item.createdAt})" +
-            "</foreach>" +
-            "</script>")
-    int insertBatch(@Param("list") List<Assay> assays);
 }

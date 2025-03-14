@@ -5,28 +5,23 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
-@Schema(description = "查询符合条件的出库产品DTO")
+@Schema(description = "库存查询请求DTO")
 public class OutProductQueryDTO {
-    @Schema(description = "产品名称", example = "中冰")
+    @Schema(description = "产品名称")
     private String productName;
-    @Schema(description = "生产日期 起始", example = "2025-01-01")
+
+    @Schema(description = "标准名称列表")
+    private List<String> standardNames;
+
+    @Schema(description = "筛网 ID")
+    private Integer screenMeshId;
+
+    @Schema(description = "查询开始日期")
     private LocalDate startDate;
-    @Schema(description = "生产日期 终止", example = "2025-12-31")
+
+    @Schema(description = "查询结束日期")
     private LocalDate endDate;
-    @Schema(description = "色值 最小值", example = "0.0")
-    private BigDecimal colorValueMin;
-    @Schema(description = "色值 最大值", example = "500.0")
-    private BigDecimal colorValueMax;
-    @Schema(description = "还原糖含量 最小值", example = "0.0")
-    private BigDecimal reducingSugarMin;
-    @Schema(description = "还原糖含量 最大值", example = "100.0")
-    private BigDecimal reducingSugarMax;
-    @Schema(description = "pH 最小值", example = "0.0")
-    private BigDecimal phMin;
-    @Schema(description = "pH 最大值", example = "14.0")
-    private BigDecimal phMax;
-    @Schema(description = "筛网Id", example = "1")
-    private Integer ScreenMeshId;
 }

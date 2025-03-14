@@ -9,6 +9,7 @@ import com.Laibin.SugarInventory.domain.po.Assay;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.AssayVO;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.ibatis.annotations.Mapper;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,6 @@ public interface AssayService extends IService<Assay> {
     PageResult<AssayVO> queryAssays(AssayQueryDTO query);
 
     @Transactional
-    AssayVO updateAssay(Integer id, AssaySubmitDTO dto, User operator);
+    AssayVO updateAssay(Integer id, AssaySubmitDTO dto, User operator) throws JsonProcessingException;
 
 }

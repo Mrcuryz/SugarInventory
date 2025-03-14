@@ -2,9 +2,13 @@ package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.InventoryQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
 import com.Laibin.SugarInventory.domain.po.Product;
+import com.Laibin.SugarInventory.domain.vo.OutProductVO;
+import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
+import com.Laibin.SugarInventory.mapper.InventoryMapper;
 import com.Laibin.SugarInventory.mapper.InventorySummaryMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.service.InventoryService;
@@ -24,6 +28,9 @@ public class InventoryServiceImpl implements InventoryService {
     @Autowired
     private ProductMapper productMapper;
 
+    @Autowired
+    private InventoryMapper inventoryMapper;
+
     @Override
     public PageResult<VInventorySummary> getInventorySummary(InventoryQueryDTO query) {
         int offset = (query.getPage() - 1) * query.getSize();
@@ -41,6 +48,16 @@ public class InventoryServiceImpl implements InventoryService {
         Long total = summaryMapper.countSummary(query);
 
         return new PageResult<>(total, records);
+    }
+
+    @Override
+    public List<OutWarehouseVO> getQualifiedWarehouses(OutProductQueryDTO queryDTO) {
+        return inventoryMapper.findWarehousesByCondition(queryDTO);
+    }
+
+    @Override
+    public List<OutProductVO> getInventoryDetails(Integer warehouseId, OutProductQueryDTO queryDTO) {
+        return inventoryMapper.findInventoryByWarehouse(warehouseId, queryDTO);
     }
 
     @Override

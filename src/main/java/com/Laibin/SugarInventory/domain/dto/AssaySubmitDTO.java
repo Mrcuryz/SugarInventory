@@ -21,13 +21,27 @@ public class AssaySubmitDTO {
     private LocalDate sampleDate;
 
     @DecimalMin(value = "0.00", message = "色值不能小于0")
-    @DecimalMax(value = "500.00", message = "色值不能大于500")
     @Schema(description = "色值", example = "75.5")
     private BigDecimal colorValue;
 
-    @DecimalMin(value = "0.00", message = "还原糖不能小于0")
-    @DecimalMax(value = "50.00", message = "还原糖不能大于50")
+    @Schema(description = "还原糖分", example = "1.0")
+    @DecimalMin(value = "0.00", message = "还原糖分不能小于0")
     private BigDecimal reducingSugar;
+
+    @Schema(description = "干燥失重", example = "1.0")
+    @DecimalMin(value = "0.00", message = "干燥失重不能小于0")
+    private BigDecimal dryWeight;
+
+    @Schema(description = "电导灰分", example = "0.05")
+    @DecimalMin(value = "0.00", message = "电导灰分不能小于0")
+    private BigDecimal conductivityAsh;
+
+    @Schema(description = "蔗糖分", example = "98.0")
+    @DecimalMin(value = "0.00", message = "蔗糖分不能小于0")
+    private BigDecimal sucrose;
+
+    @Schema(description = "不溶于水杂质", example = "50")
+    private BigDecimal insolubleImpurity;
 
     @DecimalMin(value = "0.00", message = "pH值不能小于0")
     @DecimalMax(value = "14.00", message = "pH值不能大于14")

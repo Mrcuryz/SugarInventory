@@ -1,6 +1,8 @@
 package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.domain.dto.ScreenMeshCreateDTO;
+import com.Laibin.SugarInventory.domain.dto.ScreenMeshUpdateDTO;
 import com.Laibin.SugarInventory.domain.po.Assay;
 import com.Laibin.SugarInventory.domain.po.ScreenMesh;
 import com.Laibin.SugarInventory.mapper.ScreenMeshMapper;
@@ -20,7 +22,10 @@ public class ScreenMeshServiceImpl implements ScreenMeshService, LoggableService
 
     @Override
     public List<ScreenMesh> findScreenMeshes(String meshName) {
-        return screenMeshMapper.findByMeshName(meshName);
+        System.out.println("findScreenMeshes" + meshName);
+        List<ScreenMesh> list = screenMeshMapper.findByMeshName(meshName);
+        System.out.println(list);
+        return list;
     }
 
     @Override
@@ -29,7 +34,11 @@ public class ScreenMeshServiceImpl implements ScreenMeshService, LoggableService
     }
 
     @Override
-    public ScreenMesh addScreenMesh(ScreenMesh screenMesh, Integer userId) {
+    public ScreenMesh addScreenMesh(ScreenMeshCreateDTO dto, Integer userId) {
+        ScreenMesh screenMesh = new ScreenMesh();
+        screenMesh.setMeshName(dto.getMeshName());
+        screenMesh.setDescription(dto.getDescription());
+
         if(screenMeshMapper.existByName(screenMesh.getMeshName()) != null)
             throw new BusinessException("筛网名称已存在");
 
@@ -43,7 +52,22 @@ public class ScreenMeshServiceImpl implements ScreenMeshService, LoggableService
     }
 
     @Override
-    public ScreenMesh updateScreenMesh(ScreenMesh screenMesh, Integer userId) {
+    public ScreenMesh updateScreenMesh(ScreenMeshUpdateDTO dto, Integer userId) {
+        ScreenMesh screenMesh = screenMeshMapper.selectById(dto.getId());
+        if (screenMesh == null) {
+            throw new BusinessException("筛网不存在");
+        }
+
+        if (dto.getMeshName()!= null &&!dto.getMeshName().equals(screenMesh.getMeshName())) {
+            if (screenMeshMapper.existByName(dto.getMeshName()) != null)
+                throw new BusinessException("筛网名称已存在");
+            screenMesh.setMeshName(dto.getMeshName());
+        }
+
+        if(dto.getDescription()!= null){
+            screenMesh.setDescription(dto.getDescription());
+        }
+
         screenMesh.setUpdatedBy(userId);
         screenMesh.setUpdatedAt(LocalDateTime.now());
         int result = screenMeshMapper.updateScreenMesh(screenMesh);

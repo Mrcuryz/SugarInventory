@@ -131,13 +131,6 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
     }
 
     @Override
-    public List<OutProductVO> searchProducts(OutProductQueryDTO query) {
-        List<OutProductVO> productVOList = outStockMapper.selectProductsByQuery(query);
-        System.out.println(productVOList);
-        return productVOList;
-    }
-
-    @Override
     public PageResult<OutStockRecordVO> searchOutRecords(OutRecordQueryDTO query) {
         int offset = (query.getPage() - 1) * query.getSize();
 

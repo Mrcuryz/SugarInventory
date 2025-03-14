@@ -93,11 +93,14 @@ public class OperationLogAspect {
 
             // **1. 处理参数**
             for (Object arg : args) {
+                System.out.println("arg: " + arg);
                 if (operationType == OperationType.UPDATE || operationType == OperationType.DELETE) {
                     if (arg instanceof Integer) {
                         ids.add((Integer) arg);
+                        System.out.println("id: " + arg);
                     } else if (arg instanceof BaseDTO) {
-                        ids.add(((BaseDTO) arg).getId());
+                        if(((BaseDTO) arg).getId() != null)
+                            ids.add(((BaseDTO) arg).getId());
                     } else if (arg instanceof BaseEntity) {
                         ids.add(((BaseEntity) arg).getId());
                     } else if (arg instanceof List<?>) {
@@ -174,9 +177,8 @@ public class OperationLogAspect {
             for (OperationLog log : logEntries) {
                 operationLogMapper.insert(log);
             }
-
             return result;
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             System.err.println("参数错误：" + e.getMessage());
             return joinPoint.proceed(); // 跳过日志记录，继续执行原方法
@@ -207,7 +209,7 @@ public class OperationLogAspect {
     }
 
     private Map<String, Object> getChangedFields(Object oldData, Object newData) {
-        Map<String, Object> changes = new HashMap<>();
+        Map<String, Object> changes = new LinkedHashMap<>();
         if (oldData == null || newData == null) {
             return changes;
         }
@@ -239,7 +241,7 @@ public class OperationLogAspect {
     private Map<String, Object> convertProductIdToName(Map<String, Object> dataMap) {
         if (dataMap == null) return null;
 
-        Map<String, Object> updatedMap = new HashMap<>(dataMap);
+        Map<String, Object> updatedMap = new LinkedHashMap<>(dataMap);
         if (updatedMap.containsKey("productId") || updatedMap.containsKey("product_id")) {
             Integer productId = (Integer) updatedMap.get("product_id");
             if (productId == null) {
@@ -262,7 +264,7 @@ public class OperationLogAspect {
     // 将对象转换为 Map
     private Map<String, Object> objectToMap(Object obj) {
         if (obj == null) return Collections.emptyMap();
-        Map<String, Object> map = new HashMap<>();
+        Map<String, Object> map = new LinkedHashMap<>();
         BeanWrapper beanWrapper = new BeanWrapperImpl(obj);
         for (PropertyDescriptor pd : beanWrapper.getPropertyDescriptors()) {
             String fieldName = pd.getName();
@@ -276,7 +278,8 @@ public class OperationLogAspect {
 
     // 忽略自动填充字段（如 createdAt/updatedAt）
     private boolean isIgnoredField(String field) {
-        return field.equals("createdAt") || field.equals("updatedAt") || field.equals("createdBy") || field.equals("updatedBy");
+        return field.equals("createdAt") || field.equals("updatedAt") ||
+                field.equals("createdBy") || field.equals("updatedBy");
     }
 
     // 将对象转换为 JSON 字符串

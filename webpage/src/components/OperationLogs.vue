@@ -40,13 +40,12 @@
 
         <el-form-item label="操作人员">
           <el-input
-              v-model="searchForm.Operator"
-              placeholder="请输入操作内容"
+              v-model="searchForm.operator"
+              placeholder="请输入操作人姓名"
               clearable
               style="width: 300px"
           />
         </el-form-item>
-
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
@@ -133,7 +132,7 @@ import { getOperationLogs } from '@/api/operationLogs'
 const searchForm = ref({
   tableName: '',
   operationType: '',
-  Operator: '',
+  operator: '',
   dateRange: []
 })
 // 过滤后的日志列表
@@ -176,8 +175,8 @@ const handleSearch = async () => {
   if (searchForm.value.operationType) {
     params.operationType = searchForm.value.operationType
   }
-  if (searchForm.value.Operator) {
-    params.Operator = searchForm.value.Operator
+  if (searchForm.value.operator) {
+    params.operator = searchForm.value.operator
   }
   if (searchForm.value.dateRange.length === 2) {
     params.startTime = searchForm.value.dateRange[0]

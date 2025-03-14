@@ -2,10 +2,12 @@ package com.Laibin.SugarInventory.domain.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
 @Schema(description = "库位更新DTO")
-public class WarehouseUpdateDTO {
+public class WarehouseUpdateDTO extends BaseDTO {
     @Schema(description = "id")
     private Integer id;
     @Schema(description = "库位名称")

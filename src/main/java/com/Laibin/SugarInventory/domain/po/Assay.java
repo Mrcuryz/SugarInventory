@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.DecimalMin;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -43,6 +45,18 @@ public class Assay extends BaseEntity implements Serializable {
     @TableField(value = "reducing_sugar")
     private BigDecimal reducingSugar;
 
+    @TableField(value = "dry_weight")
+    private BigDecimal dryWeight;
+
+    @TableField(value = "conductivity_ash")
+    private BigDecimal conductivityAsh;
+
+    @TableField(value = "sucrose")
+    private BigDecimal sucrose;
+
+    @TableField(value = "insoluble_impurity")
+    private BigDecimal insolubleImpurity;
+
     @TableField(value = "ph_value")
     private BigDecimal phValue;
 
@@ -51,6 +65,12 @@ public class Assay extends BaseEntity implements Serializable {
 
     @TableField(value = "created_at")
     private LocalDateTime createdAt;
+
+    @TableField("qualified_standards")
+    private String qualifiedStandards;
+
+    @TableField(value = "is_qualified")
+    private String isQualified;
 
     @TableField(value = "version")
     private Integer version;
