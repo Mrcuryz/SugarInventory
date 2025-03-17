@@ -25,11 +25,55 @@
       </div>
     </el-card>
   </div>
+  <el-card class="search-card">
+  <el-form :model="searchWarehouseForm" inline>
+    <el-form-item label="产品名称">
+      <el-input
+          v-model="searchWarehouseForm.productName"
+          placeholder="请输入产品名称"
+          clearable
+          style="width: 200px"
+      >
+      </el-input>
+    </el-form-item>
+    <el-form-item label="标准名称">
+      <el-input-tag
+          v-model="searchWarehouseForm.standardNames"
+          placeholder="请输入标准名称后回车"
+          clearable
+          style="width: 420px"
+      />
+    </el-form-item>
+    <el-form-item label="筛网ID">
+      <el-input
+          v-model="searchWarehouseForm.screenMeshId"
+          placeholder="请输入筛网ID"
+          clearable
+          style="width: 300px"
+      />
+    </el-form-item>
+    <el-form-item label="时间范围">
+      <el-date-picker
+          v-model="searchWarehouseForm.dateRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          style="width: 400px"
+      />
+    </el-form-item>
+    <el-form-item>
+      <el-button type="primary" @click="handleSearch">查询</el-button>
+      <el-button @click="handleReset">重置</el-button>
+    </el-form-item>
+  </el-form>
+  </el-card>
   <el-container class="h-screen">
     <!-- 左侧库位图 -->
     <el-main
         class="p-4 bg-gray-50 transition-all duration-300"
         :style="{ flex: `0 0 ${selectedLocation ? 'calc(100% - 360px)' : '100%'}`}"
+        v-loading="loadingMap"
     >
       <div class="border rounded-lg bg-white p-4 h-full">
         <svg
@@ -89,28 +133,303 @@
             {{ selectedLocation.productName }}
           </el-descriptions-item>
           <el-descriptions-item label="数量">
-            {{ selectedLocation.totalQuantity }}
+            {{ selectedLocation.totalQuantity }}板
           </el-descriptions-item>
           <el-descriptions-item label="重量">
-            {{ selectedLocation.totalWeight }}
+            {{ selectedLocation.totalWeight }}kg
           </el-descriptions-item>
           <el-descriptions-item label="入库日期">
             {{ selectedLocation.entryDate }}
           </el-descriptions-item>
         </el-descriptions>
       </div>
+        <!-- 修改后的模板 -->
+        <div class="location-layout-container" v-if="selectedLocation.status === 'filtered'">
+          <!-- 添加flex横向布局容器 -->
+          <div class="columns-wrapper">
+            <!-- LEFT列 -->
+            <div class="column">
+              <div class="rows-container">
+                <div
+                    v-for="row in maxRowNum"
+                    :key="`left-${row}`"
+                    class="cell"
+                    :class="getCellClass('LEFT', row)"
+                >
+                  {{ row }}
+                </div>
+              </div>
+              <div class="column-title">LEFT</div>
+            </div>
+
+            <!-- RIGHT列 -->
+            <div class="column">
+              <div class="rows-container">
+                <div
+                    v-for="row in maxRowNum"
+                    :key="`right-${row}`"
+                    class="cell"
+                    :class="getCellClass('RIGHT', row)"
+                >
+                  {{ row }}
+                </div>
+              </div>
+              <div class="column-title">RIGHT</div>
+            </div>
+          </div>
+        </div>
     </el-aside>
     </transition>
   </el-container>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, reactive , onBeforeMount} from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive , onBeforeMount, watchEffect } from 'vue'
 import { Calendar, Timer } from '@element-plus/icons-vue'
 import { throttle } from 'lodash-es'
-import { getWarehouseInfo, getAllWarehouseCapacity } from '@/api/warehouseinfo'
+import { getWarehouseInfo, getAllWarehouseCapacity, getWarehouseList, getWarehouseById, getMaxRowNum } from '@/api/warehouseinfo'
 import { ElMessage } from 'element-plus'
-
+//查询仓库信息
+let searchWarehouseForm = ref({
+  productName: '',
+  standardNames: [],
+  screenMeshId: '',
+  dateRange: [],
+})
+const loadingMap = ref(false)
+const warehousesList = ref([])
+const filteredInfo = ref([])
+// 处理搜索
+const handleSearch = async () => {
+  let params = {}
+  if (searchWarehouseForm.value.productName) {
+    params.productName = searchWarehouseForm.value.productName
+  }
+  if (searchWarehouseForm.value.standardNames) {
+    params.standardNames = searchWarehouseForm.value.standardNames
+  }
+  if (searchWarehouseForm.value.screenMeshId) {
+    params.screenMeshId = searchWarehouseForm.value.screenMeshId
+  }
+  if (searchWarehouseForm.value.dateRange.length === 2) {
+    params.startTime = searchWarehouseForm.value.dateRange[0]
+    params.endTime = searchWarehouseForm.value.dateRange[1]
+  }
+  if (searchWarehouseForm.value.productName === '' && searchWarehouseForm.value.standardNames.length === 0 && searchWarehouseForm.value.screenMeshId === '' && searchWarehouseForm.value.dateRange.length === 0) {
+    ElMessage.error('请至少输入一个查询条件')
+    return
+  }
+  filteredInfo.value = params
+  loadingMap.value = true
+  let res = await getWarehouseList(params)
+  if (res.code === 200) {
+    warehousesList.value = res.data
+    //查询后的仓库变蓝色
+    warehousesList.value.forEach(warehouse => {
+      //查找locations中id为item.warehouseId的对象，并更新其capacityPercentage和status属性
+      const index = locations.value.findIndex(location => location.id === warehouse.warehouseId)
+      if(index === -1){
+        return
+      }
+      locations.value[index].status = 'filtered'
+    })
+    loadingMap.value = false
+  } else {
+    console.error(res.msg)
+  }
+}
+// 处理重置
+const handleReset = () => {
+  searchWarehouseForm.value = {
+    productName: '',
+    standardNames: [],
+    screenMeshId: '',
+    dateRange: [],
+  }
+  filteredInfo.value = []
+  getAll()
+}
+// 过滤库位处理
+// const filterLocations =ref([
+//   {
+//     x: 150,
+//     y: 20,
+//     width: 200,
+//     height: 510,
+//     status: 'info'
+//   },
+//   {
+//     id: 10,
+//     x: 160,
+//     y: 30,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 11,
+//     x: 160,
+//     y: 80,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 12,
+//     x: 160,
+//     y: 130,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 13,
+//     x: 160,
+//     y: 180,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 14,
+//     x: 160,
+//     y: 230,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 15,
+//     x: 160,
+//     y: 280,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 16,
+//     x: 160,
+//     y: 330,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 17,
+//     x: 160,
+//     y: 380,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 18,
+//     x: 160,
+//     y: 430,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 19,
+//     x: 160,
+//     y: 480,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 20,
+//     x: 300,
+//     y: 30,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 21,
+//     x: 300,
+//     y: 80,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 22,
+//     x: 300,
+//     y: 130,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 23,
+//     x: 300,
+//     y: 180,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 24,
+//     x: 300,
+//     y: 230,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 25,
+//     x: 300,
+//     y: 280,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 26,
+//     x: 300,
+//     y: 330,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 27,
+//     x: 300,
+//     y: 380,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 28,
+//     x: 300,
+//     y: 430,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   },
+//   {
+//     id: 29,
+//     x: 300,
+//     y: 480,
+//     width: 40,
+//     height: 40,
+//     status: 'default'
+//   }
+// ])
+const filterLocations = ref([])
+const maxRowNum = ref(0)
+// 样式计算函数
+const getCellClass = (side, row) => {
+  const hasGoods = filterLocations.value.some(
+      loc => loc.side === side && loc.rowNumber === row
+  )
+  return hasGoods
+      ? 'bg-blue-500 cursor-pointer'
+      : 'bg-gray-200 cursor-not-allowed'
+}
 // 时间数据
 const time = ref(new Date())
 const canvas = ref({
@@ -118,7 +437,6 @@ const canvas = ref({
   height: 0
 })
 let animationFrame = null
-
 // 粒子参数
 const particles = {
   count: 100,
@@ -128,7 +446,6 @@ const particles = {
   baseWidth: 1920, // 基准分辨率宽度
   marginRatio: 0.1 // 边距比例
 }
-
 // 时间计算属性
 const hours = computed(() => time.value.getHours().toString().padStart(2, '0'))
 const minutes = computed(() => time.value.getMinutes().toString().padStart(2, '0'))
@@ -138,7 +455,6 @@ const formattedDate = computed(() => {
   const d = time.value
   return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`
 })
-
 // 粒子系统类
 class Particle {
   constructor(canvasWidth, canvasHeight) {
@@ -174,7 +490,6 @@ class Particle {
     ctx.fill()
   }
 }
-
 // 粒子系统管理
 let particlesArray = []
 const initParticles = () => {
@@ -253,7 +568,6 @@ const viewBoxWidth = ref(1200)
 const viewBoxHeight = ref(800)
 // 当前选中库位
 const selectedLocation = ref(null)
-
 // 状态映射配置
 const statusMap = reactive({
   normal: '正常',
@@ -261,9 +575,9 @@ const statusMap = reactive({
   full: '满仓',
   danger: '临期预警',
   maintenance: '维护',
+  filtered: '选中',
   default: '默认',
 })
-
 const statusTagMap = reactive({
   normal: 'success',
   empty: 'primary',
@@ -272,7 +586,6 @@ const statusTagMap = reactive({
   maintenance: 'info',
   default: 'info',
 })
-
 // 库位数据（示例）
 const locations = ref([
   {
@@ -835,6 +1148,10 @@ const handleSelectLocation = async (location) => {
   ElMessage.success(`已选中 ${location.id}号仓库`)
   selectedLocation.value = location
   loading.value = true
+  let isFiltered = false
+  if (location.status === 'filtered') {
+    isFiltered = true
+  }
   let params = {
     warehouseId: location.id,
     page:1,
@@ -842,12 +1159,25 @@ const handleSelectLocation = async (location) => {
   }
   let result = await getWarehouseInfo(params)
   if (result.code === 200) {
+    selectedLocation.value.warehouseId = result.data.records[0].warehouseId
     selectedLocation.value.warehouseName = result.data.records[0].warehouseName
     selectedLocation.value.productName = result.data.records[0].productName
     selectedLocation.value.totalQuantity = result.data.records[0].totalQuantity
     selectedLocation.value.totalWeight = result.data.records[0].totalWeight
     selectedLocation.value.entryDate = result.data.records[0].entryDate
     selectedLocation.value.firstEntryDate = result.data.records[0].firstEntryDate
+  }
+  if (isFiltered) {
+    selectedLocation.value.status = 'filtered'
+    let res = await getWarehouseById(location.id, filteredInfo.value)
+    if (res.code === 200) {
+      filterLocations.value = res.data
+      // 获取最大行数
+      const result = await getMaxRowNum(selectedLocation.value.warehouseId)
+      if (result.code === 200) {
+        maxRowNum.value = result.data.maxRows
+      }
+    }
   }
   loading.value = false
   //颜色变深
@@ -857,7 +1187,6 @@ const handleSelectLocation = async (location) => {
     locationElement.classList.remove('selected')
   }, 1000)
 }
-
 // 状态颜色映射（不带透明度）
 const statusColorMap = reactive({
   normal: '#006918',
@@ -1056,6 +1385,8 @@ const handleCanvasClick = () => {
 .location.full { fill: #ff5353; }
 .location.maintenance { fill: #727272; }
 .location.default { fill: #ffffff; }
+.location.filtered { fill: #3693ff; }
+.location.info { fill: #ffffff; }
 
 
 .location-label {
@@ -1065,5 +1396,54 @@ const handleCanvasClick = () => {
   fill: #475569;
   font-family: 'Helvetica Neue', sans-serif;
   pointer-events: none;
+}
+
+/* 关键样式 */
+.location-layout-container {
+  width: 100%;
+  min-width: 300px;
+  padding: 12px 0;
+}
+
+.columns-wrapper {
+  display: flex;          /* 核心布局 */
+  justify-content: center;
+  gap: 40px;              /* 列间距 */
+  flex-wrap: nowrap;      /* 禁止换行 */
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rows-container {
+  display: flex;
+  flex-direction: column; /* 行号从下往上 */
+  gap: 4px;
+}
+
+.cell {
+  width: 36px;
+  height: 36px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: white;
+  transition: all 0.2s;
+}
+
+.cell.bg-blue-500 {
+  background: #3b82f6;
+}
+
+.column-title {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
 }
 </style>
