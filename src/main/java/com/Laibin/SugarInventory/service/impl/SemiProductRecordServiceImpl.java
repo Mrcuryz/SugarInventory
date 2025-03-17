@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
@@ -53,7 +54,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         }
 
         // 2. 获取库位信息
-        Warehouse warehouse = warehouseMapper.selectById(dto.getWarehouseId());
+        Warehouse warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
         if (warehouse == null) {
             throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
@@ -69,10 +70,10 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         boolean canStack = product.getCanStack(); // 是否可堆积
 
         // **3. 预获取当前库位的存储情况**
-        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "LEFT", 1);
-        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "RIGHT", 1);
-        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "LEFT", 2);
-        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "RIGHT", 2);
+        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 1);
+        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 1);
+        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 2);
+        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 2);
 
         int currentLayer = (leftUsedRowsLayer2 > 0 || rightUsedRowsLayer2 > 0) ? 2 : 1;
 
@@ -94,7 +95,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
 
         // **4. 记录入库信息**
         SemiProductRecord semiProductRecord = new SemiProductRecord();
-        semiProductRecord.setWarehouseId(dto.getWarehouseId());
+        semiProductRecord.setWarehouseId(warehouse.getId());
         semiProductRecord.setProductId(dto.getProductId());
         semiProductRecord.setQuantity(quantity);
         semiProductRecord.setOperator(operator);
@@ -118,7 +119,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
 
                 // **存储单板**
                 Inventory inventory = new Inventory();
-                inventory.setWarehouseId(dto.getWarehouseId());
+                inventory.setWarehouseId(warehouse.getId());
                 inventory.setProductId(dto.getProductId());
                 inventory.setSide(currentSide);
                 inventory.setRowNumber(rowNumber);
@@ -181,36 +182,6 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     }
 
     @Override
-    @Transactional
-    public SemiProductRecord updateRecord(RecordUpdateDTO vo, String operator) {
-        // 1. 查询原记录（验证存在性）
-        SemiProductRecord origin = recordMapper.selectById(vo.getId());
-        if (origin == null) {
-            throw new BusinessException(ErrorCode.RECORD_NOT_FOUND);
-        }
-
-        // 2. 验证操作员一致性
-        if (!origin.getOperator().equals(operator)) {
-            throw new BusinessException(ErrorCode.OPERATION_FORBIDDEN);
-        }
-
-        // 3. 执行更新（带修改次数限制）
-        int rows = recordMapper.updateWithLimit(
-                vo.getId(),
-                vo.getQuantity(),
-                operator
-        );
-
-        // 4. 处理更新结果
-        if (rows == 0) {
-            throw new BusinessException(ErrorCode.MODIFY_LIMIT_EXCEEDED);
-        }
-
-        // 5. 返回更新后的记录
-        return recordMapper.selectById(vo.getId());
-    }
-
-    @Override
     public List<RecordDetailVO> getSemiProductRecordsByIds(List<Integer> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
@@ -220,11 +191,11 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     }
 
     @Override
-    public List<SemiProductRecord> getSemiProductRecords(SemiProductRecordDTO vo) {
-        String productName = vo.getProductName();
-        LocalDate date = vo.getDate();
-        String operatorName = vo.getOperatorName();
-        return recordMapper.getRecordsByConditions(productName, date, operatorName);
+    public PageResult<RecordDetailVO> getSemiProductRecords(SemiProductRecordDTO dto) {
+        int offset = (dto.getPage() - 1) * dto.getSize();
+        List<RecordDetailVO> recordList = recordMapper.getRecordsByConditions(dto, offset, dto.getSize());
+        Long total = recordMapper.countByConditions(dto);
+        return new PageResult<>(total, recordList);
     }
 
     @Override

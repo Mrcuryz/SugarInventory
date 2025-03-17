@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.annotation.LogOperation;
+import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
@@ -46,7 +47,11 @@ public class SemiProductRecordController {
     public Result<InVO> addSemiProductRecord(
             @RequestBody AddSemiProductRecordDTO dto,
             @AuthenticationPrincipal LoginUser loginUser) {
-        return Result.success(semiProductRecordService.addSemiProductRecord(dto, loginUser.getUser().getName()));
+        try {
+            return Result.success(semiProductRecordService.addSemiProductRecord(dto, loginUser.getUser().getName()));
+        } catch (Exception e) {
+            return Result.error(500, e.getMessage());
+        }
     }
 
     @Operation(summary = "批量查询半成品记录详情", description = "根据多个记录ID批量查询半成品记录的详细信息")
@@ -77,36 +82,22 @@ public class SemiProductRecordController {
     }
 
     /**
-     * 修改本人的半成品记录
-     * @param dto 半成品修改信息
-     *            记录id、数量
-     * @param loginUser 登录用户信息
-     * @return 半成品名称列表
-     */
-    @Operation(summary = "修改半成品记录", description = "修改当前用户的半成品记录，只允许修改数量，记录ID必须存在")
-    @LogOperation(value = "semi_product_record", type = OperationType.UPDATE)
-    @PutMapping("/update")
-    @PreAuthorize("hasAuthority('record:update')")
-    public Result<SemiProductRecord> updateRecord(
-            @Validated @RequestBody RecordUpdateDTO dto,
-            @AuthenticationPrincipal LoginUser loginUser
-    ) {
-        try{
-            return Result.success(semiProductRecordService.updateRecord(dto, loginUser.getUser().getName()));
-        } catch (Exception e) {
-            return Result.error(500, "修改失败：" + e.getMessage());
-        }
-    }
-
-    /**
      * 查询半成品记录
      * @param dto 查询条件
      *            产品名称（可选）、操作日期（可选）、操作员姓名（可选）
      * @return 半成品记录列表
      */
     @Operation(summary = "查询半成品记录列表", description = "根据查询条件（产品名称、操作日期、操作员姓名）查询半成品记录列表")
-    @GetMapping("/records")
-    public Result<List<SemiProductRecord>> getSemiProductRecords(@RequestBody SemiProductRecordDTO dto) {
-        return Result.success(semiProductRecordService.getSemiProductRecords(dto));
+    @PostMapping("/records")
+    public Result<PageResult<RecordDetailVO>> getSemiProductRecords(@RequestBody SemiProductRecordDTO dto) {
+        System.out.println("dto: " + dto);
+        try {
+            PageResult<RecordDetailVO> pageResult = semiProductRecordService.getSemiProductRecords(dto);
+            System.out.println("Result: " + pageResult.getRecords());
+            return Result.success(pageResult);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error(500, "查询失败");
+        }
     }
 }

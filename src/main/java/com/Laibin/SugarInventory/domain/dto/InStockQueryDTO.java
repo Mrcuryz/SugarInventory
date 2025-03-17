@@ -8,11 +8,10 @@ import java.util.Date;
 @Data
 @Schema(description = "入库记录查询条件DTO")
 public class InStockQueryDTO {
-
     @Schema(description = "产品名称，支持模糊查询", example = "冰糖")
     private String productName;
 
-    @Schema(description = "仓库ID", example = "101")
+    @Schema(description = "仓库名称", example = "101")
     private String warehouseName;
 
     @Schema(description = "查询起始日期", example = "2025-01-01")

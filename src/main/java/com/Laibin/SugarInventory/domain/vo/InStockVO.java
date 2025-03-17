@@ -36,12 +36,9 @@ public class InStockVO {
     @Schema(description = "筛网规格名称", example = "大筛网")
     private String meshName;
 
-    @Schema(description = "半成品记录ID", example = "5")
+    @Schema(description = "半成品记录", example = "5")
     private String semiProductRecords;
 
     @Schema(description = "创建时间", example = "2025-02-25T16:00:00.000+00:00")
     private LocalDateTime createdAt;
-
-    @Schema(description = "更新时间", example = "2025-02-25T16:05:00.000+00:00")
-    private LocalDateTime updatedAt;
 }

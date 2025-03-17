@@ -1,5 +1,6 @@
 package com.Laibin.SugarInventory.mapper;
 
+import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
 import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
 import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
@@ -69,20 +70,54 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
                         @Param("quantity") Integer quantity,
                         @Param("operator") String operator);
 
-    // 根据传入的条件查询数据
+    // 根据传入的条件（产品名称、库位名称、操作员、日期范围）分页查询数据
     @Select("<script>" +
-            "SELECT s.*, p.product_name " +
+            "SELECT s.*, p.product_name, w.warehouse_name, a.*, u.name AS tester_name " +
             "FROM semi_product_record s " +
             "JOIN product p ON s.product_id = p.id " +
+            "JOIN warehouse w ON s.warehouse_id = w.id " +
+            "JOIN assay as a ON s.assay_id = a.id " +
+            "JOIN user u ON a.tested_by = u.id " +
             "WHERE 1=1 " +
-            "<if test='productName != null and productName != \"\"'>AND product_id IN " +
-            "(SELECT id FROM product WHERE product_name LIKE CONCAT('%', #{productName}, '%'))</if>" +
-            "<if test='operationDate != null'>AND operation_date = #{operationDate}</if>" +
-            "<if test='operatorName != null and operatorName != \"\"'>AND operator = #{operatorName}</if>" +
-            "ORDER BY operation_date DESC" +
+            "<if test='dto.productName != null and dto.productName != \"\"'>" +
+            "   AND p.product_name LIKE CONCAT('%', #{dto.productName}, '%') " +
+            "</if>" +
+            "<if test='dto.warehouseName != null and dto.warehouseName != \"\"'>" +
+            "   AND w.warehouse_name LIKE CONCAT('%', #{dto.warehouseName}, '%') " +
+            "</if>" +
+            "<if test='dto.operatorName != null and dto.operatorName != \"\"'>" +
+            "   AND s.operator LIKE CONCAT('%', #{dto.operatorName}, '%') " +
+            "</if>" +
+            "<if test='dto.startDate != null and dto.endDate != null'>" +
+            "   AND s.operation_date BETWEEN #{dto.startDate} AND #{dto.endDate} " +
+            "</if>" +
+            "ORDER BY s.operation_date DESC " +
+            "LIMIT #{offset}, #{size}" +
             "</script>")
-    List<SemiProductRecord> getRecordsByConditions(@Param("productName") String productName,
-                                                     @Param("operationDate") LocalDate operationDate,
-                                                     @Param("operatorName") String operatorName);
+    List<RecordDetailVO> getRecordsByConditions(@Param("dto") SemiProductRecordDTO dto,
+                                                   @Param("offset") Integer offset,
+                                                   @Param("size") Integer size);
 
+    // 根据传入的条件（产品名称、库位名称、操作员、日期范围）统计总数
+    @Select("<script>" +
+            "SELECT COUNT(*) " +
+            "FROM semi_product_record s " +
+            "JOIN product p ON s.product_id = p.id " +
+            "JOIN warehouse w ON s.warehouse_id = w.id " +
+            "JOIN assay as a ON s.assay_id = a.id " +
+            "WHERE 1=1 " +
+            "<if test='dto.productName != null and dto.productName != \"\"'>" +
+            "   AND p.product_name LIKE CONCAT('%', #{dto.productName}, '%') " +
+            "</if>" +
+            "<if test='dto.warehouseName != null and dto.warehouseName != \"\"'>" +
+            "   AND w.warehouse_name LIKE CONCAT('%', #{dto.warehouseName}, '%') " +
+            "</if>" +
+            "<if test='dto.operatorName != null and dto.operatorName != \"\"'>" +
+            "   AND s.operator LIKE CONCAT('%', #{dto.operatorName}, '%') " +
+            "</if>" +
+            "<if test='dto.startDate != null and dto.endDate != null'>" +
+            "   AND s.operation_date BETWEEN #{dto.startDate} AND #{dto.endDate} " +
+            "</if>" +
+            "</script>")
+    Long countByConditions(@Param("dto") SemiProductRecordDTO dto);
 }

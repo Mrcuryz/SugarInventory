@@ -14,6 +14,9 @@ public class AssayVO {
     @Schema(description = "化验记录ID", example = "1")
     private Integer id;
 
+    @Schema(description = "产品ID", example = "1")
+    private Integer productId;
+
     @Schema(description = "产品名称", example = "中冰")
     private String productName;
 

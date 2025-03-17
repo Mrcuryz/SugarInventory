@@ -20,10 +20,6 @@ import java.util.List;
  */
 @Mapper
 public interface ProductMapper extends BaseMapper<Product> {
-
-    @Select("SELECT * FROM product WHERE product_name = #{name}")
-    Product selectByName(@Param("name") String productName);
-
     // 查询产品名称是否已存在
     @Select("SELECT COUNT(*) FROM product WHERE product_name = #{name}")
     boolean existsByName(@Param("name") String name);
@@ -50,13 +46,17 @@ public interface ProductMapper extends BaseMapper<Product> {
 
 
     // 查询所有半成品名称
-    @Select("SELECT DISTINCT id AS productId, product_name AS productName " +
+    @Select("SELECT DISTINCT id AS productId, product_name AS productName, " +
+            "packaging_method AS packagingMethod, product_type AS productType, " +
+            "weight_per_piece AS weightPerPiece " +
             "FROM product WHERE status = '半成品'")
     List<ProductInfoVO> selectSemiProductNames();
 
     // 根据名称或类型查询半成品
     @Select("<script>" +
-            "SELECT id AS productId, product_name AS productName " +
+            "SELECT id AS productId, product_name AS productName, " +
+            "packaging_method AS packagingMethod, product_type AS productType, " +
+            "weight_per_piece AS weightPerPiece " +
             "FROM product " +
             "WHERE status = '半成品' " +
             "<if test='name != null and name != \"\"'>" +
@@ -72,13 +72,17 @@ public interface ProductMapper extends BaseMapper<Product> {
     );
 
     // 查询所有成品名称
-    @Select("SELECT DISTINCT id AS productId, product_name AS productName " +
+    @Select("SELECT DISTINCT id AS productId, product_name AS productName, " +
+            "packaging_method AS packagingMethod, product_type AS productType, " +
+            "weight_per_piece AS weightPerPiece " +
             "FROM product WHERE status = '成品'")
     List<ProductInfoVO> selectFinishedProductNames();
 
     // 根据名称或类型查询半成品
     @Select("<script>" +
-            "SELECT id AS productId, product_name AS productName " +
+            "SELECT id AS productId, product_name AS productName, " +
+            "packaging_method AS packagingMethod, product_type AS productType, " +
+            "weight_per_piece AS weightPerPiece " +
             "FROM product " +
             "WHERE status = '成品' " +
             "<if test='name != null and name != \"\"'>" +

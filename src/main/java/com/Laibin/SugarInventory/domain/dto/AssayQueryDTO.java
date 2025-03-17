@@ -22,6 +22,9 @@ public class AssayQueryDTO extends BaseDTO {
     @Schema(description = "化验人员姓名，支持模糊查询", example = "1")
     private String testerName;
 
+    @Schema(description = "化验数据版本号", example = "1")
+    private Integer version;
+
     @Schema(description = "当前页码", example = "1")
     private Integer page = 1;
 

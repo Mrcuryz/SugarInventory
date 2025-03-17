@@ -51,9 +51,7 @@ public class AssayController {
             @RequestBody AssayQueryDTO query
     ) {
         try {
-            Result<PageResult<AssayVO>> result = Result.success(assayService.queryAssays(query));
-            System.out.println("result:" + result);
-            return result;
+            return Result.success(assayService.queryAssays(query));
         } catch (BusinessException e) {
             e.printStackTrace();
             return Result.error(500, "化验记录查询失败：" + e.getMessage());

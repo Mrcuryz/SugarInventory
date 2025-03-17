@@ -5,17 +5,29 @@ import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
+import java.util.Date;
 
 @Data
 @Schema(description = "半成品记录查询条件DTO")
 public class SemiProductRecordDTO {
-    @Schema(description = "产品名称，支持模糊查询", example = "中冰")
+    @Schema(description = "产品名称，支持模糊查询", example = "冰糖")
     private String productName;
 
-    @DateTimeFormat(pattern = "yyyy-MM-dd")
-    @Schema(description = "查询日期，格式yyyy-MM-dd", example = "2025-02-24")
-    private LocalDate date;
+    @Schema(description = "仓库名称", example = "101")
+    private String warehouseName;
 
-    @Schema(description = "操作员姓名", example = "张三")
+    @Schema(description = "查询起始日期", example = "2025-01-01")
+    private LocalDate startDate;
+
+    @Schema(description = "查询结束日期", example = "2025-03-31")
+    private LocalDate endDate;
+
+    @Schema(description = "操作员名称，支持模糊查询", example = "张三")
     private String operatorName;
+
+    @Schema(description = "当前页码", example = "1")
+    private Integer page;
+
+    @Schema(description = "每页记录数", example = "10")
+    private Integer size;
 }

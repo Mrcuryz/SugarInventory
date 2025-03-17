@@ -76,9 +76,10 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
                     Assay assay = new Assay();
                     BeanUtils.copyProperties(dto, assay);
                     assay.setTestedBy(operatorId);
+                    assay.setSucrose(dto.getSucrose());
                     assay.setIsQualified(isQualified? "合格" : "不合格");
                     if(!isQualified)
-                        qualifiedStandards.add("不合格");
+                        qualifiedStandards.add("无");
                     assay.setCreatedAt(LocalDateTime.now());
                     try {
                         assay.setQualifiedStandards(objectMapper.writeValueAsString(qualifiedStandards));
@@ -103,19 +104,25 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
                 (query.getPage()-1)*query.getSize(),
                 query.getSize()
         );
-        System.out.println("records: " + records);
+
         Long total = assayMapper.countAssay(query);
         if (records == null) {
             throw new BusinessException(ErrorCode.ASSAY_NOT_FOUND);
         }
-        System.out.println("total: " + total);
+
         return new PageResult<>(total, records);
     }
 
     @Override
     @Transactional
     public AssayVO updateAssay(Integer id, AssaySubmitDTO dto, User operator) throws JsonProcessingException {
-        Assay latestAssay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getSampleDate());
+        Assay latestAssay = new Assay();
+
+        try {
+            latestAssay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getSampleDate());
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
+        }
 
         Product product = productMapper.selectById(dto.getProductId());
         List<QualityStandard> standards = qualityStandardMapper.selectByProductType(product.getProductType());
@@ -137,6 +144,8 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
         BeanUtils.copyProperties(dto, newAssay);
         newAssay.setTestedBy(operator.getId());
         newAssay.setIsQualified(isQualified? "合格" : "不合格");
+        if(!isQualified)
+            qualifiedStandards.add("无");
         newAssay.setCreatedAt(LocalDateTime.now());
         newAssay.setQualifiedStandards(objectMapper.writeValueAsString(qualifiedStandards));
         newAssay.setVersion(latestAssay.getVersion() + 1);  // 版本递增

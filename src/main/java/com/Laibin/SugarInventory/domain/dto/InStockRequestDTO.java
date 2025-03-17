@@ -23,9 +23,9 @@ public class InStockRequestDTO {
     @Schema(description = "产品ID", example = "57")
     private Integer productId;
 
-    @NotNull(message = "仓库ID不能为空")
-    @Schema(description = "仓库ID", example = "101")
-    private Integer warehouseId;
+    @NotNull(message = "仓库名称不能为空")
+    @Schema(description = "仓库名称", example = "101")
+    private String warehouseName;
 
     @NotNull(message = "数量（板）不能为空")
     @Schema(description = "数量（板）", example = "30")
