@@ -42,7 +42,14 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     @Override
     public List<ProductInfoVO> getSemiProductNames() {
-        return productMapper.selectSemiProductNames();
+        List<ProductInfoVO> list = productMapper.selectSemiProductNames();
+        for(ProductInfoVO vo : list){
+            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+                vo.setPackagingMethod("件");
+            }
+            vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
+        }
+        return list;
     }
 
     @Override
@@ -51,12 +58,26 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         if (type != null && !Arrays.asList("黄冰糖", "白冰糖").contains(type)) {
             throw new IllegalArgumentException("无效的产品类型");
         }
-        return productMapper.selectSemiProductsByCondition(name, type);
+        List<ProductInfoVO> list = productMapper.selectSemiProductsByCondition(name, type);
+        for(ProductInfoVO vo : list){
+            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+                vo.setPackagingMethod("件");
+            }
+            vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
+        }
+        return list;
     }
 
     @Override
     public List<ProductInfoVO> getFinishedProductNames() {
-        return productMapper.selectFinishedProductNames();
+        List<ProductInfoVO> list = productMapper.selectFinishedProductNames();
+        for(ProductInfoVO vo : list){
+            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+                vo.setPackagingMethod("件");
+            }
+            vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
+        }
+        return list;
     }
 
     @Override
@@ -65,7 +86,14 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         if (type != null && !Arrays.asList("黄冰糖", "白冰糖").contains(type)) {
             throw new IllegalArgumentException("无效的产品类型");
         }
-        return productMapper.selectFinishedProductsByCondition(name, type);
+        List<ProductInfoVO> list = productMapper.selectFinishedProductsByCondition(name, type);
+        for(ProductInfoVO vo : list){
+            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+                vo.setPackagingMethod("件");
+            }
+            vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
+        }
+        return list;
     }
 
     @Override

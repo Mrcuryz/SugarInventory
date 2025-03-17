@@ -65,7 +65,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         }
 
         // 2. 获取库位信息
-        Warehouse warehouse = warehouseMapper.selectById(dto.getWarehouseId());
+        Warehouse warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
         if (warehouse == null) {
             throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
@@ -97,10 +97,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         boolean canStack = product.getCanStack(); // 是否可堆积
 
         // **3. 预获取当前库位的存储情况**
-        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "LEFT", 1);
-        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "RIGHT", 1);
-        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "LEFT", 2);
-        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(dto.getWarehouseId(), "RIGHT", 2);
+        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 1);
+        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 1);
+        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 2);
+        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 2);
 
         int currentLayer = (leftUsedRowsLayer2 > 0 || rightUsedRowsLayer2 > 0) ? 2 : 1;
 
@@ -122,7 +122,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
         // **4. 记录入库信息**
         InStock inStock = new InStock();
-        inStock.setWarehouseId(dto.getWarehouseId());
+        inStock.setWarehouseId(warehouse.getId());
         inStock.setProductId(dto.getProductId());
         inStock.setQuantity(quantity);
         inStock.setSemiProductRecords(semiProductRecordsJson);
@@ -148,7 +148,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
                 // **存储单板**
                 Inventory inventory = new Inventory();
-                inventory.setWarehouseId(dto.getWarehouseId());
+                inventory.setWarehouseId(warehouse.getId());
                 inventory.setProductId(dto.getProductId());
                 inventory.setSide(currentSide);
                 inventory.setRowNumber(rowNumber);
@@ -201,9 +201,9 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
         // **6. 同步更新库位信息**
         warehouseMapper.updateCurCapacity(
-                dto.getWarehouseId(), warehouse.getCurCapacity() + (quantity * product.getPiecesPerPallet()));
+                warehouse.getId(), warehouse.getCurCapacity() + (quantity * product.getPiecesPerPallet()));
         if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
-            warehouseMapper.updateMaxCapacity(dto.getWarehouseId(), warehouse.getMaxRows() * 2 * 2);
+            warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
 
         InVO inVO = new InVO();
         inVO.setRemainingQuantity(0);
@@ -316,8 +316,6 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
     @Override
     public PageResult<InStockVO> queryInStockRecords(InStockQueryDTO queryDTO, User currentUser) {
-        System.out.println(currentUser.getRoleCode());
-        System.out.println("DTO:" + queryDTO);
         // 计算分页偏移量
         int offset = (queryDTO.getPage() - 1) * queryDTO.getSize();
 

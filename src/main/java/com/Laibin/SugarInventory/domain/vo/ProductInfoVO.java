@@ -15,4 +15,13 @@ public class ProductInfoVO {
 
     @Schema(description = "产品名称", example = "中冰")
     private String productName;
+
+    @Schema(description = "包装方式", example = "袋")
+    private String packagingMethod;
+
+    @Schema(description = "产品类型", example = "白冰糖")
+    private String productType;
+
+    @Schema(description = "每件重量", example = "40kg")
+    private String weightPerPiece;
 }

@@ -35,14 +35,46 @@ public interface AssayMapper extends BaseMapper<Assay> {
             "   <if test='query.productName != null'>AND p.product_name LIKE CONCAT('%', #{query.productName}, '%')</if> " +
             "   <if test='query.startDate != null'>AND a.sample_date &gt;= #{query.startDate}</if> " +
             "   <if test='query.endDate != null'>AND a.sample_date &lt;= #{query.endDate}</if> " +
-            "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, 'name'}, '%')</if> " +
+            "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, '%')</if> " +
             "</where> " +
-            "ORDER BY a.sample_date DESC " +
+            "ORDER BY a.sample_date DESC, a.product_id ASC, a.version DESC " +
             "LIMIT #{offset}, #{size} " +
             "</script>")
     List<AssayVO> selectAssayList(@Param("query") AssayQueryDTO query,
                                   @Param("offset") int offset,
                                   @Param("size") int size);
+
+//    @Select("<script>" +
+//            "SELECT t1.*  " +
+//            "FROM assay t1 " +
+//            "INNER JOIN ( " +
+//            "    SELECT product_id, sample_date, MAX(version) AS latest_version " +
+//            "    FROM assay " +
+//            "    GROUP BY product_id, sample_date " +
+//            ") t2 ON t1.product_id = t2.product_id AND t1.sample_date = t2.sample_date AND t1.version = t2.latest_version " +
+//            "LEFT JOIN product p ON t1.product_id = p.id " +
+//            "LEFT JOIN quality_standards s ON p.product_type = s.product_type " +
+//            "LEFT JOIN user u ON u.id = t1.tested_by " +
+//            "WHERE 1=1 " +
+//            "    <if test='query.productName != null'> " +
+//            "        AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
+//            "    </if> " +
+//            "    <if test='query.testerName != null'> " +
+//            "        AND u.name LIKE CONCAT('%', #{query.testerName}, '%') " +
+//            "    </if> " +
+//            "    <if test='query.startDate != null'> " +
+//            "        AND t1.sample_date >= #{query.startDate} " +
+//            "    </if> " +
+//            "    <if test='query.endDate != null'> " +
+//            "        AND t1.sample_date <= #{query.endDate} " +
+//            "    </if> " +
+//            "ORDER BY t1.sample_date DESC " +
+//            "LIMIT #{offset}, #{size} " +
+//            "</script>")
+//    List<AssayVO> selectAssayList(@Param("query") AssayQueryDTO query,
+//                                  @Param("offset") int offset,
+//                                  @Param("size") int size);
+
 
     @Select("<script>" +
             "SELECT COUNT(*) " +
@@ -53,7 +85,7 @@ public interface AssayMapper extends BaseMapper<Assay> {
             "   <if test='query.productName != null'>AND p.product_name LIKE CONCAT('%', #{query.productName}, '%')</if> " +
             "   <if test='query.startDate != null'>AND a.sample_date &gt;= #{query.startDate}</if> " +
             "   <if test='query.endDate != null'>AND a.sample_date &lt;= #{query.endDate}</if> " +
-            "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, 'name'}, '%')</if> " +
+            "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, '%')</if> " +
             "</where> " +
             "</script>")
     Long countAssay(@Param("query") AssayQueryDTO query);
