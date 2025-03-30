@@ -74,11 +74,9 @@ public interface InventoryMapper {
             "<if test='query.productName != null'>" +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
-            "<if test='query.standardNames != null and query.standardNames.size > 0'>" +
-            "   <foreach item='name' collection='query.standardNames' open='AND (' separator=' OR ' close=')'> " +
-            "       JSON_CONTAINS(a.qualified_standards, JSON_QUOTE(#{name})) " +
-            "   </foreach> " +
-            "</if> " +
+            "<if test='query.standardNames != null'> " +
+            "   AND JSON_CONTAINS(a.qualified_standards, CONCAT('\\\"', #{query.standardNames}, '\\\"')) " +
+            "</if>" +
             "<if test='query.screenMeshId != null'>" +
             "   AND sm.id = #{query.screenMeshId} " +
             "</if> " +
@@ -91,8 +89,6 @@ public interface InventoryMapper {
             "ORDER BY w.warehouse_name" +
             "</script>")
     List<OutWarehouseVO> findWarehousesByCondition(@Param("query") OutProductQueryDTO query);
-
-
 
     @Select("<script>" +
             "SELECT p.product_name, w.warehouse_name, a.sample_date, p.product_type, " +
@@ -107,11 +103,9 @@ public interface InventoryMapper {
             "<if test='query.productName != null'>" +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
-            "<if test='query.standardNames != null and query.standardNames.size > 0'>" +
-            "   <foreach item='name' collection='query.standardNames' open='AND (' separator=' OR ' close=')'> " +
-            "       JSON_CONTAINS(a.qualified_standards, JSON_QUOTE(#{name})) " +
-            "   </foreach> " +
-            "</if> " +
+            "<if test='query.standardNames != null'> " +
+            "   AND JSON_CONTAINS(a.qualified_standards, CONCAT('\\\"', #{query.standardNames}, '\\\"')) " +
+            "</if>" +
             "<if test='query.screenMeshId != null'>" +
             "   AND sm.id = #{query.screenMeshId} " +
             "</if> " +

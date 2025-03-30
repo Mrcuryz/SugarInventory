@@ -5,7 +5,6 @@ import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
 import com.Laibin.SugarInventory.domain.dto.AddSemiProductRecordDTO;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
-import com.Laibin.SugarInventory.domain.dto.RecordUpdateDTO;
 import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.transaction.annotation.Transactional;

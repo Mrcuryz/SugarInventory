@@ -1,5 +1,6 @@
 package com.Laibin.SugarInventory.domain.po;
 
+import com.Laibin.SugarInventory.domain.dto.SemiRecordDTO;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -13,6 +14,7 @@ import org.apache.commons.math3.geometry.partitioning.Side;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)
 @Getter
@@ -57,7 +59,7 @@ public class Inventory extends BaseEntity implements Serializable {
     private Integer screenMeshId;
 
     @TableField("semi_record_id")
-    private Integer semiRecordId;
+    private String semiRecordId;
 
     @TableField("product_status")
     private String productStatus;

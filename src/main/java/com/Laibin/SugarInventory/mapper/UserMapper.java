@@ -18,7 +18,6 @@ import java.util.List;
  */
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
-
     @Select("SELECT * FROM user WHERE openid = #{openid}")
     User selectByOpenid(@Param("openid") String openid);
 

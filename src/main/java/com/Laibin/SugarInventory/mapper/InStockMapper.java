@@ -28,13 +28,14 @@ public interface InStockMapper extends BaseMapper<InStock> {
     int insert(InStock inStock);
 
     @Select("<script>" +
-            "SELECT s.*, p.product_name, w.warehouse_name, u.name as operator_name, " +
+            "SELECT s.*, p.product_name, w.warehouse_name, u.name as operator, a.*, " +
             "sm.mesh_name " +
             "FROM in_stock s " +
             "LEFT JOIN product p ON s.product_id = p.id " +
             "LEFT JOIN warehouse w ON s.warehouse_id = w.id " +
             "LEFT JOIN user u ON s.created_by = u.id " +
             "LEFT JOIN screen_mesh sm ON s.screen_mesh_id = sm.id " +
+            "LEFT JOIN assay a ON s.assay_id = a.id " +
             "where 1=1 " +
             "<if test='query.productName != null'> " +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
@@ -54,7 +55,7 @@ public interface InStockMapper extends BaseMapper<InStock> {
             "<if test='isStaff'> " +
             "   AND s.created_by = #{userId} " +
             "</if>" +
-            "ORDER BY s.entry_date DESC " +
+            "ORDER BY s.created_at DESC " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
     List<InStockVO> selectInStockList(
@@ -72,6 +73,7 @@ public interface InStockMapper extends BaseMapper<InStock> {
             "LEFT JOIN user u ON s.created_by = u.id " +
             "LEFT JOIN warehouse w ON s.warehouse_id = w.id " +
             "LEFT JOIN screen_mesh sm ON s.screen_mesh_id = sm.id " +
+            "LEFT JOIN assay a ON s.assay_id = a.id " +
             "where 1=1 " +
             "<if test='query.productName != null'> " +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +

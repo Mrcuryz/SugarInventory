@@ -52,6 +52,8 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     private ObjectMapper objectMapper;
     @Autowired
     private InventoryLocationMapper inventoryLocationMapper;
+    @Autowired
+    private UserMapper userMapper;
 
     private final Integer page = 1;
     private final Integer size = 10;
@@ -75,21 +77,19 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
         }
 
+        InStock inStock = new InStock();
+
         // 3. 解析前端传来的半成品 JSON，并查询数据库
-        List<Integer> semiProductRecordIds = new ArrayList<>();
-        for (SemiRecordDTO recordDTO : dto.getSemiProductRecords()) {
-            SemiProductRecord record = semiProductRecordMapper
-                    .selectByProductIdAndDate(recordDTO.getSemiProductId(), recordDTO.getProductionDate());
-            if (record == null) {
-                throw new BusinessException(ErrorCode.RECORD_NOT_FOUND);
+        if(dto.getSemiRecords() != null && !dto.getSemiRecords().isEmpty()) {
+            for (SemiRecordDTO recordDTO : dto.getSemiRecords()) {
+                int count = semiProductRecordMapper.existsByProductIdAndDate
+                        (recordDTO.getSemiProductId(), recordDTO.getProductionDate());
+                if(count == 0)
+                    throw new BusinessException(ErrorCode.RECORD_NOT_FOUND);
             }
-            semiProductRecordIds.add(record.getId());
+            String semiProductRecordsJson = convertToJson(dto.getSemiRecords());
+            inStock.setSemiProductRecords(semiProductRecordsJson);
         }
-
-        if(semiProductRecordIds.isEmpty())
-            throw new BusinessException(ErrorCode.RECORD_NOT_FOUND);
-
-        String semiProductRecordsJson = convertToJson(semiProductRecordIds);
 
         int maxRows = warehouse.getMaxRows();
         int remainingQuantity = dto.getQuantity();
@@ -97,10 +97,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         boolean canStack = product.getCanStack(); // 是否可堆积
 
         // **3. 预获取当前库位的存储情况**
-        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 1);
-        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 1);
-        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 2);
-        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 2);
+        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "左", 1);
+        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "右", 1);
+        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "左", 2);
+        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "右", 2);
 
         int currentLayer = (leftUsedRowsLayer2 > 0 || rightUsedRowsLayer2 > 0) ? 2 : 1;
 
@@ -121,11 +121,9 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                         .multiply(new BigDecimal(product.getPiecesPerPallet())));
 
         // **4. 记录入库信息**
-        InStock inStock = new InStock();
         inStock.setWarehouseId(warehouse.getId());
         inStock.setProductId(dto.getProductId());
         inStock.setQuantity(quantity);
-        inStock.setSemiProductRecords(semiProductRecordsJson);
         inStock.setCreatedBy(operatorId);
         inStock.setEntryDate(LocalDate.now());
         inStock.setAssayId(assay.getId());
@@ -139,7 +137,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
         // **5. 开始存放**
         while (remainingQuantity > 0) {
-            int usedRows = (currentSide.equals("LEFT")) ?
+            int usedRows = (currentSide.equals("左")) ?
                     (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
                     : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
 
@@ -159,13 +157,19 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                 inventory.setScreenMeshId(dto.getScreenMeshId());
                 inventory.setAssayId(assay.getId());
                 inventory.setProductStatus(product.getStatus());
+                inventory.setSemiRecordId(null);
                 inventory.setCreatedAt(LocalDateTime.now());
 
-                inventoryMapper.insert(inventory);
+                try {
+                    inventoryMapper.insert(inventory);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new BusinessException(ErrorCode.STOCK_IN_FAILED);
+                }
                 remainingQuantity--;
 
                 // **更新本地变量**
-                if (currentSide.equals("LEFT")) {
+                if (currentSide.equals("左")) {
                     if (currentLayer == 1) leftUsedRowsLayer1++;
                     else leftUsedRowsLayer2++;
                 } else {
@@ -176,8 +180,8 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
             // **如果当前列满，尝试切换到另一侧**
             if (remainingQuantity > 0 && usedRows >= maxRows) {
-                currentSide = currentSide.equals("LEFT") ? "RIGHT" : "LEFT";
-                usedRows = (currentSide.equals("LEFT")) ?
+                currentSide = currentSide.equals("左") ? "右" : "左";
+                usedRows = (currentSide.equals("左")) ?
                         (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
                         : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
             }
@@ -190,7 +194,12 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                     leftUsedRowsLayer2 = 0;
                     rightUsedRowsLayer2 = 0;
                 } else if (!canStack || (leftUsedRowsLayer2 >= maxRows && rightUsedRowsLayer2 >= maxRows)) {
-                    // **如果当前是第二层且满了，则提示库位已满**
+                    // **如果不可堆积，或者第二层也满了，则提示库位已满**
+                    warehouseMapper.updateCurCapacity(
+                            warehouse.getId(), warehouse.getCurCapacity() + quantity);
+                    if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
+                        warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
+
                     InVO inVO = new InVO();
                     inVO.setRemainingQuantity(remainingQuantity);
                     inVO.setMessage("库位已满！剩余 " + remainingQuantity + " 板产品，请选择新库位");
@@ -201,13 +210,15 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
         // **6. 同步更新库位信息**
         warehouseMapper.updateCurCapacity(
-                warehouse.getId(), warehouse.getCurCapacity() + (quantity * product.getPiecesPerPallet()));
+                warehouse.getId(), warehouse.getCurCapacity() + quantity);
         if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
             warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
 
         InVO inVO = new InVO();
-        inVO.setRemainingQuantity(0);
-        inVO.setMessage("入库成功！");
+        inVO.setRemainingQuantity(remainingQuantity);
+        if (inVO.getMessage() == null) {
+            inVO.setMessage("入库成功！");
+        }
         return inVO;
     }
 
@@ -330,6 +341,13 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                 offset,
                 queryDTO.getSize()
         );
+
+        for(InStockVO record : records){
+            Integer id = record.getTestedBy();
+            if(id == null) continue;
+            String testerName = userMapper.selectById(id).getName();
+            record.setTesterName(testerName);
+        }
 
         System.out.println("records:" + records);
 

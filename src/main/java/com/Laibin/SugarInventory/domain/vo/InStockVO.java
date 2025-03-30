@@ -31,13 +31,51 @@ public class InStockVO {
     private LocalDate entryDate;
 
     @Schema(description = "操作员名称", example = "张三")
-    private String operatorName;
+    private String operator;
 
     @Schema(description = "筛网规格名称", example = "大筛网")
     private String meshName;
 
     @Schema(description = "半成品记录", example = "5")
     private String semiProductRecords;
+
+    @Schema(description = "化验记录id")
+    private Integer assayId;
+
+    @Schema(description = "采样日期", example = "2025-02-27")
+    private LocalDate sampleDate;
+
+    @Schema(description = "色值")
+    private BigDecimal colorValue;
+
+    @Schema(description = "还原糖分")
+    private BigDecimal reducingSugar;
+
+    @Schema(description = "干燥失重")
+    private BigDecimal dryWeight;
+
+    @Schema(description = "电导灰分")
+    private BigDecimal conductivityAsh;
+
+    @Schema(description = "蔗糖分")
+    private BigDecimal sucrose;
+
+    @Schema(description = "不溶于水杂质")
+    private BigDecimal insolubleImpurity;
+
+    @Schema(description = "pH值")
+    private BigDecimal phValue;
+
+    private Integer testedBy;
+
+    @Schema(description = "化验人名称", example = "李四")
+    private String testerName;
+
+    @Schema(description = "是否检验合格", example = "合格/不合格")
+    private String isQualified;
+
+    @Schema(description = "JSON格式的合格标准列表")
+    private String qualifiedStandards;
 
     @Schema(description = "创建时间", example = "2025-02-25T16:00:00.000+00:00")
     private LocalDateTime createdAt;

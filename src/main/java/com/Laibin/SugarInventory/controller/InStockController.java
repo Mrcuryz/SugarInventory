@@ -48,8 +48,10 @@ public class InStockController {
     ) {
         try {
             InVO inVO = inStockService.stockIn(request, loginUser.getUser().getId());
+            System.out.println(inVO);
             return Result.success(inVO);
         } catch (BusinessException e) {
+            e.printStackTrace();
             return Result.error(500, "商品入库出错：" + e.getMessage());
         }
     }

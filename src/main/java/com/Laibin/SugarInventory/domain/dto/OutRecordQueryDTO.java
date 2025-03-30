@@ -21,7 +21,8 @@ public class OutRecordQueryDTO {
     @Schema(description = "查询结束日期", example = "2025-03-31")
     private Date endDate;
 
-    private Integer operatorName;
+    @Schema(description = "操作员姓名", example = "i")
+    private String operatorName;
 
     @Schema(description = "当前页码", example = "1")
     private Integer page;

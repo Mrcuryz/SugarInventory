@@ -14,7 +14,7 @@ public class OutProductQueryDTO {
     private String productName;
 
     @Schema(description = "标准名称列表")
-    private List<String> standardNames;
+    private String standardNames;
 
     @Schema(description = "筛网 ID")
     private Integer screenMeshId;

@@ -57,10 +57,10 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         List<Inventory> inventoryList = new ArrayList<>();
 
         String nextSide; // 下一个出库侧
-        if(currentSide.equals("LEFT"))
-            nextSide = "RIGHT";
+        if(currentSide.equals("左"))
+            nextSide = "右";
         else
-            nextSide = "LEFT";
+            nextSide = "左";
 
         // **1. 可堆积产品：先查找第二层**
         if (curLayer == 2 && remainingQuantity > 0) {
@@ -91,17 +91,20 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
             remainingQuantity--;
         }
 
+        int quantity = dto.getQuantity() > curCapacity? curCapacity : dto.getQuantity();
+
         // **4. 如果出库数量不足，返回错误**
         if (remainingQuantity > 0) {
             if(warehouse.getMaxRows() * 2 != warehouse.getMaxCapacity())
                 warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2);
+
+            warehouseMapper.updateCurCapacity(dto.getWarehouseId(),
+                    warehouse.getCurCapacity() - (quantity * product.getPiecesPerPallet()));
             OutVO outVO = new OutVO();
             outVO.setRemainingQuantity(remainingQuantity);
             outVO.setMessage("当前库存不足！还差 " + remainingQuantity + " 板");
             return outVO;
         }
-
-        int quantity = dto.getQuantity() > curCapacity? curCapacity : dto.getQuantity();
 
         BigDecimal totalWeight = product.getWeightPerPiece()
                 .multiply(new BigDecimal(quantity)

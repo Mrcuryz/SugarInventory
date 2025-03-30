@@ -38,6 +38,9 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "<if test='query.productName != null'>" +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
+            "<if test='query.operatorName != null'> " +
+            "   AND u.name LIKE CONCAT('%', #{query.operatorName}, '%') " +
+            "</if>" +
             "<if test='query.startDate != null'>" +
             "   AND o.in_date &gt;= #{query.startDate} " +
             "</if> " +
@@ -66,6 +69,9 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "<if test='query.productName != null'>" +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
+            "<if test='query.operatorName != null'> " +
+            "   AND u.name LIKE CONCAT('%', #{query.operatorName}, '%') " +
+            "</if>" +
             "<if test='query.startDate != null'>" +
             "   AND o.in_date &gt;= #{query.startDate} " +
             "</if> " +

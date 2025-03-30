@@ -42,6 +42,58 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             "</script>")
     Long countSummary(@Param("query") InventoryQueryDTO query);
 
-    @Select("SELECT * FROM v_warehouse_capacity")
+    @Select("SELECT * FROM v_warehouse_capacity " +
+            "ORDER BY capacity_percentage DESC")
     List<VWarehouseCapacity> selectCapacityList();
+
+    // 根据库位状态或库存id列表批量查询库位容量信息
+    @Select("<script>" +
+            "SELECT * FROM v_warehouse_capacity " +
+            "<where>" +
+            "   1=1 " +
+            "   <if test='warehouseName != null and warehouseName != \"\"'> " +
+            "       AND warehouse_name LIKE concat('%', #{warehouseName}, '%') " +
+            "   </if> " +
+            "   <if test='status != null and status != \"\"'> " +
+            "       AND status = #{status} " +
+            "   </if> " +
+            "   <if test='warehouseIds != null and warehouseIds.size() > 0'> " +
+            "       AND warehouse_id IN " +
+            "       <foreach collection='warehouseIds' item='id' open='(' separator=',' close=')'> " +
+            "           #{id} " +
+            "       </foreach> " +
+            "   </if> " +
+            "</where>" +
+            "ORDER BY capacity_percentage DESC " +
+            "LIMIT #{offset}, #{size}" +
+            "</script>")
+    List<VWarehouseCapacity> selectCapacityListByStatus(@Param("warehouseName") String warehouseName,
+                                                        @Param("warehouseIds") List<Integer> warehouseIds,
+                                                        @Param("status") String status,
+                                                        @Param("offset") int offset,
+                                                        @Param("size") int size);
+
+
+    // 根据库位状态和库存id列表批量查询库位容量数量
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM v_warehouse_capacity " +
+            "<where>" +
+            "   1=1 " +
+            "   <if test='warehouseName != null and warehouseName != \"\"'> " +
+            "       AND warehouse_name LIKE concat('%', #{warehouseName}, '%') " +
+            "   </if> " +
+            "<if test='status!= null and status != \"\"'> " +
+            "   AND status = #{status} " +
+            "</if >" +
+            "   <if test='warehouseIds != null and warehouseIds.size() > 0'> " +
+            "       AND warehouse_id IN " +
+            "       <foreach collection='warehouseIds' item='id' open='(' separator=',' close=')'> " +
+            "           #{id} " +
+            "       </foreach> " +
+            "   </if> " +
+            "</where>" +
+            "</script>")
+    Long countCapacityByStatus(@Param("warehouseName") String warehouseName,
+                               @Param("status") String status,
+                               @Param("warehouseIds") List<Integer> warehouseIds);
 }

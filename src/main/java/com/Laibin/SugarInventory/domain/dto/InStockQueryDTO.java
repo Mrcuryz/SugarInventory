@@ -3,6 +3,7 @@ package com.Laibin.SugarInventory.domain.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.Date;
 
 @Data
@@ -15,10 +16,10 @@ public class InStockQueryDTO {
     private String warehouseName;
 
     @Schema(description = "查询起始日期", example = "2025-01-01")
-    private Date startDate;
+    private LocalDate startDate;
 
     @Schema(description = "查询结束日期", example = "2025-03-31")
-    private Date endDate;
+    private LocalDate endDate;
 
     @Schema(description = "操作员名称，支持模糊查询", example = "张三")
     private String operatorName;

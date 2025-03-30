@@ -40,10 +40,10 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
     List<RecordDetailVO> selectByOperator(@Param("openid") String openid,
                                           @Param("date") LocalDate date);
 
-    @Select("SELECT * FROM semi_product_record " +
+    @Select("SELECT COUNT(*) FROM semi_product_record " +
             "WHERE product_id = #{productId} " +
             "AND operation_date = #{operationDate} ")
-    SemiProductRecord selectByProductIdAndDate(@Param("productId") Integer productId,
+    int existsByProductIdAndDate(@Param("productId") Integer productId,
                                                @Param("operationDate") LocalDate operationDate);
 
     @Select("<script>" +
@@ -91,7 +91,7 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
             "<if test='dto.startDate != null and dto.endDate != null'>" +
             "   AND s.operation_date BETWEEN #{dto.startDate} AND #{dto.endDate} " +
             "</if>" +
-            "ORDER BY s.operation_date DESC " +
+            "ORDER BY s.created_at DESC " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
     List<RecordDetailVO> getRecordsByConditions(@Param("dto") SemiProductRecordDTO dto,

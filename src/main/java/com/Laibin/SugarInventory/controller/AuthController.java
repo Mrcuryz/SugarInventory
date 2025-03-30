@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;
 import me.chanjar.weixin.common.error.WxErrorException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -22,6 +23,7 @@ public class AuthController {
     @Autowired
     private AuthService authService;
 
+//    @PreAuthorize("hasAuthority('user:create')")
     @Operation(summary = "Web 端管理员登录", description = "使用姓名+统一口令登录")
     @PostMapping("/web-login")
     public Result<AuthVO> webLogin(@RequestBody WebLoginDTO dto) {

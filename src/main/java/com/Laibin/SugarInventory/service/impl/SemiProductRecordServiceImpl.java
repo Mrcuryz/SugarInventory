@@ -70,10 +70,10 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         boolean canStack = product.getCanStack(); // 是否可堆积
 
         // **3. 预获取当前库位的存储情况**
-        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 1);
-        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 1);
-        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "LEFT", 2);
-        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "RIGHT", 2);
+        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "左", 1);
+        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "右", 1);
+        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "左", 2);
+        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "右", 2);
 
         int currentLayer = (leftUsedRowsLayer2 > 0 || rightUsedRowsLayer2 > 0) ? 2 : 1;
 
@@ -110,7 +110,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
 
         // **5. 开始存放**
         while (remainingQuantity > 0) {
-            int usedRows = (currentSide.equals("LEFT")) ?
+            int usedRows = (currentSide.equals("左")) ?
                     (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
                     : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
 
@@ -128,14 +128,13 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
                 inventory.setEntryDate(LocalDate.now());
                 inventory.setAssayId(assay.getId());
                 inventory.setProductStatus(product.getStatus());
-                inventory.setSemiRecordId(inStockId);
                 inventory.setCreatedAt(LocalDateTime.now());
 
                 inventoryMapper.insert(inventory);
                 remainingQuantity--;
 
                 // **更新本地变量**
-                if (currentSide.equals("LEFT")) {
+                if (currentSide.equals("左")) {
                     if (currentLayer == 1) leftUsedRowsLayer1++;
                     else leftUsedRowsLayer2++;
                 } else {
@@ -146,8 +145,8 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
 
             // **如果当前列满，尝试切换到另一侧**
             if (remainingQuantity > 0 && usedRows >= maxRows) {
-                currentSide = currentSide.equals("LEFT") ? "RIGHT" : "LEFT";
-                usedRows = (currentSide.equals("LEFT")) ?
+                currentSide = currentSide.equals("左") ? "右" : "左";
+                usedRows = (currentSide.equals("左")) ?
                         (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
                         : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
             }
@@ -161,6 +160,11 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
                     rightUsedRowsLayer2 = 0;
                 } else if (!canStack || (leftUsedRowsLayer2 >= maxRows && rightUsedRowsLayer2 >= maxRows)) {
                     // **如果当前是第二层且满了，则提示库位已满**
+                    warehouseMapper.updateCurCapacity(
+                            warehouse.getId(), warehouse.getCurCapacity() + quantity);
+                    if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
+                        warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
+
                     InVO inVO = new InVO();
                     inVO.setRemainingQuantity(remainingQuantity);
                     inVO.setMessage("库位已满！剩余 " + remainingQuantity + " 板产品，请选择新库位");
@@ -169,7 +173,13 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
             }
         }
 
-        // **6. 返回入库信息**
+        // **6. 同步更新库位信息**
+        warehouseMapper.updateCurCapacity(
+                warehouse.getId(), warehouse.getCurCapacity() + quantity);
+        if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
+            warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
+
+        // **7. 返回入库信息**
         InVO inVO = new InVO();
         inVO.setRemainingQuantity(remainingQuantity);
         inVO.setMessage("入库成功！");

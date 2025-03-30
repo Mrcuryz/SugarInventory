@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 @EqualsAndHashCode(callSuper = true)
 @Data
 public class QualityStandardVO extends BaseVO {
+    private Integer id;
     private String standardName;
     private String productType;
     private BigDecimal colorMin;

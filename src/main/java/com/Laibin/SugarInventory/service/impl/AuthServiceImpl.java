@@ -28,6 +28,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -72,6 +73,11 @@ public class AuthServiceImpl implements AuthService {
             user.setRoleCode(employee.getRoleCode());
             user.setLoginType("WEB");
             userMapper.insert(user);
+        }
+
+        if(!Objects.equals(user.getRoleCode(), "ADMIN")){
+            System.out.println("User role is not admin" + user.getRoleCode());
+            throw new BusinessException("无权限登录");
         }
 
         try {

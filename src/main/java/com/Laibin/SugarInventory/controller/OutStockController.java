@@ -36,8 +36,10 @@ public class OutStockController {
             @AuthenticationPrincipal LoginUser loginUser
     ) {
         try {
+            System.out.println(request);
             return Result.success(outStockService.processOutStock(request, loginUser.getUser().getId()));
         } catch (Exception e) {
+            e.printStackTrace();
             return Result.error(e.getMessage());
         }
     }

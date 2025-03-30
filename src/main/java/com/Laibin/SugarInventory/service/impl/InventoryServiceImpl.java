@@ -3,6 +3,7 @@ package com.Laibin.SugarInventory.service.impl;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.InventoryQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.OutStockBatchQueryDTO;
 import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
@@ -52,7 +53,9 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Override
     public List<OutWarehouseVO> getQualifiedWarehouses(OutProductQueryDTO queryDTO) {
-        return inventoryMapper.findWarehousesByCondition(queryDTO);
+        List<OutWarehouseVO> warehouses = inventoryMapper.findWarehousesByCondition(queryDTO);
+        System.out.println(warehouses);
+        return warehouses;
     }
 
     @Override
@@ -63,5 +66,35 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     public List<VWarehouseCapacity> getWarehouses() {
         return summaryMapper.selectCapacityList();
+    }
+
+    @Override
+    public PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size, String status) {
+        int offset = (page - 1) * size;
+
+        List<VWarehouseCapacity> records =
+                summaryMapper.selectCapacityListByStatus(warehouseName, warehouseIds, status, offset, size);
+        Long total = summaryMapper.countCapacityByStatus(warehouseName, status, warehouseIds);
+
+        return new PageResult<>(total, records);
+    }
+
+    @Override
+    public PageResult<VWarehouseCapacity> batchQueryWarehouses(OutStockBatchQueryDTO queryDTO){
+        int offset = (queryDTO.getPage() - 1) * queryDTO.getSize();
+
+        if(queryDTO.getIds() == null || queryDTO.getIds().isEmpty()){
+            return new PageResult<>(0L, null);
+        }
+
+        List<VWarehouseCapacity> records =
+                summaryMapper.selectCapacityListByStatus(
+                        null,
+                        queryDTO.getIds(),
+                        null,
+                        offset,
+                        queryDTO.getSize());
+        Long total = summaryMapper.countCapacityByStatus(null, null, queryDTO.getIds());
+        return new PageResult<>(total, records);
     }
 }

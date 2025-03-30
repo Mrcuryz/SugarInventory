@@ -30,6 +30,6 @@ public class AddSemiProductRecordDTO {
     @Schema(description = "数量（板）", example = "30")
     private Integer quantity;
 
-    @Schema(description = "库位左/右列，默认为左", example = "LEFT")
-    private String side = "LEFT";  // 默认左侧
+    @Schema(description = "库位左/右列，默认为左", example = "左")
+    private String side = "左";  // 默认左侧
 }

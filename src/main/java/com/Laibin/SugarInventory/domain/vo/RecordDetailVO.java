@@ -21,7 +21,7 @@ public class RecordDetailVO {
     private String productName;
 
     @Schema(description = "库位名称", example = "101")
-    private Integer warehouseName;
+    private String warehouseName;
 
     @Schema(description = "数量（板）", example = "100")
     private Integer quantity;
@@ -66,7 +66,7 @@ public class RecordDetailVO {
     private BigDecimal phValue;
 
     @Schema(description = "化验人名称", example = "李四")
-    private String testedBy;
+    private String testerName;
 
     @Schema(description = "是否检验合格", example = "合格/不合格")
     private String isQualified;

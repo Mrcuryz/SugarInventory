@@ -50,6 +50,7 @@ public class SemiProductRecordController {
         try {
             return Result.success(semiProductRecordService.addSemiProductRecord(dto, loginUser.getUser().getName()));
         } catch (Exception e) {
+            e.printStackTrace();
             return Result.error(500, e.getMessage());
         }
     }
