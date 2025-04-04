@@ -53,9 +53,7 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Override
     public List<OutWarehouseVO> getQualifiedWarehouses(OutProductQueryDTO queryDTO) {
-        List<OutWarehouseVO> warehouses = inventoryMapper.findWarehousesByCondition(queryDTO);
-        System.out.println(warehouses);
-        return warehouses;
+        return inventoryMapper.findWarehousesByCondition(queryDTO);
     }
 
     @Override

@@ -39,6 +39,9 @@ public class OutStock extends BaseEntity {
     @TableField(value = "operator_id")
     private Integer operatorId;
 
+    @TableField(value = "assay_id")
+    private Integer assayId;
+
     @TableField(value = "created_at")
     private LocalDateTime createdAt;
 }

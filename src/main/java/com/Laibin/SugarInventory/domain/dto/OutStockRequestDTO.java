@@ -29,5 +29,5 @@ public class OutStockRequestDTO {
     private Integer quantity;
 
     @Schema(description = "先从左/右侧出库，默认为左", example = "LEFT")
-    private String side = "LEFT";
+    private String side = "左";
 }

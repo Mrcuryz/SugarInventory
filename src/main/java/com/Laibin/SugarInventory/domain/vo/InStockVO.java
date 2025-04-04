@@ -74,7 +74,7 @@ public class InStockVO {
     @Schema(description = "是否检验合格", example = "合格/不合格")
     private String isQualified;
 
-    @Schema(description = "JSON格式的合格标准列表")
+    @Schema(description = "JSON格式的合格标准")
     private String qualifiedStandards;
 
     @Schema(description = "创建时间", example = "2025-02-25T16:00:00.000+00:00")

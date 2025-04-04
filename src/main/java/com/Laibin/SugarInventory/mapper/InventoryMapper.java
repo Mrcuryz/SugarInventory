@@ -75,8 +75,8 @@ public interface InventoryMapper {
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
             "<if test='query.standardNames != null'> " +
-            "   AND JSON_CONTAINS(a.qualified_standards, CONCAT('\\\"', #{query.standardNames}, '\\\"')) " +
-            "</if>" +
+            "   AND JSON_CONTAINS(a.qualified_standards, '\\\"${query.standardNames}\\\"') " +
+            "</if> " +
             "<if test='query.screenMeshId != null'>" +
             "   AND sm.id = #{query.screenMeshId} " +
             "</if> " +
@@ -104,12 +104,12 @@ public interface InventoryMapper {
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
             "<if test='query.standardNames != null'> " +
-            "   AND JSON_CONTAINS(a.qualified_standards, CONCAT('\\\"', #{query.standardNames}, '\\\"')) " +
+            "   AND JSON_CONTAINS(a.qualified_standards, '\\\"${query.standardNames}\\\"') " +
             "</if>" +
             "<if test='query.screenMeshId != null'>" +
             "   AND sm.id = #{query.screenMeshId} " +
             "</if> " +
-            "ORDER BY a.sample_date DESC " +
+            "ORDER BY a.sample_date DESC, w.warehouse_name, i.side, i.`row_number` ASC " +
             "</script>")
     List<OutProductVO> findInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,
                                                 @Param("query") OutProductQueryDTO query);

@@ -23,14 +23,17 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "   p.product_name, " +
             "   o.quantity, " +
             "   o.in_date, " +
+            "   o.assay_id, " +
             "   o.total_weight, " +
             "   o.out_date, " +
-            "   u.name as operator_name, " +
-            "   o.created_at " +
+            "   u.name as operator, " +
+            "   o.created_at, " +
+            "   a.* " +
             "FROM out_stock o " +
             "INNER JOIN warehouse w ON o.warehouse_id = w.id " +
             "INNER JOIN product p ON o.product_id = p.id " +
             "INNER JOIN user u ON o.operator_id = u.id " +
+            "INNER JOIN assay a ON o.assay_id = a.id " +
             "WHERE 1 = 1 " +
             "<if test='query.warehouseName != null'>" +
             "   AND w.warehouse_name LIKE CONCAT('%', #{query.warehouseName}, '%') " +
@@ -42,10 +45,10 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "   AND u.name LIKE CONCAT('%', #{query.operatorName}, '%') " +
             "</if>" +
             "<if test='query.startDate != null'>" +
-            "   AND o.in_date &gt;= #{query.startDate} " +
+            "   AND o.out_date &gt;= #{query.startDate} " +
             "</if> " +
             "<if test='query.endDate != null'>" +
-            "   AND o.in_date &lt;= #{query.endDate} " +
+            "   AND o.out_date &lt;= #{query.endDate} " +
             "</if> " +
             "ORDER BY o.out_date DESC " +
             "LIMIT #{offset}, #{size}" +
