@@ -1,0 +1,53 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/home/home",
+    "pages/bind-phone/bind-phone",
+    "pages/bind-manual/bind-manual",
+    "pages/in-stock/in-stock",
+    "pages/manual/manual",
+    "pages/products/products",
+    "pages/products/edit",
+    "pages/warehouse/warehouse",
+    "pages/screen-mesh/screen-mesh",
+    "pages/assay/assay",
+    "pages/semi-product/semi-product",
+    "pages/inventory/inventory",
+    "pages/out-stock/out-stock"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTitleText": "冰糖仓储",
+    "navigationBarTextStyle": "black"
+  },
+  "tabBar": {
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页",
+        "iconPath": "assets/icons/home.png",
+        "selectedIconPath": "assets/icons/home-active.png"
+      },
+      {
+        "pagePath": "pages/manual/manual",
+        "text": "使用手册",
+        "iconPath": "assets/icons/manual.png",
+        "selectedIconPath": "assets/icons/manual-active.png"
+      }
+    ],
+    "color": "#999999",
+    "selectedColor": "#0055FF",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black"
+  },
+  "useExtendedLib": {
+    "weui": true
+  },
+  "permission": {
+    "scope.phoneNumber": {
+      "desc":"用于获取您的手机号码"
+    }
+  },
+  "lazyCodeLoading": "requiredComponents"
+}

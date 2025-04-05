@@ -1,0 +1,188 @@
+<view class="container">
+  <!-- 搜索栏 -->
+  <view class="search-bar">
+    <input class="search-input" placeholder="输入产品名称" bindinput="onSearchInput" data-field="productName" />
+    <input class="search-input" placeholder="输入化验员姓名" bindinput="onSearchInput" data-field="testerName" />
+  </view>
+
+  <view class="date-filter">
+    <picker mode="date" bindchange="onDateChange" data-field="startDate">
+      <view class="date-picker">
+        {{queryParams.startDate ? queryParams.startDate : "起始日期"}}
+      </view>
+    </picker>
+    <text>~</text>
+    <picker mode="date" bindchange="onDateChange" data-field="endDate">
+      <view class="date-picker">
+        {{queryParams.endDate ? queryParams.endDate : "结束日期"}}
+      </view>
+    </picker>
+    <button class="reset-btn" bindtap="resetFilters">
+      <image src="/assets/icons/reset.png"></image>
+    </button>
+  </view>
+
+  <!-- 化验数据列表 -->
+  <view class="lab-data-list">
+    <block wx:for="{{labData}}" wx:key="latest.id">
+      <view class="lab-data-card">
+        <!-- 头部基础信息 -->
+        <view class="lab-data-info">
+          <view>ID: <text class="bold">{{item.latest.id}}</text></view>
+          <view>产品名称: <text class="bold">{{item.latest.productName}}</text></view>
+          <view>采样日期: <text class="bold">{{item.latest.sampleDate}}</text></view>
+        </view>
+
+        <!-- 指标信息区域 -->
+        <view class="indicator">
+          <view class="indicator-row">
+            <text>色值(IU): {{item.latest.colorValue}}</text>
+            <text>还原糖分: {{item.latest.reducingSugar != null ? item.latest.reducingSugar + 'g/100g' : '暂无数据'}}</text>
+          </view>
+          <view class="indicator-row">
+            <text>pH值: {{item.latest.phValue != null ? item.latest.phValue : '暂无数据'}}</text>
+            <text>干燥失重: {{item.latest.dryWeight != null ? item.latest.dryWeight + 'g/100g' : '暂无数据'}}</text>
+          </view>
+          <view class="indicator-row">
+            <text>电导灰分: {{item.latest.conductivityAsh != null ? item.latest.conductivityAsh + 'g/100g': '暂无数据'}}</text>
+            <text>蔗糖分: {{item.latest.sucrose}}g/100g</text>
+          </view>
+          <view class="indicator-row">
+            <text>不溶于水杂质: {{item.latest.insolubleImpurity != null ? item.latest.insolubleImpurity + 'mg/kg' : '暂无数据'}}</text>
+          </view>
+          <view class="indicator-row">
+            <text>符合标准: {{item.latest.qualifiedStandards != null ? item.latest.qualifiedStandards : '暂无数据'}}</text>
+            <text>检验: {{item.latest.isQualified}}</text>
+          </view>
+          <view class="indicator-row">
+            <text>化验员: {{item.latest.testerName}}</text>
+            <text>创建时间: {{item.latest.createdAt}}</text>
+          </view>
+        </view>
+
+        <!-- 操作按钮 -->
+        <view class="action-buttons">
+          <button class="edit-btn" bindtap="editLabData" data-id="{{item.latest.id}}">修改</button>
+          <button class="history-btn" wx:if="{{item.history.length}}" bindtap="toggleHistory" data-record="{{index}}">
+            {{item.showHistory ? '隐藏历史数据' : '查看历史数据'}}
+          </button>
+        </view>
+
+        <!-- 历史版本数据 -->
+        <view wx:if="{{item.showHistory}}" class="history-data">
+          <block wx:for="{{item.history}}" wx:key="id">
+            <view class="history-item">
+              <view><text class="bold">ID：</text>{{item.id}}</view>
+              <view><text class="bold">采样日期：</text>{{item.sampleDate || '暂无数据'}}</view>
+              <view><text class="bold">色值(IU)：</text>{{item.colorValue != null ? item.colorValue : '暂无数据'}}</view>
+              <view><text class="bold">还原糖分：</text>{{item.reducingSugar != null ? item.reducingSugar + 'g/100g' : '暂无数据'}}</view>
+              <view><text class="bold">pH值：</text>{{item.phValue != null ? item.phValue : '暂无数据'}}</view>
+              <view><text class="bold">干燥失重：</text>{{item.dryWeight != null ? item.dryWeight + 'g/100g' : '暂无数据'}}</view>
+              <view><text class="bold">电导灰分：</text>{{item.conductivityAsh != null ? item.conductivityAsh + 'g/100g' : '暂无数据'}}</view>
+              <view><text class="bold">蔗糖分：</text>{{item.sucrose != null ? item.sucrose + 'g/100g' : '暂无数据'}}</view>
+              <view><text class="bold">不溶于水杂质：</text>{{item.insolubleImpurity != null ? item.insolubleImpurity + 'mg/kg' : '暂无数据'}}</view>
+              <view><text class="bold">符合标准：</text>{{item.qualifiedStandards || '暂无数据'}}</view>
+              <view><text class="bold">检验：</text>{{item.isQualified || '暂无数据'}}</view>
+              <view><text class="bold">化验员：</text>{{item.testerName || '暂无数据'}}</view>
+              <view><text class="bold">创建时间：</text>{{item.createdAt || '暂无数据'}}</view>
+            </view>
+          </block>
+        </view>
+
+      </view>
+    </block>
+  </view>
+
+
+  <!-- 分页 -->
+  <!-- 改进分页组件 -->
+  <view class="pagination">
+    <view class="page-control">
+      <div class="arrow-btn" bindtap="prevPage" disabled="{{currentPage === 1}}">
+        <image src="/assets/icons/arrow-left.png"></image>
+      </div>
+
+      <input class="page-input" type="number" value="{{currentPage}}" bindinput="onPageInput" min="1" max="{{totalPages}}" />
+
+      <text class="total">/ {{totalPages}}</text>
+
+      <div class="arrow-btn" bindtap="nextPage" disabled="{{currentPage === totalPages}}">
+        <image src="/assets/icons/arrow-right.png"></image>
+      </div>
+    </view>
+  </view>
+
+  <!-- 悬浮新增按钮 -->
+  <view class="floating-button" bindtap="showAddLabDataModal">
+    <image class="icon" src="/assets/icons/add.png"></image>
+  </view>
+
+  <!-- 背景遮罩层 -->
+  <view wx:if="{{showModal}}" class="modal-overlay" bindtap="hideModal"></view>
+
+  <!-- 弹出表单 -->
+  <view wx:if="{{showModal}}" class="modal">
+    <view class="modal-header">
+      <text class="title">{{editMode ? '修改' : '新增'}}化验记录</text>
+      <image src="/assets/icons/close.png" class="close-icon" bindtap="hideModal"></image>
+    </view>
+
+    <scroll-view class="modal-body" scroll-y>
+      <view class="form-item">
+        <text class="required">*</text>
+        <text class="label">产品名称</text>
+        <picker mode="multiSelector" range="{{productOptions}}" value="{{pickerIndexes}}" bindcolumnchange="onProductPickerColumnChange" bindchange="onProductPickerConfirm">
+          <input class="input" placeholder="请选择产品" value="{{currentLabData.      productName}}" disabled />
+        </picker>
+      </view>
+
+      <view class="form-grid">
+        <view class="form-item">
+          <text class="required">*</text>
+          <text class="label">采样日期</text>
+          <picker mode="date" value="{{currentLabData.sampleDate}}" bindchange="onSampleDateChange">
+            <view class="picker">
+              {{currentLabData.sampleDate || '请选择日期'}}
+            </view>
+          </picker>
+        </view>
+      </view>
+
+      <!-- 指标输入区域 -->
+      <view class="indicator-group">
+        <view class="indicator-item">
+          <text class="label">色值（IU）</text>
+          <input class="input" type="text" bindinput="onInputChange" data-field="colorValue" value="{{currentLabData.colorValue}}" />
+        </view>
+        <view class="indicator-item">
+          <text class="label">还原糖分(g/100g)</text>
+          <input class="input" bindinput="onInputChange" data-field="reducingSugar" value="{{currentLabData.reducingSugar}}" />
+        </view>
+        <view class="indicator-item">
+          <text class="label">干燥失重(g/100g)</text>
+          <input class="input" bindinput="onInputChange" data-field="dryWeight" value="{{currentLabData.dryWeight}}" />
+        </view>
+        <view class="indicator-item">
+          <text class="label">电导灰分(g/100g)</text>
+          <input class="input" bindinput="onInputChange" data-field="conductivityAsh" value="{{currentLabData.conductivityAsh}}" />
+        </view>
+        <view class="indicator-item">
+          <text class="label">蔗糖分(g/100g)</text>
+          <input class="input" bindinput="onInputChange" data-field="sucrose" value="{{currentLabData.sucrose}}" />
+        </view>
+        <view class="indicator-item">
+          <text class="label">不溶于水杂质(mg/kg)</text>
+          <input class="input" bindinput="onInputChange" data-field="insolubleImpurity" value="{{currentLabData.insolubleImpurity}}" />
+        </view>
+        <view class="indicator-item">
+          <text class="label">pH</text>
+          <input class="input" bindinput="onInputChange" data-field="phValue" value="{{currentLabData.phValue}}" />
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="modal-footer">
+      <button class="submit-btn" bindtap="submitLabData">提交</button>
+    </view>
+  </view>
+</view>

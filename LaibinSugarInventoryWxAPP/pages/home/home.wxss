@@ -1,0 +1,117 @@
+.container {
+  padding: 20rpx;
+  background-color: rgba(255, 255, 255, 0);
+}
+
+/* 用户信息 */
+.user-info {
+  text-align: center;
+  margin-bottom: 40rpx;
+}
+
+.avatar {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  margin-bottom: 10rpx;
+}
+
+.username {
+  font-size: 36rpx;
+  font-weight: bold;
+}
+
+.date {
+  font-size: 28rpx;
+  color: #888;
+}
+
+/* 功能按钮（图标 + 文字） */
+.icon-grid {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 40rpx;
+  margin-left: 10px;
+  margin-right: 60px;
+}
+
+.icon-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left : 50px;
+}
+
+.icon-img {
+  width: 80rpx;
+  height: 80rpx;
+  margin-bottom: 10rpx;
+}
+
+.icon-item text {
+  font-size: 28rpx;
+  color: #333;
+  white-space: nowrap;
+}
+
+/* 卡片式导航 */
+.card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 0 16rpx;
+}
+
+.card-item {
+  width: 45%;
+  margin-bottom: 20rpx;
+  background-color: #fff;
+  border-radius: 16rpx;
+  box-shadow: 0px 4rpx 8rpx rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  padding: 10rpx;
+}
+
+.card-img {
+  width: 80rpx;
+  height: 80rpx;
+  margin-bottom: 10rpx;
+}
+
+.card-item text {
+  display: block;
+  text-align: center;
+  padding: 10rpx;
+  font-size: 30rpx;
+  font-weight: bold;
+}
+
+.usage-section {
+  margin-top: 30rpx;
+  padding: 20rpx;
+  background: #fff;
+  border-radius: 10rpx;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1);
+  width: 85%;
+}
+
+.usage-title {
+  display: flex;
+  align-items: center;
+  font-size: 40rpx;
+  font-weight: bold;
+  margin-bottom: 10rpx;
+}
+
+.usage-title .icon {
+  width: 50rpx;
+  height: 50rpx;
+  margin-right: 10rpx;
+}
+
+.usage-text {
+  font-size: 30rpx;
+  color: #666;
+  line-height: 1.6;
+}
+

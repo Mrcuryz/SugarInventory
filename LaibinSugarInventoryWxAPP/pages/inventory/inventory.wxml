@@ -1,0 +1,226 @@
+<view class="container">
+  <!-- 搜索筛选区 -->
+  <view class="warehouse-list">
+    <!-- Tab选项 -->
+    <view class="tab-bar">
+      <view class="tab-item {{activeTab === 'inventory' ? 'active' : ''}}" bindtap="switchTab" data-tab="inventory">库存查询</view>
+      <view class="tab-item {{activeTab === 'outbound' ? 'active' : ''}}" bindtap="switchTab" data-tab="outbound">查询可出库产品</view>
+    </view>
+
+    <!-- 库存查询表单 -->
+    <view class="search-bar" wx:if="{{activeTab === 'inventory'}}">
+      <view class="search-item">
+        <picker bindchange="onStatusChange" value="{{statusIndex}}" range="{{statusOptions}}">
+          <view class="picker-value">{{statusOptions[statusIndex]}}</view>
+        </picker>
+        <input type="text" placeholder="输入库位名称" bindinput="onWarehouseNameInput" value="{{warehouseName}}" />
+        <button class="search-btn" bindtap="searchInventory">查询</button>
+      </view>
+    </view>
+
+    <!-- 出库查询表单 -->
+    <view class="search-bar" wx:if="{{activeTab === 'outbound'}}">
+      <view class="search-item">
+        <input class="search-product" placeholder="产品名称" bindinput="onOutboundProductNameInput" value="{{outboundProductName}}" />
+        <picker range="{{standardNameOptions}}" bindchange="onStandardNameChange" value="{{standardNameIndex}}">
+          <view class="picker-value">
+            {{standardNameOptions[standardNameIndex] || '请选择标准'}}
+          </view>
+        </picker>
+      </view>
+      <view class="search-item">
+        <picker mode="date" bindchange="onStartDateChange">
+          <view class="picker-date">{{startDate || '起始日期'}}</view>
+        </picker>
+        <text>~</text>
+        <picker mode="date" bindchange="onEndDateChange">
+          <view class="picker-date">{{endDate || '结束日期'}}</view>
+        </picker>
+        <picker mode="selector" range="{{screenMeshOptions}}" bindchange="onScreenMeshChange" value="selectedScreenMeshIndex">
+          <view class="picker-mesh">{{screenMeshOptions[selectedScreenMeshIndex] || '请选择筛网'}}</view>
+        </picker>
+      </view>
+      <view class="search-item">
+        <button class="search-btn" bindtap="searchOutboundCondition">查询可出库产品</button>
+      </view>
+    </view>
+
+    <!-- 库存总览 -->
+    <view wx:if="{{warehouseList.length > 0}}">
+      <view class="warehouse-card" wx:for="{{warehouseList}}" wx:for-item="item" wx:key="warehouseId">
+        <view class="card-header">
+          <text class="warehouse-name">{{item.warehouseName}}</text>
+          <text class="status-badge {{item.statusClass}}">{{item.status}}</text>
+        </view>
+
+        <view class="capacity-container">
+          <view class="capacity-bar">
+            <view class="capacity-progress {{item.capacityPercentage >= 90 ? 'danger' : item.capacityPercentage >= 70 ? 'warning' : 'normal'}}" style="width: {{item.capacityPercentage}}%"></view>
+          </view>
+          <view class="capacity-info">
+            <text>{{item.curCapacity}}/{{item.maxCapacity}}</text>
+            <text>{{item.capacityPercentage}}%</text>
+          </view>
+        </view>
+
+        <view class="card-meta">
+          <text>最早入库: {{item.firstEntryDate}}</text>
+        </view>
+
+        <view class="card-footer">
+          <button size="mini" class="detail-btn" wx:if="{{activeTab === 'inventory'}}" bindtap="showDetail" data-id="{{item.warehouseId}}">查看详情</button>
+          <button size="mini" class="detail-btn" wx:if="{{activeTab === 'outbound'}}" bindtap="showQualifiedDetail" data-id="{{item.warehouseId}}">查看详情</button>
+          <button size="mini" type="primary" class="outbound-btn" bindtap="startOutbound" data-id="{{item.warehouseId}}" data-name="{{item.warehouseName}}" data-capacity="{{item.curCapacity}}">出库</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态展示 -->
+    <view class="empty-state" wx:else>
+      <icon type="info" size="50" color="#CCCCCC"></icon>
+      <text>
+        {{activeTab === 'inventory' ? '暂无库位数据' : '找不到数据'}}
+      </text>
+    </view>
+  </view>
+
+  <!-- 分页控件 -->
+  <view class="pagination" wx:if="{{totalPages > 0}}">
+    <text>共{{totalItems}}条</text>
+    <view class="page-controls">
+      <button size="mini" plain disabled="{{currentPage <= 1}}" bindtap="prevPage">上一页</button>
+      <text class="page-text">{{currentPage}}/{{totalPages}}</text>
+      <button size="mini" plain disabled="{{currentPage >= totalPages}}" bindtap="nextPage">下一页</button>
+    </view>
+  </view>
+</view>
+
+<!-- 库存详情弹窗 -->
+<view class="modal {{showDetailModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+  <view class="modal-mask" bindtap="hideDetail"></view>
+  <view class="modal-content">
+    <view class="modal-header">
+      <text class="modal-title">{{ isOutboundDetail ? '出库产品详情' : '库存详情' }}</text>
+      <view class="modal-close" bindtap="hideDetail">×</view>
+    </view>
+
+    <scroll-view scroll-y class="modal-body">
+      <view class="detail-list">
+
+        <!-- 库存详情 -->
+        <block wx:if="{{!isOutboundDetail}}">
+          <view class="detail-header">
+            <text class="col product">产品名称</text>
+            <text class="col date">入库日期</text>
+            <text class="col quantity">库存总量</text>
+            <text class="col weight">总重量</text>
+          </view>
+
+          <view wx:if="{{detailList.length > 0}}">
+            <view class="detail-item" wx:for="{{detailList}}" wx:key="index">
+              <text class="col product">{{item.productName}}</text>
+              <text class="col date">{{item.entryDate}}</text>
+              <text class="col quantity">{{item.totalQuantity}}</text>
+              <text class="col weight">{{item.totalWeight}}kg</text>
+            </view>
+          </view>
+
+          <view class="empty-detail" wx:else>
+            <text>暂无详细数据</text>
+          </view>
+        </block>
+
+        <!-- 出库产品详情 -->
+        <block wx:if="{{isOutboundDetail}}">
+          <view wx:if="{{detailList.length > 0}}">
+            <view class="detail-item-2row" wx:for="{{detailList}}" wx:key="index">
+              <view class="row">
+                <text class="value">产品名称：{{item.productName}}</text>
+                <text class="value">检测日期：{{item.sampleDate}}</text>
+              </view>
+              <view class="row">
+                <text class="value">产品类型：{{item.productType}}</text>
+                <text class="value">筛网：{{item.meshName || '无'}}</text>
+              </view>
+              <view class="row">
+                <text class="value">符合标准：{{item.standardNames}}</text>
+              </view>
+              <view class="row">
+                <text class="value">位置：{{item.side}} {{item.rowNumber}}排 {{item.layer}}层</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="empty-detail" wx:else>
+            <text>暂无详细数据</text>
+          </view>
+        </block>
+
+      </view>
+    </scroll-view>
+
+
+    <view class="modal-footer">
+      <view class="detail-pagination" wx:if="{{detailTotalPages > 0}}">
+        <button size="mini" plain disabled="{{detailCurrentPage <= 1}}" bindtap="detailPrevPage">上一页</button>
+        <text>{{detailCurrentPage}}/{{detailTotalPages}}</text>
+        <button size="mini" plain disabled="{{detailCurrentPage >= detailTotalPages}}" bindtap="detailNextPage">下一页</button>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- 出库操作弹窗 -->
+<view class="modal {{showOutboundModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+  <view class="modal-mask" bindtap="hideOutbound"></view>
+  <view class="modal-content">
+    <view class="modal-header">
+      <text class="modal-title">出库操作</text>
+      <view class="modal-close" bindtap="hideOutbound">×</view>
+    </view>
+
+    <view class="modal-body">
+      <view class="form-group">
+        <text class="form-label">库位名称</text>
+        <input disabled value="{{selectedWarehouse.warehouseName}}" />
+      </view>
+
+      <view class="form-group">
+        <text class="form-label">当前库存</text>
+        <input disabled value="{{selectedWarehouse.curCapacity}}" />
+      </view>
+
+      <view class="form-group">
+        <text class="form-label required">出库数量</text>
+        <input type="digit" placeholder="请输入出库数量" bindinput="onQuantityInput" value="{{outboundQuantity}}" />
+        <text class="error-msg" wx:if="{{quantityError}}">{{quantityError}}</text>
+      </view>
+
+      <view class="form-group">
+        <text class="form-label required">出库顺序</text>
+        <radio-group class="side-options" bindchange="onSideChange">
+          <label class="radio-item">
+            <radio value="左" checked="{{outboundSide === '左'}}" />左
+          </label>
+          <label class="radio-item">
+            <radio value="右" checked="{{outboundSide === '右'}}" />右
+          </label>
+        </radio-group>
+      </view>
+    </view>
+
+    <view class="modal-footer">
+      <button type="default" bindtap="hideOutbound">取消</button>
+      <button type="primary" disabled="{{!isOutboundValid}}" bindtap="confirmOutbound">确认出库</button>
+    </view>
+  </view>
+</view>
+
+<!-- 加载提示 -->
+<view class="loading {{isLoading ? 'show' : ''}}">
+  <view class="loading-mask"></view>
+  <view class="loading-content">
+    <view class="loading-spinner"></view>
+    <text>加载中...</text>
+  </view>
+</view>

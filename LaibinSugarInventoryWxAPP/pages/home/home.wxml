@@ -1,0 +1,65 @@
+<view class="container">
+  <!-- 用户信息 -->
+  <view class="user-info">
+    <text class="username">{{userInfo.name}}，欢迎您！</text>
+    <text class="date">{{currentDate}}</text>
+  </view>
+
+  <!-- 功能按钮 -->
+  <view class="icon-grid">
+    <view class="icon-item" bindtap="goToPage" data-url="/pages/products/products">
+      <image src="/assets/icons/product.png" class="icon-img"></image>
+      <text>产品</text>
+    </view>
+    <view class="icon-item" bindtap="goToPage" data-url="/pages/warehouse/warehouse">
+      <image src="/assets/icons/warehouse.png" class="icon-img"></image>
+      <text>库位</text>
+    </view>
+    <view class="icon-item" bindtap="goToPage" data-url="/pages/screen-mesh/screen-mesh">
+      <image src="/assets/icons/screen.png" class="icon-img"></image>
+      <text>筛网</text>
+    </view>
+    <view class="icon-item" bindtap="goToPage" data-url="/pages/out-stock/out-stock">
+      <image src="/assets/icons/out-stock.png" class="icon-img"></image>
+      <text>出库记录</text>
+    </view>
+  </view>
+
+  <!-- 大卡片导航 -->
+  <view class="card-grid">
+    <view class="card-item" bindtap="goToPage" data-url="/pages/semi-product/semi-product">
+      <image src="/assets/images/semi-product.png" class="card-img"></image>
+      <text>半成品入库</text>
+    </view>
+    <view class="card-item" bindtap="goToPage" data-url="/pages/assay/assay">
+      <image src="/assets/images/assay.png" class="card-img"></image>
+      <text>化验数据</text>
+    </view>
+    <view class="card-item" bindtap="goToPage" data-url="/pages/in-stock/in-stock">
+      <image src="/assets/images/finished-product.png" class="card-img"></image>
+      <text>成品入库</text>
+    </view>
+    <view class="card-item" bindtap="goToPage" data-url="/pages/inventory/inventory">
+      <image src="/assets/images/out-stock.png" class="card-img"></image>
+      <text>库存详情/出库</text>
+    </view>
+  </view>
+  <view class="usage-section">
+    <view class="usage-title">
+      <image class="icon" src="/assets/icons/usage.png"></image>
+      <text>使用说明</text>
+    </view>
+    <view class="usage-text">
+      <text>此小程序仅用于来冰食品有限责任公司冰糖生产车间仓储管理
+      </text>
+      <text>• 可管理产品、库位、筛网信息。
+      </text>
+      <text>• 可查询库存、录入化验数据。
+      </text>
+      <text>• 可进行入库、出库等操作，并查看相关记录。
+      </text>
+      <text>• 更多详细说明请参考使用手册。首次使用时，请您详细阅读使用手册！
+      </text>
+    </view>
+  </view>
+</view>
