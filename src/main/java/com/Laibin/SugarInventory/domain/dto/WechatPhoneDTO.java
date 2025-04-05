@@ -11,5 +11,5 @@ public class WechatPhoneDTO {
     private String code;
 
     @Schema(description = "加密的微信手机号", example = "暂无")
-    private String encryptedData;
+    private String phoneCode;
 }

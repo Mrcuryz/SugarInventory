@@ -195,14 +195,8 @@ public class AuthServiceImpl implements AuthService {
         return new AuthVO(jwtUtils.generateToken(userDetails), user.getName(), user.getRoleCode());
     }
 
-    private Object processWechatBind(SessionInfo session, EmployeeRoster roster) {
-        // 检查是否已存在绑定
-        User existUser = userMapper.selectByEmployeeId(roster.getEmployeeId());
-        if (existUser != null) {
-            throw new BusinessException("该员工已绑定其他微信账号");
-        }
-
-        // 3. 执行绑定前，检查是否已存在
+    private Object processWechatBind(SessionInfo session, EmployeeRoster roster) {                 
+        // 执行绑定前，检查是否已存在
         User existingUser = userMapper.selectByEmployeeId(roster.getEmployeeId());
         User user = new User();
 

@@ -33,7 +33,15 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "INNER JOIN warehouse w ON o.warehouse_id = w.id " +
             "INNER JOIN product p ON o.product_id = p.id " +
             "INNER JOIN user u ON o.operator_id = u.id " +
-            "INNER JOIN assay a ON o.assay_id = a.id " +
+            "LEFT JOIN ( " +
+            "    SELECT * " +
+            "    FROM ( " +
+            "        SELECT a.*, " +
+            "               ROW_NUMBER() OVER (PARTITION BY product_id, sample_date ORDER BY version DESC) AS rn " +
+            "        FROM assay a " +
+            "    ) ranked " +
+            "    WHERE rn = 1 " +
+            ") a ON o.product_id = a.product_id AND o.in_date = a.sample_date " +
             "WHERE 1 = 1 " +
             "<if test='query.warehouseName != null'>" +
             "   AND w.warehouse_name LIKE CONCAT('%', #{query.warehouseName}, '%') " +

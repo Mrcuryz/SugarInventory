@@ -35,7 +35,15 @@ public interface InStockMapper extends BaseMapper<InStock> {
             "LEFT JOIN warehouse w ON s.warehouse_id = w.id " +
             "LEFT JOIN user u ON s.created_by = u.id " +
             "LEFT JOIN screen_mesh sm ON s.screen_mesh_id = sm.id " +
-            "LEFT JOIN assay a ON s.assay_id = a.id " +
+            "LEFT JOIN ( " +
+            "    SELECT * " +
+            "    FROM ( " +
+            "        SELECT a.*, " +
+            "               ROW_NUMBER() OVER (PARTITION BY product_id, sample_date ORDER BY version DESC) AS rn " +
+            "        FROM assay a " +
+            "    ) ranked " +
+            "    WHERE rn = 1 " +
+            ") a ON s.product_id = a.product_id AND s.entry_date = a.sample_date " +
             "where 1=1 " +
             "<if test='query.productName != null'> " +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +

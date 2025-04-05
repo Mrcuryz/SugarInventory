@@ -27,7 +27,7 @@ public class WechatAuthServiceImpl implements WechatAuthService {
     // 解密手机号
     public String decryptPhone(WechatPhoneDTO dto) throws Exception {
         return wxMaService.getUserService().getPhoneNoInfo(
-                dto.getEncryptedData()
+                dto.getPhoneCode()
         ).getPhoneNumber();
     }
 
