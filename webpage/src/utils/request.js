@@ -44,7 +44,11 @@ instance.interceptors.response.use(
             return result.data;
         }
         //操作失败
-        //alert(result.data.msg?result.data.msg:'服务异常')
+        //JSON parse error
+        if(result.data.code===500 && result.data.msg.includes('JSON parse error')){
+            ElMessage.error('请检查输入参数是否正确')
+            return Promise.reject(result.data)
+        }
         ElMessage.error(result.data.msg?result.data.msg:'服务异常')
         //异步操作的状态转换为失败
         return Promise.reject(result.data)

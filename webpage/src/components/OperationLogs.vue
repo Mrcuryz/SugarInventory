@@ -1,6 +1,6 @@
 <template>
   <div class="operation-logs">
-    <el-card class="search-card">
+    <el-card class="search-card" style="max-width: 1200px">
       <el-form :model="searchForm" inline>
         <el-form-item label="时间范围">
           <el-date-picker
@@ -12,7 +12,6 @@
               style="width: 400px"
           />
         </el-form-item>
-
         <el-form-item label="操作类型">
           <el-select
               v-model="searchForm.operationType"
@@ -49,11 +48,12 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button @click="exportExcel">导出Excel(点击查询后才能导出)</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-card class="table-card">
+    <el-card class="table-card" style="max-width: 1200px">
       <el-table
           :data="filteredLogs"
           style="width: 95%"
@@ -127,6 +127,99 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getOperationLogs } from '@/api/operationLogs'
+import {ElMessage} from "element-plus"
+import * as XLSX from 'xlsx'
+import {useI18n} from "vue-i18n";
+
+const { t } = useI18n(); // 确保已经导入useI18n
+
+const exportExcel = async () => {
+  try {
+    loading.value = true;
+    // 获取所有符合条件的数据
+    const params = {
+      page: 1,
+      size: total.value
+    }
+    if (searchForm.value.tableName) {
+      params.tableName = searchForm.value.tableName
+    }
+    if (searchForm.value.operationType) {
+      params.operationType = searchForm.value.operationType
+    }
+    if (searchForm.value.operator) {
+      params.operator = searchForm.value.operator
+    }
+    if (searchForm.value.dateRange !== []) {
+      params.startTime = searchForm.value.dateRange[0]
+      params.endTime = searchForm.value.dateRange[1]
+    }
+    const res = await getOperationLogs(params);
+    if (res.code === 200) {
+      const data = res.data.records.map(item => {
+        // 处理数据格式
+        const processed = {
+          ...item,
+          changedFields: JSON.parse(JSON.parse(item.changedFields)),
+          oldData: JSON.parse(JSON.parse(item.oldData)),
+          operationTime: item.operationTime.replace('T', ' ').replace('Z', ' ')
+        };
+
+        delete processed.changedFields.id;
+        delete processed.oldData.id;
+
+        if (processed.changedFields.sampleDate) {
+          processed.changedFields.sampleDate =
+              `${processed.changedFields.sampleDate[0]}年${
+                  processed.changedFields.sampleDate[1]}月${
+                  processed.changedFields.sampleDate[2]}日`;
+        }
+
+        return processed;
+      });
+
+      // 生成Excel数据
+      const excelData = data.map(log => ({
+        时间: log.operationTime,
+        操作业务: log.tableName,
+        操作类型: { INSERT: '新增', UPDATE: '修改', DELETE: '删除' }[log.operationType],
+        操作人: log.operator,
+        操作内容: formatFields(log.changedFields),
+        原数据: formatFields(log.oldData)
+      }));
+
+      // 创建工作表并导出
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '操作日志');
+      XLSX.writeFile(workbook, `操作日志_${new Date().toISOString().slice(0,10)}.xlsx`);
+      ElMessage.success('导出成功');
+    }
+  } catch (error) {
+    ElMessage.error('导出失败: ' + error.message);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 格式化字段显示
+const formatFields = (fields) => {
+  if (!fields || Object.keys(fields).length === 0) return '无';
+
+  return Object.entries(fields)
+      .map(([key, value]) => {
+        let displayValue = value;
+        switch (value) {
+          case 'ADMIN': displayValue = '管理员'; break;
+          case 'QC': displayValue = '化验员'; break;
+          case 'STAFF': displayValue = '员工'; break;
+          case true: displayValue = '是'; break;
+          case false: displayValue = '否'; break;
+        }
+        return `${t(`fields.${key}`)}: ${displayValue}`;
+      })
+      .join('\n');
+};
 
 // 搜索表单
 const searchForm = ref({
@@ -178,7 +271,7 @@ const handleSearch = async () => {
   if (searchForm.value.operator) {
     params.operator = searchForm.value.operator
   }
-  if (searchForm.value.dateRange.length === 2) {
+  if (searchForm.value.dateRange !== []) {
     params.startTime = searchForm.value.dateRange[0]
     params.endTime = searchForm.value.dateRange[1]
   }
@@ -208,7 +301,7 @@ const handleSearch = async () => {
     })
     loading.value = false
   } else {
-    console.error(res.msg)
+    ElMessage.error(res.msg)
   }
 }
 

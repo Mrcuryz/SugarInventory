@@ -37,12 +37,17 @@
       </el-input>
     </el-form-item>
     <el-form-item label="标准名称">
-      <el-input-tag
-          v-model="searchWarehouseForm.standardNames"
-          placeholder="请输入标准名称后回车"
-          clearable
-          style="width: 420px"
-      />
+      <el-select v-model="searchWarehouseForm.standardNames"
+                 placeholder="请选择"
+                 clearable
+                 style="width: 200px">
+        <el-option
+            v-for="item in standards"
+            :key="item.standardName"
+            :label="item.label"
+            :value="item.standardName"
+        />
+      </el-select>
     </el-form-item>
     <el-form-item label="筛网ID">
       <el-input
@@ -141,6 +146,10 @@
           <el-descriptions-item label="入库日期">
             {{ selectedLocation.entryDate }}
           </el-descriptions-item>
+          <el-descriptions-item label="操作">
+            <el-button type="success" @click="visible = true;operationType='新增入库'">新增入库</el-button>
+            <el-button type="success" @click="visible = true;operationType='新增出库'">新增出库</el-button>
+          </el-descriptions-item>
         </el-descriptions>
       </div>
         <!-- 修改后的模板 -->
@@ -180,15 +189,156 @@
         </div>
     </el-aside>
     </transition>
+    <el-dialog
+        :title=operationType
+        v-model="visible"
+        width="40%"
+        :before-close="handleClose"
+    >
+      <el-form :model="submitForm" :rules="rule" label-width="auto" v-if="operationType === '新增入库'">
+        <el-form-item label="产品名称" prop="productId">
+          <el-cascader
+              v-model="submitForm.productId"
+              :options="productOptions"
+              :props="cascaderProps"
+              placeholder="请选择产品名称"
+              style="width: 100%"
+              clearable
+          />
+        </el-form-item>
+        <el-form-item label="产品状态">
+          <el-radio-group v-model="firstLevelValues">
+            <el-radio label="成品" value="成品">成品</el-radio>
+            <el-radio label="半成品" value="半成品">半成品</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="仓库名称" prop="warehouseName">
+          <span>{{ selectedLocation.warehouseName }}</span>
+        </el-form-item>
+        <el-form-item label="数量" prop="quantity">
+          <el-input v-model="submitForm.quantity" clearable />
+        </el-form-item>
+        <el-form-item label="位置" prop="side">
+          <el-radio-group v-model="submitForm.side">
+            <el-radio label="左" value="LEFT">左</el-radio>
+            <el-radio label="右" value="RIGHT">右</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="筛网名称" prop="screenMeshId" v-if="firstLevelValues === '成品'">
+          <el-select
+              v-model="submitForm.screenMeshId"
+              placeholder="请选择"
+              clearable
+              style="width: 200px"
+          >
+            <el-option
+                v-for="item in meshList"
+                :key="item.id"
+                :label="item.meshName"
+                :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="半成品信息">
+          <div v-for="(item, index) in submitForm.semiRecords" :key="index">
+            <el-row :gutter="20">
+              <el-col :span="20">
+                <el-form-item
+                    label="半成品名称"
+                    :prop="`semiRecords.${index}.semiProductId`"
+                    :rules="rules.semiProductId"
+                >
+                  <el-select
+                      v-model="item.semiProductId"
+                      placeholder="选择半成品"
+                      clearable
+                  >
+                    <el-option
+                        v-for="semi in semiProductList"
+                        :key="semi.productId"
+                        :label="semi.productName"
+                        :value="semi.productId"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="20">
+                <el-form-item
+                    label="数量"
+                    :prop="`semiRecords.${index}.quantity`"
+                    :rules="rules.quantity"
+                >
+                  <el-input v-model="item.quantity" placeholder="数量" type="number"/>
+                </el-form-item>
+              </el-col>
+              <el-col :span="20">
+                <el-form-item
+                    label="生产日期"
+                    :prop="`semiRecords.${index}.productionDate`"
+                    :rules="rules.productionDate"
+                >
+                  <el-date-picker
+                      v-model="item.productionDate"
+                      type="date"
+                      placeholder="生产日期"
+                      style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-button
+                    type="danger"
+                    :icon="Delete"
+                    @click="removeSemi(index)"
+                    circle
+                />
+              </el-col>
+            </el-row>
+          </div>
+          <el-button
+              type="primary"
+              icon="el-icon-plus"
+              @click="addSemi"
+              style="margin-top: 10px"
+              v-if="firstLevelValues === '成品'"
+          >
+            添加半成品
+          </el-button>
+        </el-form-item>
+      </el-form>
+      <el-form :model="submitForm" :rules="ruless" label-width="auto" v-if="operationType === '新增出库'">
+        <el-form-item label="仓库名称" prop="warehouseName">
+          <span>{{ selectedLocation.warehouseName }}</span>
+        </el-form-item>
+        <el-form-item label="数量" prop="quantity">
+          <el-input v-model="submitForm.quantity" clearable />
+        </el-form-item>
+        <el-form-item label="位置" prop="side">
+          <el-radio-group v-model="submitForm.side">
+            <el-radio label="左" value="LEFT">左</el-radio>
+            <el-radio label="右" value="RIGHT">右</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <div slot="footer" class="dialog-footer">
+        <el-button type="primary" @click=" operationType === '新增入库' ? handleNew() : handleOut()">确定</el-button>
+        <el-button @click="visible = false;handleClose()">取消</el-button>
+      </div>
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, reactive , onBeforeMount, watchEffect } from 'vue'
-import { Calendar, Timer } from '@element-plus/icons-vue'
+import {ref, computed, onMounted, onUnmounted, reactive, onBeforeMount, watchEffect, watch} from 'vue'
+import {Calendar, Delete, Timer} from '@element-plus/icons-vue'
 import { throttle } from 'lodash-es'
 import { getWarehouseInfo, getAllWarehouseCapacity, getWarehouseList, getWarehouseById, getMaxRowNum } from '@/api/warehouseinfo'
 import { ElMessage } from 'element-plus'
+import {getStandard} from "@/api/standard";
+import {getSemiProduct, getStProduct} from "@/api/assay";
+import {addInStock, addOutStock} from "@/api/stock";
+import {getMesh} from "@/api/mesh";
+import dayjs from "dayjs";
 //查询仓库信息
 let searchWarehouseForm = ref({
   productName: '',
@@ -205,7 +355,7 @@ const handleSearch = async () => {
   if (searchWarehouseForm.value.productName) {
     params.productName = searchWarehouseForm.value.productName
   }
-  if (searchWarehouseForm.value.standardNames) {
+  if (searchWarehouseForm.value.standardNames.length > 0) {
     params.standardNames = searchWarehouseForm.value.standardNames
   }
   if (searchWarehouseForm.value.screenMeshId) {
@@ -249,176 +399,6 @@ const handleReset = () => {
   filteredInfo.value = []
   getAll()
 }
-// 过滤库位处理
-// const filterLocations =ref([
-//   {
-//     x: 150,
-//     y: 20,
-//     width: 200,
-//     height: 510,
-//     status: 'info'
-//   },
-//   {
-//     id: 10,
-//     x: 160,
-//     y: 30,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 11,
-//     x: 160,
-//     y: 80,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 12,
-//     x: 160,
-//     y: 130,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 13,
-//     x: 160,
-//     y: 180,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 14,
-//     x: 160,
-//     y: 230,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 15,
-//     x: 160,
-//     y: 280,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 16,
-//     x: 160,
-//     y: 330,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 17,
-//     x: 160,
-//     y: 380,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 18,
-//     x: 160,
-//     y: 430,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 19,
-//     x: 160,
-//     y: 480,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 20,
-//     x: 300,
-//     y: 30,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 21,
-//     x: 300,
-//     y: 80,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 22,
-//     x: 300,
-//     y: 130,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 23,
-//     x: 300,
-//     y: 180,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 24,
-//     x: 300,
-//     y: 230,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 25,
-//     x: 300,
-//     y: 280,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 26,
-//     x: 300,
-//     y: 330,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 27,
-//     x: 300,
-//     y: 380,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 28,
-//     x: 300,
-//     y: 430,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   },
-//   {
-//     id: 29,
-//     x: 300,
-//     y: 480,
-//     width: 40,
-//     height: 40,
-//     status: 'default'
-//   }
-// ])
 const filterLocations = ref([])
 const maxRowNum = ref(0)
 // 样式计算函数
@@ -1133,12 +1113,12 @@ const locations = ref([
     status: "default",
   },
   {
-    id: 101,
-    x:1100,
-    y: 430,
-    width: 30,
-    height: 130,
-    status: 'default'
+    id:101,
+    x:312,
+    y: 600,
+    width: 710,
+    height: 240,
+    status: "default",
   }
 ])
 // 加载状态
@@ -1146,6 +1126,7 @@ const loading = ref(false)
 // 处理库位点击
 const handleSelectLocation = async (location) => {
   ElMessage.success(`已选中 ${location.id}号仓库`)
+
   selectedLocation.value = location
   loading.value = true
   let isFiltered = false
@@ -1217,6 +1198,7 @@ const getLocationStyle = (location) => {
 let CapacityList=ref([]);
 const getAll = async () => {
   let result =  await getAllWarehouseCapacity();
+
   if (result.code === 200) {
     CapacityList.value = result.data
     CapacityList.value.forEach(item => {
@@ -1248,6 +1230,262 @@ const handleCanvasClick = () => {
     selectedLocation.value = null
   }
 }
+const standards = ref([])
+const getStandardList = async () => {
+  let params = {
+  }
+  let res = await getStandard(params)
+  if (res.code === 200) {
+    standards.value = res.data
+  }else{
+    ElMessage.error('获取标准列表失败')
+  }
+}
+getStandardList()
+
+// 新增
+const handleClose = () => {
+  visible.value = false
+  submitForm.value = {
+    productId: '',
+    warehouseName: '',
+    quantity: '',
+    side: '',
+    screenMeshId: '',
+    semiRecords: []
+  }
+  firstLevelValues.value = '成品'
+}
+const operationType = ref('')
+const submitForm = ref({
+  productId: '',
+  warehouseName: '',
+  quantity: '',
+  side: '',
+  screenMeshId: '',
+  semiRecords: []
+})
+const visible = ref(false)
+// 验证规则
+const rule = {
+  productId: [ { required: true, message: '请输入产品名称', trigger: 'blur' } ],
+  warehouseName: [ { required: true, message: '请输入仓库名称', trigger: 'blur' } ],
+  quantity: [ { required: true, message: '请输入数量', trigger: 'blur' } ],
+  side: [ { required: true, message: '请选择位置', trigger: 'blur' } ],
+  meshName: [ { required: true, message: '请输入筛网名称', trigger: 'blur' } ]
+}
+const rules = reactive({
+  productId: { required: true, message: '请选择产品' },
+  warehouseName: { required: true, message: '请输入仓库名称' },
+  quantity: {required: true, message: '请输入数量' },
+  semiProductId: { required: true, message: '请选择半成品' },
+  productionDate: { type: 'date', required: true, message: '请选择生产日期' },
+})
+const ruless = reactive({
+  quantity: {required: true, message: '请输入数量' },
+  side: [ { required: true, message: '请选择位置', trigger: 'blur' } ]
+})
+const addSemi = () => {
+  if (!submitForm.value.semiRecords) {
+    submitForm.value.semiRecords = [] // 初始化数组
+  }
+  submitForm.value.semiRecords.push({
+    semiProductId: null,
+    quantity: null
+  })
+}
+const removeSemi = (index) => {
+  submitForm.value.semiRecords.splice(index, 1)
+}
+const handleOut = async () => {
+  if (submitForm.value.quantity === ''){
+    ElMessage.error('请输入数量')
+  }
+  if (submitForm.value.side === '') {
+    ElMessage.error('请选择位置')
+  }
+  let params = {
+    warehouseId: selectedLocation.value.warehouseId,
+    side: submitForm.value.side,
+    quantity: submitForm.value.quantity
+  }
+  let res = await addOutStock(params)
+  if (res.code === 200) {
+    ElMessage.success('新增成功')
+    await handleSearch()
+    dialogVisible.value = false
+    submitForm.value = {
+      productId: '',
+      warehouseName: '',
+      quantity: '',
+      side: '',
+      meshName: ''
+    }
+  } else {
+    ElMessage.error(res.msg)
+  }
+}
+const handleNew = async () => {
+  console.log(firstLevelValues.value)
+  // 校验表单
+  if (submitForm.value.productId === '') {
+    ElMessage.error('请选择产品名称')
+    return
+  }
+  if (submitForm.value.quantity === '') {
+    ElMessage.error('请输入数量')
+    return
+  }
+  if (submitForm.value.side === '') {
+    ElMessage.error('请选择位置')
+    return
+  }
+  if (submitForm.value.screenMeshId === '') {
+    ElMessage.error('请输入筛网名称')
+    return
+  }
+  if (submitForm.value.semiRecords.length === 0) {
+    ElMessage.error('请添加半成品信息')
+    return
+  }
+  //在semiProductList中查找输入的半成品信息
+  for (let i = 0; i < submitForm.value.semiRecords.length; i++) {
+    let semiProduct = semiProductList.value.find(item => item.productId === submitForm.value.semiRecords[i].semiProductId)
+    if (!semiProduct) {
+      ElMessage.error('半成品信息有误')
+      return
+    }else{
+      submitForm.value.semiRecords[i].productName = semiProduct.productName
+      submitForm.value.semiRecords[i].productionDate = dayjs(submitForm.value.semiRecords[i].productionDate).format('YYYY-MM-DD')
+    }
+  }
+  submitForm.value.semiProductRecords = JSON.stringify(submitForm.value.semiRecords)
+  submitForm.value.warehouseName = selectedLocation.value.warehouseName
+  if (firstLevelValues.value === '半成品') {
+    let params = {
+      productId: submitForm.value.productId,
+      warehouseName: submitForm.value.warehouseName,
+      quantity: submitForm.value.quantity,
+      side: submitForm.value.side
+    }
+    let res = await addOutStock(params)
+    if (res.code === 200) {
+      ElMessage.success('新增成功')
+      await handleSearch()
+      dialogVisible.value = false
+      submitForm.value = {
+        productId: '',
+        warehouseName: '',
+        quantity: '',
+        side: '',
+        meshName: ''
+      }
+    } else {
+      ElMessage.error(res.msg)
+    }
+  } else {
+    let res = await addInStock(submitForm.value)
+    if (res.code === 200) {
+      ElMessage.success('新增成功')
+      await handleSearch()
+      dialogVisible.value = false
+      submitForm.value = {
+        productId: '',
+        warehouseName: '',
+        quantity: '',
+        side: '',
+        meshName: ''
+      }
+    } else {
+      ElMessage.error(res.msg)
+    }
+  }
+}
+
+const firstLevelValues = ref('成品')
+// 级联组件配置（保持不变）
+const cascaderProps = reactive({
+  emitPath: false,
+  label: 'label',
+  value: 'value',
+  children: 'children'
+})
+
+// 合并处理成品和半成品数据
+const productOptions = computed(() => {
+  // 合并数据并添加分类标记
+  const combinedProducts = [
+    ...StProductList.value.map(p => ({ ...p, category: '成品' })),
+    ...semiProductList.value.map(p => ({ ...p, category: '半成品' }))
+  ]
+
+  const categoryMap = {}
+
+  combinedProducts.forEach(product => {
+    // 第一级：成品/半成品
+    const categoryNode = categoryMap[product.category] || {
+      value: product.category,
+      label: product.category,
+      children: {}
+    }
+
+    // 第二级：产品类型
+    const typeNode = categoryNode.children[product.productType] || {
+      value: product.productType,
+      label: product.productType,
+      children: []
+    }
+
+    // 第三级：具体产品
+    const productNode = {
+      value: product.productId,
+      label: product.productName
+    }
+
+    // 更新数据结构
+    if (!categoryMap[product.category]) {
+      categoryMap[product.category] = categoryNode
+    }
+    if (!categoryNode.children[product.productType]) {
+      categoryNode.children[product.productType] = typeNode
+    }
+    typeNode.children.push(productNode)
+  })
+
+  // 转换数据结构为数组格式
+  return Object.values(categoryMap).map(category => ({
+    ...category,
+    children: Object.values(category.children).map(type => ({
+      ...type,
+      children: type.children
+    }))
+  }))
+})
+
+const semiProductList = ref([])
+const SemiProduct = async () => {
+  let res = await getSemiProduct()
+  semiProductList.value = res.data
+}
+const StProductList = ref([])
+const StProduct = async () => {
+  let res = await getStProduct()
+  StProductList.value = res.data
+}
+const meshList = ref([])
+const getMeshList = async () => {
+  let res = await getMesh()
+  if (res.code === 200) {
+    meshList.value = res.data
+  } else {
+    ElMessage.error(res.msg)
+  }
+}
+onMounted(async () => {
+  await SemiProduct()
+  await StProduct()
+  await getMeshList()
+})
 </script>
 
 <style scoped>
