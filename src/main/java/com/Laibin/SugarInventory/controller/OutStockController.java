@@ -8,6 +8,7 @@ import com.Laibin.SugarInventory.domain.dto.OutRecordQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
+import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutStockRecordVO;
 import com.Laibin.SugarInventory.domain.vo.OutVO;
@@ -44,11 +45,16 @@ public class OutStockController {
         }
     }
 
+
     @Operation(summary = "出库记录查询", description = "根据条件批量查询出库记录信息")
     @PostMapping("/records")
-    public Result<PageResult<OutStockRecordVO>> searchOutRecords(@RequestBody OutRecordQueryDTO query) {
+    public Result<PageResult<OutStockRecordVO>> searchOutRecords(
+            @RequestBody OutRecordQueryDTO query,
+            @AuthenticationPrincipal LoginUser loginUser
+    ) {
+        User user = loginUser.getUser();
         try {
-            return Result.success(outStockService.searchOutRecords(query));
+            return Result.success(outStockService.searchOutRecords(query, user));
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }

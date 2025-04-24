@@ -21,7 +21,7 @@ public class UserController {
     @GetMapping("/info")
     @Operation(summary = "获取用户信息", description = "根据JWT Token解析用户信息，返回用户姓名、工号、角色代码")
     public Result<Map<String, Object>> getUserInfo(@AuthenticationPrincipal LoginUser loginUser) {
-        if (loginUser == null || loginUser.getUser() == null) {
+        if (loginUser == null && loginUser.getUser() == null) {
             return Result.error(401, "未授权访问");
         }
 

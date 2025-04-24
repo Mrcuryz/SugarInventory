@@ -172,20 +172,37 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
     }
 
     @Override
-    public PageResult<OutStockRecordVO> searchOutRecords(OutRecordQueryDTO query) {
+    public PageResult<OutStockRecordVO> searchOutRecords(OutRecordQueryDTO query, User user) {
         int offset = (query.getPage() - 1) * query.getSize();
 
+        boolean isStaff = user.getRoleCode().equals("STAFF");
+
         List<OutStockRecordVO> recordVOList = outStockMapper
-                .selectOutStockRecordsByQuery(query, offset, query.getSize());
+                .selectOutStockRecordsByQuery(query, offset, query.getSize(), isStaff, user.getName());
 
         for(OutStockRecordVO record : recordVOList){
             Integer id = record.getTestedBy();
             if(id == null) continue;
             String testerName = userMapper.selectById(id).getName();
             record.setTesterName(testerName);
+
+            if(isStaff){
+                record.setAssayId(null);
+                record.setSampleDate(null);
+                record.setColorValue(null);
+                record.setReducingSugar(null);
+                record.setDryWeight(null);
+                record.setConductivityAsh(null);
+                record.setSucrose(null);
+                record.setInsolubleImpurity(null);
+                record.setPhValue(null);
+                record.setTesterName(null);
+                record.setIsQualified(null);
+                record.setQualifiedStandards(null);
+            }
         }
 
-        Long total = outStockMapper.countOutStockRecordsByQuery(query);
+        Long total = outStockMapper.countOutStockRecordsByQuery(query, isStaff, user.getName());
 
         return new PageResult<>(total, recordVOList);
 

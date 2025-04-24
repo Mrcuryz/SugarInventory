@@ -58,12 +58,18 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "<if test='query.endDate != null'>" +
             "   AND o.out_date &lt;= #{query.endDate} " +
             "</if> " +
+            "<if test='isStaff'>" +
+            "   AND o.operator_id = #{createdBy} " +
+            "</if>" +
             "ORDER BY o.out_date DESC " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
     List<OutStockRecordVO> selectOutStockRecordsByQuery(@Param("query") OutRecordQueryDTO query,
-                                                         @Param("offset") Integer offset,
-                                                         @Param("size") Integer size
+                                                        @Param("offset") Integer offset,
+                                                        @Param("size") Integer size,
+                                                        @Param("isStaff") boolean isStaff,
+                                                        @Param("createdBy") String createdBy
+
     );
 
     // 计算批量查询出库记录的总数
@@ -89,6 +95,11 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "<if test='query.endDate != null'>" +
             "   AND o.in_date &lt;= #{query.endDate} " +
             "</if> " +
+            "<if test='isStaff'>" +
+            "   AND o.operator_id = #{createdBy} " +
+            "</if>" +
             "</script>")
-    Long countOutStockRecordsByQuery(@Param("query") OutRecordQueryDTO query);
+    Long countOutStockRecordsByQuery(@Param("query") OutRecordQueryDTO query,
+                                     @Param("isStaff") boolean isStaff,
+                                     @Param("createdBy") String createdBy);
 }

@@ -72,10 +72,11 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
 
     // 根据传入的条件（产品名称、库位名称、操作员、日期范围）分页查询数据
     @Select("<script>" +
-            "SELECT s.*, p.product_name, w.warehouse_name, a.*, u.name AS tester_name " +
+            "SELECT s.*, p.product_name, w.warehouse_name, a.*, u.name AS tester_name, sm.mesh_name " +
             "FROM semi_product_record s " +
             "JOIN product p ON s.product_id = p.id " +
             "JOIN warehouse w ON s.warehouse_id = w.id " +
+            "JOIN screen_mesh sm ON s.screen_mesh_id = sm.id " +
             "LEFT JOIN ( " +
             "    SELECT * " +
             "    FROM ( " +
@@ -99,12 +100,17 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
             "<if test='dto.startDate != null and dto.endDate != null'>" +
             "   AND s.operation_date BETWEEN #{dto.startDate} AND #{dto.endDate} " +
             "</if>" +
+            "<if test='isStaff'>" +
+            "   AND s.operator = #{operator} " +
+            "</if>" +
             "ORDER BY s.created_at DESC " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
     List<RecordDetailVO> getRecordsByConditions(@Param("dto") SemiProductRecordDTO dto,
-                                                   @Param("offset") Integer offset,
-                                                   @Param("size") Integer size);
+                                                @Param("offset") Integer offset,
+                                                @Param("size") Integer size,
+                                                @Param("isStaff") boolean isStaff,
+                                                @Param("operator") String operator);
 
     // 根据传入的条件（产品名称、库位名称、操作员、日期范围）统计总数
     @Select("<script>" +
@@ -126,6 +132,11 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
             "<if test='dto.startDate != null and dto.endDate != null'>" +
             "   AND s.operation_date BETWEEN #{dto.startDate} AND #{dto.endDate} " +
             "</if>" +
+            "<if test='isStaff'>" +
+            "   AND s.operator = #{operator} " +
+            "</if>" +
             "</script>")
-    Long countByConditions(@Param("dto") SemiProductRecordDTO dto);
+    Long countByConditions(@Param("dto") SemiProductRecordDTO dto,
+                           @Param("isStaff") boolean isStaff,
+                           @Param("operator") String operator);
 }
