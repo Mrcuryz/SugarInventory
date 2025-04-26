@@ -13,7 +13,9 @@ import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.Laibin.SugarInventory.mapper.OperationLogMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.service.LoggableService;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.annotation.PostConstruct;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -51,7 +53,22 @@ public class OperationLogAspect {
     @PostConstruct
     public void init() {
         // 使 ObjectMapper 支持 Java 8 时间类型
+        objectMapper = new ObjectMapper() {
+            @Override
+            public ObjectMapper configure(MapperFeature feature, boolean state) {
+                // 强制禁用所有排序功能
+                return super.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, false)
+                        .disable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
+            }
+        };
+
         objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        // 关键配置：禁用所有排序
+        objectMapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, false);
+        objectMapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, false);
+
         // 获取所有LoggableService的实例
         Map<String, LoggableService> beans = applicationContext.getBeansOfType(LoggableService.class);
         tableServiceMap = new HashMap<>();
@@ -195,7 +212,7 @@ public class OperationLogAspect {
             changedFieldsJson = convertToJson(changedFields);
             System.out.println("changedFieldsJson: " + changedFieldsJson);
         } else if (operationType == OperationType.INSERT) {
-            Map<String, Object> newDataMap = convertProductIdToName(objectToMap(newData));
+            Map<String, Object> newDataMap = convertProductIdToName(getOrderedFieldMap(newData, true));
             changedFieldsJson = convertToJson(newDataMap);
         }
 
@@ -203,31 +220,79 @@ public class OperationLogAspect {
         log.setOperationType(operationType.name());
         log.setOperationTime(LocalDateTime.now());
         log.setChangedFields(changedFieldsJson);
-        log.setOldData(convertToJson(convertProductIdToName(objectToMap(oldData))));
+        Map<String, Object> oldData1 = getOrderedFieldMap(oldData, true);
+        System.out.println("oldData1: " + oldData1);
+        Map<String, Object> oldData2 = convertProductIdToName(oldData1);
+        System.out.println("oldData2: " + oldData2);
+
+        log.setOldData(convertToJson(oldData2));
+        System.out.println("oldDataJson: " + convertToJson(oldData2));
         log.setOperator(operator);
         return log;
     }
 
+    // 修改后的getChangedFields方法（使用反射保持顺序）
     private Map<String, Object> getChangedFields(Object oldData, Object newData) {
         Map<String, Object> changes = new LinkedHashMap<>();
-        if (oldData == null || newData == null) {
-            return changes;
-        }
-        BeanWrapper oldWrapper = new BeanWrapperImpl(oldData);
-        BeanWrapper newWrapper = new BeanWrapperImpl(newData);
-        for (PropertyDescriptor pd : oldWrapper.getPropertyDescriptors()) {
-            String field = pd.getName();
-            if ("class".equals(field) || isIgnoredField(field)) { // 过滤字段
-                continue;
+        if (oldData == null || newData == null) return changes;
+
+        try {
+            Map<String, Field> oldFields = getDeclaredFieldsMap(oldData.getClass());
+            Map<String, Field> newFields = getDeclaredFieldsMap(newData.getClass());
+
+            // 遍历旧数据字段（按声明顺序）
+            for (Field oldField : oldFields.values()) {
+                String fieldName = oldField.getName();
+                if (isIgnoredField(fieldName)) continue;
+
+                Field newField = newFields.get(fieldName);
+                if (newField == null) continue;
+
+                oldField.setAccessible(true);
+                newField.setAccessible(true);
+
+                Object oldVal = oldField.get(oldData);
+                Object newVal = newField.get(newData);
+
+                if (!isEqual(oldVal, newVal)) {
+                    changes.put(fieldName, newVal);
+                }
             }
-            Object oldVal = oldWrapper.getPropertyValue(field);
-            Object newVal = newWrapper.getPropertyValue(field);
-            if (!isEqual(oldVal, newVal)) { // 精准比较值
-                changes.put(field, newVal);
-            }
+        } catch (IllegalAccessException e) {
+            System.err.println("反射比较字段失败: " + e.getMessage());
         }
         return changes;
     }
+
+    // 辅助方法：获取类字段的声明顺序映射
+    private Map<String, Field> getDeclaredFieldsMap(Class<?> clazz) {
+        Map<String, Field> fieldMap = new LinkedHashMap<>(); // 保持顺序
+        for (Field field : clazz.getDeclaredFields()) {
+            fieldMap.put(field.getName(), field);
+        }
+        return fieldMap;
+    }
+
+//    private Map<String, Object> getChangedFields(Object oldData, Object newData) {
+//        Map<String, Object> changes = new LinkedHashMap<>();
+//        if (oldData == null || newData == null) {
+//            return changes;
+//        }
+//        BeanWrapper oldWrapper = new BeanWrapperImpl(oldData);
+//        BeanWrapper newWrapper = new BeanWrapperImpl(newData);
+//        for (PropertyDescriptor pd : oldWrapper.getPropertyDescriptors()) {
+//            String field = pd.getName();
+//            if ("class".equals(field) || isIgnoredField(field)) { // 过滤字段
+//                continue;
+//            }
+//            Object oldVal = oldWrapper.getPropertyValue(field);
+//            Object newVal = newWrapper.getPropertyValue(field);
+//            if (!isEqual(oldVal, newVal)) { // 精准比较值
+//                changes.put(field, newVal);
+//            }
+//        }
+//        return changes;
+//    }
 
     // 精准比较值（处理日期类型）
     private boolean isEqual(Object oldVal, Object newVal) {
@@ -261,25 +326,50 @@ public class OperationLogAspect {
         return updatedMap;
     }
 
-    // 将对象转换为 Map
-    private Map<String, Object> objectToMap(Object obj) {
+    private Map<String, Object> getOrderedFieldMap(Object obj, boolean filterIgnored) {
         if (obj == null) return Collections.emptyMap();
+
         Map<String, Object> map = new LinkedHashMap<>();
-        BeanWrapper beanWrapper = new BeanWrapperImpl(obj);
-        for (PropertyDescriptor pd : beanWrapper.getPropertyDescriptors()) {
-            String fieldName = pd.getName();
-            if (!"class".equals(fieldName)) {
-                Object fieldValue = beanWrapper.getPropertyValue(fieldName);
-                map.put(fieldName, fieldValue);
+        try {
+            // 通过反射直接获取字段声明顺序
+            Class<?> clazz = obj.getClass();
+            List<Field> fields = new ArrayList<>(Arrays.asList(clazz.getDeclaredFields()));
+
+            // 按字段声明顺序处理
+            for (Field field : fields) {
+                String fieldName = field.getName();
+                if (filterIgnored && isIgnoredField(fieldName)) continue;
+
+                field.setAccessible(true);
+                Object value = field.get(obj);
+                map.put(fieldName, value);
             }
+        } catch (IllegalAccessException e) {
+            System.err.println("反射获取字段值失败: " + e.getMessage());
         }
         return map;
     }
 
+    // 将对象转换为 Map
+//    private Map<String, Object> objectToMap(Object obj) {
+//        if (obj == null) return Collections.emptyMap();
+//        Map<String, Object> map = new LinkedHashMap<>();
+//        BeanWrapper beanWrapper = new BeanWrapperImpl(obj);
+//        for (PropertyDescriptor pd : beanWrapper.getPropertyDescriptors()) {
+//            String field = pd.getName();
+//            if ("class".equals(field) || isIgnoredField(field)) {
+//                continue;
+//            }
+//            Object value = beanWrapper.getPropertyValue(field);
+//            map.put(field, value);
+//        }
+//        return map;
+//    }
+
     // 忽略自动填充字段（如 createdAt/updatedAt）
     private boolean isIgnoredField(String field) {
         return field.equals("createdAt") || field.equals("updatedAt") ||
-                field.equals("createdBy") || field.equals("updatedBy");
+                field.equals("createdBy") || field.equals("updatedBy") || field.isEmpty();
     }
 
     // 将对象转换为 JSON 字符串

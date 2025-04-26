@@ -60,7 +60,7 @@ public class AssayController {
     }
 
     @Operation(summary = "更新化验记录", description = "根据化验记录ID更新化验数据（更新时保留旧记录，以便历史对比）")
-    @LogOperation(value = "化验数据", type = OperationType.INSERT)
+    @LogOperation(value = "化验数据", type = OperationType.UPDATE)
     @PreAuthorize("hasAuthority('quality:test')")
     @PostMapping("/{id}")
     public Result<AssayVO> updateAssay(
