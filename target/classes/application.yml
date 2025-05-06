@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/laibin?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
     username: root
-    password: ssmrcury1
+    password: 1104318878
     driver-class-name: com.mysql.cj.jdbc.Driver
   jackson:
     serialization:
