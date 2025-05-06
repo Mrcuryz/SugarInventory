@@ -58,19 +58,46 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="productName" label="产品名称" width="150" />
-        <el-table-column prop="productType" label="产品类型" width="150" />
-        <el-table-column prop="status" label="产品状态" width="150"/>
-        <el-table-column prop="packagingMethod" label="打包方式" width="100" />
-        <el-table-column prop="weightPerPiece" label="每件重量（kg）" width="150"/>
-        <el-table-column prop="piecesPerPallet" label="每板件数" width="100"/>
-        <el-table-column prop="canStack" label="是否可堆叠" width="100">
+        <el-table-column prop="productName" label="产品名称" width="150" >
+          <template #default="{ row }">
+            <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
+              {{ row.productName }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productType" label="产品类型" width="300" >
+        <template #default="{ row }">
+            <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
+              {{ row.productType }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="产品状态" width="100">
+          <template #default="{ row }">
+            <span
+              :style="{
+                color:
+                  row.status === '半成品'
+                    ? '#e60000'
+                    : row.status === '成品'
+                    ? 'green'
+                    : '#000'
+              }"
+            >
+              {{ row.status }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="packagingMethod" label="打包方式" width="120" />
+        <el-table-column prop="weightPerPiece" label="每件重量（kg）" min-width="auto"/>
+        <el-table-column prop="piecesPerPallet" label="每板件数" width="auto"/>
+        <el-table-column prop="canStack" label="是否可堆叠" width="auto">
           <template #default="{ row }">
             <span v-if="row.canStack">是</span>
             <span v-else>否</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="auto">
+        <el-table-column label="操作" width="150">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改产品';editProduct(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="deleteProduct(row)">删除</el-button>
@@ -248,11 +275,11 @@ const rule = {
   ],
   weightPerPiece: [
     { required: true, message: '请输入每件重量', trigger: 'blur' },
-    { type: 'string', message: '请输入数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
+    { type: 'float', message: '请输入数字', trigger: 'blur' }
   ],
   piecesPerPallet: [
     { required: true, message: '请输入每板件数', trigger: 'blur' },
-    { type: 'string', message: '请输入整数', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
+    { type: 'integer', message: '请输入整数', trigger: 'blur' }
   ]
 }
 const dialogVisible = ref(false)
