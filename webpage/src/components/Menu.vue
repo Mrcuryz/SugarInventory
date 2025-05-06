@@ -20,7 +20,7 @@ const menuList = [
   {path: '/warehouse', title: '库位管理', icon: Box},
   {path: '/screenMesh', title: '筛网管理', icon: Filter},
   {path: '/assay', title: '化验管理', icon: PieChart},
-  {path: '/standard', title: '质量标准管理', icon: Finished},
+  {path: '/standard', title: '化验标准管理', icon: Finished},
   {path: '/stock', title: '出入库管理', icon: Switch},
   {path: '/employee', title: '员工管理', icon: User}
 ]
@@ -44,7 +44,6 @@ const activeMenu = computed(() => route.path)
     <!-- 侧边栏 -->
     <el-aside class="el-aside" :width="isCollapse ? '64px' : '240px'">
       <div class="logo-container">
-        <img src="@/assets/logo.png" class="logo">
         <span v-show="!isCollapse">仓储管理系统</span>
       </div>
       <el-menu
@@ -84,22 +83,6 @@ const activeMenu = computed(() => route.path)
               {{ item.title }}
             </el-breadcrumb-item>
           </el-breadcrumb>
-        </div>
-
-        <div class="user-info">
-          <el-dropdown>
-            <div class="user-wrapper">
-              <el-avatar :size="32" src="@/assets/user.png" />
-              <span class="username">管理员</span>
-              <el-icon><arrow-down /></el-icon>
-            </div>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item>个人中心</el-dropdown-item>
-                <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
         </div>
       </el-header>
 

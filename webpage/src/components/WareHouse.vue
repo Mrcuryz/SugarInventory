@@ -28,14 +28,15 @@
           v-loading="loading"
       >
         <el-table-column prop="warehouseName" label="库位名称" width="200" sortable />
-        <el-table-column prop="status" label="库位状态" width="300" />
+        <el-table-column prop="status" label="库位状态" width="200" />
         <el-table-column prop="maxCapacity" label="最大容量" width="150" sortable/>
         <el-table-column prop="curCapacity" label="当前容量" width="150" sortable/>
-        <el-table-column prop="maxRows" label="最大行数" min-width="auto"/>
-        <el-table-column label="操作" width="150">
+        <el-table-column prop="maxRows" label="最大行数" min-width="150"/>
+        <el-table-column label="操作" width="220">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改库位';editWarehouse(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="deleteWarehouse(row)">删除</el-button>
+            <el-button type="info" size="small" @click="dialogVisible = true;operationType='修改状态';editWarehouse(row)">修改状态</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -48,13 +49,13 @@
         :before-close="handleClose"
     >
       <el-form :model="warehouseForm" :rules="rule" label-width="auto">
-        <el-form-item label="库位名称" prop="warehouseName" required>
+        <el-form-item label="库位名称" prop="warehouseName" v-if="operationType !== '修改状态'" required>
           <el-input v-model="warehouseForm.warehouseName" clearable />
         </el-form-item>
-        <el-form-item label="最大行数" prop="maxRows" required>
+        <el-form-item label="最大行数" prop="maxRows" v-if="operationType !== '修改状态'" required>
           <el-input v-model="warehouseForm.maxRows" clearable />
         </el-form-item>
-        <el-form-item v-if="operationType === '修改库位'" label="状态" prop="status" required>
+        <el-form-item v-if="operationType === '修改状态'" label="正常" prop="status" required>
           <el-switch
               v-model="warehouseForm.status"
               active-value="维护"
@@ -64,7 +65,7 @@
           />
         </el-form-item>
       </el-form>
-      <div slot="footer" class="dialog-footer">
+      <div slot="footer" class="dialog-footer" fixed="right">
         <el-button type="primary" @click="operationType === '新增库位' ? newWarehouse() : updateWarehouse()">确定</el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
       </div>
@@ -115,7 +116,7 @@ const rule = {
   ],
   maxRows: [
     { required: true, message: '请输入最大行数', trigger: 'blur' },
-    { type: 'integer', message: '请输入整数', trigger: 'blur' }
+    { type: 'string', message: '请输入整数', trigger: 'blur' ,pattern: /^\d+$/}
   ]
 }
 const dialogVisible = ref(false)
@@ -191,7 +192,6 @@ const deleteWarehouse = async (row) => {
 
 // 编辑库位
 const editWarehouse = (row) => {
-  operationType.value = '修改库位'
   warehouseForm.value = {
     id: row.id,
     warehouseName: row.warehouseName,
@@ -211,12 +211,18 @@ const updateWarehouse = async () => {
     ElMessage.error('请输入最大行数')
     return
   }
-  let res = await changeWarehouse(warehouseForm.value)
-  if (warehouseForm.value.status === '维护' || warehouseForm.value.status === '取消维护') {
-    let res = await changeWarehouseStatus(warehouseForm.value.id)
+  if (warehouseForm.value.status === '') {
+    ElMessage.error('请选择状态')
+    return
+  }
+  let res
+  if (operationType.value === '修改状态') {
+    res = await changeWarehouseStatus(warehouseForm.value.id)
     if (res.code !== 200) {
       ElMessage.error(res.msg)
     }
+  }else{
+    res = await changeWarehouse(warehouseForm.value)
   }
   if (res.code === 200) {
     ElMessage.success('修改成功')

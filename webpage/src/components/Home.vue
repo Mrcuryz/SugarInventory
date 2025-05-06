@@ -49,13 +49,20 @@
         />
       </el-select>
     </el-form-item>
-    <el-form-item label="筛网ID">
-      <el-input
+    <el-form-item label="筛网名称" prop="screenMeshId">
+      <el-select
           v-model="searchWarehouseForm.screenMeshId"
-          placeholder="请输入筛网ID"
+          placeholder="请选择"
           clearable
-          style="width: 300px"
-      />
+          style="width: 200px"
+      >
+        <el-option
+            v-for="item in meshList"
+            :key="item.id"
+            :label="item.meshName"
+            :value="item.id"
+        />
+      </el-select>
     </el-form-item>
     <el-form-item label="时间范围">
       <el-date-picker
@@ -106,7 +113,13 @@
             <text
                 :x="location.x + location.width/2"
                 :y="location.y + location.height/2"
-                class="location-label"
+                :class="{ 'vertical-text': verticalTextIds.includes(location.id) }"
+                text-anchor="middle"
+                dominant-baseline="middle"
+                :style="{
+      fontSize: verticalTextIds.includes(location.id) ? '16px' : '14px',
+      fill: verticalTextIds.includes(location.id) ? '#333' : '#666'
+    }"
             >
               {{ location.id }}
             </text>
@@ -134,17 +147,40 @@
           <el-descriptions-item label="库名">
             {{ selectedLocation.warehouseName }}
           </el-descriptions-item>
-          <el-descriptions-item label="产品名称">
-            {{ selectedLocation.productName }}
-          </el-descriptions-item>
-          <el-descriptions-item label="数量">
-            {{ selectedLocation.totalQuantity }}板
-          </el-descriptions-item>
-          <el-descriptions-item label="重量">
-            {{ selectedLocation.totalWeight }}kg
-          </el-descriptions-item>
-          <el-descriptions-item label="入库日期">
-            {{ selectedLocation.entryDate }}
+          <el-descriptions-item label="产品信息" v-if="selectedLocationInfo.length">
+            <el-row :gutter="12" class="product-cards">
+              <el-col
+                  v-for="(item, index) in selectedLocationInfo"
+                  :key="index"
+                  :xs="24"
+                  :sm="24"
+                  class="mb-3"
+              >
+                <el-card
+                    shadow="hover"
+                    class="product-card"
+                    body-class="p-3"
+                >
+                  <div class="flex justify-between items-center">
+                    <div class="font-medium text-primary">产品名称：{{ item.productName }}</div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span class="text-gray-500">数量：</span>
+                      <span class="font-medium">{{ item.totalQuantity }} 件</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500">重量：</span>
+                      <span class="font-medium">{{ item.totalWeight.toFixed(2) }} kg</span>
+                    </div>
+                    <div class="col-span-2">
+                      <span class="text-gray-500">入库日期：</span>
+                      <span class="font-medium">{{ item.entryDate }}</span>
+                    </div>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
           </el-descriptions-item>
           <el-descriptions-item label="操作">
             <el-button type="success" @click="visible = true;operationType='新增入库'">新增入库</el-button>
@@ -163,12 +199,12 @@
                     v-for="row in maxRowNum"
                     :key="`left-${row}`"
                     class="cell"
-                    :class="getCellClass('LEFT', row)"
+                    :class="getCellClass('左', row)"
                 >
                   {{ row }}
                 </div>
               </div>
-              <div class="column-title">LEFT</div>
+              <div class="column-title">左</div>
             </div>
 
             <!-- RIGHT列 -->
@@ -178,12 +214,12 @@
                     v-for="row in maxRowNum"
                     :key="`right-${row}`"
                     class="cell"
-                    :class="getCellClass('RIGHT', row)"
+                    :class="getCellClass('右', row)"
                 >
                   {{ row }}
                 </div>
               </div>
-              <div class="column-title">RIGHT</div>
+              <div class="column-title">右</div>
             </div>
           </div>
         </div>
@@ -196,21 +232,29 @@
         :before-close="handleClose"
     >
       <el-form :model="submitForm" :rules="rule" label-width="auto" v-if="operationType === '新增入库'">
+        <el-form-item label="产品状态">
+          <el-radio-group
+              v-model="firstLevelValues"
+              @change="submitForm.productId = []"
+          >
+            <el-radio label="成品">成品</el-radio>
+            <el-radio label="半成品">半成品</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- 级联选择器 - 动态禁用选项 -->
         <el-form-item label="产品名称" prop="productId">
           <el-cascader
               v-model="submitForm.productId"
-              :options="productOptions"
-              :props="cascaderProps"
+                :options="productOptions.map(item => ({
+        ...item,
+        disabled: firstLevelValues ? item.label !== firstLevelValues : false
+      }))"
+              :props="{ expandTrigger: 'hover' }"
               placeholder="请选择产品名称"
               style="width: 100%"
               clearable
           />
-        </el-form-item>
-        <el-form-item label="产品状态">
-          <el-radio-group v-model="firstLevelValues">
-            <el-radio label="成品" value="成品">成品</el-radio>
-            <el-radio label="半成品" value="半成品">半成品</el-radio>
-          </el-radio-group>
         </el-form-item>
         <el-form-item label="仓库名称" prop="warehouseName">
           <span>{{ selectedLocation.warehouseName }}</span>
@@ -220,11 +264,11 @@
         </el-form-item>
         <el-form-item label="位置" prop="side">
           <el-radio-group v-model="submitForm.side">
-            <el-radio label="左" value="LEFT">左</el-radio>
-            <el-radio label="右" value="RIGHT">右</el-radio>
+            <el-radio label="左" value="左">左</el-radio>
+            <el-radio label="右" value="右">右</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="筛网名称" prop="screenMeshId" v-if="firstLevelValues === '成品'">
+        <el-form-item label="筛网名称" prop="screenMeshId">
           <el-select
               v-model="submitForm.screenMeshId"
               placeholder="请选择"
@@ -239,7 +283,7 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="半成品信息">
+        <el-form-item label="半成品信息" v-if="firstLevelValues === '成品'">
           <div v-for="(item, index) in submitForm.semiRecords" :key="index">
             <el-row :gutter="20">
               <el-col :span="20">
@@ -315,8 +359,8 @@
         </el-form-item>
         <el-form-item label="位置" prop="side">
           <el-radio-group v-model="submitForm.side">
-            <el-radio label="左" value="LEFT">左</el-radio>
-            <el-radio label="右" value="RIGHT">右</el-radio>
+            <el-radio label="左" value="左">左</el-radio>
+            <el-radio label="右" value="右">右</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -336,7 +380,7 @@ import { getWarehouseInfo, getAllWarehouseCapacity, getWarehouseList, getWarehou
 import { ElMessage } from 'element-plus'
 import {getStandard} from "@/api/standard";
 import {getSemiProduct, getStProduct} from "@/api/assay";
-import {addInStock, addOutStock} from "@/api/stock";
+import {addInStock, addOutStock, addSemiProduct} from "@/api/stock";
 import {getMesh} from "@/api/mesh";
 import dayjs from "dayjs";
 //查询仓库信息
@@ -351,6 +395,7 @@ const warehousesList = ref([])
 const filteredInfo = ref([])
 // 处理搜索
 const handleSearch = async () => {
+  await getAll()
   let params = {}
   if (searchWarehouseForm.value.productName) {
     params.productName = searchWarehouseForm.value.productName
@@ -566,8 +611,39 @@ const statusTagMap = reactive({
   maintenance: 'info',
   default: 'info',
 })
+// 需要垂直排列的ID列表
+const verticalIds = ['办公室门', '仓库入口', '特殊区域']
+
+// 在 script 中添加
+const getTextPosition = (location) => {
+  if (verticalTextIds.value.includes(location.id)) {
+    return {
+      x: location.x + location.width/2 - 8, // 向左微调
+      y: location.y + location.height/2 + 5
+    }
+  }
+  return {
+    x: location.x + location.width/2,
+    y: location.y + location.height/2
+  }
+}
+// script setup 部分
+const verticalTextIds = ref([
+  '办公室门',
+  '消防通道',
+  '应急出口'
+  // 添加其他需要垂直排列的ID
+])
 // 库位数据（示例）
 const locations = ref([
+  // {
+  //   id: '办公室门',
+  //   x:1030,
+  //   y: 300,
+  //   width: 30,
+  //   height: 130,
+  //   status: 'default'
+  // },
   {
     id: 1,
     x:992,
@@ -1110,23 +1186,28 @@ const locations = ref([
     y: 28,
     width: 710,
     height: 240,
-    status: "default",
-  },
-  {
-    id:101,
-    x:312,
-    y: 600,
-    width: 710,
-    height: 240,
-    status: "default",
+    status: "default"
   }
+  // ,
+  // {
+  //   id:101,
+  //   x:312,
+  //   y: 600,
+  //   width: 710,
+  //   height: 240,
+  //   status: "default",
+  // }
 ])
 // 加载状态
 const loading = ref(false)
+//单个库位信息
+const selectedLocationInfo = ref([])
+
 // 处理库位点击
 const handleSelectLocation = async (location) => {
   ElMessage.success(`已选中 ${location.id}号仓库`)
-
+  selectedLocation.value = null
+  selectedLocationInfo.value = []
   selectedLocation.value = location
   loading.value = true
   let isFiltered = false
@@ -1140,13 +1221,25 @@ const handleSelectLocation = async (location) => {
   }
   let result = await getWarehouseInfo(params)
   if (result.code === 200) {
-    selectedLocation.value.warehouseId = result.data.records[0].warehouseId
-    selectedLocation.value.warehouseName = result.data.records[0].warehouseName
-    selectedLocation.value.productName = result.data.records[0].productName
-    selectedLocation.value.totalQuantity = result.data.records[0].totalQuantity
-    selectedLocation.value.totalWeight = result.data.records[0].totalWeight
-    selectedLocation.value.entryDate = result.data.records[0].entryDate
-    selectedLocation.value.firstEntryDate = result.data.records[0].firstEntryDate
+    console.log(result.value)
+    selectedLocation.value.warehouseId = location.id
+    selectedLocation.value.warehouseName =  CapacityList.value.find(item => item.warehouseId === location.id).warehouseName
+    if (result.data.records[0].productName){
+      selectedLocation.value.productName = result.data.records[0].productName
+    }
+    if (result.data.records[0].totalQuantity){
+      selectedLocation.value.totalQuantity = result.data.records[0].totalQuantity
+    }
+    if (result.data.records[0].totalWeight){
+      selectedLocation.value.totalWeight = result.data.records[0].totalWeight
+    }
+    if (result.data.records[0].entryDate){
+      selectedLocation.value.entryDate = result.data.records[0].entryDate
+    }
+    if (result.data.records[0].firstEntryDate){
+      selectedLocation.value.firstEntryDate = result.data.records[0].firstEntryDate
+    }
+    selectedLocationInfo.value = result.data.records
   }
   if (isFiltered) {
     selectedLocation.value.status = 'filtered'
@@ -1312,15 +1405,8 @@ const handleOut = async () => {
   let res = await addOutStock(params)
   if (res.code === 200) {
     ElMessage.success('新增成功')
-    await handleSearch()
-    dialogVisible.value = false
-    submitForm.value = {
-      productId: '',
-      warehouseName: '',
-      quantity: '',
-      side: '',
-      meshName: ''
-    }
+    await getAll()
+    visible.value = false
   } else {
     ElMessage.error(res.msg)
   }
@@ -1344,10 +1430,10 @@ const handleNew = async () => {
     ElMessage.error('请输入筛网名称')
     return
   }
-  if (submitForm.value.semiRecords.length === 0) {
-    ElMessage.error('请添加半成品信息')
-    return
-  }
+  // if (submitForm.value.semiRecords.length === 0) {
+  //   ElMessage.error('请添加半成品信息')
+  //   return
+  // }
   //在semiProductList中查找输入的半成品信息
   for (let i = 0; i < submitForm.value.semiRecords.length; i++) {
     let semiProduct = semiProductList.value.find(item => item.productId === submitForm.value.semiRecords[i].semiProductId)
@@ -1366,20 +1452,14 @@ const handleNew = async () => {
       productId: submitForm.value.productId,
       warehouseName: submitForm.value.warehouseName,
       quantity: submitForm.value.quantity,
-      side: submitForm.value.side
+      side: submitForm.value.side,
+      screenMeshId: submitForm.value.screenMeshId,
     }
-    let res = await addOutStock(params)
+    let res = await addSemiProduct(params)
     if (res.code === 200) {
       ElMessage.success('新增成功')
-      await handleSearch()
-      dialogVisible.value = false
-      submitForm.value = {
-        productId: '',
-        warehouseName: '',
-        quantity: '',
-        side: '',
-        meshName: ''
-      }
+      await getAll()
+      visible.value = false
     } else {
       ElMessage.error(res.msg)
     }
@@ -1387,8 +1467,8 @@ const handleNew = async () => {
     let res = await addInStock(submitForm.value)
     if (res.code === 200) {
       ElMessage.success('新增成功')
-      await handleSearch()
-      dialogVisible.value = false
+      await getAll()
+      visible.value = false
       submitForm.value = {
         productId: '',
         warehouseName: '',
@@ -1683,5 +1763,20 @@ onMounted(async () => {
   margin-top: 8px;
   font-size: 12px;
   color: #666;
+}
+/* 垂直文字样式 */
+.vertical-text {
+  writing-mode: tb;
+  glyph-orientation-vertical: 0;
+  letter-spacing: 0.2em;
+  /* 微调垂直位置 */
+  transform: translateY(8px);
+}
+
+/* 水平文字样式 */
+.location-label {
+  font-size: 14px;
+  fill: #666;
+  pointer-events: none;
 }
 </style>

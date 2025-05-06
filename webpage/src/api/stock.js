@@ -22,6 +22,10 @@ export const addOutStock = (params)=>{
 export const getSemiProductList = (params)=>{
     return request.post('/semi-products/records', params)
 }
+//新增半成品入库
+export const addSemiProduct = (params)=>{
+    return request.post('/semi-products/add', params)
+}
 
 
 
