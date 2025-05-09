@@ -64,12 +64,6 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
                         throw new BusinessException("未找到该产品的质量标准");
                     }
 
-                    // 检验是否已存在相同日期的记录
-                    Assay latestAssay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getSampleDate());
-                    if (latestAssay != null) {
-                        throw new BusinessException("当日已存在化验记录");
-                    }
-
                     List<String> qualifiedStandards = new ArrayList<>();
                     boolean isQualified = false;
 

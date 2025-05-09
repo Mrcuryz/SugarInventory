@@ -58,9 +58,36 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="productName" label="产品名称" width="150" />
-        <el-table-column prop="productType" label="产品类型" width="300" />
-        <el-table-column prop="status" label="产品状态" width="100"/>
+        <el-table-column prop="productName" label="产品名称" width="150" >
+          <template #default="{ row }">
+            <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
+              {{ row.productName }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productType" label="产品类型" width="300" >
+        <template #default="{ row }">
+            <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
+              {{ row.productType }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="产品状态" width="100">
+          <template #default="{ row }">
+            <span
+              :style="{
+                color:
+                  row.status === '半成品'
+                    ? '#e60000'
+                    : row.status === '成品'
+                    ? 'green'
+                    : '#000'
+              }"
+            >
+              {{ row.status }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="packagingMethod" label="打包方式" width="120" />
         <el-table-column prop="weightPerPiece" label="每件重量（kg）" min-width="auto"/>
         <el-table-column prop="piecesPerPallet" label="每板件数" width="auto"/>

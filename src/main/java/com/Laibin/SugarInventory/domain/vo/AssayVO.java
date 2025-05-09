@@ -3,16 +3,14 @@ package com.Laibin.SugarInventory.domain.vo;
 import com.baomidou.mybatisplus.annotation.TableField;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@EqualsAndHashCode(callSuper = true)
 @Data
 @Schema(description = "化验记录返回VO")
-public class AssayVO extends BaseVO {
+public class AssayVO {
     @Schema(description = "化验记录ID", example = "1")
     private Integer id;
 
@@ -54,9 +52,6 @@ public class AssayVO extends BaseVO {
 
     @Schema(description = "JSON格式的合格标准列表")
     private String qualifiedStandards;
-
-    @Schema(description = "版本号", example = "1")
-    private Integer version;
 
     @Schema(description = "创建时间", example = "2025-02-24T10:15:30")
     private LocalDateTime createdAt;

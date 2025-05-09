@@ -40,7 +40,6 @@ public class EmployeeRosterController {
     @Operation(summary = "新增员工")
     @PreAuthorize("hasAuthority('user:create')")
     @PostMapping("/add")
-    @LogOperation(value = "员工名册", type = OperationType.INSERT)
     public Result<String> addEmployee(@Validated @RequestBody EmployeeRoster employeeRoster) {
         try {
             employeeService.save(employeeRoster);

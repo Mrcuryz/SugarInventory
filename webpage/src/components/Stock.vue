@@ -51,15 +51,15 @@
       >
         <el-table-column prop="productName" label="产品名称" width="150"></el-table-column>
         <el-table-column prop="warehouseName" label="仓库名称" width="150"></el-table-column>
-        <el-table-column prop="quantity" label="数量（件）" width="100" sortable></el-table-column>
-        <el-table-column prop="totalWeight" label="重量（kg）" width="100" sortable></el-table-column>
+        <el-table-column prop="quantity" label="数量（件）" width="150" sortable></el-table-column>
+        <el-table-column prop="totalWeight" label="重量（kg）" width="150" sortable></el-table-column>
         <el-table-column prop="entryDate" label="入库日期" width="150" v-if="searchFormType === '入库'" sortable></el-table-column>
         <el-table-column prop="inDate" label="入库日期" width="150" v-if="searchFormType === '出库'" sortable></el-table-column>
         <el-table-column prop="outDate" label="出库日期" width="150" v-if="searchFormType === '出库'" sortable></el-table-column>
         <el-table-column prop="operationDate" label="入库日期" width="150" v-if="searchFormType === '半成品入库'" sortable></el-table-column>
         <el-table-column prop="operator" label="操作人" width="150"></el-table-column>
-        <el-table-column prop="meshName" label="筛网名称" width="150" v-if="searchFormType === '入库'"></el-table-column>
-        <el-table-column label="操作" width="250">
+        <el-table-column prop="meshName" label="筛网名称" width="150" v-if="searchFormType !== '出库'"></el-table-column>
+        <el-table-column label="操作" width="250" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="dialogVisible = true;operationType='查看半成品';handleEdit(row)" v-if="searchFormType === '入库'">查看半成品</el-button>
             <el-button type="danger" size="small" @click="dialogVisible = true;operationType='查看化验记录';handleEdit(row)">查看化验记录</el-button>
@@ -87,7 +87,7 @@
       <!-- 卡片容器 -->
       <div v-if="semiProductRecords?.length && operationType === '查看半成品'" class="card-container">
         <el-card
-            v-for="(item, index) in semiProductRecords"
+            v-for="(item, index) in semiProductRecords "
             :key="index"
             class="record-card"
             shadow="hover"
@@ -121,10 +121,8 @@
             shadow="hover"
         >
           <div class="card-content">
-            <!-- 两列布局 -->
-            <el-row :gutter="20">
-              <!-- 第一列 -->
-              <el-col :span="12">
+            <el-row :gutter="20" v-if="item.id === currentRow.id">
+              <el-col :span="20">
                 <div class="info-item">
                   <label>采样日期：</label>
                   <span>{{ item.sampleDate }}</span>
@@ -141,10 +139,6 @@
                   <label>干重：</label>
                   <span>{{ item.dryWeight }}</span>
                 </div>
-              </el-col>
-
-              <!-- 第二列 -->
-              <el-col :span="12">
                 <div class="info-item">
                   <label>电导灰分：</label>
                   <span>{{ item.conductivityAsh }}</span>
@@ -180,9 +174,11 @@
           </div>
         </el-card>
       </div>
-      <!-- 空状态 -->
-      <div v-else class="empty-container">
+      <div v-if="!semiProductRecords?.length && operationType === '查看半成品'" class="empty-container">
         <el-empty description="暂无半成品记录" :image-size="100" />
+      </div>
+      <div v-if="!resultList.length" class="empty-container">
+        <el-empty description="暂无数据" :image-size="100" />
       </div>
     </el-dialog>
   </div>
@@ -395,10 +391,12 @@ const submitForm = ref({
   screenMeshId: '',
   semiRecords: []
 })
+const currentRow = ref('')
 const visible = ref(false)
 const handleEdit = (row) => {
   semiProductRecords.value = row.semiProductRecords
   dialogVisible.value = true
+  currentRow.value = row
 }
 const productList = ref([])
 const getProduct = async () => {
@@ -464,7 +462,7 @@ onMounted(() => {
 }
 
 :deep(.el-table__header th) {
-  background-color: #fdfdfd;
+  background-color: #fdfdfd !important;
   color: #525252;
 }
 
