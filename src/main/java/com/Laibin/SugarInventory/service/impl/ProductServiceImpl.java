@@ -103,6 +103,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             throw new BusinessException(ErrorCode.PRODUCT_NAME_EXISTS);
         }
 
+        if (vo.getPackagingMethod() != null && vo.getPackagingMethod().isEmpty()) {
+            vo.setPackagingMethod(null);
+        }
+
         // 2. 构建PO对象
         Product po = new Product();
         BeanUtils.copyProperties(vo, po);

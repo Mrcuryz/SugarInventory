@@ -33,4 +33,5 @@ public interface AssayService extends IService<Assay> {
     @Transactional
     AssayVO updateAssay(Integer id, AssaySubmitDTO dto, User operator) throws JsonProcessingException;
 
+    void deleteAssay(Integer id);
 }

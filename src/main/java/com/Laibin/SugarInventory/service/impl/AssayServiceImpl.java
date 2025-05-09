@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -167,6 +168,18 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
         return assayVO;
     }
 
+    @Override
+    public void deleteAssay(Integer id) {
+        try {
+            int rows = assayMapper.deleteById(id);
+            if (rows == 0) {
+                throw new BusinessException("记录删除失败");
+            }
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException("该记录已被其他数据关联，无法删除");
+        }
+    }
+
     private boolean checkStandardCompliance(AssaySubmitDTO assay, QualityStandard standard) {
         return checkValue(assay.getColorValue(), standard.getColorMin(), standard.getColorMax()) &&
                 checkValue(assay.getReducingSugar(), standard.getReducingSugarMin(), standard.getReducingSugarMax()) &&
@@ -179,8 +192,10 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
 
     //校验某个数值是否符合指标
     private boolean checkValue(BigDecimal value, BigDecimal min, BigDecimal max) {
-        if (value == null) {
-            return false; // 化验数据为空，则不符合标准
+        if (value == null && min == null && max == null) {
+            return true; // 化验数据为空，且标准里上下限都为空，则无需校验
+        } else if (value == null) {
+            return false; // 化验数据为空，则不合格
         }
         if (min != null && max == null) {
             return value.compareTo(min) >= 0;  // 只有下限，必须大于等于下限

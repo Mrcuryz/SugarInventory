@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
+import com.Laibin.SugarInventory.annotation.CheckWarehouseStatus;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
@@ -31,6 +32,7 @@ public class OutStockController {
     private final OutStockService outStockService;
 
     @Operation(summary = "产品出库操作", description = "创建出库记录，需指定产品ID、入库日期、筛网规格以及每个位置对应的出库数量")
+    @CheckWarehouseStatus
     @PostMapping("/out")
     public Result<OutVO> createOutStock(
             @RequestBody OutStockRequestDTO request,

@@ -26,11 +26,10 @@ public interface AssayMapper extends BaseMapper<Assay> {
                                    @Param("date") LocalDate date);
 
     @Select("<script>" +
-            "SELECT a.*, p.product_name, u.name AS tester_name, s.*" +
+            "SELECT a.*, p.product_name, u.name AS tester_name " +
             "FROM assay a " +
             "LEFT JOIN product p ON a.product_id = p.id " +
             "LEFT JOIN user u ON a.tested_by = u.id " +
-            "LEFT JOIN quality_standards s ON p.product_type = s.product_type " +
             "<where> " +
             "   <if test='query.productName != null'>AND p.product_name LIKE CONCAT('%', #{query.productName}, '%')</if> " +
             "   <if test='query.startDate != null'>AND a.sample_date &gt;= #{query.startDate}</if> " +

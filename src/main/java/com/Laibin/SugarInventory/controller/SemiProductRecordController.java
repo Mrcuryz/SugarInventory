@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
+import com.Laibin.SugarInventory.annotation.CheckWarehouseStatus;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
@@ -44,6 +45,7 @@ public class SemiProductRecordController {
      */
     @Operation(summary = "半成品入库", description = "新增一条半成品记录，记录产品名称、数量等信息。记录由当前登录用户录入。")
     @PostMapping("/add")
+    @CheckWarehouseStatus
     @PreAuthorize("hasAuthority('record:create')")
     public Result<InVO> addSemiProductRecord(
             @RequestBody AddSemiProductRecordDTO dto,

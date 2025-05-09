@@ -74,4 +74,17 @@ public class AssayController {
             return Result.error(500, "化验记录更新失败：" + e.getMessage());
         }
     }
+
+    @Operation(summary = "删除化验记录", description = "根据化验记录ID删除化验记录")
+    @LogOperation(value = "化验数据", type = OperationType.DELETE)
+    @PreAuthorize("hasAuthority('quality:test')")
+    @DeleteMapping("/{id}")
+    public Result<Boolean> deleteAssay(@PathVariable("id") Integer id){
+        try {
+            assayService.deleteAssay(id);
+            return Result.success(true);
+        } catch (BusinessException e) {
+            return Result.error(500, "化验记录删除失败：" + e.getMessage());
+        }
+    }
 }

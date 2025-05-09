@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
+import com.Laibin.SugarInventory.annotation.CheckWarehouseStatus;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
@@ -40,7 +41,9 @@ public class InStockController {
     @Autowired
     private InStockService inStockService;
 
+
     @Operation(summary = "新增成品入库记录", description = "新增入库记录，包含产品、仓库、半成品信息、筛网规格及多个库存位置")
+    @CheckWarehouseStatus
     @PostMapping("/add")
     public Result<InVO> stockIn(
             @RequestBody @Valid InStockRequestDTO request,

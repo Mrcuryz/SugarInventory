@@ -294,11 +294,17 @@ public class OperationLogAspect {
 //        return changes;
 //    }
 
-    // 精准比较值（处理日期类型）
+    // 精准比较值
     private boolean isEqual(Object oldVal, Object newVal) {
         if (oldVal instanceof LocalDateTime && newVal instanceof LocalDateTime) {
             return ((LocalDateTime) oldVal).isEqual((LocalDateTime) newVal);
         }
+
+        // 对于枚举类型，比较名称
+        if (oldVal instanceof Enum && newVal instanceof Enum) {
+            return ((Enum<?>) oldVal).name().equals(((Enum<?>) newVal).name());
+        }
+
         return Objects.equals(oldVal, newVal);
     }
 
@@ -368,7 +374,7 @@ public class OperationLogAspect {
 
     // 忽略自动填充字段（如 createdAt/updatedAt）
     private boolean isIgnoredField(String field) {
-        return field.equals("createdAt") || field.equals("updatedAt") ||
+        return field.equals("createdAt") || field.equals("updatedAt") || field.equals("testedBy") ||
                 field.equals("createdBy") || field.equals("updatedBy") || field.isEmpty();
     }
 

@@ -19,7 +19,7 @@ import java.util.List;
 public interface WarehouseService extends IService<Warehouse> {
 
     @Transactional
-    void setWarehouseToMaintain(Integer id);
+    Warehouse setWarehouseToMaintain(Integer id);
 
     // 新增库位
     Warehouse createWarehouse(WarehouseDTO warehouse);
