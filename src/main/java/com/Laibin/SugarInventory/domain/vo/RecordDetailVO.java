@@ -38,6 +38,9 @@ public class RecordDetailVO {
     @Schema(description = "操作员姓名", example = "张三")
     private String operator;
 
+    @Schema(description = "筛网名称")
+    private String meshName;
+
     @Schema(description = "化验记录id")
     private Integer assayId;
 

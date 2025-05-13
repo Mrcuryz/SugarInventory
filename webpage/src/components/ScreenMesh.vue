@@ -28,7 +28,7 @@
           v-loading="loading"
       >
         <el-table-column prop="meshName" label="筛网名称" width="200" />
-        <el-table-column prop="description" label="描述" width="auto" />
+        <el-table-column prop="description" label="描述" width="352" />
         <el-table-column prop="createdAt" label="创建时间" width="200" sortable/>
         <el-table-column prop="updatedAt" label="更新时间" width="200" sortable/>
         <el-table-column label="操作" width="150">

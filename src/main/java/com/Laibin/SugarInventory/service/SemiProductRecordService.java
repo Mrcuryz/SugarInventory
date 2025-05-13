@@ -1,8 +1,10 @@
 package com.Laibin.SugarInventory.service;
 
+import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
 import com.Laibin.SugarInventory.domain.dto.AddSemiProductRecordDTO;
+import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
 import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
@@ -25,7 +27,7 @@ public interface SemiProductRecordService extends IService<SemiProductRecord> {
 
     List<RecordDetailVO> getRecordsByOperator(String openid, LocalDate date);
 
-    PageResult<RecordDetailVO> getSemiProductRecords(SemiProductRecordDTO vo);
+    PageResult<RecordDetailVO> getSemiProductRecords(SemiProductRecordDTO vo, User currentUser);
 
     List<RecordDetailVO> getSemiProductRecordsByIds(List<Integer> ids);
 

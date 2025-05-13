@@ -66,22 +66,22 @@
         </el-table-column>
         <el-table-column prop="sampleDate" label="采样日期" width="120" sortable/>
         <el-table-column prop="colorValue" label="色值" width="120" sortable/>
-        <el-table-column prop="reducingSugar" label="去糖度" width="120" sortable/>
-        <el-table-column prop="dryWeight" label="干重" width="120" sortable/>
-        <el-table-column prop="conductivityAsh" label="电导率" width="120" sortable/>
-        <el-table-column prop="sucrose" label="糖度" width="120" sortable/>
-        <el-table-column prop="insolubleImpurity" label="杂质" width="120" sortable/>
+        <el-table-column prop="reducingSugar" label="还原糖分" width="120" sortable/>
+        <el-table-column prop="dryWeight" label="干燥失重" width="120" sortable/>
+        <el-table-column prop="conductivityAsh" label="电导灰分" width="120" sortable/>
+        <el-table-column prop="sucrose" label="蔗糖分" width="120" sortable/>
+        <el-table-column prop="insolubleImpurity" label="不溶于水杂质" width="150" sortable/>
         <el-table-column prop="phValue" label="pH值" width="120" sortable/>
         <el-table-column prop="testerName" label="化验员名称" width="120" />
-        <el-table-column prop="version" label="化验版本数" width="120" />
-        <el-table-column prop="isQualified" label="合格/不合格" width="120" >
+        <el-table-column prop="version" label="次数" width="120" />
+        <el-table-column prop="isQualified" label="是否合格" width="120" >
           <template #default="{ row }">
             <el-tag type="success" v-if="row.isQualified === '合格'">合格</el-tag>
             <el-tag type="danger" v-else>不合格</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="qualifiedStandards" label="合格标准" width="200" />
-        <el-table-column label="操作" width="150">
+        <el-table-column fixed="right" label="操作" width="90">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改化验';handleEdit(row)">编辑</el-button>
           </template>
@@ -122,20 +122,20 @@
         <el-form-item label="色值" prop="colorValue">
           <el-input v-model="submitForm.colorValue" placeholder="请输入色值" style="width: 100%"></el-input>
         </el-form-item>
-        <el-form-item label="去糖度" prop="reducingSugar">
-          <el-input v-model="submitForm.reducingSugar" placeholder="请输入去糖度" style="width: 100%"></el-input>
+        <el-form-item label="还原糖分" prop="reducingSugar">
+          <el-input v-model="submitForm.reducingSugar" placeholder="请输入还原糖分" style="width: 100%"></el-input>
         </el-form-item>
-        <el-form-item label="干重" prop="dryWeight">
-          <el-input v-model="submitForm.dryWeight" placeholder="请输入干重" style="width: 100%"></el-input>
+        <el-form-item label="干燥失重" prop="dryWeight">
+          <el-input v-model="submitForm.dryWeight" placeholder="请输入干燥失重" style="width: 100%"></el-input>
         </el-form-item>
-        <el-form-item label="电导率" prop="conductivityAsh">
-          <el-input v-model="submitForm.conductivityAsh" placeholder="请输入电导率" style="width: 100%"></el-input>
+        <el-form-item label="电导灰分" prop="conductivityAsh">
+          <el-input v-model="submitForm.conductivityAsh" placeholder="请输入电导灰分" style="width: 100%"></el-input>
         </el-form-item>
-        <el-form-item label="糖度" prop="sucrose">
-          <el-input v-model="submitForm.sucrose" placeholder="请输入糖度" style="width: 100%"></el-input>
+        <el-form-item label="蔗糖分" prop="sucrose">
+          <el-input v-model="submitForm.sucrose" placeholder="请输入蔗糖分" style="width: 100%"></el-input>
         </el-form-item>
-        <el-form-item label="杂质" prop="insolubleImpurity">
-          <el-input v-model="submitForm.insolubleImpurity" placeholder="请输入杂质" style="width: 100%"></el-input>
+        <el-form-item label="不溶于水杂质" prop="insolubleImpurity">
+          <el-input v-model="submitForm.insolubleImpurity" placeholder="请输入不溶于水杂质" style="width: 100%"></el-input>
         </el-form-item>
         <el-form-item label="pH值" prop="phValue">
           <el-input v-model="submitForm.phValue" placeholder="请输入pH值" style="width: 100%"></el-input>
@@ -206,6 +206,9 @@ const handleSearch = async () => {
   if (res.code === 200) {
     total.value = res.data.total
     resultList.value = res.data.records
+    for (let i = 0; i < resultList.value.length; i++) {
+      resultList.value[i].qualifiedStandards = JSON.parse(resultList.value[i].qualifiedStandards)
+    }
     loading.value = false
   } else {
     ElMessage.error(res.msg)
@@ -230,25 +233,25 @@ const rule = {
       { required: true, message: '请选择采样日期', trigger: 'blur' }
     ],
     colorValue: [
-      { type: 'float', message: '色值必须为数字', trigger: 'blur' }
+      { type: 'string', message: '色值必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
     ],
     reducingSugar: [
-      { type: 'float', message: '去糖度必须为数字', trigger: 'blur' }
+      { type: 'string', message: '去糖度必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
     ],
     dryWeight: [
-      { type: 'float', message: '干重必须为数字', trigger: 'blur' }
+      { type: 'string', message: '干重必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
     ],
     conductivityAsh: [
-      { type: 'float', message: '电导率必须为数字', trigger: 'blur' }
+      { type: 'string', message: '电导率必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
     ],
     sucrose: [
-      { type: 'float', message: '糖度必须为数字', trigger: 'blur' }
+      { type: 'string', message: '糖度必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
     ],
     insolubleImpurity: [
-      { type: 'float', message: '杂质必须为数字', trigger: 'blur' }
+      { type: 'string', message: '杂质必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
     ],
     phValue: [
-      { type: 'float', message: 'pH值必须为数字', trigger: 'blur' }
+      { type: 'string', message: 'pH值必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
     ]
 }
 const dialogVisible = ref(false)
@@ -496,7 +499,7 @@ onMounted(() => {
 }
 
 :deep(.el-table__header th) {
-  background-color: #fdfdfd;
+  background-color: #fdfdfd !important;
   color: #525252;
 }
 

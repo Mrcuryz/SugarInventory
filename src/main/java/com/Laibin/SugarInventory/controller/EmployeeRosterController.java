@@ -37,6 +37,18 @@ public class EmployeeRosterController {
         }
     }
 
+    @Operation(summary = "新增员工")
+    @PreAuthorize("hasAuthority('user:create')")
+    @PostMapping("/add")
+    public Result<String> addEmployee(@Validated @RequestBody EmployeeRoster employeeRoster) {
+        try {
+            employeeService.save(employeeRoster);
+            return Result.success("员工信息新增成功");
+        } catch (Exception e) {
+            return Result.error(500, "员工信息新增失败: " + e.getMessage());
+        }
+    }
+
     @Operation(summary = "根据条件（可选）查询员工名册")
     @PostMapping("/query")
     public Result<PageResult<EmployeeRoster>> queryEmployee(@RequestBody EmployeeQueryDTO queryDTO) {

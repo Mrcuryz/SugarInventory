@@ -37,4 +37,5 @@ public class SemiProductRecord extends BaseEntity implements Serializable {
     private BigDecimal totalWeight;
     private Integer warehouseId;
     private Integer assayId;
+    private Integer screenMeshId;
 }

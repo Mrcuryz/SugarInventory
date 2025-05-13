@@ -45,6 +45,7 @@ public class AssayController {
         }
     }
 
+    @PreAuthorize("hasAuthority('quality:test')")
     @Operation(summary = "查询化验记录", description = "根据查询条件分页查询化验记录")
     @PostMapping("/query")
     public Result<PageResult<AssayVO>> queryAssays(

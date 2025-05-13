@@ -48,7 +48,7 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button @click="exportExcel">导出Excel(点击查询后才能导出)</el-button>
+          <el-button @click="exportExcel">导出Excel</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -168,12 +168,12 @@ const exportExcel = async () => {
         delete processed.changedFields.id;
         delete processed.oldData.id;
 
-        if (processed.changedFields.sampleDate) {
-          processed.changedFields.sampleDate =
-              `${processed.changedFields.sampleDate[0]}年${
-                  processed.changedFields.sampleDate[1]}月${
-                  processed.changedFields.sampleDate[2]}日`;
-        }
+        // if (processed.changedFields.sampleDate) {
+        //   processed.changedFields.sampleDate =
+        //       `${processed.changedFields.sampleDate[0]}年${
+        //           processed.changedFields.sampleDate[1]}月${
+        //           processed.changedFields.sampleDate[2]}日`;
+        // }
 
         return processed;
       });
@@ -289,14 +289,19 @@ const handleSearch = async () => {
       delete item.changedFields.id
       delete item.oldData.id
       //处理时间格式，原格式[2025,3,8]改为'2025-03-08'
-      if(item.changedFields.sampleDate){
-        item.changedFields.sampleDate = `${item.changedFields.sampleDate[0]}年${item.changedFields.sampleDate[1]}月${item.changedFields.sampleDate[2]}日`
-      }
+      // if(item.changedFields.sampleDate){
+      //   item.changedFields.sampleDate = `${item.changedFields.sampleDate[0]}年${item.changedFields.sampleDate[1]}月${item.changedFields.sampleDate[2]}日`
+      // }
     })
     //处理操作日期格式，员格式2025-03-08T00:00:00 改为 2025年03月08日00:00:00
     filteredLogs.value.forEach(item => {
       if(item.operationTime){
         item.operationTime = item.operationTime.replace('T',' ').replace('Z',' ')
+      }
+    })
+    filteredLogs.value.forEach(item => {
+      if(item.changedFields.qualifiedStandards){
+        item.changedFields.qualifiedStandards = JSON.parse(item.changedFields.qualifiedStandards)
       }
     })
     loading.value = false

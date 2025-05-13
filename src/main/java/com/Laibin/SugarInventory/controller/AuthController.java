@@ -23,7 +23,6 @@ public class AuthController {
     @Autowired
     private AuthService authService;
 
-//    @PreAuthorize("hasAuthority('user:create')")
     @Operation(summary = "Web 端管理员登录", description = "使用姓名+统一口令登录")
     @PostMapping("/web-login")
     public Result<AuthVO> webLogin(@RequestBody WebLoginDTO dto) {

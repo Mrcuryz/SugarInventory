@@ -1,5 +1,6 @@
 package com.Laibin.SugarInventory.service.impl;
 
+import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.*;
@@ -98,6 +99,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         semiProductRecord.setWarehouseId(warehouse.getId());
         semiProductRecord.setProductId(dto.getProductId());
         semiProductRecord.setQuantity(quantity);
+        semiProductRecord.setScreenMeshId(dto.getScreenMeshId());
         semiProductRecord.setOperator(operator);
         semiProductRecord.setOperationDate(LocalDate.now());
         semiProductRecord.setAssayId(assay.getId());
@@ -125,6 +127,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
                 inventory.setRowNumber(rowNumber);
                 inventory.setLayer(currentLayer);
                 inventory.setQuantity(1);
+                inventory.setScreenMeshId(dto.getScreenMeshId());
                 inventory.setEntryDate(LocalDate.now());
                 inventory.setAssayId(assay.getId());
                 inventory.setProductStatus(product.getStatus());
@@ -201,10 +204,33 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     }
 
     @Override
-    public PageResult<RecordDetailVO> getSemiProductRecords(SemiProductRecordDTO dto) {
+    public PageResult<RecordDetailVO> getSemiProductRecords(SemiProductRecordDTO dto, User currentUser) {
         int offset = (dto.getPage() - 1) * dto.getSize();
-        List<RecordDetailVO> recordList = recordMapper.getRecordsByConditions(dto, offset, dto.getSize());
-        Long total = recordMapper.countByConditions(dto);
+
+        boolean isStaff = currentUser.getRoleCode().equals("STAFF");
+
+        List<RecordDetailVO> recordList = recordMapper.getRecordsByConditions(
+                dto, offset, dto.getSize(), isStaff, currentUser.getName()
+        );
+
+        for (RecordDetailVO record : recordList) {
+            if(isStaff){
+                record.setAssayId(null);
+                record.setSampleDate(null);
+                record.setColorValue(null);
+                record.setReducingSugar(null);
+                record.setDryWeight(null);
+                record.setConductivityAsh(null);
+                record.setSucrose(null);
+                record.setInsolubleImpurity(null);
+                record.setPhValue(null);
+                record.setTesterName(null);
+                record.setIsQualified(null);
+                record.setQualifiedStandards(null);
+            }
+        }
+
+        Long total = recordMapper.countByConditions(dto, isStaff, currentUser.getName());
         return new PageResult<>(total, recordList);
     }
 

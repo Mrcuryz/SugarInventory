@@ -40,6 +40,9 @@ export default {
         phValue: "pH值",
         phMin: "最小pH值",
         phMax: "最大pH值",
+        qualifiedStandards: "合格标准",
+        isQualified: "是否合格",
+        version: "化验次数",
         //筛网表字段翻译
         meshName: "筛网类型",
         description: "筛网描述",

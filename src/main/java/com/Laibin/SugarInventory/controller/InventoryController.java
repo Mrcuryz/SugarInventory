@@ -13,6 +13,7 @@ import com.Laibin.SugarInventory.service.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +26,7 @@ public class InventoryController {
 
     private final InventoryService inventoryService;
 
+    @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "库存详情查询", description = "根据库位ID和产品名称查询库存详情")
     @PostMapping("/summary")
     public Result<PageResult<VInventorySummary>> getSummary(
@@ -33,6 +35,7 @@ public class InventoryController {
         return Result.success(inventoryService.getInventorySummary(query));
     }
 
+    @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @GetMapping("/warehouses")
     public Result<List<VWarehouseCapacity>> getWarehouses() {
@@ -43,6 +46,7 @@ public class InventoryController {
         }
     }
 
+    @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @GetMapping("/query")
     public Result<PageResult<VWarehouseCapacity>> queryWarehouses(
@@ -58,6 +62,7 @@ public class InventoryController {
         }
     }
 
+    @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @PostMapping("/query")
     public Result<PageResult<VWarehouseCapacity>> queryWarehouses(@RequestBody OutStockBatchQueryDTO query) {
@@ -69,6 +74,7 @@ public class InventoryController {
         }
     }
 
+    @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "查询所有存有符合标准的产品的库位", description = "根据产品名称、标准名称、筛网ID、入库日期查询存有符合条件产品的库位")
     @PostMapping("/qualified-warehouses")
     public Result<List<OutWarehouseVO>> getQualifiedWarehouses(@RequestBody OutProductQueryDTO queryDTO) {

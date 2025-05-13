@@ -44,78 +44,64 @@
       >
         <el-table-column prop="standardName" label="标准名称" width="150" />
         <el-table-column prop="productType" label="产品类型" width="100" />
-        <el-table-column label="颜色范围" width="200">
-<!--          改为最小值<=x<=最大值的形式-->
+        <el-table-column label="色值范围" width="200">
+<!--          改为最小值~x~最大值的形式-->
           <template #default="{ row }">
             {{ row.colorMin }}
-            <span v-if="row.colorMin !== null"> <= </span>
-            <span v-if="row.colorMax !== null || row.colorMin !== null">x</span>
             <span v-if="row.colorMax === null && row.colorMin === null"> 无 </span>
-            <span v-if="row.colorMax"> <= </span>
+            <span v-if="row.colorMax || row.colorMin"> ~ </span>
             {{ row.colorMax }}
           </template>
         </el-table-column>
-        <el-table-column label="糖分范围" width="200">
+        <el-table-column label="蔗糖分范围" width="200">
           <template #default="{ row }">
             {{ row.reducingSugarMin }}
-            <span v-if="row.reducingSugarMin !== null"> <= </span>
-            <span v-if="row.reducingSugarMax !== null || row.reducingSugarMin !== null">x</span>
             <span v-if="row.reducingSugarMax === null && row.reducingSugarMin === null"> 无 </span>
-            <span v-if="row.reducingSugarMax"> <= </span>
+            <span v-if="row.reducingSugarMax || row.reducingSugarMin"> ~ </span>
             {{ row.reducingSugarMax }}
           </template>
         </el-table-column>
-        <el-table-column label="干重范围" width="200">
+        <el-table-column label="干燥失重范围" width="200">
           <template #default="{ row }">
             {{ row.dryWeightMin }}
-            <span v-if="row.dryWeightMin !== null"> <= </span>
-            <span v-if="row.dryWeightMax !== null || row.dryWeightMin !== null">x</span>
             <span v-if="row.dryWeightMax === null && row.dryWeightMin === null"> 无 </span>
-            <span v-if="row.dryWeightMax"> <= </span>
+            <span v-if="row.dryWeightMax || row.dryWeightMin"> ~ </span>
             {{ row.dryWeightMax }}
           </template>
         </el-table-column>
-        <el-table-column label="亚硝酸盐含量范围" width="200">
+        <el-table-column label="电导灰分范围" width="200">
           <template #default="{ row }">
             {{ row.conductivityAshMin }}
-            <span v-if="row.conductivityAshMin !== null"> <= </span>
-            <span v-if="row.conductivityAshMax !== null || row.conductivityAshMin !== null">x</span>
             <span v-if="row.conductivityAshMax === null && row.conductivityAshMin === null"> 无 </span>
-            <span v-if="row.conductivityAshMax"> <= </span>
+            <span v-if="row.conductivityAshMax || row.conductivityAshMin"> ~ </span>
             {{ row.conductivityAshMax }}
           </template>
         </el-table-column>
-        <el-table-column label="糖度范围" width="200">
+        <el-table-column label="蔗糖分范围" width="200">
           <template #default="{ row }">
             {{ row.sucroseMin }}
-            <span v-if="row.sucroseMin !== null"> <= </span>
-            <span v-if="row.sucroseMax !== null || row.sucroseMin !== null">x</span>
             <span v-if="row.sucroseMax === null && row.sucroseMin === null"> 无 </span>
-            <span v-if="row.sucroseMax"> <= </span>
+            <span v-if="row.sucroseMax || row.sucroseMin"> ~ </span>
             {{ row.sucroseMax }}
           </template>
         </el-table-column>
-        <el-table-column label="无水杂质含量范围" width="200">
+        <el-table-column label="不溶于水杂质范围" width="200">
           <template #default="{ row }">
             {{ row.insolubleImpurityMin }}
-            <span v-if="row.insolubleImpurityMin !== null"> <= </span>
-            <span v-if="row.insolubleImpurityMax !== null || row.insolubleImpurityMin !== null">x</span>
             <span v-if="row.insolubleImpurityMax === null && row.insolubleImpurityMin === null"> 无 </span>
-            <span v-if="row.insolubleImpurityMax"> <= </span>
+            <span v-if="row.insolubleImpurityMax || row.insolubleImpurityMin"> ~ </span>
             {{ row.insolubleImpurityMax }}
           </template>
         </el-table-column>
         <el-table-column label="pH范围" width="200">
           <template #default="{ row }">
             {{ row.phMin }}
-            <span v-if="row.phMin !== null"> <= </span>
-            <span v-if="row.phMax !== null || row.phMin !== null">x</span>
             <span v-if="row.phMax === null && row.phMin === null"> 无 </span>
-            <span v-if="row.phMax"> <= </span>
+            <span v-if="row.phMax || row.phMin"> ~ </span>
             {{ row.phMax }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改标准';handleEdit(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
@@ -144,39 +130,39 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="颜色范围" prop="colorMin">
+        <el-form-item label="色值范围" prop="colorMin">
           <el-input-number v-model="submitForm.colorMin" controls-position="right" />
-          <span> <= x <= </span>
+          <span> ~ </span>
           <el-input-number v-model="submitForm.colorMax" controls-position="right" />
         </el-form-item>
-        <el-form-item label="糖分范围" prop="reducingSugarMin">
+        <el-form-item label="还原糖范围" prop="reducingSugarMin">
           <el-input-number v-model="submitForm.reducingSugarMin" controls-position="right" />
-          <span> <= x <= </span>
+          <span> ~ </span>
           <el-input-number v-model="submitForm.reducingSugarMax" controls-position="right" />
         </el-form-item>
-        <el-form-item label="干重范围" prop="dryWeightMin">
+        <el-form-item label="干燥失重范围" prop="dryWeightMin">
           <el-input-number v-model="submitForm.dryWeightMin" controls-position="right" />
-          <span> <= x <= </span>
+          <span> ~ </span>
           <el-input-number v-model="submitForm.dryWeightMax" controls-position="right" />
         </el-form-item>
-        <el-form-item label="亚硝酸盐含量范围" prop="conductivityAshMin">
+        <el-form-item label="电导灰分范围" prop="conductivityAshMin">
           <el-input-number v-model="submitForm.conductivityAshMin" controls-position="right" />
-          <span> <= x <= </span>
+          <span> ~ </span>
           <el-input-number v-model="submitForm.conductivityAshMax" controls-position="right" />
         </el-form-item>
-        <el-form-item label="糖度范围" prop="sucroseMin">
+        <el-form-item label="蔗糖分范围" prop="sucroseMin">
           <el-input-number v-model="submitForm.sucroseMin" controls-position="right" />
-          <span> <= x <= </span>
+          <span> ~ </span>
           <el-input-number v-model="submitForm.sucroseMax" controls-position="right" />
         </el-form-item>
-        <el-form-item label="无水杂质含量范围" prop="insolubleImpurityMin">
+        <el-form-item label="不溶于水杂质范围" prop="insolubleImpurityMin">
           <el-input-number v-model="submitForm.insolubleImpurityMin" controls-position="right" />
-          <span> <= x <= </span>
+          <span> ~ </span>
           <el-input-number v-model="submitForm.insolubleImpurityMax" controls-position="right" />
         </el-form-item>
         <el-form-item label="pH范围" prop="phMin">
           <el-input-number v-model="submitForm.phMin" controls-position="right" />
-          <span> <= x <= </span>
+          <span> ~ </span>
           <el-input-number v-model="submitForm.phMax" controls-position="right" />
         </el-form-item>
       </el-form>
@@ -488,7 +474,7 @@ onMounted(() => {
 }
 
 :deep(.el-table__header th) {
-  background-color: #fdfdfd;
+  background-color: #fdfdfd !important;
   color: #525252;
 }
 

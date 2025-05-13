@@ -7,6 +7,7 @@ import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
+import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.*;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -90,10 +91,14 @@ public class SemiProductRecordController {
      */
     @Operation(summary = "查询半成品记录列表", description = "根据查询条件（产品名称、操作日期、操作员姓名）查询半成品记录列表")
     @PostMapping("/records")
-    public Result<PageResult<RecordDetailVO>> getSemiProductRecords(@RequestBody SemiProductRecordDTO dto) {
+    public Result<PageResult<RecordDetailVO>> getSemiProductRecords(
+            @RequestBody SemiProductRecordDTO dto,
+            @AuthenticationPrincipal LoginUser loginUser
+    ) {
         System.out.println("dto: " + dto);
+        User user = loginUser.getUser();
         try {
-            PageResult<RecordDetailVO> pageResult = semiProductRecordService.getSemiProductRecords(dto);
+            PageResult<RecordDetailVO> pageResult = semiProductRecordService.getSemiProductRecords(dto, user);
             System.out.println("Result: " + pageResult.getRecords());
             return Result.success(pageResult);
         } catch (Exception e) {

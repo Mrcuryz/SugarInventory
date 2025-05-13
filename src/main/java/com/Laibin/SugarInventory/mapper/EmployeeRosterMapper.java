@@ -47,7 +47,7 @@ public interface EmployeeRosterMapper extends BaseMapper<EmployeeRoster> {
             "   <if test='query.status != null and query.status != \"\"'> AND status = #{query.status} </if>" +
             "   <if test='query.roleCode != null and query.roleCode != \"\"'> AND role_code = #{query.roleCode} </if>" +
             "</where> " +
-            "ORDER BY created_at DESC " +
+            "ORDER BY employee_id ASC " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
     List<EmployeeRoster> selectEmployeeList(@Param("query") EmployeeQueryDTO query,

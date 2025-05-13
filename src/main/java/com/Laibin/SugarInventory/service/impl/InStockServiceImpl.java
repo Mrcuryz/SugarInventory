@@ -347,6 +347,22 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             if(id == null) continue;
             String testerName = userMapper.selectById(id).getName();
             record.setTesterName(testerName);
+
+            if(isStaff){
+                record.setAssayId(null);
+                record.setSampleDate(null);
+                record.setColorValue(null);
+                record.setReducingSugar(null);
+                record.setDryWeight(null);
+                record.setConductivityAsh(null);
+                record.setSucrose(null);
+                record.setInsolubleImpurity(null);
+                record.setPhValue(null);
+                record.setTestedBy(null);
+                record.setTesterName(null);
+                record.setIsQualified(null);
+                record.setQualifiedStandards(null);
+            }
         }
 
         System.out.println("records:" + records);
