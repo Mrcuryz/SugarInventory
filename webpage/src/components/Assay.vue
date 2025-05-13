@@ -48,6 +48,22 @@
           row-key="id"
       >
         <el-table-column prop="productName" label="化验产品名称" width="120" />
+        <el-table-column prop="status" label="产品状态" width="100">
+          <template #default="{ row }">
+            <span
+              :style="{
+                color:
+                  row.status === '半成品'
+                    ? '#e60000'
+                    : row.status === '成品'
+                    ? 'green'
+                    : '#000'
+              }"
+            >
+              {{ row.status }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="sampleDate" label="采样日期" width="120" sortable/>
         <el-table-column prop="colorValue" label="色值" width="120" sortable/>
         <el-table-column prop="reducingSugar" label="去糖度" width="120" sortable/>

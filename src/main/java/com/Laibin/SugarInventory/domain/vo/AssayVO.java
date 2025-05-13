@@ -20,6 +20,9 @@ public class AssayVO {
     @Schema(description = "产品名称", example = "中冰")
     private String productName;
 
+    @Schema(description = "产品状态", example = "半成品")
+    private String status;
+
     @Schema(description = "采样日期", example = "2025-02-27")
     private LocalDate sampleDate;
 

@@ -26,7 +26,7 @@ public interface AssayMapper extends BaseMapper<Assay> {
                                    @Param("date") LocalDate date);
 
     @Select("<script>" +
-            "SELECT a.*, p.product_name, u.name AS tester_name, s.*" +
+            "SELECT a.*, p.product_name, p.status, u.name AS tester_name, s.*" +
             "FROM assay a " +
             "LEFT JOIN product p ON a.product_id = p.id " +
             "LEFT JOIN user u ON a.tested_by = u.id " +
