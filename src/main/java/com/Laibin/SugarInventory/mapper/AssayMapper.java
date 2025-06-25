@@ -25,6 +25,12 @@ public interface AssayMapper extends BaseMapper<Assay> {
     Assay selectByProductIdAndDate(@Param("productId") Integer productId,
                                    @Param("date") LocalDate date);
 
+    @Select("SELECT COUNT(*) FROM assay " +
+            "WHERE product_id = #{productId} " +
+            "AND sample_date = #{date}")
+    Boolean existsByProductIdAndDate(@Param("productId") Integer productId,
+                                     @Param("date") LocalDate date);
+
     @Select("<script>" +
             "SELECT a.*, p.product_name, u.name AS tester_name " +
             "FROM assay a " +
@@ -36,7 +42,7 @@ public interface AssayMapper extends BaseMapper<Assay> {
             "   <if test='query.endDate != null'>AND a.sample_date &lt;= #{query.endDate}</if> " +
             "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, '%')</if> " +
             "</where> " +
-            "ORDER BY a.sample_date DESC, a.product_id ASC, a.version DESC " +
+            "ORDER BY a.created_at DESC, a.product_id ASC, a.version DESC " +
             "LIMIT #{offset}, #{size} " +
             "</script>")
     List<AssayVO> selectAssayList(@Param("query") AssayQueryDTO query,

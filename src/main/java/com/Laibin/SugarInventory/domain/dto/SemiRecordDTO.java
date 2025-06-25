@@ -11,10 +11,16 @@ import java.time.LocalDate;
 public class SemiRecordDTO {
     @Schema(description = "半成品ID", example = "1")
     private Integer semiProductId;
+
     @Schema(description = "产品名称")
     private String productName;
+
     @Schema(description = "生产日期", example = "2025-01-01")
     private LocalDate productionDate;
+
     @Schema(description = "使用的半成品重量", example = "20")
     private Integer quantity;
+
+    @Schema(description = "是否套用该半成品的化验数据", example = "false")
+    private Boolean useAssay = false;
 }

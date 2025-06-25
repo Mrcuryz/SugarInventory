@@ -27,6 +27,10 @@ public class InStockRequestDTO {
     @Schema(description = "仓库名称", example = "101")
     private String warehouseName;
 
+    @NotNull(message = "入库日期不能为空")
+    @Schema(description = "入库日期", example = "2025-05-01")
+    private LocalDate entryDate;
+
     @NotNull(message = "数量（板）不能为空")
     @Schema(description = "数量（板）", example = "30")
     private Integer quantity;

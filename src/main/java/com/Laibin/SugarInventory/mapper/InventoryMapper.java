@@ -17,6 +17,14 @@ public interface InventoryMapper {
     @Select("SELECT * FROM inventory WHERE in_stock_id = #{inStockId}")
     Inventory selectByInStockId(@Param("inStockId") Integer inStockId);
 
+    @Select("SELECT side, `row_number` FROM inventory WHERE warehouse_id = #{warehouseId}")
+    List<Inventory> selectByWarehouseOrdered(@Param("warehouseId") Integer warehouseId);
+
+    @Select("SELECT * FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
+            "ORDER BY CASE side WHEN '右' THEN 1 ELSE 2 END, `row_number` DESC")
+    List<Inventory> getInventoryStackOrder(@Param("warehouseId") Integer warehouseId);
+
     @Select("SELECT COUNT(DISTINCT `row_number`) " +
             "FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +

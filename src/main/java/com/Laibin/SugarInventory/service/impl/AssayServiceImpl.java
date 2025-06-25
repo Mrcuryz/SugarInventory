@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
+import com.Laibin.SugarInventory.domain.dto.AssayCheckDTO;
 import com.Laibin.SugarInventory.domain.dto.AssayQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AssaySubmitDTO;
 import com.Laibin.SugarInventory.domain.po.Assay;
@@ -172,6 +173,11 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException("该记录已被其他数据关联，无法删除");
         }
+    }
+
+    @Override
+    public Boolean existedAssay(AssayCheckDTO dto) {
+        return assayMapper.existsByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
     }
 
     private boolean checkStandardCompliance(AssaySubmitDTO assay, QualityStandard standard) {

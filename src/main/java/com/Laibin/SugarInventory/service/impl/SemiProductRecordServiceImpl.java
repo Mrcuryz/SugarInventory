@@ -20,10 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -60,7 +58,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
             throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
 
-        Assay assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), LocalDate.now());
+        Assay assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
         if (assay == null) {
             throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
         }
@@ -101,7 +99,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         semiProductRecord.setQuantity(quantity);
         semiProductRecord.setScreenMeshId(dto.getScreenMeshId());
         semiProductRecord.setOperator(operator);
-        semiProductRecord.setOperationDate(LocalDate.now());
+        semiProductRecord.setOperationDate(dto.getEntryDate());
         semiProductRecord.setAssayId(assay.getId());
         semiProductRecord.setTotalWeight(totalWeight);
         semiProductRecord.setCreatedAt(LocalDateTime.now());
@@ -128,7 +126,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
                 inventory.setLayer(currentLayer);
                 inventory.setQuantity(1);
                 inventory.setScreenMeshId(dto.getScreenMeshId());
-                inventory.setEntryDate(LocalDate.now());
+                inventory.setEntryDate(dto.getEntryDate());
                 inventory.setAssayId(assay.getId());
                 inventory.setProductStatus(product.getStatus());
                 inventory.setCreatedAt(LocalDateTime.now());
@@ -187,6 +185,85 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         inVO.setRemainingQuantity(remainingQuantity);
         inVO.setMessage("入库成功！");
         return inVO;
+    }
+
+    @Override
+    @Transactional
+    public InVO stackModeInStock(AddSemiProductRecordDTO dto, String operator) {
+        Product product = productMapper.selectById(dto.getProductId());
+        if (product == null) throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+
+        Warehouse warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
+        if (warehouse == null) throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
+
+        Assay assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
+        if (assay == null) throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
+
+        int maxRows = warehouse.getMaxRows();
+        int maxCapacity = maxRows * 2;
+        int curCapacity = warehouse.getCurCapacity();
+        int available = maxCapacity - curCapacity;
+
+        if (available <= 0) throw new BusinessException(ErrorCode.WAREHOUSE_FULL);
+
+        int inQty = Math.min(dto.getQuantity(), available);
+        int remaining = dto.getQuantity() - inQty;
+
+        // 记录入库记录
+        BigDecimal totalWeight = product.getWeightPerPiece()
+                .multiply(new BigDecimal(inQty).multiply(new BigDecimal(product.getPiecesPerPallet())));
+        SemiProductRecord record = new SemiProductRecord();
+        record.setWarehouseId(warehouse.getId());
+        record.setProductId(dto.getProductId());
+        record.setQuantity(inQty);
+        record.setScreenMeshId(dto.getScreenMeshId());
+        record.setOperator(operator);
+        record.setOperationDate(dto.getEntryDate());
+        record.setAssayId(assay.getId());
+        record.setTotalWeight(totalWeight);
+        record.setCreatedAt(LocalDateTime.now());
+
+        recordMapper.insert(record);
+
+        // 计算当前最大 row_number
+        List<Inventory> existList = inventoryMapper.selectByWarehouseOrdered(warehouse.getId());
+        Set<String> occupied = existList.stream()
+                .map(inv -> inv.getSide() + "-" + inv.getRowNumber())
+                .collect(Collectors.toSet());
+
+        int count = 0;
+
+        // 入库顺序：左1～左N → 右1～右N
+        for (String side : List.of("左", "右")) {
+            for (int row = 1; row <= maxRows && count < inQty; row++) {
+                String key = side + "-" + row;
+                if (occupied.contains(key)) continue;
+
+                Inventory inv = new Inventory();
+                inv.setWarehouseId(warehouse.getId());
+                inv.setProductId(dto.getProductId());
+                inv.setSide(side);
+                inv.setRowNumber(row);
+                inv.setLayer(1); // 固定为第一层
+                inv.setQuantity(1);
+                inv.setScreenMeshId(dto.getScreenMeshId());
+                inv.setEntryDate(dto.getEntryDate());
+                inv.setAssayId(assay.getId());
+                inv.setProductStatus(product.getStatus());
+                inv.setCreatedAt(LocalDateTime.now());
+
+                inventoryMapper.insert(inv);
+                count++;
+            }
+        }
+
+        // 更新仓库当前容量
+        warehouseMapper.updateCurCapacity(warehouse.getId(), curCapacity + inQty);
+
+        InVO vo = new InVO();
+        vo.setRemainingQuantity(remaining);
+        vo.setMessage(remaining > 0 ? "已入库 " + inQty + " 板，库位已满，剩余 " + remaining + " 板未入库" : "入库成功");
+        return vo;
     }
 
     @Override

@@ -55,7 +55,7 @@ public class InStockController {
             return Result.success(inVO);
         } catch (BusinessException e) {
             e.printStackTrace();
-            return Result.error(500, "商品入库出错：" + e.getMessage());
+            return Result.error(500, "成品入库出错：" + e.getMessage());
         }
     }
 
