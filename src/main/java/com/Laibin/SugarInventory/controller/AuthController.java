@@ -46,6 +46,7 @@ public class AuthController {
         try {
             return Result.success(authService.handleLogin(dto));
         } catch (Exception e) {
+            e.printStackTrace();
             return Result.error(e.getMessage());
         }
     }

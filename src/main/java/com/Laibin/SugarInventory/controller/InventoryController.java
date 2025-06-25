@@ -23,7 +23,6 @@ import java.util.List;
 @RequiredArgsConstructor
 @Tag(name = "库存详情查询", description = "库位中库存详情查询")
 public class InventoryController {
-
     private final InventoryService inventoryService;
 
     @PreAuthorize("hasAuthority('record:query')")

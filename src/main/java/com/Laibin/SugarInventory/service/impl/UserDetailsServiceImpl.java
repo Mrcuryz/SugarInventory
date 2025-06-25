@@ -28,12 +28,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String idOrEmployeeId) {
-        User user = null;
-        if (idOrEmployeeId.matches("\\d+")) {
-            user = userMapper.selectById(Integer.parseInt(idOrEmployeeId));  // 根据 userId 查询
-        } else {
-            user = userMapper.selectByEmployeeId(idOrEmployeeId);  // 根据 employeeId 查询
+        User user = userMapper.selectByEmployeeId(idOrEmployeeId);  // 先按工号查
+
+        if (user == null && idOrEmployeeId.matches("\\d+")) {
+            user = userMapper.selectById(Integer.parseInt(idOrEmployeeId));  // 如果按工号查不到，再按ID查
         }
+
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }

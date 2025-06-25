@@ -2,9 +2,9 @@ package com.Laibin.SugarInventory.service;
 
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
+import com.Laibin.SugarInventory.domain.dto.AssayCheckDTO;
 import com.Laibin.SugarInventory.domain.dto.AssayQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AssaySubmitDTO;
-import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.Assay;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.AssayVO;
@@ -33,4 +33,7 @@ public interface AssayService extends IService<Assay> {
     @Transactional
     AssayVO updateAssay(Integer id, AssaySubmitDTO dto, User operator) throws JsonProcessingException;
 
+    void deleteAssay(Integer id);
+
+    Boolean existedAssay(AssayCheckDTO dto);
 }

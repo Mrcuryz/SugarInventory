@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.dto.AssayCheckDTO;
 import com.Laibin.SugarInventory.domain.dto.AssayQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AssaySubmitDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
@@ -19,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -41,7 +43,19 @@ public class AssayController {
             assayService.importAssays(dtos, loginUser.getUser().getId());
             return Result.success(true);
         } catch (BusinessException e) {
+            e.printStackTrace();
             return Result.error(500, "化验记录导入失败：" + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "检查化验记录是否存在", description = "根据产品id和日期检查化验记录是否存在")
+    @PostMapping("/exists")
+    public Result<Boolean> exists(
+            @RequestBody AssayCheckDTO dto) {
+        try {
+            return Result.success(assayService.existedAssay(dto));
+        } catch (BusinessException e) {
+            return Result.error(500, "化验记录检查失败：" + e.getMessage());
         }
     }
 
@@ -72,6 +86,19 @@ public class AssayController {
             return Result.success(assayService.updateAssay(id, dto, loginUser.getUser()));
         } catch (BusinessException | JsonProcessingException e) {
             return Result.error(500, "化验记录更新失败：" + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "删除化验记录", description = "根据化验记录ID删除化验记录")
+    @LogOperation(value = "化验数据", type = OperationType.DELETE)
+    @PreAuthorize("hasAuthority('quality:test')")
+    @DeleteMapping("/{id}")
+    public Result<Boolean> deleteAssay(@PathVariable("id") Integer id){
+        try {
+            assayService.deleteAssay(id);
+            return Result.success(true);
+        } catch (BusinessException e) {
+            return Result.error(500, "化验记录删除失败：" + e.getMessage());
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
+import com.Laibin.SugarInventory.annotation.CheckWarehouseStatus;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
@@ -30,7 +31,8 @@ public class OutStockController {
 
     private final OutStockService outStockService;
 
-    @Operation(summary = "产品出库操作", description = "创建出库记录，需指定产品ID、入库日期、筛网规格以及每个位置对应的出库数量")
+    @Operation(summary = "产品出库操作", description = "创建出库记录")
+    @CheckWarehouseStatus
     @PostMapping("/out")
     public Result<OutVO> createOutStock(
             @RequestBody OutStockRequestDTO request,
@@ -45,6 +47,21 @@ public class OutStockController {
         }
     }
 
+    @Operation(summary = "栈式出库操作", description = "新增特殊库位出库记录")
+    @CheckWarehouseStatus
+    @PostMapping("/stack-out")
+    public Result<OutVO> createStackOutStock(
+            @RequestBody OutStockRequestDTO request,
+            @AuthenticationPrincipal LoginUser loginUser
+    ) {
+        try {
+            System.out.println(request);
+            return Result.success(outStockService.processStackOutStock(request, loginUser.getUser().getId()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error(e.getMessage());
+        }
+    }
 
     @Operation(summary = "出库记录查询", description = "根据条件批量查询出库记录信息")
     @PostMapping("/records")

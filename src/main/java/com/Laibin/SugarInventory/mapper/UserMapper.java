@@ -6,6 +6,8 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import com.Laibin.SugarInventory.domain.po.Permission;
+import org.apache.ibatis.annotations.Update;
+
 import java.util.List;
 
 /**
@@ -29,4 +31,7 @@ public interface UserMapper extends BaseMapper<User> {
 
     @Select("SELECT * FROM user WHERE employee_id = #{employeeId}")
     User selectByEmployeeId(@Param("employeeId") String employeeId);
+
+    @Update("UPDATE user SET role_code = #{roleCode} WHERE employee_id = #{employeeId}")
+    void updateRoleByEmployeeId(@Param("employeeId") String employeeId, @Param("roleCode") String roleCode);
 }

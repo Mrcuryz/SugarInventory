@@ -7,8 +7,11 @@ spring:
     password: ssmrcury1
     driver-class-name: com.mysql.cj.jdbc.Driver
   jackson:
+    mapper:
+      sort-properties-alphabetically: false
     serialization:
       WRITE_DATES_AS_TIMESTAMPS: false
+      order-map-entries-by-keys: false
 server:
   port: 8080
 wechat:
@@ -28,6 +31,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     default-enum-type-handler: org.apache.ibatis.type.EnumTypeHandler
     auto-mapping-behavior: full
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 logging:
   level:
     org.springframework.aop: DEBUG

@@ -25,19 +25,24 @@ public interface AssayMapper extends BaseMapper<Assay> {
     Assay selectByProductIdAndDate(@Param("productId") Integer productId,
                                    @Param("date") LocalDate date);
 
+    @Select("SELECT COUNT(*) FROM assay " +
+            "WHERE product_id = #{productId} " +
+            "AND sample_date = #{date}")
+    Boolean existsByProductIdAndDate(@Param("productId") Integer productId,
+                                     @Param("date") LocalDate date);
+
     @Select("<script>" +
-            "SELECT a.*, p.product_name, u.name AS tester_name, s.*" +
+            "SELECT a.*, p.product_name, u.name AS tester_name " +
             "FROM assay a " +
             "LEFT JOIN product p ON a.product_id = p.id " +
             "LEFT JOIN user u ON a.tested_by = u.id " +
-            "LEFT JOIN quality_standards s ON p.product_type = s.product_type " +
             "<where> " +
             "   <if test='query.productName != null'>AND p.product_name LIKE CONCAT('%', #{query.productName}, '%')</if> " +
             "   <if test='query.startDate != null'>AND a.sample_date &gt;= #{query.startDate}</if> " +
             "   <if test='query.endDate != null'>AND a.sample_date &lt;= #{query.endDate}</if> " +
             "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, '%')</if> " +
             "</where> " +
-            "ORDER BY a.sample_date DESC, a.product_id ASC, a.version DESC " +
+            "ORDER BY a.created_at DESC, a.product_id ASC, a.version DESC " +
             "LIMIT #{offset}, #{size} " +
             "</script>")
     List<AssayVO> selectAssayList(@Param("query") AssayQueryDTO query,

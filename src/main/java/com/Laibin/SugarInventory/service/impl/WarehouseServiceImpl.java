@@ -41,7 +41,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
 
     @Override
     @Transactional
-    public void setWarehouseToMaintain(Integer id) {
+    public Warehouse setWarehouseToMaintain(Integer id) {
         Warehouse warehouse = warehouseMapper.selectById(id);
         int rows = 0;
         if(warehouse.getStatus().equals("维护"))
@@ -51,6 +51,9 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         if (rows < 1) {
             throw new BusinessException("修改仓库状态失败");
         }
+
+        warehouse = warehouseMapper.selectById(id);
+        return warehouse;
     }
 
     @Override

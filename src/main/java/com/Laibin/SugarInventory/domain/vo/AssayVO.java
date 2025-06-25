@@ -50,6 +50,9 @@ public class AssayVO {
     @Schema(description = "是否检验合格", example = "合格/不合格")
     private String isQualified;
 
+    @Schema(description = "版本号")
+    private Integer version;
+
     @Schema(description = "JSON格式的合格标准列表")
     private String qualifiedStandards;
 

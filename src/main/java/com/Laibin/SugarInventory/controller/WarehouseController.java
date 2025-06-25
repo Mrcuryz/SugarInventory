@@ -34,12 +34,11 @@ public class WarehouseController {
     @Operation(summary = "设置指定库位为维修状态")
     @LogOperation(value = "库位", type = OperationType.UPDATE)
     @PutMapping("/maintain/{id}")
-    public Result<String> updateWarehouseToMaintain(
+    public Result<Warehouse> updateWarehouseToMaintain(
             @Parameter(description = "库位ID")
             @PathVariable("id") Integer id) {
-        try {
-            warehouseService.setWarehouseToMaintain(id);
-            return Result.success("仓库状态更新成功");
+        try {;
+            return Result.success(warehouseService.setWarehouseToMaintain(id));
         } catch (Exception e) {
             return Result.error("仓库状态更新失败");
         }

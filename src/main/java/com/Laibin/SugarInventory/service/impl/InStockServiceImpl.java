@@ -3,19 +3,19 @@ package com.Laibin.SugarInventory.service.impl;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
-import com.Laibin.SugarInventory.domain.dto.InStockQueryDTO;
-import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
-import com.Laibin.SugarInventory.domain.dto.SemiRecordDTO;
+import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
-import com.Laibin.SugarInventory.domain.dto.InStockRequestDTO;
 import com.Laibin.SugarInventory.domain.vo.InStockVO;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.mapper.*;
+import com.Laibin.SugarInventory.service.AssayService;
 import com.Laibin.SugarInventory.service.InStockService;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +47,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     @Autowired
     private AssayMapper assayMapper;
     @Autowired
+    private AssayService assayService;
+    @Autowired
+    private QualityStandardMapper qualityStandardMapper;
+    @Autowired
     private WarehouseMapper warehouseMapper;
     @Autowired
     private ObjectMapper objectMapper;
@@ -72,7 +76,80 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
 
-        Assay assay = getAssayByProductIdAndDate(dto.getProductId(), LocalDate.now());
+        // 验证半成品记录中 useAssay 为 true 的记录数量
+        long useAssayCount = dto.getSemiRecords().stream()
+                .filter(SemiRecordDTO::getUseAssay)
+                .count();
+
+        if (useAssayCount > 1) {
+            throw new BusinessException(ErrorCode.MULTIPLE_USE_ASSAY_FLAGS);
+        }
+
+        Assay assay = new Assay();
+        Assay semiAssay;
+
+        if (useAssayCount == 1) {
+            // 获取标记为 useAssay 的半成品记录
+            SemiRecordDTO selectedSemi = dto.getSemiRecords().stream()
+                    .filter(SemiRecordDTO::getUseAssay)
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_SEMI_RECORD));
+            // 根据半成品ID和生产日期查询化验记录
+            semiAssay = getAssayByProductIdAndDate(selectedSemi.getSemiProductId(), selectedSemi.getProductionDate());
+            AssaySubmitDTO dtoAssay = new AssaySubmitDTO();
+            dtoAssay.setProductId(dto.getProductId());
+            dtoAssay.setSampleDate(dto.getEntryDate());
+            dtoAssay.setColorValue(semiAssay.getColorValue());
+            dtoAssay.setReducingSugar(semiAssay.getReducingSugar());
+            dtoAssay.setDryWeight(semiAssay.getDryWeight());
+            dtoAssay.setInsolubleImpurity(semiAssay.getInsolubleImpurity());
+            dtoAssay.setPhValue(semiAssay.getPhValue());
+            dtoAssay.setSucrose(semiAssay.getSucrose());
+            dtoAssay.setConductivityAsh(semiAssay.getConductivityAsh());
+
+            List<QualityStandard> standards = qualityStandardMapper.selectByProductType(product.getProductType());
+            if (standards.isEmpty()) {
+                throw new BusinessException("未找到该产品的质量标准");
+            }
+
+            List<String> qualifiedStandards = new ArrayList<>();
+            boolean isQualified = false;
+
+            for (QualityStandard standard : standards) {
+                if (checkStandardCompliance(dtoAssay, standard)) {
+                    qualifiedStandards.add(standard.getStandardName());
+                    isQualified = true;  // 只要有一个标准符合，就算合格
+                }
+            }
+
+            BeanUtils.copyProperties(dtoAssay, assay);
+            assay.setTestedBy(operatorId);
+            assay.setSucrose(dtoAssay.getSucrose());
+            assay.setIsQualified(isQualified? "合格" : "不合格");
+
+            Assay todaysAssay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
+            if (todaysAssay!= null) {
+                int version = todaysAssay.getVersion() + 1;
+                assay.setVersion(version);
+            } else {
+                assay.setVersion(1);
+            }
+            if(!isQualified)
+                qualifiedStandards.add("无");
+            assay.setCreatedAt(LocalDateTime.now());
+            try {
+                assay.setQualifiedStandards(objectMapper.writeValueAsString(qualifiedStandards));
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
+
+            assayMapper.insert(assay);
+            assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
+        } else {
+            // 根据成品ID和入库日期查询化验记录
+            assay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
+        }
+
         if (assay == null) {
             throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
         }
@@ -125,7 +202,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         inStock.setProductId(dto.getProductId());
         inStock.setQuantity(quantity);
         inStock.setCreatedBy(operatorId);
-        inStock.setEntryDate(LocalDate.now());
+        inStock.setEntryDate(dto.getEntryDate());
         inStock.setAssayId(assay.getId());
         inStock.setScreenMeshId(dto.getScreenMeshId());
         inStock.setTotalWeight(totalWeight);
@@ -152,7 +229,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                 inventory.setRowNumber(rowNumber);
                 inventory.setLayer(currentLayer);
                 inventory.setQuantity(1);
-                inventory.setEntryDate(LocalDate.now());
+                inventory.setEntryDate(dto.getEntryDate());
                 inventory.setInStockId(inStockId);
                 inventory.setScreenMeshId(dto.getScreenMeshId());
                 inventory.setAssayId(assay.getId());
@@ -220,6 +297,35 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             inVO.setMessage("入库成功！");
         }
         return inVO;
+    }
+
+    private boolean checkStandardCompliance(AssaySubmitDTO assay, QualityStandard standard) {
+        return checkValue(assay.getColorValue(), standard.getColorMin(), standard.getColorMax()) &&
+                checkValue(assay.getReducingSugar(), standard.getReducingSugarMin(), standard.getReducingSugarMax()) &&
+                checkValue(assay.getDryWeight(), standard.getDryWeightMin(), standard.getDryWeightMax()) &&
+                checkValue(assay.getConductivityAsh(), standard.getConductivityAshMin(), standard.getConductivityAshMax()) &&
+                checkValue(assay.getSucrose(), standard.getSucroseMin(), standard.getSucroseMax()) &&
+                checkValue(assay.getInsolubleImpurity(), standard.getInsolubleImpurityMin(), standard.getInsolubleImpurityMax()) &&
+                checkValue(assay.getPhValue(), standard.getPhMin(), standard.getPhMax());
+    }
+
+    //校验某个数值是否符合指标
+    private boolean checkValue(BigDecimal value, BigDecimal min, BigDecimal max) {
+        if (value == null && min == null && max == null) {
+            return true; // 化验数据为空，且标准里上下限都为空，则无需校验
+        } else if (value == null) {
+            return false; // 化验数据为空，则不合格
+        }
+        if (min != null && max == null) {
+            return value.compareTo(min) >= 0;  // 只有下限，必须大于等于下限
+        }
+        if (min == null && max != null) {
+            return value.compareTo(max) <= 0;  // 只有上限，必须小于等于上限
+        }
+        if (min != null && max != null) {
+            return value.compareTo(min) >= 0 && value.compareTo(max) <= 0; // 同时存在上下限
+        }
+        return true; // 如果标准里上下限都为空，则默认合格
     }
 
     // 入库操作（使用坐标方式）

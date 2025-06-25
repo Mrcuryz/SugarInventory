@@ -2,8 +2,6 @@ package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
-import com.Laibin.SugarInventory.common.Result;
-import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutRecordQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
@@ -170,6 +168,78 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         outVO.setMessage("出库成功！");
         return outVO;
     }
+
+    @Transactional
+    @Override
+    public OutVO processStackOutStock(OutStockRequestDTO dto, Integer operatorId) {
+        int remainingQuantity = dto.getQuantity();
+        int totalOutQuantity = 0;
+
+        Warehouse warehouse = warehouseMapper.selectById(dto.getWarehouseId());
+        if (warehouse == null) throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
+
+        List<Inventory> inventoryList = inventoryMapper.getInventoryStackOrder(dto.getWarehouseId());
+        if (inventoryList.isEmpty()) throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
+
+        Map<String, BatchInfo> batchMap = new HashMap<>();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate outDate = LocalDate.now();
+
+        for (Inventory inv : inventoryList) {
+            if (remainingQuantity <= 0) break;
+
+            String batchKey = inv.getProductId() + "_" + inv.getEntryDate();
+            BatchInfo batch = batchMap.getOrDefault(batchKey, new BatchInfo(inv.getProductId(), inv.getEntryDate(), 0));
+            batch.incrementQuantity();
+            batchMap.put(batchKey, batch);
+
+            inventoryMapper.deleteInventoryById(inv.getId());
+            remainingQuantity--;
+            totalOutQuantity++;
+        }
+
+        // 批量插入出库记录
+        for (BatchInfo batchInfo : batchMap.values()) {
+            Product product = productMapper.selectById(batchInfo.getProductId());
+            if (product == null) continue;
+
+            Assay assay = assayMapper.selectByProductIdAndDate(batchInfo.getProductId(), batchInfo.getEntryDate());
+            if (assay == null) throw new BusinessException(ErrorCode.ASSAY_NOT_FOUND);
+
+            BigDecimal totalWeight = product.getWeightPerPiece()
+                    .multiply(new BigDecimal(batchInfo.getQuantity())
+                            .multiply(new BigDecimal(product.getPiecesPerPallet())));
+
+            OutStock outStock = new OutStock();
+            outStock.setWarehouseId(dto.getWarehouseId());
+            outStock.setProductId(batchInfo.getProductId());
+            outStock.setQuantity(batchInfo.getQuantity());
+            outStock.setTotalWeight(totalWeight);
+            outStock.setOperatorId(operatorId);
+            outStock.setInDate(batchInfo.getEntryDate());
+            outStock.setOutDate(outDate);
+            outStock.setCreatedAt(now);
+            outStock.setAssayId(assay.getId());
+
+            outStockMapper.insert(outStock);
+        }
+
+        warehouseMapper.updateCurCapacity(dto.getWarehouseId(),
+                warehouse.getCurCapacity() - totalOutQuantity);
+
+        // 处理最大容量字段自动修正（如果历史有异常）
+        if (warehouse.getMaxRows() * 2 != warehouse.getMaxCapacity()) {
+            warehouseMapper.updateMaxCapacity(dto.getWarehouseId(), warehouse.getMaxRows() * 2);
+        }
+
+        OutVO vo = new OutVO();
+        vo.setRemainingQuantity(remainingQuantity);
+        vo.setMessage(remainingQuantity > 0
+                ? "库存不足，剩余 " + remainingQuantity + " 板未出库"
+                : "出库成功！");
+        return vo;
+    }
+
 
     @Override
     public PageResult<OutStockRecordVO> searchOutRecords(OutRecordQueryDTO query, User user) {

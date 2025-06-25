@@ -23,13 +23,16 @@ import java.util.List;
  * @since 2025-02-19
  */
 public interface SemiProductRecordService extends IService<SemiProductRecord> {
-    InVO addSemiProductRecord(AddSemiProductRecordDTO vo, String operator);
+    InVO addSemiProductRecord(AddSemiProductRecordDTO dto, String operator);
 
     List<RecordDetailVO> getRecordsByOperator(String openid, LocalDate date);
 
-    PageResult<RecordDetailVO> getSemiProductRecords(SemiProductRecordDTO vo, User currentUser);
+    PageResult<RecordDetailVO> getSemiProductRecords(SemiProductRecordDTO dto, User currentUser);
 
     List<RecordDetailVO> getSemiProductRecordsByIds(List<Integer> ids);
 
     RecordDetailVO getSemiProductRecord(Integer id);
+
+    @Transactional
+    InVO stackModeInStock(AddSemiProductRecordDTO dto, String operator);
 }

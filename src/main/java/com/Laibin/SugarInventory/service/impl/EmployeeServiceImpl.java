@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.domain.dto.EmployeeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.EmployeeUpdateDTO;
 import com.Laibin.SugarInventory.domain.po.EmployeeRoster;
 import com.Laibin.SugarInventory.mapper.EmployeeRosterMapper;
+import com.Laibin.SugarInventory.mapper.UserMapper;
 import com.Laibin.SugarInventory.service.EmployeeService;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -30,6 +31,9 @@ import java.util.List;
 public class EmployeeServiceImpl extends ServiceImpl<EmployeeRosterMapper, EmployeeRoster> implements EmployeeService, LoggableService<EmployeeRoster> {
     @Autowired
     private EmployeeRosterMapper rosterMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     @Override
     @Transactional
@@ -82,6 +86,13 @@ public class EmployeeServiceImpl extends ServiceImpl<EmployeeRosterMapper, Emplo
         int rows = rosterMapper.updateEmployee(dto);
         if (rows < 1) {
             throw new RuntimeException("更新失败，员工ID不存在或数据未变更");
+        }
+        if(dto.getRoleCode() != null){
+            try {
+                userMapper.updateRoleByEmployeeId(dto.getEmployeeId(), dto.getRoleCode());
+            } catch (Exception e) {
+                throw new RuntimeException("更新员工角色失败：" + e.getMessage(), e);
+            }
         }
         return rosterMapper.selectById(dto.getId());
     }
