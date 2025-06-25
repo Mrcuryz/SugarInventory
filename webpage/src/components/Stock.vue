@@ -110,6 +110,9 @@
               <span class="label">日期：</span>
               <span class="value">{{ item.productionDate || '未填写日期' }}</span>
             </div>
+            <div class="info-item">
+              <span class="label" v-if="item.useAssay === true" style="color: #f56c6c;">已套用该半成品的化验数据</span>
+            </div>
           </div>
         </el-card>
       </div>

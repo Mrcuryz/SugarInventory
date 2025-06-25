@@ -94,21 +94,32 @@
             @click.self.stop="handleCanvasClick"
         >
           <g v-for="location in locations" :key="location.id">
-            <rect
-                :x="location.x"
-                :y="location.y"
-                :width="location.width"
-                :height="location.height"
-                :class="[
-                  'location',
-                  location.status,
-                  { 'selected': location.id === selectedLocation?.id,
-                    'disabled': location.status === 'default'
-                    //透明度根据capacity计算
-                  }
-                ]"
-                :style="getLocationStyle(location)"
-                @click="location.status !== 'default' && handleSelectLocation(location)"
+            <rect v-if="location.shape !=='polygon'"
+                  :x="location.x"
+                  :y="location.y"
+                  :width="location.width"
+                  :height="location.height"
+                  :class="[
+                    'location',
+                    location.status,
+                    { 'selected': location.id === selectedLocation?.id,
+                      'disabled': location.status === 'default'
+                    }
+                  ]"
+                  :style="getLocationStyle(location)"
+                  @click="location.status !== 'default' && handleSelectLocation(location)"
+            />
+            <polygon v-else-if="location.shape === 'polygon'"
+                     :points="getPolygonPoints(location)"
+                     :class="[
+                        'location',
+                        location.status,
+                        { 'selected': location.id === selectedLocation?.id,
+                          'disabled': location.status === 'default'
+                        }
+                     ]"
+                     :style="getLocationStyle(location)"
+                     @click="location.status !== 'default' && handleSelectLocation(location)"
             />
             <text
                 :x="location.x + location.width/2"
@@ -121,7 +132,7 @@
       fill: verticalTextIds.includes(location.id) ? '#333' : '#666'
     }"
             >
-              {{ location.id }}
+              {{ location.name? location.name : location.id }}
             </text>
           </g>
         </svg>
@@ -167,7 +178,7 @@
                   <div class="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <span class="text-gray-500">数量：</span>
-                      <span class="font-medium">{{ item.totalQuantity }} 件</span>
+                      <span class="font-medium">{{ item.totalQuantity }} 板</span>
                     </div>
                     <div>
                       <span class="text-gray-500">重量：</span>
@@ -183,45 +194,45 @@
             </el-row>
           </el-descriptions-item>
           <el-descriptions-item label="操作">
-            <el-button type="success" @click="visible = true;operationType='新增入库'">新增入库</el-button>
+            <el-button type="success" @click="visible = true;operationType='新增入库';disableBtn=false">新增入库</el-button>
             <el-button type="success" @click="visible = true;operationType='新增出库'">新增出库</el-button>
           </el-descriptions-item>
         </el-descriptions>
-      </div>
-        <!-- 修改后的模板 -->
-        <div class="location-layout-container" v-if="selectedLocation.status === 'filtered'">
-          <!-- 添加flex横向布局容器 -->
-          <div class="columns-wrapper">
-            <!-- LEFT列 -->
-            <div class="column">
-              <div class="rows-container">
-                <div
-                    v-for="row in maxRowNum"
-                    :key="`left-${row}`"
-                    class="cell"
-                    :class="getCellClass('左', row)"
-                >
-                  {{ row }}
-                </div>
-              </div>
-              <div class="column-title">左</div>
-            </div>
+<!--      </div>-->
+<!--        &lt;!&ndash; 修改后的模板 &ndash;&gt;-->
+<!--        <div class="location-layout-container" v-if="selectedLocation.status === 'filtered'">-->
+<!--          &lt;!&ndash; 添加flex横向布局容器 &ndash;&gt;-->
+<!--          <div class="columns-wrapper">-->
+<!--            &lt;!&ndash; LEFT列 &ndash;&gt;-->
+<!--            <div class="column">-->
+<!--              <div class="rows-container">-->
+<!--                <div-->
+<!--                    v-for="row in maxRowNum"-->
+<!--                    :key="`left-${row}`"-->
+<!--                    class="cell"-->
+<!--                    :class="getCellClass('左', row)"-->
+<!--                >-->
+<!--                  {{ row }}-->
+<!--                </div>-->
+<!--              </div>-->
+<!--              <div class="column-title">左</div>-->
+<!--            </div>-->
 
-            <!-- RIGHT列 -->
-            <div class="column">
-              <div class="rows-container">
-                <div
-                    v-for="row in maxRowNum"
-                    :key="`right-${row}`"
-                    class="cell"
-                    :class="getCellClass('右', row)"
-                >
-                  {{ row }}
-                </div>
-              </div>
-              <div class="column-title">右</div>
-            </div>
-          </div>
+<!--            &lt;!&ndash; RIGHT列 &ndash;&gt;-->
+<!--            <div class="column">-->
+<!--              <div class="rows-container">-->
+<!--                <div-->
+<!--                    v-for="row in maxRowNum"-->
+<!--                    :key="`right-${row}`"-->
+<!--                    class="cell"-->
+<!--                    :class="getCellClass('右', row)"-->
+<!--                >-->
+<!--                  {{ row }}-->
+<!--                </div>-->
+<!--              </div>-->
+<!--              <div class="column-title">右</div>-->
+<!--            </div>-->
+<!--          </div>-->
         </div>
     </el-aside>
     </transition>
@@ -237,8 +248,8 @@
               v-model="firstLevelValues"
               @change="submitForm.productId = []"
           >
-            <el-radio label="成品">成品</el-radio>
-            <el-radio label="半成品">半成品</el-radio>
+            <el-radio label="成品" value="成品" :disabled="selectedLocation.id >= 1000">成品</el-radio>
+            <el-radio label="半成品" value="半成品" >半成品</el-radio>
           </el-radio-group>
         </el-form-item>
 
@@ -259,10 +270,22 @@
         <el-form-item label="仓库名称" prop="warehouseName">
           <span>{{ selectedLocation.warehouseName }}</span>
         </el-form-item>
+        <el-form-item label="入库日期" prop="entryDate">
+          <el-date-picker
+              v-model="submitForm.entryDate"
+              type="date"
+              placeholder="入库日期"
+              style="width: 88%"
+          />
+          <transition name="fade" mode="out-in">
+            <el-tag type="danger" v-if="checkAssay === -1" key="unchecked">未化验</el-tag>
+            <el-tag type="success" v-else-if="checkAssay === 1" key="checked">已化验</el-tag>
+          </transition>
+        </el-form-item>
         <el-form-item label="数量" prop="quantity">
           <el-input v-model="submitForm.quantity" clearable />
         </el-form-item>
-        <el-form-item label="位置" prop="side">
+        <el-form-item label="位置" prop="side" v-if="selectedLocation.id < 1000">
           <el-radio-group v-model="submitForm.side">
             <el-radio label="左" value="左">左</el-radio>
             <el-radio label="右" value="右">右</el-radio>
@@ -336,8 +359,19 @@
                     @click="removeSemi(index)"
                     circle
                 />
+                <el-switch
+                    v-model="item.useAssay"
+                    active-color="#13ce66"
+                    inactive-color="#ff4949"
+                    active-text="套用该半成品化验数据"
+                    :active-value="true"
+                    :inactive-value="false"
+                    @change="handleUseAssay(index)"
+                />
               </el-col>
+
             </el-row>
+            <br>
           </div>
           <el-button
               type="primary"
@@ -357,7 +391,7 @@
         <el-form-item label="数量" prop="quantity">
           <el-input v-model="submitForm.quantity" clearable />
         </el-form-item>
-        <el-form-item label="位置" prop="side">
+        <el-form-item label="位置" prop="side" v-if="selectedLocation.id < 1000">
           <el-radio-group v-model="submitForm.side">
             <el-radio label="左" value="左">左</el-radio>
             <el-radio label="右" value="右">右</el-radio>
@@ -380,7 +414,7 @@ import { getWarehouseInfo, getAllWarehouseCapacity, getWarehouseList, getWarehou
 import { ElMessage } from 'element-plus'
 import {getStandard} from "@/api/standard";
 import {getSemiProduct, getStProduct} from "@/api/assay";
-import {addInStock, addOutStock, addSemiProduct} from "@/api/stock";
+import {addInStock, addOutStack, addOutStock, addSemiProduct, addSemiProductStack, getCheck} from "@/api/stock";
 import {getMesh} from "@/api/mesh";
 import dayjs from "dayjs";
 //查询仓库信息
@@ -614,19 +648,28 @@ const statusTagMap = reactive({
 // 需要垂直排列的ID列表
 const verticalIds = ['办公室门', '仓库入口', '特殊区域']
 
+// 将多边形点数组转换为SVG需要的字符串格式
+const getPolygonPoints = (location) => {
+  return location.points.map(point => {
+    // 将相对坐标转换为绝对坐标
+    const absX = location.x + point[0];
+    const absY = location.y + point[1];
+    return `${absX},${absY}`;
+  }).join(' ');
+};
 // 在 script 中添加
-const getTextPosition = (location) => {
-  if (verticalTextIds.value.includes(location.id)) {
-    return {
-      x: location.x + location.width/2 - 8, // 向左微调
-      y: location.y + location.height/2 + 5
-    }
-  }
-  return {
-    x: location.x + location.width/2,
-    y: location.y + location.height/2
-  }
-}
+// const getTextPosition = (location) => {
+//   if (verticalTextIds.value.includes(location.id)) {
+//     return {
+//       x: location.x + location.width/2 - 8, // 向左微调
+//       y: location.y + location.height/2 + 5
+//     }
+//   }
+//   return {
+//     x: location.x + location.width/2,
+//     y: location.y + location.height/2
+//   }
+// }
 // script setup 部分
 const verticalTextIds = ref([
   '办公室门',
@@ -636,14 +679,78 @@ const verticalTextIds = ref([
 ])
 // 库位数据（示例）
 const locations = ref([
-  // {
-  //   id: '办公室门',
-  //   x:1030,
-  //   y: 300,
-  //   width: 30,
-  //   height: 130,
-  //   status: 'default'
-  // },
+  {
+    id:1000,
+    name: '包装间库',
+    x: 320,
+    y: 50,
+    points: [ // 定义不规则图形的各个顶点坐标
+      [0, 0],
+      [700, 0],
+      [700, 70],
+      [450, 70],
+      [450, 210],
+      [0, 210]
+    ],
+    status: 'default',
+    shape: 'polygon', // 标记为多边形
+    width: 500,
+    height: 210,
+  },
+  {
+    id: 1001,
+    name: '烘房1',
+    x: 780,
+    y: 130,
+    width: 30,
+    height: 130,
+    status: 'default'
+  },
+  {
+    id: 1002,
+    name: '烘房2',
+    x: 820,
+    y: 130,
+    width: 30,
+    height: 130,
+    status: 'default'
+  },
+  {
+    id: 1003,
+    name: '烘房3',
+    x: 860,
+    y: 130,
+    width: 30,
+    height: 130,
+    status: 'default'
+  },
+  {
+    id: 1004,
+    name: '烘房4',
+    x: 900,
+    y: 130,
+    width: 30,
+    height: 130,
+    status: 'default'
+  },
+  {
+    id: 1005,
+    name: '烘房5',
+    x: 940,
+    y: 130,
+    width: 30,
+    height: 130,
+    status: 'default'
+  },
+  {
+    id: 1006,
+    name: '烘房6',
+    x: 980,
+    y: 130,
+    width: 30,
+    height: 130,
+    status: 'default'
+  },
   {
     id: 1,
     x:992,
@@ -1179,15 +1286,15 @@ const locations = ref([
     width: 30,
     height: 130,
     status: 'default'
-  },
-  {
-    id: '多晶冰糖包装间',
-    x:312,
-    y: 28,
-    width: 710,
-    height: 240,
-    status: "default"
   }
+  // {
+  //   id: '多晶冰糖包装间',
+  //   x:312,
+  //   y: 28,
+  //   width: 710,
+  //   height: 240,
+  //   status: "default"
+  // }
   // ,
   // {
   //   id:101,
@@ -1348,6 +1455,7 @@ const handleClose = () => {
     semiRecords: []
   }
   firstLevelValues.value = '成品'
+  checkAssay.value = 0
 }
 const operationType = ref('')
 const submitForm = ref({
@@ -1356,6 +1464,7 @@ const submitForm = ref({
   quantity: '',
   side: '',
   screenMeshId: '',
+  entryDate: '',
   semiRecords: []
 })
 const visible = ref(false)
@@ -1365,7 +1474,8 @@ const rule = {
   warehouseName: [ { required: true, message: '请输入仓库名称', trigger: 'blur' } ],
   quantity: [ { required: true, message: '请输入数量', trigger: 'blur' } ],
   side: [ { required: true, message: '请选择位置', trigger: 'blur' } ],
-  meshName: [ { required: true, message: '请输入筛网名称', trigger: 'blur' } ]
+  meshName: [ { required: true, message: '请输入筛网名称', trigger: 'blur' } ],
+  entryDate: [ { required: true, message: '请选择入库日期', trigger: 'blur' } ]
 }
 const rules = reactive({
   productId: { required: true, message: '请选择产品' },
@@ -1390,19 +1500,57 @@ const addSemi = () => {
 const removeSemi = (index) => {
   submitForm.value.semiRecords.splice(index, 1)
 }
+// 自动查询逻辑
+const checkAssay = ref(0)
+const handleAutoQuery = async () => {
+  let len = submitForm.value.productId.length
+  let params = {
+    productId: submitForm.value.productId[len - 1],
+    entryDate: dayjs(submitForm.value.entryDate).format('YYYY-MM-DD')
+  }
+  let res = await getCheck(params)
+  if(res.data === true){
+    checkAssay.value = 1
+  }else if(res.data === false){
+    checkAssay.value = -1
+  }
+  console.log(checkAssay.value)
+}
+// 监听产品ID和入库日期的变化
+watch(
+    [() => submitForm.value.productId, () => submitForm.value.entryDate],
+    ([productId, entryDate]) => {
+      // 当两者都有值时触发查询
+      if (productId?.length > 0 && entryDate) {
+        handleAutoQuery()
+      }
+    },
+    { deep: true }
+)
+
 const handleOut = async () => {
   if (submitForm.value.quantity === ''){
     ElMessage.error('请输入数量')
   }
-  if (submitForm.value.side === '') {
+  if (submitForm.value.side === '' && selectedLocation.value.warehouseId < 1000) {
     ElMessage.error('请选择位置')
   }
-  let params = {
-    warehouseId: selectedLocation.value.warehouseId,
-    side: submitForm.value.side,
-    quantity: submitForm.value.quantity
+
+  let res
+  if(selectedLocation.value.warehouseId >=1000 && selectedLocation.value.warehouseId < 2000){
+    let params = {
+      warehouseId: selectedLocation.value.warehouseId,
+      quantity: submitForm.value.quantity
+    }
+    res = await addOutStack(params)
+  }else{
+    let params = {
+      warehouseId: selectedLocation.value.warehouseId,
+      side: submitForm.value.side,
+      quantity: submitForm.value.quantity
+    }
+    res = await addOutStock(params)
   }
-  let res = await addOutStock(params)
   if (res.code === 200) {
     ElMessage.success('新增成功')
     await getAll()
@@ -1411,8 +1559,8 @@ const handleOut = async () => {
     ElMessage.error(res.msg)
   }
 }
+
 const handleNew = async () => {
-  console.log(firstLevelValues.value)
   // 校验表单
   if (submitForm.value.productId === '') {
     ElMessage.error('请选择产品名称')
@@ -1422,12 +1570,16 @@ const handleNew = async () => {
     ElMessage.error('请输入数量')
     return
   }
-  if (submitForm.value.side === '') {
+  if (submitForm.value.side === '' && selectedLocation.value.warehouseId < 1000) {
     ElMessage.error('请选择位置')
     return
   }
   if (submitForm.value.screenMeshId === '') {
     ElMessage.error('请输入筛网名称')
+    return
+  }
+  if (submitForm.value.entryDate === '') {
+    ElMessage.error('请选择入库日期')
     return
   }
   // if (submitForm.value.semiRecords.length === 0) {
@@ -1445,30 +1597,61 @@ const handleNew = async () => {
       submitForm.value.semiRecords[i].productionDate = dayjs(submitForm.value.semiRecords[i].productionDate).format('YYYY-MM-DD')
     }
   }
+  let len = submitForm.value.productId.length
+  submitForm.value.productId = submitForm.value.productId[len - 1]
+  console.log(submitForm.value)
+  submitForm.value.entryDate = dayjs(submitForm.value.entryDate).format('YYYY-MM-DD')
   submitForm.value.semiProductRecords = JSON.stringify(submitForm.value.semiRecords)
   submitForm.value.warehouseName = selectedLocation.value.warehouseName
   if (firstLevelValues.value === '半成品') {
-    let params = {
-      productId: submitForm.value.productId,
-      warehouseName: submitForm.value.warehouseName,
-      quantity: submitForm.value.quantity,
-      side: submitForm.value.side,
-      screenMeshId: submitForm.value.screenMeshId,
+    let res
+    if(selectedLocation.value.warehouseId >=1000 && selectedLocation.value.warehouseId < 2000){
+      let params = {
+        productId: submitForm.value.productId,
+        warehouseName: submitForm.value.warehouseName,
+        quantity: submitForm.value.quantity,
+        screenMeshId: submitForm.value.screenMeshId,
+        entryDate: submitForm.value.entryDate
+      }
+      res = await addSemiProductStack(params)
+    }else{
+      let params = {
+        productId: submitForm.value.productId,
+        warehouseName: submitForm.value.warehouseName,
+        quantity: submitForm.value.quantity,
+        side: submitForm.value.side,
+        screenMeshId: submitForm.value.screenMeshId,
+        entryDate: submitForm.value.entryDate
+      }
+      res = await addSemiProduct(params)
     }
-    let res = await addSemiProduct(params)
     if (res.code === 200) {
       ElMessage.success('新增成功')
       await getAll()
       visible.value = false
+      checkAssay.value = 0
     } else {
       ElMessage.error(res.msg)
     }
   } else {
+    //如果有两个半成品记录的useAssay为true，则报错
+    let hasTwoUseAssay = 0
+    for (let i = 0; i < submitForm.value.semiRecords.length; i++) {
+      if (submitForm.value.semiRecords[i].useAssay) {
+        hasTwoUseAssay++
+      }
+    }
+    if (hasTwoUseAssay > 1) {
+      ElMessage.error('只能套用一个半成品的化验数据')
+      return
+    }
+    console.log(submitForm.value)
     let res = await addInStock(submitForm.value)
     if (res.code === 200) {
       ElMessage.success('新增成功')
       await getAll()
       visible.value = false
+      checkAssay.value = 0
       submitForm.value = {
         productId: '',
         warehouseName: '',
@@ -1482,7 +1665,7 @@ const handleNew = async () => {
   }
 }
 
-const firstLevelValues = ref('成品')
+const firstLevelValues = ref('半成品')
 // 级联组件配置（保持不变）
 const cascaderProps = reactive({
   emitPath: false,
@@ -1541,7 +1724,13 @@ const productOptions = computed(() => {
     }))
   }))
 })
-
+const handleUseAssay = (index) => {
+  submitForm.value.semiRecords.forEach((item, i) => {
+    if (i !== index) {
+      item.useAssay = false
+    }
+  })
+}
 const semiProductList = ref([])
 const SemiProduct = async () => {
   let res = await getSemiProduct()

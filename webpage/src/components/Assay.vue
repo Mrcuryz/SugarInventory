@@ -41,11 +41,12 @@
       <el-table
           :data="resultList"
           style="width: 95%"
-          heigth="300"
+          height="300"
           stripe
           border
           v-loading="loading"
           row-key="id"
+          :tree-props="{children: 'historyVersions', hasChildren: 'hasHistory'}"
       >
         <el-table-column prop="productName" label="化验产品名称" width="120" />
         <el-table-column prop="sampleDate" label="采样日期" width="120" sortable/>
@@ -57,7 +58,7 @@
         <el-table-column prop="insolubleImpurity" label="不溶于水杂质" width="150" sortable/>
         <el-table-column prop="phValue" label="pH值" width="120" sortable/>
         <el-table-column prop="testerName" label="化验员名称" width="120" />
-        <el-table-column prop="version" label="次数" width="120" />
+        <el-table-column prop="version" label="版本" width="120" />
         <el-table-column prop="isQualified" label="是否合格" width="120" >
           <template #default="{ row }">
             <el-tag type="success" v-if="row.isQualified === '合格'">合格</el-tag>
@@ -65,9 +66,41 @@
           </template>
         </el-table-column>
         <el-table-column prop="qualifiedStandards" label="合格标准" width="200" />
-        <el-table-column fixed="right" label="操作" width="90">
+        <el-table-column type="expand" width="100" label="历史版本" fixed="left">
+          <template #default="{ row }">
+            <div v-if="row.historyVersions && row.historyVersions.length > 0">
+              <el-table :data="row.historyVersions" border style="background-color: #03791e">
+                <el-table-column width="100"/>
+                <el-table-column prop="productName" label="化验产品名称" width="120" />
+                <el-table-column prop="sampleDate" label="采样日期" width="120" sortable/>
+                <el-table-column prop="colorValue" label="色值" width="120" sortable/>
+                <el-table-column prop="reducingSugar" label="还原糖分" width="120" sortable/>
+                <el-table-column prop="dryWeight" label="干燥失重" width="120" sortable/>
+                <el-table-column prop="conductivityAsh" label="电导灰分" width="120" sortable/>
+                <el-table-column prop="sucrose" label="蔗糖分" width="120" sortable/>
+                <el-table-column prop="insolubleImpurity" label="不溶于水杂质" width="150" sortable/>
+                <el-table-column prop="phValue" label="pH值" width="120" sortable/>
+                <el-table-column prop="testerName" label="化验员名称" width="120" />
+                <el-table-column prop="version" label="版本" width="120" />
+                <el-table-column prop="isQualified" label="是否合格" width="120" >
+                  <template #default="{ row: historyRow }">
+                    <el-tag type="success" v-if="historyRow.isQualified === '合格'">合格</el-tag>
+                    <el-tag type="danger" v-else>不合格</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="qualifiedStandards" label="合格标准" width="200" />
+                <el-table-column width="150"/>
+              </el-table>
+            </div>
+            <div v-else>
+              无历史版本数据
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column fixed="right" label="操作" width="150" >
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改化验';handleEdit(row)">编辑</el-button>
+            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -135,9 +168,9 @@
 
 <script setup>
 import dayjs from 'dayjs'
-import {ref, onMounted, reactive, computed} from 'vue'
-import { ElMessage, ElMessageBox} from 'element-plus'
-import {addAssay, getAssay, getSemiProduct, getStProduct, updateAssay} from "@/api/assay";
+import {computed, onMounted, reactive, ref} from 'vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {addAssay, deleteAssay, getAssay, getSemiProduct, getStProduct, updateAssay} from "@/api/assay";
 import {getProductList} from "@/api/product";
 // 搜索表单
 const searchForm = ref({
@@ -147,8 +180,8 @@ const searchForm = ref({
   version: ''
 })
 // 列表
-const resultList = ref([])
-
+let resultList = ref([])
+const originalList = ref([])
 // 加载状态
 const loading = ref(false)
 
@@ -189,15 +222,53 @@ const handleSearch = async () => {
   let res = await getAssay(params)
   if (res.code === 200) {
     total.value = res.data.total
-    resultList.value = res.data.records
-    for (let i = 0; i < resultList.value.length; i++) {
-      resultList.value[i].qualifiedStandards = JSON.parse(resultList.value[i].qualifiedStandards)
+    originalList.value = res.data.records
+    for (let i = 0; i < originalList.value.length; i++) {
+      originalList.value[i].qualifiedStandards = JSON.parse(originalList.value[i].qualifiedStandards)
     }
+    resultList = processResultList(originalList.value);
     loading.value = false
   } else {
     ElMessage.error(res.msg)
   }
 }
+// 处理数据的方法
+const processResultList = (data) => {
+  // 按产品名称和采样日期分组
+  const grouped = data.reduce((acc, item) => {
+    const key = `${item.productName}-${item.sampleDate}` // 组合键
+
+    if (!acc[key]) {
+      acc[key] = []
+    }
+    acc[key].push(item)
+    return acc
+  }, {})
+
+  // 对每组按版本排序（假设版本号是数字或可比较的字符串）
+  Object.keys(grouped).forEach(key => {
+    grouped[key].sort((a, b) => {
+      // 这里根据你的实际版本格式进行调整
+      // 如果是数字版本
+      return Number(b.version) - Number(a.version)
+      // 如果是日期字符串版本
+      // return new Date(b.version) - new Date(a.version)
+    })
+  })
+
+  // 构建树形结构
+  return Object.keys(grouped).map(key => {
+    const versions = grouped[key]
+    const latestVersion = versions[0]
+
+    return {
+      ...latestVersion,
+      historyVersions: versions.slice(1), // 除最新版本外的所有版本
+      hasHistory: versions.length > 1    // 是否有历史版本
+    }
+  })
+}
+
 // 处理重置
 const handleReset = () => {
   searchForm.value = {
@@ -370,6 +441,19 @@ const handleUpdate = async () => {
   }
 }
 
+//删除化验
+const handleDelete = async (row) => {
+  const confirm = await ElMessageBox.confirm('确认删除该化验记录吗？')
+  if (confirm) {
+    let res = await deleteAssay(row.id)
+    if (res.code === 200) {
+      ElMessage.success('删除成功')
+      await handleSearch()
+    } else {
+      ElMessage.error(res.msg)
+    }
+  }
+}
 
 // 级联组件配置（保持不变）
 const cascaderProps = reactive({
@@ -490,4 +574,5 @@ onMounted(() => {
 :deep(.el-table__body tr:hover > td) {
   background-color: rgb(159, 234, 252) !important;
 }
+
 </style>

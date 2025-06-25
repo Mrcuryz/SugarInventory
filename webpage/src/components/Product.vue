@@ -275,11 +275,11 @@ const rule = {
   ],
   weightPerPiece: [
     { required: true, message: '请输入每件重量', trigger: 'blur' },
-    { type: 'float', message: '请输入数字', trigger: 'blur' }
+    { type: 'string', message: '重量必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
   ],
   piecesPerPallet: [
     { required: true, message: '请输入每板件数', trigger: 'blur' },
-    { type: 'integer', message: '请输入整数', trigger: 'blur' }
+    { type: 'string', message: '板数必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
   ]
 }
 const dialogVisible = ref(false)
