@@ -26,6 +26,16 @@ export const getSemiProductList = (params)=>{
 export const addSemiProduct = (params)=>{
     return request.post('/semi-products/add', params)
 }
+//查询是否化验
+export const getCheck = (params)=>{
+    return request.post('/assay/exists', params)
+}
 
+export const addOutStack = (params)=>{
+    return request.post('/out-stock/stack-out', params)
+}
+export const addSemiProductStack = (params)=>{
+    return request.post('/semi-products/stack-in', params)
+}
 
 

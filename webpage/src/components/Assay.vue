@@ -97,10 +97,11 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column fixed="right" label="操作" width="150" >
+        <el-table-column fixed="right" label="操作" width="200" >
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改化验';handleEdit(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="success" size="small" @click="handleCopy(row)">复制</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -123,7 +124,7 @@
         :before-close="handleClose"
     >
       <el-form :model="submitForm" :rules="rule" label-width="auto">
-        <el-form-item label="化验产品名称" prop="productId" v-if="operationType === '新增化验'">
+        <el-form-item label="化验产品名称" prop="productId" v-if="operationType === '新增化验'|| operationType === '复制化验'">
           <el-cascader
               v-model="submitForm.productId"
               :options="productOptions"
@@ -159,7 +160,7 @@
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="operationType === '新增化验' ? handleNew() : handleUpdate()">确定</el-button>
+        <el-button type="primary" @click="operationType === '新增化验' || operationType === '复制化验' ? handleNew() : handleUpdate()">确定</el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
       </div>
     </el-dialog>
@@ -453,6 +454,21 @@ const handleDelete = async (row) => {
       ElMessage.error(res.msg)
     }
   }
+}
+//复制化验
+const handleCopy = async (row) => {
+  operationType.value = '复制化验'
+  submitForm.value = {
+    sampleDate: row.sampleDate,
+    colorValue: row.colorValue,
+    reducingSugar: row.reducingSugar,
+    dryWeight: row.dryWeight,
+    conductivityAsh: row.conductivityAsh,
+    sucrose: row.sucrose,
+    insolubleImpurity: row.insolubleImpurity,
+    phValue: row.phValue
+  }
+  dialogVisible.value = true
 }
 
 // 级联组件配置（保持不变）

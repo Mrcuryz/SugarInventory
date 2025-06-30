@@ -198,41 +198,41 @@
             <el-button type="success" @click="visible = true;operationType='新增出库'">新增出库</el-button>
           </el-descriptions-item>
         </el-descriptions>
-<!--      </div>-->
-<!--        &lt;!&ndash; 修改后的模板 &ndash;&gt;-->
-<!--        <div class="location-layout-container" v-if="selectedLocation.status === 'filtered'">-->
-<!--          &lt;!&ndash; 添加flex横向布局容器 &ndash;&gt;-->
-<!--          <div class="columns-wrapper">-->
-<!--            &lt;!&ndash; LEFT列 &ndash;&gt;-->
-<!--            <div class="column">-->
-<!--              <div class="rows-container">-->
-<!--                <div-->
-<!--                    v-for="row in maxRowNum"-->
-<!--                    :key="`left-${row}`"-->
-<!--                    class="cell"-->
-<!--                    :class="getCellClass('左', row)"-->
-<!--                >-->
-<!--                  {{ row }}-->
-<!--                </div>-->
-<!--              </div>-->
-<!--              <div class="column-title">左</div>-->
-<!--            </div>-->
+      </div>
+        <!-- 修改后的模板 -->
+        <div class="location-layout-container" v-if="selectedLocation.status === 'filtered' && selectedLocation.id < 1000">
+          <!-- 添加flex横向布局容器 -->
+          <div class="columns-wrapper">
+            <!-- LEFT列 -->
+            <div class="column">
+              <div class="rows-container">
+                <div
+                    v-for="row in maxRowNum"
+                    :key="`left-${row}`"
+                    class="cell"
+                    :class="getCellClass('左', row)"
+                >
+                  {{ row }}
+                </div>
+              </div>
+              <div class="column-title">左</div>
+            </div>
 
-<!--            &lt;!&ndash; RIGHT列 &ndash;&gt;-->
-<!--            <div class="column">-->
-<!--              <div class="rows-container">-->
-<!--                <div-->
-<!--                    v-for="row in maxRowNum"-->
-<!--                    :key="`right-${row}`"-->
-<!--                    class="cell"-->
-<!--                    :class="getCellClass('右', row)"-->
-<!--                >-->
-<!--                  {{ row }}-->
-<!--                </div>-->
-<!--              </div>-->
-<!--              <div class="column-title">右</div>-->
-<!--            </div>-->
-<!--          </div>-->
+            <!-- RIGHT列 -->
+            <div class="column">
+              <div class="rows-container">
+                <div
+                    v-for="row in maxRowNum"
+                    :key="`right-${row}`"
+                    class="cell"
+                    :class="getCellClass('右', row)"
+                >
+                  {{ row }}
+                </div>
+              </div>
+              <div class="column-title">右</div>
+            </div>
+          </div>
         </div>
     </el-aside>
     </transition>
@@ -680,7 +680,16 @@ const verticalTextIds = ref([
 // 库位数据（示例）
 const locations = ref([
   {
-    id:1000,
+    id: 1007,
+    name: '二楼库房',
+    x: 20,
+    y: 600,
+    width: 800,
+    height: 200,
+    status: 'default'
+  },
+  {
+    id: 1000,
     name: '包装间库',
     x: 320,
     y: 50,

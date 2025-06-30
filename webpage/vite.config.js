@@ -16,10 +16,8 @@ export default defineConfig({
   }
   ,
   server:{
-    // host:'0.0.0.0',
-    // allowedHosts: ['cscgood.mynatapp.cc'],
-    // port: 5173,
     //https://cscgood.mynatapp.cc/
+    //http://localhost:8080/
     proxy:{
       '/api':{//获取路径中包含了/api的请求
           target:'https://cscgood.mynatapp.cc/',//后台服务所在的源
