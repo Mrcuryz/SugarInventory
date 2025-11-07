@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.mapper;
 
 import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.vo.ProductInfoVO;
+import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.*;
 
@@ -130,4 +131,10 @@ public interface ProductMapper extends BaseMapper<Product> {
     @Delete("DELETE FROM product WHERE id = #{id}")
     @Override
     int deleteById(Serializable id);
+
+    @Select("SELECT warehouse_id, warehouse_name,product_id,product_name," +
+            "sum(total_pieces) AS totalPieces, sum(total_quantity) AS totalQuantity " +
+            "FROM v_warehouse_inventory_summary WHERE product_id = #{id} " +
+            "GROUP BY warehouse_id")
+    List<VInventorySummary> getProductWarehouse(Integer id);
 }

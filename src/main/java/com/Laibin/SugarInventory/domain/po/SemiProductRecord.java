@@ -3,6 +3,7 @@ package com.Laibin.SugarInventory.domain.po;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -15,15 +16,13 @@ import lombok.Setter;
 
 /**
  * <p>
- * 
+ *
  * </p>
  *
  * @author Mrcury
  * @since 2025-02-19
  */
 @EqualsAndHashCode(callSuper = true)
-@Getter
-@Setter
 @Data
 @TableName("semi_product_record")
 public class SemiProductRecord extends BaseEntity implements Serializable {
@@ -38,4 +37,5 @@ public class SemiProductRecord extends BaseEntity implements Serializable {
     private Integer warehouseId;
     private Integer assayId;
     private Integer screenMeshId;
+    private String unit;
 }

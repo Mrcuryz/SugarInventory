@@ -1,9 +1,0 @@
-<!--pages/bind-manual/bind-manual.wxml-->
-<view class="container">
-  <text class="title">绑定工号</text>
-  
-  <input class="input" placeholder="请输入工号" bindinput="onInputEmployeeId"/>
-  <input class="input" placeholder="请输入姓名" bindinput="onInputNamePart"/>
-
-  <button bindtap="onBindWork" class="weui-btn weui-btn_primary">绑定</button>
-</view>

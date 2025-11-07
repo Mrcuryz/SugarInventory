@@ -34,7 +34,7 @@ public class Inventory extends BaseEntity implements Serializable {
     @TableField(value = "side")
     private String side;
 
-    @TableField("row_number")
+    @TableField("`row_number`")
     private Integer rowNumber;
 
     @TableField("layer")
@@ -45,6 +45,9 @@ public class Inventory extends BaseEntity implements Serializable {
 
     @TableField("quantity")
     private Integer quantity;
+
+    @TableField("pieces")
+    private Integer pieces;
 
     @TableField("assay_id")
     private Integer assayId;

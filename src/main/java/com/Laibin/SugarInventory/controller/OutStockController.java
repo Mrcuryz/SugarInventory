@@ -8,12 +8,10 @@ import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.OutRecordQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.TransferOutStockRequestDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.User;
-import com.Laibin.SugarInventory.domain.vo.OutProductVO;
-import com.Laibin.SugarInventory.domain.vo.OutStockRecordVO;
-import com.Laibin.SugarInventory.domain.vo.OutVO;
-import com.Laibin.SugarInventory.domain.vo.ProductVO;
+import com.Laibin.SugarInventory.domain.vo.*;
 import com.Laibin.SugarInventory.service.OutStockService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -46,6 +44,23 @@ public class OutStockController {
             return Result.error(e.getMessage());
         }
     }
+
+    @Operation(summary = "产品调拨出库", description = "产品调拨出库")
+    @CheckWarehouseStatus
+    @PostMapping("/transferOut")
+    public Result<InVO> transferOut(
+            @RequestBody TransferOutStockRequestDTO request,
+            @AuthenticationPrincipal LoginUser loginUser
+    ) {
+        try {
+            return Result.success(outStockService.transferOut(request, loginUser.getUser().getId()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error(e.getMessage());
+        }
+    }
+
+
 
     @Operation(summary = "栈式出库操作", description = "新增特殊库位出库记录")
     @CheckWarehouseStatus

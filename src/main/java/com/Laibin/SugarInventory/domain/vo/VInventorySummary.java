@@ -1,5 +1,6 @@
 package com.Laibin.SugarInventory.domain.vo;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -22,10 +23,18 @@ public class VInventorySummary {
     private String productName;
     @Schema(description = "入库日期")
     private LocalDate entryDate;
-    @Schema(description = "产品库存总量")
+    @Schema(description = "产品库存总板数")
     private Integer totalQuantity;
+   @Schema(description = "产品库存总件数")
+    private Integer totalPieces;
     @Schema(description = "产品最早入库时间")
     private Date firstEntryDate;
+
+    @TableField(exist = false)
     @Schema(description = "产品库存总重量")
     private BigDecimal totalWeight;
+
+    @TableField(exist = false)
+    @Schema(description = "库存信息")
+    private String stockInfo;
 }

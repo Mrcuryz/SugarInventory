@@ -10,4 +10,11 @@ public class InVO {
     Integer remainingQuantity;
     @Schema(description = "详细信息")
     String message;
+
+    public static InVO createDefault() {
+        InVO inVO = new InVO();
+        inVO.setRemainingQuantity(0);
+        inVO.setMessage("入库成功");
+        return inVO;
+    }
 }

@@ -27,6 +27,15 @@ public class OutStock extends BaseEntity {
     @TableField(value = "quantity")
     private Integer quantity;
 
+    @TableField(value = "pieces")
+    private Integer pieces;
+
+    @TableField(value = "out_type")
+    private Integer outType;
+
+    @TableField(value = "unit")
+    private String unit;
+
     @TableField(value = "in_date")
     private LocalDate inDate;
 
@@ -44,4 +53,5 @@ public class OutStock extends BaseEntity {
 
     @TableField(value = "created_at")
     private LocalDateTime createdAt;
+
 }

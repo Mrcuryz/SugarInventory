@@ -1,18 +1,18 @@
 package com.Laibin.SugarInventory.mapper;
 
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
-import com.Laibin.SugarInventory.domain.po.Coordinates;
 import com.Laibin.SugarInventory.domain.po.Inventory;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
+import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
 @Mapper
-public interface InventoryMapper {
+public interface InventoryMapper extends BaseMapper<Inventory> {
 
     @Select("SELECT * FROM inventory WHERE in_stock_id = #{inStockId}")
     Inventory selectByInStockId(@Param("inStockId") Integer inStockId);
@@ -34,6 +34,15 @@ public interface InventoryMapper {
                     @Param("side") String side,
                     @Param("layer") int layer);
 
+    @Select("SELECT `row_number` " +
+            "FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
+            "AND side = #{side} " +
+            "AND layer = #{layer}")
+    List<Integer> getUsedRowList(@Param("warehouseId") int warehouseId,
+                    @Param("side") String side,
+                    @Param("layer") int layer);
+
 
     @Select("SELECT * FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
@@ -46,9 +55,9 @@ public interface InventoryMapper {
                                  @Param("screenMeshId") Integer screenMeshId);
 
     @Insert("INSERT INTO inventory (warehouse_id, product_id, entry_date, side, `row_number`, layer, quantity, " +
-            "screen_mesh_id, assay_id, created_at, in_stock_id, semi_record_id, product_status) " +
+            "screen_mesh_id, assay_id, created_at, in_stock_id, semi_record_id, product_status, pieces) " +
             "VALUES (#{warehouseId}, #{productId}, #{entryDate}, #{side}, #{rowNumber}, #{layer}, #{quantity}, " +
-            "#{screenMeshId}, #{assayId}, #{createdAt}, #{inStockId}, #{semiRecordId}, #{productStatus})")
+            "#{screenMeshId}, #{assayId}, #{createdAt}, #{inStockId}, #{semiRecordId}, #{productStatus}, #{pieces} )")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Inventory inventory);
 
@@ -121,4 +130,15 @@ public interface InventoryMapper {
             "</script>")
     List<OutProductVO> findInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,
                                                 @Param("query") OutProductQueryDTO query);
+
+
+    @Select("select * from inventory where warehouse_id = #{warehouseId} AND entry_date = #{entryDate}  AND product_id = #{productId}  AND pieces > 0 AND pieces < #{piecesPerPallet}")
+    List<Inventory> getHasPiecesRows(@Param("warehouseId") Integer warehouseId,
+                                     @Param("entryDate") LocalDate entryDate,
+                                     @Param("productId") Integer productId,
+                                     @Param("piecesPerPallet") Integer piecesPerPallet);
+
+    @Update("update inventory set pieces = #{pieces} where id = #{id}")
+    void updatePieces(@Param("id") Integer id, @Param("pieces") Integer pieces);
+
 }

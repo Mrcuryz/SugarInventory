@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.mapper;
 
 import com.Laibin.SugarInventory.domain.dto.InStockQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.SemiRecordDTO;
 import com.Laibin.SugarInventory.domain.po.InStock;
 import com.Laibin.SugarInventory.domain.po.InventoryLocation;
 import com.Laibin.SugarInventory.domain.vo.InStockVO;
@@ -21,9 +22,9 @@ import java.util.List;
 public interface InStockMapper extends BaseMapper<InStock> {
 
     @Insert("INSERT INTO in_stock (product_id, warehouse_id, quantity, total_weight, " +
-            "screen_mesh_id, semi_product_records, assay_id, entry_date, created_by, created_at) " +
+            "screen_mesh_id, semi_product_records, assay_id, entry_date, created_by, created_at, unit) " +
             "VALUES (#{productId}, #{warehouseId}, #{quantity}, #{totalWeight}, " +
-            "#{screenMeshId}, #{semiProductRecords}, #{assayId}, #{entryDate}, #{createdBy}, #{createdAt})")
+            "#{screenMeshId}, #{semiProductRecords}, #{assayId}, #{entryDate}, #{createdBy}, #{createdAt}, #{unit})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(InStock inStock);
 
@@ -107,4 +108,13 @@ public interface InStockMapper extends BaseMapper<InStock> {
             @Param("userId") Integer userId,
             @Param("isStaff") Boolean isStaff
     );
+
+    @Insert("<script>" +
+            "INSERT INTO in_stock_item (in_stock_id, product_name, quantity, warehouse_id, semi_product_id, production_date, use_assay, unit) " +
+            "VALUES " +
+            "<foreach item='item' index='index' collection='semiRecords' separator=','>" +
+            "(#{inStockId}, #{item.productName}, #{item.quantity}, #{item.warehouseId}, #{item.semiProductId}, #{item.productionDate}, #{item.useAssay}, #{item.unit})" +
+            "</foreach>" +
+            "</script>")
+    void saveInStockItem(@Param("semiRecords") List<SemiRecordDTO> semiRecords, @Param("inStockId") Integer inStockId);
 }

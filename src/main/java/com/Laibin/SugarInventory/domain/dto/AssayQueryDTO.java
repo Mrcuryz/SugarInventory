@@ -13,6 +13,15 @@ public class AssayQueryDTO extends BaseDTO {
     @Schema(description = "产品名称，支持模糊查询", example = "中冰")
     private String productName;
 
+    @Schema(description = "产品ID", example = "1")
+    private String productId;
+
+    @Schema(description = "化验日期", example = "2025-01-01")
+    private String sampleDate;
+
+    @Schema(description = "是否合格", example = "合格不合格")
+    private String isQualified;
+
     @Schema(description = "查询起始日期", example = "2025-01-01")
     private LocalDate startDate;
 

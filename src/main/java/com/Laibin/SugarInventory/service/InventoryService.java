@@ -24,4 +24,10 @@ public interface InventoryService {
     PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size, String status);
 
     PageResult<VWarehouseCapacity> batchQueryWarehouses(OutStockBatchQueryDTO queryDTO);
+
+    /**
+     * 获取所有产品的库存信息
+     * @param productStatus 产品状态：成品/半成品
+     */
+    List<VInventorySummary> getProductStock(String productStatus, String productName);
 }

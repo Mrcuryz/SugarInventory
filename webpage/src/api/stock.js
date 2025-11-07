@@ -34,6 +34,9 @@ export const getCheck = (params)=>{
 export const addOutStack = (params)=>{
     return request.post('/out-stock/stack-out', params)
 }
+export const addTransferOut = (params)=>{
+    return request.post('/out-stock/transferOut', params)
+}
 export const addSemiProductStack = (params)=>{
     return request.post('/semi-products/stack-in', params)
 }

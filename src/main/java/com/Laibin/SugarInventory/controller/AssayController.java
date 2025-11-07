@@ -31,6 +31,7 @@ public class AssayController {
     @Autowired
     private AssayService assayService;
 
+
     @PostMapping("/import")
     @LogOperation(value = "化验数据", type = OperationType.INSERT)
     @Operation(summary = "导入化验记录", description = "批量导入化验记录")
@@ -47,6 +48,23 @@ public class AssayController {
             return Result.error(500, "化验记录导入失败：" + e.getMessage());
         }
     }
+
+//    @PostMapping("/copy")
+//    @LogOperation(value = "化验数据", type = OperationType.INSERT)
+//    @Operation(summary = "复制化验记录", description = "复制化验记录")
+//    @PreAuthorize("hasAuthority('quality:test')")
+//    public Result<Boolean> copyAssay(
+//            @RequestBody AssayCopyDTO dto,
+//            @AuthenticationPrincipal LoginUser loginUser
+//    ) {
+//        try {
+//            assayService.copyAssay(dto, loginUser.getUser().getId());
+//            return Result.success(true);
+//        } catch (BusinessException e) {
+//            e.printStackTrace();
+//            return Result.error(500, "化验记录复制失败：" + e.getMessage());
+//        }
+//    }
 
     @Operation(summary = "检查化验记录是否存在", description = "根据产品id和日期检查化验记录是否存在")
     @PostMapping("/exists")

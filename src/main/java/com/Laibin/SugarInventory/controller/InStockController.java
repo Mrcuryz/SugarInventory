@@ -36,7 +36,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/in-stock")
 @Tag(name = "入库管理", description = "入库记录的新增、查询、批量修改接口")
-
 public class InStockController {
     @Autowired
     private InStockService inStockService;

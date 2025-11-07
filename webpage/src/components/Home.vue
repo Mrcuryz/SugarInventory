@@ -17,68 +17,72 @@
 
         <!-- 日期信息 -->
         <div class="date-info">
-          <el-icon><calendar /></el-icon>
+          <el-icon>
+            <calendar/>
+          </el-icon>
           <span>{{ formattedDate }}</span>
-          <el-icon><timer /></el-icon>
+          <el-icon>
+            <timer/>
+          </el-icon>
           <span>{{ dayOfWeek }}</span>
         </div>
       </div>
     </el-card>
   </div>
   <el-card class="search-card">
-  <el-form :model="searchWarehouseForm" inline>
-    <el-form-item label="产品名称">
-      <el-input
-          v-model="searchWarehouseForm.productName"
-          placeholder="请输入产品名称"
-          clearable
-          style="width: 200px"
-      >
-      </el-input>
-    </el-form-item>
-    <el-form-item label="标准名称">
-      <el-select v-model="searchWarehouseForm.standardNames"
-                 placeholder="请选择"
-                 clearable
-                 style="width: 200px">
-        <el-option
-            v-for="item in standards"
-            :key="item.standardName"
-            :label="item.label"
-            :value="item.standardName"
+    <el-form :model="searchWarehouseForm" inline>
+      <el-form-item label="产品名称">
+        <el-input
+            v-model="searchWarehouseForm.productName"
+            placeholder="请输入产品名称"
+            clearable
+            style="width: 200px"
+        >
+        </el-input>
+      </el-form-item>
+      <el-form-item label="标准名称">
+        <el-select v-model="searchWarehouseForm.standardNames"
+                   placeholder="请选择"
+                   clearable
+                   style="width: 200px">
+          <el-option
+              v-for="item in standards"
+              :key="item.standardName"
+              :label="item.label"
+              :value="item.standardName"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="筛网名称" prop="screenMeshId">
+        <el-select
+            v-model="searchWarehouseForm.screenMeshId"
+            placeholder="请选择"
+            clearable
+            style="width: 200px"
+        >
+          <el-option
+              v-for="item in meshList"
+              :key="item.id"
+              :label="item.meshName"
+              :value="item.id"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="时间范围">
+        <el-date-picker
+            v-model="searchWarehouseForm.dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            style="width: 400px"
         />
-      </el-select>
-    </el-form-item>
-    <el-form-item label="筛网名称" prop="screenMeshId">
-      <el-select
-          v-model="searchWarehouseForm.screenMeshId"
-          placeholder="请选择"
-          clearable
-          style="width: 200px"
-      >
-        <el-option
-            v-for="item in meshList"
-            :key="item.id"
-            :label="item.meshName"
-            :value="item.id"
-        />
-      </el-select>
-    </el-form-item>
-    <el-form-item label="时间范围">
-      <el-date-picker
-          v-model="searchWarehouseForm.dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          style="width: 400px"
-      />
-    </el-form-item>
-    <el-form-item>
-      <el-button type="primary" @click="handleSearch">查询</el-button>
-      <el-button @click="handleReset">重置</el-button>
-    </el-form-item>
-  </el-form>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="handleSearch">查询</el-button>
+        <el-button @click="handleReset">重置</el-button>
+      </el-form-item>
+    </el-form>
   </el-card>
   <el-container class="h-screen">
     <!-- 左侧库位图 -->
@@ -132,7 +136,7 @@
       fill: verticalTextIds.includes(location.id) ? '#333' : '#666'
     }"
             >
-              {{ location.name? location.name : location.id }}
+              {{ location.name ? location.name : location.id }}
             </text>
           </g>
         </svg>
@@ -147,60 +151,80 @@
           width="360px"
           class="border-l p-4 bg-white h-full"
       >
-      <div>
-        <h2 class="text-lg font-bold mb-4">{{ selectedLocation.warehouseName }} 详情</h2>
-        <el-descriptions :column="1" border>
-          <el-descriptions-item label="状态">
-            <el-tag :type="statusTagMap[selectedLocation.status]">
-              {{ statusMap[selectedLocation.status] }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="库名">
-            {{ selectedLocation.warehouseName }}
-          </el-descriptions-item>
-          <el-descriptions-item label="产品信息" v-if="selectedLocationInfo.length">
-            <el-row :gutter="12" class="product-cards">
-              <el-col
-                  v-for="(item, index) in selectedLocationInfo"
-                  :key="index"
-                  :xs="24"
-                  :sm="24"
-                  class="mb-3"
-              >
-                <el-card
-                    shadow="hover"
-                    class="product-card"
-                    body-class="p-3"
+        <div>
+          <h2 class="text-lg font-bold mb-4">{{ selectedLocation.warehouseName }} 详情</h2>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="状态">
+              <el-tag :type="statusTagMap[selectedLocation.status]">
+                {{ statusMap[selectedLocation.status] }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="库名">
+              {{ selectedLocation.warehouseName }}
+            </el-descriptions-item>
+            <el-descriptions-item label="产品信息">
+              <el-row :gutter="12" class="product-cards">
+                <el-col
+                    v-for="(item, index) in selectedLocationInfo"
+                    :key="index"
+                    :xs="24"
+                    :sm="24"
+                    class="mb-3"
                 >
-                  <div class="flex justify-between items-center">
-                    <div class="font-medium text-primary">产品名称：{{ item.productName }}</div>
-                  </div>
-                  <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span class="text-gray-500">数量：</span>
-                      <span class="font-medium">{{ item.totalQuantity }} 板</span>
+                  <el-card
+                      shadow="hover"
+                      class="product-card"
+                      body-class="p-3"
+                  >
+                    <div class="flex justify-between items-center">
+                      <div class="font-medium text-primary">产品名称：{{ item.productName }}</div>
                     </div>
-                    <div>
-                      <span class="text-gray-500">重量：</span>
-                      <span class="font-medium">{{ item.totalWeight.toFixed(2) }} kg</span>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span class="text-gray-500">数量：</span>
+                        <span class="font-medium">{{ item.stockInfo }}</span>
+                      </div>
+                      <div>
+                        <span class="text-gray-500">重量：</span>
+                        <span class="font-medium">{{ item.totalWeight.toFixed(2) }} kg</span>
+                      </div>
+                      <div class="col-span-2">
+                        <span class="text-gray-500">入库日期：</span>
+                        <span class="font-medium">{{ item.entryDate }}</span>
+                      </div>
+                      <div class="col-span-2">
+                        <button @click="assayDialogVisible=true;getAssayInfo(item)">化验信息</button>
+                      </div>
                     </div>
-                    <div class="col-span-2">
-                      <span class="text-gray-500">入库日期：</span>
-                      <span class="font-medium">{{ item.entryDate }}</span>
-                    </div>
-                  </div>
-                </el-card>
-              </el-col>
-            </el-row>
-          </el-descriptions-item>
-          <el-descriptions-item label="操作">
-            <el-button type="success" @click="visible = true;operationType='新增入库';disableBtn=false">新增入库</el-button>
-            <el-button type="success" @click="visible = true;operationType='新增出库'">新增出库</el-button>
-          </el-descriptions-item>
-        </el-descriptions>
-      </div>
+                  </el-card>
+                </el-col>
+              </el-row>
+            </el-descriptions-item>
+            <el-descriptions-item label="操作">
+              <el-button type="success"
+                         @click="visible = true;returnInStockFlag='0';operationTypeLabel = '新增入库';operationType='新增入库';disableBtn=false">
+                新增入库
+              </el-button>
+              <el-button type="success"
+                         @click="visible = true;operationTypeLabel='新增出库'; operationType='新增出库';warehouseProductList=selectedLocationInfo">
+                新增出库
+              </el-button>
+            </el-descriptions-item>
+            <el-descriptions-item label="操作" v-show="selectedLocation.id < 1000">
+              <el-button
+                  @click="visible = true;returnInStockFlag= '1';operationTypeLabel='退货入库'; operationType='新增入库';disableBtn=false">
+                退货入库
+              </el-button>
+              <el-button type="success"
+                         @click="visible = true;operationTypeLabel='调拨出库';operationType='新增出库';warehouseProductList=selectedLocationInfo">
+                调拨出库
+              </el-button>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
         <!-- 修改后的模板 -->
-        <div class="location-layout-container" v-if="selectedLocation.status === 'filtered' && selectedLocation.id < 1000">
+        <div class="location-layout-container"
+             v-if="selectedLocation.status === 'filtered' && selectedLocation.id < 1000">
           <!-- 添加flex横向布局容器 -->
           <div class="columns-wrapper">
             <!-- LEFT列 -->
@@ -234,10 +258,10 @@
             </div>
           </div>
         </div>
-    </el-aside>
+      </el-aside>
     </transition>
     <el-dialog
-        :title=operationType
+        :title=operationTypeLabel
         v-model="visible"
         width="40%"
         :before-close="handleClose"
@@ -249,7 +273,7 @@
               @change="submitForm.productId = []"
           >
             <el-radio label="成品" value="成品" :disabled="selectedLocation.id >= 1000">成品</el-radio>
-            <el-radio label="半成品" value="半成品" >半成品</el-radio>
+            <el-radio label="半成品" value="半成品">半成品</el-radio>
           </el-radio-group>
         </el-form-item>
 
@@ -257,7 +281,7 @@
         <el-form-item label="产品名称" prop="productId">
           <el-cascader
               v-model="submitForm.productId"
-                :options="productOptions.map(item => ({
+              :options="productOptions.map(item => ({
         ...item,
         disabled: firstLevelValues ? item.label !== firstLevelValues : false
       }))"
@@ -283,7 +307,17 @@
           </transition>
         </el-form-item>
         <el-form-item label="数量" prop="quantity">
-          <el-input v-model="submitForm.quantity" clearable />
+          <div class="group-input">
+            <el-input v-model="submitForm.quantity" clearable/>
+            <el-select
+                v-model="submitForm.unit"
+                placeholder="单位"
+                style="width: 120px"
+            >
+              <el-option label="板" value="0"/>
+              <el-option label="件" value="1"/>
+            </el-select>
+          </div>
         </el-form-item>
         <el-form-item label="位置" prop="side" v-if="selectedLocation.id < 1000">
           <el-radio-group v-model="submitForm.side">
@@ -316,6 +350,7 @@
                     :rules="rules.semiProductId"
                 >
                   <el-select
+                      @change="handleSemiProductChange(item)"
                       v-model="item.semiProductId"
                       placeholder="选择半成品"
                       clearable
@@ -331,11 +366,41 @@
               </el-col>
               <el-col :span="20">
                 <el-form-item
+                    label="库位"
+                    :prop="`semiRecords.${index}.warehouseId`"
+                    :rules="rules.warehouse"
+                >
+                  <el-select
+                      v-model="item.warehouseId"
+                      placeholder="选择库位"
+                      clearable
+                  >
+                    <el-option
+                        v-for="semi in warehouseList"
+                        :key="semi.warehouseName"
+                        :label="semi.warehouseName"
+                        :value="semi.warehouseId"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="20">
+                <el-form-item
                     label="数量"
                     :prop="`semiRecords.${index}.quantity`"
                     :rules="rules.quantity"
                 >
-                  <el-input v-model="item.quantity" placeholder="数量" type="number"/>
+                  <div class="group-input">
+                    <el-input v-model="item.quantity" clearable/>
+                    <el-select
+                        v-model="item.unit"
+                        placeholder="单位"
+                        style="width: 120px"
+                    >
+                      <el-option label="板" value="0"/>
+                      <el-option label="件" value="1"/>
+                    </el-select>
+                  </div>
                 </el-form-item>
               </el-col>
               <el-col :span="20">
@@ -388,19 +453,138 @@
         <el-form-item label="仓库名称" prop="warehouseName">
           <span>{{ selectedLocation.warehouseName }}</span>
         </el-form-item>
-        <el-form-item label="数量" prop="quantity">
-          <el-input v-model="submitForm.quantity" clearable />
+        <el-form-item
+            label="产品名称"
+            prop="productId"
+            :rules="rules.productId"
+        >
+          <el-select
+              v-model="submitForm.productId"
+              placeholder="选择产品"
+              clearable
+          >
+            <el-option
+                v-for="semi in warehouseProductList"
+                :key="semi.productId"
+                :label="semi.productName +'('+ semi.entryDate + ')'"
+                :value="semi.productId"
+            />
+          </el-select>
         </el-form-item>
-        <el-form-item label="位置" prop="side" v-if="selectedLocation.id < 1000">
+        <el-form-item label="出库数量" prop="quantity">
+          <div class="group-input">
+            <el-input v-model="submitForm.quantity" clearable/>
+            <el-select
+                v-model="submitForm.unit"
+                placeholder="单位"
+                style="width: 120px"
+            >
+              <el-option label="板" value="0"/>
+              <el-option label="件" value="1"/>
+            </el-select>
+          </div>
+        </el-form-item>
+        <el-form-item label="出库位置" prop="side" v-if="selectedLocation.id < 1000">
           <el-radio-group v-model="submitForm.side">
             <el-radio label="左" value="左">左</el-radio>
             <el-radio label="右" value="右">右</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item v-if="operationTypeLabel === '调拨出库'"
+                      label="入库仓库"
+                      prop="inWarehouseName"
+                      :rules="rules.warehouse"
+        >
+          <el-select
+              v-model="submitForm.inWarehouseName"
+              placeholder="选择入库仓库"
+              clearable
+          >
+            <el-option
+                v-for="semi in CapacityList"
+                :key="semi.warehouseName"
+                :label="semi.warehouseName"
+                :value="semi.warehouseId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="出库方式" prop="outType" v-if="selectedLocation.id < 1000">
+          <el-radio-group v-model="submitForm.outType">
+            <el-radio label="整板优先" value="0">整板优先</el-radio>
+            <el-radio label="散件优先" value="1">散件优先</el-radio>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click=" operationType === '新增入库' ? handleNew() : handleOut()">确定</el-button>
+        <el-button type="primary" @click="operationType === '新增入库' ? handleNew() : handleOut()">确定</el-button>
         <el-button @click="visible = false;handleClose()">取消</el-button>
+      </div>
+    </el-dialog>
+
+
+    <el-dialog
+        title="化验信息"
+        v-model="assayDialogVisible"
+        width="40%"
+    >
+      <div class="card-container">
+        <el-card
+            class="record-card"
+            shadow="hover"
+        >
+          <div class="card-content">
+            <el-row :gutter="20">
+              <el-col :span="20">
+                <div class="info-item">
+                  <label>采样日期：</label>
+                  <span>{{ assayInfo.sampleDate }}</span>
+                </div>
+                <div class="info-item">
+                  <label>色值：</label>
+                  <span>{{ assayInfo.colorValue }}</span>
+                </div>
+                <div class="info-item">
+                  <label>还原糖：</label>
+                  <span>{{ assayInfo.reducingSugar }}</span>
+                </div>
+                <div class="info-item">
+                  <label>干重：</label>
+                  <span>{{ assayInfo.dryWeight }}</span>
+                </div>
+                <div class="info-item">
+                  <label>电导灰分：</label>
+                  <span>{{ assayInfo.conductivityAsh }}</span>
+                </div>
+                <div class="info-item">
+                  <label>蔗糖：</label>
+                  <span>{{ assayInfo.sucrose }}</span>
+                </div>
+                <div class="info-item">
+                  <label>不溶物：</label>
+                  <span>{{ assayInfo.insolubleImpurity }}</span>
+                </div>
+                <div class="info-item">
+                  <label>pH值：</label>
+                  <span>{{ assayInfo.phValue }}</span>
+                </div>
+              </el-col>
+            </el-row>
+
+            <!-- 底部状态栏 -->
+            <div class="status-bar">
+              <el-tag
+                  :span="12"
+                  :type="assayInfo.isQualified === '合格' ? 'success' : 'danger'"
+                  size="medium"
+              >
+                {{ assayInfo.isQualified }}
+              </el-tag>
+              <div class="meta-info">
+                <span>检测人：{{ assayInfo.testerName }}</span>
+              </div>
+            </div>
+          </div>
+        </el-card>
       </div>
     </el-dialog>
   </el-container>
@@ -409,12 +593,26 @@
 <script setup>
 import {ref, computed, onMounted, onUnmounted, reactive, onBeforeMount, watchEffect, watch} from 'vue'
 import {Calendar, Delete, Timer} from '@element-plus/icons-vue'
-import { throttle } from 'lodash-es'
-import { getWarehouseInfo, getAllWarehouseCapacity, getWarehouseList, getWarehouseById, getMaxRowNum } from '@/api/warehouseinfo'
-import { ElMessage } from 'element-plus'
+import {throttle} from 'lodash-es'
+import {
+  getWarehouseInfo,
+  getAllWarehouseCapacity,
+  getWarehouseList,
+  getWarehouseById,
+  getMaxRowNum
+} from '@/api/warehouseinfo'
+import {ElMessage} from 'element-plus'
 import {getStandard} from "@/api/standard";
-import {getSemiProduct, getStProduct} from "@/api/assay";
-import {addInStock, addOutStack, addOutStock, addSemiProduct, addSemiProductStack, getCheck} from "@/api/stock";
+import {getSemiProduct, getStProduct, getProductWarehouse, getAssay} from "@/api/assay";
+import {
+  addInStock,
+  addOutStack,
+  addOutStock,
+  addSemiProduct,
+  addSemiProductStack, addTransferOut,
+  getCheck,
+  getOutStock
+} from "@/api/stock";
 import {getMesh} from "@/api/mesh";
 import dayjs from "dayjs";
 //查询仓库信息
@@ -424,6 +622,7 @@ let searchWarehouseForm = ref({
   screenMeshId: '',
   dateRange: [],
 })
+const warehouseProductList = ref([])
 const loadingMap = ref(false)
 const warehousesList = ref([])
 const filteredInfo = ref([])
@@ -457,7 +656,7 @@ const handleSearch = async () => {
     warehousesList.value.forEach(warehouse => {
       //查找locations中id为item.warehouseId的对象，并更新其capacityPercentage和status属性
       const index = locations.value.findIndex(location => location.id === warehouse.warehouseId)
-      if(index === -1){
+      if (index === -1) {
         return
       }
       locations.value[index].status = 'filtered'
@@ -509,11 +708,31 @@ const particles = {
 const hours = computed(() => time.value.getHours().toString().padStart(2, '0'))
 const minutes = computed(() => time.value.getMinutes().toString().padStart(2, '0'))
 const seconds = computed(() => time.value.getSeconds().toString().padStart(2, '0'))
-const dayOfWeek = computed(() => ['周日','周一','周二','周三','周四','周五','周六'][time.value.getDay()])
+const dayOfWeek = computed(() => ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][time.value.getDay()])
 const formattedDate = computed(() => {
   const d = time.value
-  return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`
+  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`
 })
+const assayDialogVisible = ref(false)
+const assayInfo = ref({})
+const getAssayInfo = async (product) => {
+  if (!product || product.productId === '' || product.entryDate === '') {
+    ElMessage.error('请选择产品')
+    return
+  }
+  let params = {
+    page: 1,
+    size: 100,
+    productId: product.productId,
+    entryDate: product.entryDate,
+    isQualified: '合格'
+  }
+  let res = await getAssay(params)
+  assayInfo.value = res.data.records[0]
+  assayDialogVisible.value = true
+  console.log(assayInfo.value)
+}
+
 // 粒子系统类
 class Particle {
   constructor(canvasWidth, canvasHeight) {
@@ -536,10 +755,10 @@ class Particle {
     this.y += this.speedY
 
     // 循环边界处理
-    if(this.x < 0) this.x += canvasWidth
-    if(this.x > canvasWidth) this.x -= canvasWidth
-    if(this.y < 0) this.y += canvasHeight
-    if(this.y > canvasHeight) this.y -= canvasHeight
+    if (this.x < 0) this.x += canvasWidth
+    if (this.x > canvasWidth) this.x -= canvasWidth
+    if (this.y < 0) this.y += canvasHeight
+    if (this.y > canvasHeight) this.y -= canvasHeight
   }
 
   draw(ctx) {
@@ -549,6 +768,7 @@ class Particle {
     ctx.fill()
   }
 }
+
 // 粒子系统管理
 let particlesArray = []
 const initParticles = () => {
@@ -557,7 +777,7 @@ const initParticles = () => {
   const ctx = canvas.value.getContext('2d')
   const initProcess = () => {
     // 初始化粒子
-    particlesArray = Array.from({ length: particles.count }, () =>
+    particlesArray = Array.from({length: particles.count}, () =>
         new Particle(canvas.value.width, canvas.value.height))
   }
 
@@ -698,13 +918,40 @@ const locations = ref([
       [700, 0],
       [700, 70],
       [450, 70],
-      [450, 210],
-      [0, 210]
+      [450, 150],
+      [0, 150]
     ],
     status: 'default',
     shape: 'polygon', // 标记为多边形
     width: 500,
     height: 210,
+  },
+  {
+    id: 1010,
+    name: '怡宝击破组 包装一楼',
+    x: 320,
+    y: 210,
+    width: 450,
+    height: 45,
+    status: 'default'
+  },
+  {
+    id: 1008,
+    name: '电梯口',
+    x:800,
+    y: 430,
+    width: 80,
+    height: 130,
+    status: 'default'
+  },
+  {
+    id: 1009,
+    name: '办公室门口',
+    x: 1080,
+    y: 145,
+    width: 100,
+    height: 40,
+    status: 'default'
   },
   {
     id: 1001,
@@ -762,7 +1009,7 @@ const locations = ref([
   },
   {
     id: 1,
-    x:992,
+    x: 992,
     y: 270,
     width: 30,
     height: 130,
@@ -770,7 +1017,7 @@ const locations = ref([
   },
   {
     id: 2,
-    x:956,
+    x: 956,
     y: 270,
     width: 30,
     height: 130,
@@ -778,7 +1025,7 @@ const locations = ref([
   },
   {
     id: 3,
-    x:926,
+    x: 926,
     y: 270,
     width: 30,
     height: 130,
@@ -786,7 +1033,7 @@ const locations = ref([
   },
   {
     id: 4,
-    x:896,
+    x: 896,
     y: 270,
     width: 30,
     height: 130,
@@ -794,7 +1041,7 @@ const locations = ref([
   },
   {
     id: 5,
-    x:860,
+    x: 860,
     y: 270,
     width: 30,
     height: 130,
@@ -802,7 +1049,7 @@ const locations = ref([
   },
   {
     id: 6,
-    x:830,
+    x: 830,
     y: 270,
     width: 30,
     height: 130,
@@ -810,7 +1057,7 @@ const locations = ref([
   },
   {
     id: 7,
-    x:800,
+    x: 800,
     y: 270,
     width: 30,
     height: 130,
@@ -818,7 +1065,7 @@ const locations = ref([
   },
   {
     id: 8,
-    x:758,
+    x: 758,
     y: 270,
     width: 30,
     height: 130,
@@ -826,7 +1073,7 @@ const locations = ref([
   },
   {
     id: 9,
-    x:728,
+    x: 728,
     y: 270,
     width: 30,
     height: 130,
@@ -834,7 +1081,7 @@ const locations = ref([
   },
   {
     id: 10,
-    x:698,
+    x: 698,
     y: 270,
     width: 30,
     height: 130,
@@ -842,7 +1089,7 @@ const locations = ref([
   },
   {
     id: 11,
-    x:662,
+    x: 662,
     y: 270,
     width: 30,
     height: 130,
@@ -850,7 +1097,7 @@ const locations = ref([
   },
   {
     id: 12,
-    x:632,
+    x: 632,
     y: 270,
     width: 30,
     height: 130,
@@ -858,7 +1105,7 @@ const locations = ref([
   },
   {
     id: 13,
-    x:602,
+    x: 602,
     y: 270,
     width: 30,
     height: 130,
@@ -866,7 +1113,7 @@ const locations = ref([
   },
   {
     id: 14,
-    x:566,
+    x: 566,
     y: 270,
     width: 30,
     height: 130,
@@ -874,7 +1121,7 @@ const locations = ref([
   },
   {
     id: 15,
-    x:536,
+    x: 536,
     y: 270,
     width: 30,
     height: 130,
@@ -882,7 +1129,7 @@ const locations = ref([
   },
   {
     id: 16,
-    x:506,
+    x: 506,
     y: 270,
     width: 30,
     height: 130,
@@ -890,7 +1137,7 @@ const locations = ref([
   },
   {
     id: 17,
-    x:470,
+    x: 470,
     y: 270,
     width: 30,
     height: 130,
@@ -898,7 +1145,7 @@ const locations = ref([
   },
   {
     id: 18,
-    x:440,
+    x: 440,
     y: 270,
     width: 30,
     height: 130,
@@ -906,7 +1153,7 @@ const locations = ref([
   },
   {
     id: 19,
-    x:410,
+    x: 410,
     y: 270,
     width: 30,
     height: 130,
@@ -914,7 +1161,7 @@ const locations = ref([
   },
   {
     id: 20,
-    x:374,
+    x: 374,
     y: 270,
     width: 30,
     height: 130,
@@ -922,7 +1169,7 @@ const locations = ref([
   },
   {
     id: 21,
-    x:314,
+    x: 314,
     y: 270,
     width: 30,
     height: 130,
@@ -930,7 +1177,7 @@ const locations = ref([
   },
   {
     id: 22,
-    x:272,
+    x: 272,
     y: 270,
     width: 30,
     height: 130,
@@ -938,7 +1185,7 @@ const locations = ref([
   },
   {
     id: 23,
-    x:242,
+    x: 242,
     y: 270,
     width: 30,
     height: 130,
@@ -946,7 +1193,7 @@ const locations = ref([
   },
   {
     id: 24,
-    x:212,
+    x: 212,
     y: 270,
     width: 30,
     height: 130,
@@ -954,7 +1201,7 @@ const locations = ref([
   },
   {
     id: 25,
-    x:176,
+    x: 176,
     y: 270,
     width: 30,
     height: 130,
@@ -962,7 +1209,7 @@ const locations = ref([
   },
   {
     id: 26,
-    x:176,
+    x: 176,
     y: 238,
     width: 130,
     height: 30,
@@ -970,7 +1217,7 @@ const locations = ref([
   },
   {
     id: 27,
-    x:176,
+    x: 176,
     y: 208,
     width: 130,
     height: 30,
@@ -978,7 +1225,7 @@ const locations = ref([
   },
   {
     id: 28,
-    x:176,
+    x: 176,
     y: 178,
     width: 130,
     height: 30,
@@ -986,7 +1233,7 @@ const locations = ref([
   },
   {
     id: 29,
-    x:176,
+    x: 176,
     y: 142,
     width: 130,
     height: 30,
@@ -994,7 +1241,7 @@ const locations = ref([
   },
   {
     id: 30,
-    x:176,
+    x: 176,
     y: 82,
     width: 130,
     height: 60,
@@ -1002,7 +1249,7 @@ const locations = ref([
   },
   {
     id: 31,
-    x:20,
+    x: 20,
     y: 82,
     width: 130,
     height: 30,
@@ -1010,7 +1257,7 @@ const locations = ref([
   },
   {
     id: 32,
-    x:20,
+    x: 20,
     y: 112,
     width: 130,
     height: 30,
@@ -1018,7 +1265,7 @@ const locations = ref([
   },
   {
     id: 33,
-    x:20,
+    x: 20,
     y: 142,
     width: 130,
     height: 30,
@@ -1026,7 +1273,7 @@ const locations = ref([
   },
   {
     id: 34,
-    x:20,
+    x: 20,
     y: 178,
     width: 130,
     height: 30,
@@ -1034,7 +1281,7 @@ const locations = ref([
   },
   {
     id: 35,
-    x:20,
+    x: 20,
     y: 208,
     width: 130,
     height: 30,
@@ -1042,7 +1289,7 @@ const locations = ref([
   },
   {
     id: 36,
-    x:20,
+    x: 20,
     y: 238,
     width: 130,
     height: 30,
@@ -1050,7 +1297,7 @@ const locations = ref([
   },
   {
     id: 37,
-    x:20,
+    x: 20,
     y: 274,
     width: 130,
     height: 30,
@@ -1058,7 +1305,7 @@ const locations = ref([
   },
   {
     id: 38,
-    x:20,
+    x: 20,
     y: 304,
     width: 130,
     height: 30,
@@ -1066,7 +1313,7 @@ const locations = ref([
   },
   {
     id: 39,
-    x:20,
+    x: 20,
     y: 334,
     width: 130,
     height: 30,
@@ -1074,7 +1321,7 @@ const locations = ref([
   },
   {
     id: 40,
-    x:20,
+    x: 20,
     y: 370,
     width: 130,
     height: 30,
@@ -1082,7 +1329,7 @@ const locations = ref([
   },
   {
     id: 41,
-    x:20,
+    x: 20,
     y: 430,
     width: 30,
     height: 130,
@@ -1090,7 +1337,7 @@ const locations = ref([
   },
   {
     id: 42,
-    x:50,
+    x: 50,
     y: 430,
     width: 30,
     height: 130,
@@ -1098,7 +1345,7 @@ const locations = ref([
   },
   {
     id: 43,
-    x:80,
+    x: 80,
     y: 430,
     width: 30,
     height: 130,
@@ -1106,7 +1353,7 @@ const locations = ref([
   },
   {
     id: 44,
-    x:116,
+    x: 116,
     y: 430,
     width: 30,
     height: 130,
@@ -1114,7 +1361,7 @@ const locations = ref([
   },
   {
     id: 45,
-    x:146,
+    x: 146,
     y: 430,
     width: 30,
     height: 130,
@@ -1122,7 +1369,7 @@ const locations = ref([
   },
   {
     id: 46,
-    x:176,
+    x: 176,
     y: 430,
     width: 30,
     height: 130,
@@ -1130,7 +1377,7 @@ const locations = ref([
   },
   {
     id: 47,
-    x:212,
+    x: 212,
     y: 430,
     width: 30,
     height: 130,
@@ -1138,7 +1385,7 @@ const locations = ref([
   },
   {
     id: 48,
-    x:242,
+    x: 242,
     y: 430,
     width: 30,
     height: 130,
@@ -1146,7 +1393,7 @@ const locations = ref([
   },
   {
     id: 49,
-    x:272,
+    x: 272,
     y: 430,
     width: 30,
     height: 130,
@@ -1154,7 +1401,7 @@ const locations = ref([
   },
   {
     id: 50,
-    x:314,
+    x: 314,
     y: 430,
     width: 30,
     height: 130,
@@ -1162,7 +1409,7 @@ const locations = ref([
   },
   {
     id: 51,
-    x:374,
+    x: 374,
     y: 430,
     width: 30,
     height: 130,
@@ -1170,7 +1417,7 @@ const locations = ref([
   },
   {
     id: 52,
-    x:410,
+    x: 410,
     y: 430,
     width: 30,
     height: 130,
@@ -1178,7 +1425,7 @@ const locations = ref([
   },
   {
     id: 53,
-    x:440,
+    x: 440,
     y: 430,
     width: 30,
     height: 130,
@@ -1186,7 +1433,7 @@ const locations = ref([
   },
   {
     id: 54,
-    x:470,
+    x: 470,
     y: 430,
     width: 30,
     height: 130,
@@ -1194,7 +1441,7 @@ const locations = ref([
   },
   {
     id: 55,
-    x:506,
+    x: 506,
     y: 430,
     width: 30,
     height: 130,
@@ -1202,7 +1449,7 @@ const locations = ref([
   },
   {
     id: 56,
-    x:536,
+    x: 536,
     y: 430,
     width: 30,
     height: 130,
@@ -1210,7 +1457,7 @@ const locations = ref([
   },
   {
     id: 57,
-    x:566,
+    x: 566,
     y: 430,
     width: 30,
     height: 130,
@@ -1218,7 +1465,7 @@ const locations = ref([
   },
   {
     id: 58,
-    x:602,
+    x: 602,
     y: 430,
     width: 30,
     height: 130,
@@ -1226,7 +1473,7 @@ const locations = ref([
   },
   {
     id: 59,
-    x:632,
+    x: 632,
     y: 430,
     width: 30,
     height: 130,
@@ -1234,7 +1481,7 @@ const locations = ref([
   },
   {
     id: 60,
-    x:662,
+    x: 662,
     y: 430,
     width: 30,
     height: 130,
@@ -1242,7 +1489,7 @@ const locations = ref([
   },
   {
     id: 61,
-    x:698,
+    x: 698,
     y: 430,
     width: 30,
     height: 130,
@@ -1250,7 +1497,7 @@ const locations = ref([
   },
   {
     id: 62,
-    x:728,
+    x: 728,
     y: 430,
     width: 30,
     height: 130,
@@ -1258,7 +1505,7 @@ const locations = ref([
   },
   {
     id: 63,
-    x:758,
+    x: 758,
     y: 430,
     width: 30,
     height: 130,
@@ -1266,7 +1513,7 @@ const locations = ref([
   },
   {
     id: 64,
-    x:896,
+    x: 896,
     y: 430,
     width: 30,
     height: 130,
@@ -1274,7 +1521,7 @@ const locations = ref([
   },
   {
     id: 65,
-    x:926,
+    x: 926,
     y: 430,
     width: 30,
     height: 130,
@@ -1282,7 +1529,7 @@ const locations = ref([
   },
   {
     id: 66,
-    x:956,
+    x: 956,
     y: 430,
     width: 30,
     height: 130,
@@ -1290,10 +1537,74 @@ const locations = ref([
   },
   {
     id: 67,
-    x:992,
+    x: 992,
     y: 430,
     width: 30,
     height: 130,
+    status: 'default'
+  },
+  {
+    id: 68,
+    x: 1080,
+    y: 500,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 69,
+    x: 1080,
+    y: 450,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 70,
+    x: 1080,
+    y: 390,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 71,
+    x: 1080,
+    y: 340,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 72,
+    x: 1080,
+    y: 290,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 73,
+    x: 1080,
+    y: 240,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 74,
+    x: 1080,
+    y: 190,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 75,
+    x: 1080,
+    y: 90,
+    width: 100,
+    height: 50,
     status: 'default'
   }
   // {
@@ -1332,27 +1643,30 @@ const handleSelectLocation = async (location) => {
   }
   let params = {
     warehouseId: location.id,
-    page:1,
-    size:1000
+    page: 1,
+    size: 1000
   }
   let result = await getWarehouseInfo(params)
   if (result.code === 200) {
     console.log(result.value)
     selectedLocation.value.warehouseId = location.id
-    selectedLocation.value.warehouseName =  CapacityList.value.find(item => item.warehouseId === location.id).warehouseName
-    if (result.data.records[0].productName){
+    selectedLocation.value.warehouseName = CapacityList.value.find(item => item.warehouseId === location.id).warehouseName
+    if (result.data.records[0].productName) {
       selectedLocation.value.productName = result.data.records[0].productName
     }
-    if (result.data.records[0].totalQuantity){
+    if (result.data.records[0].totalQuantity) {
       selectedLocation.value.totalQuantity = result.data.records[0].totalQuantity
     }
-    if (result.data.records[0].totalWeight){
+    if (result.data.records[0].totalPieces) {
+      selectedLocation.value.totalPieces = result.data.records[0].totalPieces
+    }
+    if (result.data.records[0].totalWeight) {
       selectedLocation.value.totalWeight = result.data.records[0].totalWeight
     }
-    if (result.data.records[0].entryDate){
+    if (result.data.records[0].entryDate) {
       selectedLocation.value.entryDate = result.data.records[0].entryDate
     }
-    if (result.data.records[0].firstEntryDate){
+    if (result.data.records[0].firstEntryDate) {
       selectedLocation.value.firstEntryDate = result.data.records[0].firstEntryDate
     }
     selectedLocationInfo.value = result.data.records
@@ -1395,7 +1709,7 @@ const hexToRgba = (hex, alpha) => {
 }
 // 获取库位样式
 const getLocationStyle = (location) => {
-  if(location.status === 'normal') {
+  if (location.status === 'normal') {
     const baseColor = statusColorMap[location.status]
     const capacity = location.capacityPercentage ?? 1 // 默认100%
     const alpha = Math.min(Math.max(1 - capacity, 0.3), 0.7)
@@ -1404,32 +1718,32 @@ const getLocationStyle = (location) => {
     }
   }
 }
-let CapacityList=ref([]);
+let CapacityList = ref([]);
 const getAll = async () => {
-  let result =  await getAllWarehouseCapacity();
+  let result = await getAllWarehouseCapacity();
 
   if (result.code === 200) {
     CapacityList.value = result.data
     CapacityList.value.forEach(item => {
-        //查找locations中id为item.warehouseId的对象，并更新其capacityPercentage和status属性
-        const index = locations.value.findIndex(location => location.id === item.warehouseId)
-        if(index === -1){
-          return
-        }
-        locations.value[index].capacityPercentage = item.capacityPercentage
-        if(item.status === '正常'){
-          locations.value[index].status = 'normal'
-        }else if(item.status === '空置'){
-          locations.value[index].status = 'empty'
-        }else if(item.status === '临期预警'){
-          locations.value[index].status = 'danger'
-        }else if(item.status === '满仓'){
-          locations.value[index].status = 'full'
-        }else if(item.status === '维护'){
-          locations.value[index].status = 'maintenance'
-        }else{
-          locations.value[index].status = 'default'
-        }
+      //查找locations中id为item.warehouseId的对象，并更新其capacityPercentage和status属性
+      const index = locations.value.findIndex(location => location.id === item.warehouseId)
+      if (index === -1) {
+        return
+      }
+      locations.value[index].capacityPercentage = item.capacityPercentage
+      if (item.status === '正常') {
+        locations.value[index].status = 'normal'
+      } else if (item.status === '空置') {
+        locations.value[index].status = 'empty'
+      } else if (item.status === '临期预警') {
+        locations.value[index].status = 'danger'
+      } else if (item.status === '满仓') {
+        locations.value[index].status = 'full'
+      } else if (item.status === '维护') {
+        locations.value[index].status = 'maintenance'
+      } else {
+        locations.value[index].status = 'default'
+      }
     })
   }
 }
@@ -1441,12 +1755,11 @@ const handleCanvasClick = () => {
 }
 const standards = ref([])
 const getStandardList = async () => {
-  let params = {
-  }
+  let params = {}
   let res = await getStandard(params)
   if (res.code === 200) {
     standards.value = res.data
-  }else{
+  } else {
     ElMessage.error('获取标准列表失败')
   }
 }
@@ -1461,15 +1774,22 @@ const handleClose = () => {
     quantity: '',
     side: '',
     screenMeshId: '',
+    outType: '0',
+    unit: '0',
     semiRecords: []
   }
   firstLevelValues.value = '成品'
   checkAssay.value = 0
 }
 const operationType = ref('')
+const returnInStockFlag = ref('0')
+const operationTypeLabel = ref('')
 const submitForm = ref({
+  unit: "0",
+  outType: '0',
   productId: '',
   warehouseName: '',
+  inWarehouseName: '',
   quantity: '',
   side: '',
   screenMeshId: '',
@@ -1479,23 +1799,24 @@ const submitForm = ref({
 const visible = ref(false)
 // 验证规则
 const rule = {
-  productId: [ { required: true, message: '请输入产品名称', trigger: 'blur' } ],
-  warehouseName: [ { required: true, message: '请输入仓库名称', trigger: 'blur' } ],
-  quantity: [ { required: true, message: '请输入数量', trigger: 'blur' } ],
-  side: [ { required: true, message: '请选择位置', trigger: 'blur' } ],
-  meshName: [ { required: true, message: '请输入筛网名称', trigger: 'blur' } ],
-  entryDate: [ { required: true, message: '请选择入库日期', trigger: 'blur' } ]
+  productId: [{required: true, message: '请输入产品名称', trigger: 'blur'}],
+  warehouseName: [{required: true, message: '请输入仓库名称', trigger: 'blur'}],
+  quantity: [{required: true, message: '请输入数量', trigger: 'blur'}],
+  side: [{required: true, message: '请选择位置', trigger: 'blur'}],
+  meshName: [{required: true, message: '请输入筛网名称', trigger: 'blur'}],
+  entryDate: [{required: true, message: '请选择入库日期', trigger: 'blur'}]
 }
 const rules = reactive({
-  productId: { required: true, message: '请选择产品' },
-  warehouseName: { required: true, message: '请输入仓库名称' },
-  quantity: {required: true, message: '请输入数量' },
-  semiProductId: { required: true, message: '请选择半成品' },
-  productionDate: { type: 'date', required: true, message: '请选择生产日期' },
+  productId: {required: true, message: '请选择产品'},
+  warehouseName: {required: true, message: '请输入仓库名称'},
+  quantity: {required: true, message: '请输入数量'},
+  semiProductId: {required: true, message: '请选择半成品'},
+  warehouse: {required: true, message: '请选择库位'},
+  productionDate: {type: 'date', required: true, message: '请选择生产日期'},
 })
 const ruless = reactive({
-  quantity: {required: true, message: '请输入数量' },
-  side: [ { required: true, message: '请选择位置', trigger: 'blur' } ]
+  quantity: {required: true, message: '请输入数量'},
+  side: [{required: true, message: '请选择位置', trigger: 'blur'}]
 })
 const addSemi = () => {
   if (!submitForm.value.semiRecords) {
@@ -1503,7 +1824,9 @@ const addSemi = () => {
   }
   submitForm.value.semiRecords.push({
     semiProductId: null,
-    quantity: null
+    quantity: null,
+    outType: '0',
+    unit: '0'
   })
 }
 const removeSemi = (index) => {
@@ -1518,9 +1841,9 @@ const handleAutoQuery = async () => {
     entryDate: dayjs(submitForm.value.entryDate).format('YYYY-MM-DD')
   }
   let res = await getCheck(params)
-  if(res.data === true){
+  if (res.data === true) {
     checkAssay.value = 1
-  }else if(res.data === false){
+  } else if (res.data === false) {
     checkAssay.value = -1
   }
   console.log(checkAssay.value)
@@ -1534,28 +1857,61 @@ watch(
         handleAutoQuery()
       }
     },
-    { deep: true }
+    {deep: true}
 )
 
+// 调拨出库
+const transferOut = async () => {
+  let params = {
+    productId: submitForm.value.productId,
+    warehouseId: selectedLocation.value.warehouseId,
+    inWarehouseName: submitForm.value.inWarehouseName,
+    side: submitForm.value.side,
+    unit: submitForm.value.unit,
+    outType: submitForm.value.outType,
+    quantity: submitForm.value.quantity
+  }
+  let res = await addTransferOut(params)
+  if (res.code === 200) {
+    ElMessage.success('调拨成功')
+    await getAll()
+    visible.value = false
+  } else {
+    ElMessage.error(res.msg)
+  }
+}
 const handleOut = async () => {
-  if (submitForm.value.quantity === ''){
+  if (submitForm.value.quantity === '') {
     ElMessage.error('请输入数量')
+  }
+  if (!submitForm.value.outType || submitForm.value.outType === '') {
+    ElMessage.error('请选择出库方式')
   }
   if (submitForm.value.side === '' && selectedLocation.value.warehouseId < 1000) {
     ElMessage.error('请选择位置')
   }
+  if (operationTypeLabel.value === '调拨出库') {
+    await transferOut()
+    return
+  }
 
   let res
-  if(selectedLocation.value.warehouseId >=1000 && selectedLocation.value.warehouseId < 2000){
+  if (selectedLocation.value.warehouseId >= 1000 && selectedLocation.value.warehouseId < 2000) {
     let params = {
+      productId: submitForm.value.productId,
       warehouseId: selectedLocation.value.warehouseId,
-      quantity: submitForm.value.quantity
+      quantity: submitForm.value.quantity,
+      outType: submitForm.value.outType,
+      unit: submitForm.value.unit
     }
     res = await addOutStack(params)
-  }else{
+  } else {
     let params = {
+      productId: submitForm.value.productId,
       warehouseId: selectedLocation.value.warehouseId,
       side: submitForm.value.side,
+      unit: submitForm.value.unit,
+      outType: submitForm.value.outType,
       quantity: submitForm.value.quantity
     }
     res = await addOutStock(params)
@@ -1577,6 +1933,10 @@ const handleNew = async () => {
   }
   if (submitForm.value.quantity === '') {
     ElMessage.error('请输入数量')
+    return
+  }
+  if (!submitForm.value.unit || submitForm.value.unit === '') {
+    ElMessage.error('请选择入库数量单位')
     return
   }
   if (submitForm.value.side === '' && selectedLocation.value.warehouseId < 1000) {
@@ -1601,39 +1961,49 @@ const handleNew = async () => {
     if (!semiProduct) {
       ElMessage.error('半成品信息有误')
       return
-    }else{
+    } else {
       submitForm.value.semiRecords[i].productName = semiProduct.productName
       submitForm.value.semiRecords[i].productionDate = dayjs(submitForm.value.semiRecords[i].productionDate).format('YYYY-MM-DD')
     }
   }
   let len = submitForm.value.productId.length
+  let preProductId = submitForm.value.productId;
   submitForm.value.productId = submitForm.value.productId[len - 1]
-  console.log(submitForm.value)
+  if (!submitForm.value.productId || submitForm.value.productId === '') {
+    ElMessage.error('请选择产品')
+    return
+  }
   submitForm.value.entryDate = dayjs(submitForm.value.entryDate).format('YYYY-MM-DD')
   submitForm.value.semiProductRecords = JSON.stringify(submitForm.value.semiRecords)
   submitForm.value.warehouseName = selectedLocation.value.warehouseName
+  submitForm.value.returnInStockFlag = returnInStockFlag.value
   if (firstLevelValues.value === '半成品') {
     let res
-    if(selectedLocation.value.warehouseId >=1000 && selectedLocation.value.warehouseId < 2000){
+    if (selectedLocation.value.warehouseId >= 1000 && selectedLocation.value.warehouseId < 2000) {
       let params = {
         productId: submitForm.value.productId,
         warehouseName: submitForm.value.warehouseName,
         quantity: submitForm.value.quantity,
+        unit: submitForm.value.unit,
         screenMeshId: submitForm.value.screenMeshId,
+        returnInStockFlag: returnInStockFlag.value,
         entryDate: submitForm.value.entryDate
       }
       res = await addSemiProductStack(params)
-    }else{
+    } else {
       let params = {
         productId: submitForm.value.productId,
         warehouseName: submitForm.value.warehouseName,
         quantity: submitForm.value.quantity,
         side: submitForm.value.side,
+        unit: submitForm.value.unit,
         screenMeshId: submitForm.value.screenMeshId,
+        returnInStockFlag: returnInStockFlag.value,
         entryDate: submitForm.value.entryDate
       }
       res = await addSemiProduct(params)
     }
+    submitForm.value.productId = preProductId
     if (res.code === 200) {
       ElMessage.success('新增成功')
       await getAll()
@@ -1654,8 +2024,9 @@ const handleNew = async () => {
       ElMessage.error('只能套用一个半成品的化验数据')
       return
     }
-    console.log(submitForm.value)
-    let res = await addInStock(submitForm.value)
+    let reqParams = JSON.parse(JSON.stringify(submitForm.value));
+    submitForm.value.productId = preProductId
+    let res = await addInStock(reqParams)
     if (res.code === 200) {
       ElMessage.success('新增成功')
       await getAll()
@@ -1665,6 +2036,7 @@ const handleNew = async () => {
         productId: '',
         warehouseName: '',
         quantity: '',
+        unit: '0',
         side: '',
         meshName: ''
       }
@@ -1687,8 +2059,8 @@ const cascaderProps = reactive({
 const productOptions = computed(() => {
   // 合并数据并添加分类标记
   const combinedProducts = [
-    ...StProductList.value.map(p => ({ ...p, category: '成品' })),
-    ...semiProductList.value.map(p => ({ ...p, category: '半成品' }))
+    ...StProductList.value.map(p => ({...p, category: '成品'})),
+    ...semiProductList.value.map(p => ({...p, category: '半成品'}))
   ]
 
   const categoryMap = {}
@@ -1741,9 +2113,24 @@ const handleUseAssay = (index) => {
   })
 }
 const semiProductList = ref([])
+const warehouseList = ref([])
 const SemiProduct = async () => {
   let res = await getSemiProduct()
   semiProductList.value = res.data
+}
+const handleSemiProductChange = (item) => {
+  item.warehouseName = ''
+  item.warehouseId = null
+  if (!item.semiProductId || item.semiProductId === '') {
+    warehouseList.value = []
+    return
+  }
+  getProductWarehouseData(item.semiProductId)
+}
+const getProductWarehouseData = async (productId) => {
+  let res = await getProductWarehouse(productId)
+  warehouseList.value = res.data
+
 }
 const StProductList = ref([])
 const StProduct = async () => {
@@ -1819,8 +2206,12 @@ onMounted(async () => {
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .date-info {
@@ -1870,9 +2261,8 @@ onMounted(async () => {
   stroke: #cbd5e1;
   stroke-width: 1;
   cursor: pointer;
-  transition:
-      filter 0.2s ease,
-      stroke-width 0.2s ease;
+  transition: filter 0.2s ease,
+  stroke-width 0.2s ease;
 }
 
 /* 选中状态 */
@@ -1895,14 +2285,37 @@ onMounted(async () => {
   pointer-events: none; /* 禁用所有鼠标事件 */
 }
 
-.location.normal { fill: #4bff4e; }
-.location.empty { fill: #c2c2c2; }
-.location.danger { fill: #fef08a; }
-.location.full { fill: #ff5353; }
-.location.maintenance { fill: #727272; }
-.location.default { fill: #ffffff; }
-.location.filtered { fill: #3693ff; }
-.location.info { fill: #ffffff; }
+.location.normal {
+  fill: #4bff4e;
+}
+
+.location.empty {
+  fill: #c2c2c2;
+}
+
+.location.danger {
+  fill: #fef08a;
+}
+
+.location.full {
+  fill: #ff5353;
+}
+
+.location.maintenance {
+  fill: #727272;
+}
+
+.location.default {
+  fill: #ffffff;
+}
+
+.location.filtered {
+  fill: #3693ff;
+}
+
+.location.info {
+  fill: #ffffff;
+}
 
 
 .location-label {
@@ -1922,10 +2335,10 @@ onMounted(async () => {
 }
 
 .columns-wrapper {
-  display: flex;          /* 核心布局 */
+  display: flex; /* 核心布局 */
   justify-content: center;
-  gap: 40px;              /* 列间距 */
-  flex-wrap: nowrap;      /* 禁止换行 */
+  gap: 40px; /* 列间距 */
+  flex-wrap: nowrap; /* 禁止换行 */
 }
 
 .column {
@@ -1962,6 +2375,7 @@ onMounted(async () => {
   font-size: 12px;
   color: #666;
 }
+
 /* 垂直文字样式 */
 .vertical-text {
   writing-mode: tb;

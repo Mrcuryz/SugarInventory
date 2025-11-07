@@ -20,6 +20,11 @@ export const getStProduct = ()=>{
 export const getSemiProduct = ()=>{
     return request.get('/products/semi-product-names')
 }
+
+//查询化验记录列表
+export const getProductWarehouse = (id)=>{
+    return request.get('/products/getProductWarehouse/'+ id)
+}
 //删除化验记录
 export const deleteAssay = (id)=>{
     return request.delete('/assay/'+id)

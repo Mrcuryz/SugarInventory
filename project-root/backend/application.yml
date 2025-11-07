@@ -1,0 +1,35 @@
+spring:
+  aop:
+    proxy-target-class: true
+  datasource:
+    url: jdbc:mysql://mysql:3306/laibin_inventory?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: ssmrcury1
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jackson:
+    serialization:
+      WRITE_DATES_AS_TIMESTAMPS: false
+server:
+  port: 8080
+wechat:
+  appid: wxb2e24e10a7cb3ef8
+  secret: 0e992128f83b91b6e618da3151f108f7
+jwt:
+  secret: xVqyO+0aawRF/LNpEjDDe1w/VXjnbgjJsm43uq0dbpTTt5EHbldZ3FLohntYJfRlXAhW2ZNww27q04Ja2C9kNw==
+  expiration: 86400000
+file:
+  base-url: https://cscgood.mynatapp.cc
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-enum-type-handler: org.apache.ibatis.type.EnumTypeHandler
+    auto-mapping-behavior: full
+logging:
+  level:
+    org.springframework.aop: DEBUG
+  type-handlers-package: com.Laibin.SugarInventory.util
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      id-type: auto

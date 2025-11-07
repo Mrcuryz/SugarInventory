@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -68,4 +69,14 @@ public class OutStockRecordVO {
     private String qualifiedStandards;
 
     private LocalDateTime createdAt;
+
+
+    @Schema(description = "件数", example = "0")
+    private Integer pieces;
+
+    @Schema(description = "出库单位：0板1件", example = "0")
+    private String unit;
+
+    @Schema(description = "0整版优先1散件优先", example = "0")
+    private Integer outType;
 }

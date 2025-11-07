@@ -40,6 +40,9 @@ public interface AssayMapper extends BaseMapper<Assay> {
             "   <if test='query.productName != null'>AND p.product_name LIKE CONCAT('%', #{query.productName}, '%')</if> " +
             "   <if test='query.startDate != null'>AND a.sample_date &gt;= #{query.startDate}</if> " +
             "   <if test='query.endDate != null'>AND a.sample_date &lt;= #{query.endDate}</if> " +
+            "   <if test='query.productId != null'>AND a.product_id = #{query.productId}</if> " +
+            "   <if test='query.sampleDate != null'>AND a.sample_date = #{query.sampleDate}</if> " +
+            "   <if test='query.isQualified != null'>AND a.is_qualified = #{query.isQualified}</if> " +
             "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, '%')</if> " +
             "</where> " +
             "ORDER BY a.created_at DESC, a.product_id ASC, a.version DESC " +

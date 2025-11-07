@@ -28,6 +28,24 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             @Param("size") int size
     );
 
+    @Select("<script>" +
+            "SELECT " +
+            " a.product_name, " +
+            " SUM(a.total_quantity) totalQuantity," +
+            " SUM(a.total_pieces) totalPieces," +
+            " CONCAT(ROUND(SUM(a.total_quantity) + SUM(a.total_pieces) / b.pieces_per_pallet), '板', ROUND(SUM(a.total_pieces ) % b.pieces_per_pallet), '件') AS stockInfo," +
+            " SUM(a.total_pieces * b.weight_per_piece + a.total_quantity * b.pieces_per_pallet * b.weight_per_piece)  AS totalWeight " +
+            " FROM" +
+            " v_warehouse_inventory_summary a" +
+            " LEFT JOIN product b ON a.product_id = b.id" +
+            " WHERE b.`status` = #{productStatus} " +
+            " <if test='productName != null and productName != \"\"'> " +
+            "   AND a.product_name LIKE concat('%', #{productName}, '%') " +
+            " </if>" +
+            " GROUP BY a.product_id " +
+            "</script>")
+    List<VInventorySummary> selectProductTotalStock(@Param("productStatus") String productStatus, @Param("productName") String productName);
+
     @Select("SELECT * FROM v_warehouse_inventory_summary " +
             "ORDER BY entry_date " +
             "LIMIT 1")
