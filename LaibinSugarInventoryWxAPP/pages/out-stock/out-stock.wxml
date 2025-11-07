@@ -48,8 +48,8 @@
 
         <!-- 操作按钮 -->
         <view class="action-buttons">
-          <button class="labData-btn" wx:if="{{item.labData && item.labData.length}}" bindtap="toggleLabData" data-index="{{index}}">
-            {{item.showLabData ? '隐藏' : '查看化验数据'}}
+          <button class="labData-btn" wx:if="{{item.labData && item.labData.length && role != 'STAFF'}}" bindtap="toggleLabData" data-index="{{index}}">
+            {{item.showLabData ? '隐藏化验数据' : '查看化验数据'}}
           </button>
         </view>
 

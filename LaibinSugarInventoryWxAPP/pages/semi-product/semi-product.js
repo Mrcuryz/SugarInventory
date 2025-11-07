@@ -14,8 +14,14 @@ Page({
       '成品': [],
       '半成品': []
     },
+    unit:0,
     semiProductOptions: [],
     semiProductRecords: [],
+    screenMeshOptions: [],
+    selectedProductId: null,
+    selectedEntryDate: null,
+    hasAssay: null,
+    selectedScreenMeshId: null,
     queryParams: {
       productName: '',
       warehouseName: '',
@@ -32,16 +38,49 @@ Page({
     currentRecord: {
       productId: null,
       productName: null,
+      entryDate: null,
       warehouseName: null,
+      screenMeshId: null,
       quantity: null,
       side: null
-    }
+    },
+    role: ''
   },
 
   onLoad() {
     this.loadRecords();
     this.initSemiProductPicker();
+    this.loadScreenMeshes();
+    const role = wx.getStorageSync("role") || '';
+    this.setData({ role });
   },
+
+  async loadScreenMeshes() {
+    try {
+      const res = await request('/api/screen-mesh/list', 'GET');
+      console.log(res)
+  
+      if (res && Array.isArray(res)) {
+        const options = res.map(mesh => ({
+          id: mesh.id,
+          name: `${mesh.meshName} (${mesh.description || '无描述'})`
+        }));
+        console.log(options)
+  
+        // 提取 picker 需要的字符串数组
+        const optionNames = options.map(option => option.name);
+  
+        this.setData({ 
+          screenMeshOptions: optionNames,  // 传递字符串数组
+          screenMeshMap: options,          // 存储完整对象映射
+          selectedScreenMeshId: options[0]?.id || null 
+        });
+      }
+    } catch (error) {
+      wx.showToast({ title: '筛网加载失败', icon: 'none' });
+      console.error("筛网加载失败:", error);
+    }
+  },  
 
   async loadRecords() {
     try {
@@ -77,6 +116,7 @@ Page({
         operationDate: dayjs(item.operationDate).format('YYYY-MM-DD'),
         createdAt: dayjs(item.createdAt).format('YYYY-MM-DD HH:mm'),
         operator: item.operator,
+        meshName: item.meshName,
         labData: item.assayId ? [{ // 化验记录单独封装成数组
           assayId: item.assayId,
           sampleDate: dayjs(item.sampleDate).format('YYYY-MM-DD'),
@@ -107,7 +147,13 @@ Page({
       });
     }
   },
-
+ // 单位选择处理
+ onUnitChange(e) {
+  const index = e.detail.value;
+  this.setData({
+    unit: index
+  });
+},
   onSearchInput(e) {
     const field = e.currentTarget.dataset.field;
     this.setData({
@@ -160,6 +206,51 @@ Page({
     });
   },
 
+  async checkAssayStatus() {
+    const { selectedProductId, selectedEntryDate } = this.data;
+    console.log(selectedProductId + selectedEntryDate)
+    if (!selectedProductId || !selectedEntryDate) return;
+  
+    try {
+      const res = await request('/api/assay/exists', 'POST', {
+        productId: selectedProductId,
+        entryDate: selectedEntryDate
+      });
+
+      this.setData({
+        hasAssay: res
+      });
+
+    } catch (err) {
+      console.log("检测状态查询失败", err);
+      wx.showToast({ title: "检测状态查询失败", icon: "none" });
+      this.setData({ hasAssay: null });
+    }
+  },
+
+  onEntryDateChange(e) {
+    const date = e.detail.value;
+    this.setData({ selectedEntryDate: date }, this.checkAssayStatus);
+    this.setData({
+      'currentRecord.entryDate': date
+    });
+  },
+
+  onScreenMeshChange(e) { 
+    const selectedIndex = e.detail.value; // 获取选择的索引
+    const selectedMesh = this.data.screenMeshMap[selectedIndex]; // 从映射中获取完整对象
+  
+    if (!selectedMesh) {
+      console.error("无效的筛网选择索引:", selectedIndex);
+      return;
+    }
+  
+    this.setData({ 
+      selectedScreenMeshId: selectedMesh.id, // 这里存 ID
+      selectedScreenMeshIndex: selectedIndex // 这里存索引，确保 picker 正确回显
+    });
+  },  
+
   onsideChange(e) {
     this.setData({
       'currentRecord.side': this.data.sideOptions[e.detail.value]
@@ -187,12 +278,14 @@ Page({
         productName: null,
         warehouseName: null,
         quantity: null,
+        screenMeshId: null,
         side: null
       }
     });
   },
 
   hideModal() {
+    this.resetAssayStatus();
     this.setData({
       showModal: false,
       additionalStorage: false
@@ -273,6 +366,7 @@ Page({
   
     const product = productList[productIdx];
   
+    this.setData({ selectedProductId: product.id }, this.checkAssayStatus);
     this.setData({
       semiPickerIndexes: pickerIndexes,
       'currentRecord.productId': product.id,
@@ -299,8 +393,11 @@ Page({
       const payload = {
         productId: this.data.currentRecord.productId,
         warehouseName: this.data.currentRecord.warehouseName,
+        entryDate: this.data.currentRecord.entryDate,
         quantity: parseFloat(this.data.currentRecord.quantity),
-        side: this.data.currentRecord.side
+        side: this.data.currentRecord.side,
+        unit: this.data.unit,
+        screenMeshId: this.data.selectedScreenMeshId
       };
 
       const res = await request('/api/semi-products/add', 'POST', payload);
@@ -370,7 +467,10 @@ Page({
       const payload = {
         productId: this.data.currentRecord.productId,
         warehouseName: this.data.currentRecord.warehouseName,
+        entryDate: this.data.currentRecord.entryDate,
         quantity: this.data.currentRecord.quantity,
+        unit:this.data.unit,
+        screenMeshId: this.data.selectedScreenMeshId,
         side: this.data.currentRecord.side
       };
 
@@ -422,6 +522,15 @@ Page({
     } else {
       this.submitNormalRecord();
     }
+    this.resetAssayStatus();
+  },
+
+  resetAssayStatus() {
+    this.setData({
+      selectedProductId: null,
+      selectedEntryDate: null,
+      hasAssay: null
+    });
   },
 
   validateForm() {

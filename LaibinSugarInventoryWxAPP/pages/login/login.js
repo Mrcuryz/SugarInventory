@@ -1,5 +1,7 @@
 import request from "../../utils/request";
-const BASE_URL = "https://cscgood.mynatapp.cc";
+const BASE_URL = "https://ccgl.site";
+// const BASE_URL = "http://124.220.1.37:8080";
+// const BASE_URL = "http://cscgood.mynatapp.cc";
 
 Page({
   onLogin() {
@@ -22,6 +24,7 @@ Page({
                 console.log("登录返回数据:", data);
 
                 wx.setStorageSync("token", data.token);
+                wx.setStorageSync("role", data.roleCode);
 
                 if (data.roleCode != null) {
                   setTimeout(() => {

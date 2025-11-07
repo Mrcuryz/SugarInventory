@@ -1,4 +1,6 @@
-const BASE_URL = "https://cscgood.mynatapp.cc";
+const BASE_URL = "https://ccgl.site";
+// const BASE_URL = "http://124.220.1.37:8080";
+// const BASE_URL = "https://cscgood.mynatapp.cc";
 
 function request(url, method, data = {}) {
   return new Promise((resolve, reject) => {
@@ -13,10 +15,11 @@ function request(url, method, data = {}) {
       success: res => {
         if (res.statusCode === 200) {
           const result = res.data;
+          console.log("res:", res)
           if (result.code === 200) {
             resolve(result.data); // 解析 `data`，否则 `login.js` 里 `data.token` 会报错
           } else if (result.code === 403) { // 权限不足
-            wx.showToast({
+            wx.showModal({
               title: "权限不足！",
               icon: "none",
               duration: 2000
@@ -40,10 +43,16 @@ function request(url, method, data = {}) {
 
             reject(result);
           } else {
-            wx.showToast({
-              title: result.msg || "请求失败",
-              icon: "none"
-            });
+            // wx.showToast({
+            //   title: result.msg || "请求失败",
+            //   icon: "none"
+            // });
+            wx.showModal({
+              title: '提示',
+              content: result.msg || "请求失败",
+              showCancel: false,
+              confirmText: '知道了'
+            })
             reject(result);
           }
         } else {
@@ -55,6 +64,7 @@ function request(url, method, data = {}) {
         }
       },
       fail: err => {
+        console.log("err:", err)
         wx.showToast({
           title: "网络错误，请稍后重试",
           icon: "none"

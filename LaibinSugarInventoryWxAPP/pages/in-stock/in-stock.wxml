@@ -49,7 +49,7 @@
 
         <!-- 操作按钮 -->
         <view class="action-buttons">
-          <button class="labData-btn" wx:if="{{item.labData && item.labData.length}}" bindtap="toggleLabData" data-index="{{index}}">
+          <button class="labData-btn" wx:if="{{item.labData && item.labData.length && role != 'STAFF'}}" bindtap="toggleLabData" data-index="{{index}}">
             {{item.showLabData ? '隐藏化验数据' : '查看化验数据'}}
           </button>
           <button class="semi-product-btn" wx:if="{{item.semiProductRecords && item.semiProductRecords.length > 0}}" bindtap="toggleSemiProductRecords" data-index="{{index}}">
@@ -87,7 +87,10 @@
                 <text>生产日期: {{item.productionDate}}</text>
               </view>
               <view>
-                <text>使用数量: {{item.quantity}} 件</text>
+                <text>使用数量: {{item.quantity}} {{item.unit == '0' ? '板' : '件'}}</text>
+              </view>
+              <view wx:if="{{item.useAssay}}" class="used-assay">
+                <text>已套用该半成品的化验数据</text>
               </view>
             </view>
           </block>
@@ -124,7 +127,16 @@
   <!-- 弹出表单 -->
   <view wx:if="{{showModal}}" class="modal">
     <view class="modal-header">
-      <text class="title">成品入库</text>
+      <view class="tabs">
+      <view class="tab {{returnInstockFlag === 0 ? 'active' : ''}}" 
+        bindtap="switchTab" data-tab="0">
+        成品入库
+      </view>
+      <view class="tab {{returnInstockFlag === 1 ? 'active' : ''}}" 
+        bindtap="switchTab" data-tab="1">
+        退货入库
+      </view>
+    </view>
       <image src="/assets/icons/close.png" class="close-icon" bindtap="hideModal"></image>
     </view>
 
@@ -136,12 +148,36 @@
       <view class="form-item">
         <text class="label">产品名称</text>
         <picker mode="multiSelector" range="{{finishedProductOptions}}" value="{{pickerIndexes}}" bindcolumnchange="onFinishedProductPickerChange" bindchange="onFinishedProductPickerConfirm">
-          <input class="input" placeholder="请选择产品" value="{{currentRecord.productName}}" disabled />
+          <input class="input-1" placeholder="请选择产品" value="{{currentRecord.productName}}" disabled />
         </picker>
       </view>
       <view class="form-item">
+        <text class="label">入库日期</text>
+        <view class="row">
+          <picker mode="date" bindchange="onEntryDateChange">
+            <view class="picker-date" style="width: 120%">
+              {{ currentRecord.entryDate || '请选择入库日期' }}
+            </view>
+          </picker>
+          <view wx:if="{{hasAssay !== null}}" class="assay-status">
+            <text style="color: {{hasAssay ? 'green' : 'red'}};">
+              {{hasAssay ? '✓ 已化验' : '× 未化验'}}
+            </text>
+          </view>
+        </view>
+      </view>
+      <view class="form-item">
         <text class="label">入库数量</text>
-        <input class="input" type="number" placeholder="输入入库数量" bindinput="onInputChange" data-field="quantity" value="{{currentRecord.quantity}}" />
+        <view class="group-input">
+          <input class="input" type="number" placeholder="输入入库数量" bindinput="onInputChange" data-field="quantity" value="{{currentRecord.quantity}}" />
+          <picker mode="selector" range="{{['板', '件']}}"  value="{{unit}}" 
+            bindchange="onUnitChange" class="custom-select"
+          >
+            <view class="picker-content">
+              {{unit == 0 ? '板' : '件'}}
+            </view>
+          </picker>
+        </view>
       </view>
       <view class="form-item">
         <text class="label">入库顺序</text>
@@ -174,10 +210,32 @@
             </picker>
           </view>
           <view class="form-item">
-            <text class="label">使用数量（件）</text>
-            <input class="input" placeholder="输入使用数量" bindinput="onSemiProductQuantityInput" data-index="{{idx}}" value="{{currentRecord.semiRecords[idx].quantity}}" />
+            <text class="label">{{returnInstockFlag == 0 ? '库位选择': '库位名称'}}</text>
+            <picker mode="selector" wx:if="{{returnInstockFlag == 0}}" range="{{currentRecord.semiRecords[idx].productWarehouse}}" range-key="warehouseName" data-index="{{idx}}"
+              bindchange="onInWarehouseNameChange">
+              <input class="input" placeholder="请选择库位" value="{{currentRecord.semiRecords[idx].warehouseName}}" disabled />
+            </picker>
+            <input wx:if="{{returnInstockFlag == 1}}" class="input" placeholder="输入库位名称" bindinput="onReturnWarehouseNameChange" data-index="{{idx}}" value="{{currentRecord.semiRecords[idx].warehouseName}}" />
+            <text class="error-msg" wx:if="{{inWarehouseNameError}}">{{inWarehouseNameError}}</text>
+          </view>
+          <view class="form-item">
+            <text class="label">使用数量</text>
+            <view class="group-input">
+              <input class="input" placeholder="输入使用数量" bindinput="onSemiProductQuantityInput" data-index="{{idx}}" value="{{currentRecord.semiRecords[idx].quantity}}" />
+              <picker mode="selector" range="{{['板', '件']}}"  value="{{currentRecord.semiRecords[idx].unit}}" bindchange="onSemiUnitChange" data-index="{{idx}}" class="custom-select"
+              >
+                <view class="picker-content">
+                  {{currentRecord.semiRecords[idx].unit == 0 ? '板' : '件'}}
+                </view>
+              </picker>
+            </view>
+          </view>
+          <view class="form-item">
+            <text class="label">套用该半成品的化验数据</text>
+            <switch checked="{{record.useAssay}}" bindchange="onUseAssayChange" data-index="{{idx}}" value="{{currentRecord.semiRecords[idx].useAssay}}" color="#07c160" />
           </view>
           <button bindtap="removeSemiProductRecord" data-index="{{idx}}" class="del-btn">删除</button>
+          <!-- <text class="label">\n</text> -->
         </view>
       </view>
     </scroll-view>

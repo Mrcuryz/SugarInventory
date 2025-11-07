@@ -9,6 +9,7 @@ import com.Laibin.SugarInventory.domain.dto.ProductCreateDTO;
 import com.Laibin.SugarInventory.domain.vo.ProductInfoVO;
 import com.Laibin.SugarInventory.domain.dto.ProductUpdateDTO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
+import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.ProductService;
@@ -20,11 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author Mrcury
@@ -43,8 +47,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public List<ProductInfoVO> getSemiProductNames() {
         List<ProductInfoVO> list = productMapper.selectSemiProductNames();
-        for(ProductInfoVO vo : list){
-            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+        for (ProductInfoVO vo : list) {
+            if (vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()) {
                 vo.setPackagingMethod("件");
             }
             vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
@@ -59,8 +63,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             throw new IllegalArgumentException("无效的产品类型");
         }
         List<ProductInfoVO> list = productMapper.selectSemiProductsByCondition(name, type);
-        for(ProductInfoVO vo : list){
-            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+        for (ProductInfoVO vo : list) {
+            if (vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()) {
                 vo.setPackagingMethod("件");
             }
             vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
@@ -71,8 +75,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public List<ProductInfoVO> getFinishedProductNames() {
         List<ProductInfoVO> list = productMapper.selectFinishedProductNames();
-        for(ProductInfoVO vo : list){
-            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+        for (ProductInfoVO vo : list) {
+            if (vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()) {
                 vo.setPackagingMethod("件");
             }
             vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
@@ -87,8 +91,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             throw new IllegalArgumentException("无效的产品类型");
         }
         List<ProductInfoVO> list = productMapper.selectFinishedProductsByCondition(name, type);
-        for(ProductInfoVO vo : list){
-            if(vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()){
+        for (ProductInfoVO vo : list) {
+            if (vo.getPackagingMethod() == null || vo.getPackagingMethod().isEmpty()) {
                 vo.setPackagingMethod("件");
             }
             vo.setProductName(vo.getProductName() + "(" + vo.getWeightPerPiece() + "kg/" + vo.getPackagingMethod() + ")");
@@ -127,6 +131,20 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
         // 2. 执行删除
         productMapper.deleteById(productId);
+    }
+
+    @Override
+    public List<VInventorySummary> getProductWarehouse(Integer id) {
+        return productMapper.getProductWarehouse(id);
+    }
+
+    @Override
+    public Map<Integer, Product> getMapByIds(List<Integer> productIds) {
+        List<Product> products = productMapper.selectBatchIds(productIds);
+        if (products == null) {
+            return new HashMap<>();
+        }
+        return products.stream().collect(Collectors.toMap(Product::getId, s -> s));
     }
 
     @Override

@@ -2,7 +2,7 @@
 <view class="container">
   <text class="title">绑定手机号</text>
   <button open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" class="weui-btn weui-btn_primary">
-    微信手机号验证
-  </button>
+    手机号一键验证
+  </button>   
   <text class="tip">手机号绑定失败？<navigator url="/pages/bind-work/bind-work">使用工号绑定</navigator></text>
 </view>

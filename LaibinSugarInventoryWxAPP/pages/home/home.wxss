@@ -42,6 +42,20 @@
   margin-left : 50px;
 }
 
+.icon-grid-left {
+  display: flex;
+  justify-content: flex-start; /* 使内容靠左对齐 */
+  align-items: center; /* 垂直居中，可选 */
+  flex-wrap: wrap; /* 如果需要换行 */
+}
+.icon-item-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* 使图标和文字在item内居中 */
+  margin: 12px; /* 根据需要调整间距 */
+}
+
+
 .icon-img {
   width: 80rpx;
   height: 80rpx;

@@ -19,11 +19,19 @@ Page({
       page: 1,
       size: 10
     },
+    selectTypeOptions: [
+      { id: 1, name: '产品' },
+      { id: 2, name: '验收标准' }
+    ],
+    // 验收标准选择器数据
+    standardOptions: [],
     totalPages: 1,
     currentPage: 1,
     showModal: false,
     editMode: false,
     currentLabData: {
+      selectType:1,
+      selectTypeName:'产品',
       id: null,
       productId: null,
       productName: null,
@@ -44,6 +52,7 @@ Page({
   onLoad() {
     this.loadLabData();
     this.initProductPicker();
+    this.initStandardOptions();
   },
 
   async loadLabData() {
@@ -110,7 +119,15 @@ Page({
     });
     this.debouncedLoadData();
   },
-
+// 选择类型变更（1=产品，2=验收标准）
+onSelectTypeChange(e) {
+  const index = e.detail.value;
+  const selectType =  this.data.selectTypeOptions[index];
+  this.setData({
+    'currentLabData.selectType':selectType.id,
+    'currentLabData.selectTypeName':selectType.name
+  })
+},
   toggleHistory(e) {
     const index = e.currentTarget.dataset.record;
     const labData = this.data.labData;
@@ -195,7 +212,30 @@ Page({
       }
     });
   },
-
+  // 初始化验收标准数据
+  initStandardOptions() {
+    request('/api/assayGroup/query', 'POST', {
+      page: 1,
+      size: 1000
+    }).then(res =>{
+      if (res.records) {
+        this.setData({
+          standardOptions: res.records
+        });
+      }
+    })
+  },
+  // 验收标准选择变更
+  onStandardChange(e) {
+    const index = e.detail.value;
+    const standard = this.data.standardOptions[index];
+    
+    this.setData({
+      standardIndex: index,
+      'currentLabData.standardId': standard.id,
+      'currentLabData.standardName': standard.standardName
+    });
+  },
   editLabData(e) {
     const id = e.currentTarget.dataset.id;
     const labItem = this.data.labData.find(item => item.latest.id === id);
@@ -224,6 +264,26 @@ Page({
         testerName: labData.testerName,
         isQualified: labData.isQualified,
         qualifiedStandards: labData.qualifiedStandards
+      }
+    });
+  },  
+
+  delLabData(e) {
+    const id = e.currentTarget.dataset.id;
+    wx.showModal({
+      title: "确认删除",
+      content: "确定要删除该化验记录吗？",
+      success: res => {
+        if (res.confirm) {
+          request(`/api/assay/${id}`, "DELETE")
+            .then(() => {
+              wx.showToast({ title: "删除成功", icon: "success" });
+              this.loadLabData();
+            })
+            .catch(() => {
+              wx.showToast({ title: "删除失败:已存在相关记录！", icon: "none" });
+            });
+        }
       }
     });
   },  
@@ -360,6 +420,7 @@ Page({
       this.hideModal();
       this.loadLabData();
     } catch (error) {
+      console.log(error)
       wx.showToast({ title: error.message || '操作失败', icon: 'none' });
     }
   },
@@ -367,12 +428,11 @@ Page({
   validateForm() {
     const { currentLabData } = this.data;
     const validations = [
-      { field: 'productName', message: '请选择产品' },
       { field: 'sampleDate', message: '请选择采样日期' },
       { 
         field: 'colorValue', 
-        validate: (v) => v >= 0 && v <= 500,
-        message: '色值需在0-500之间'
+        validate: (v) => v >= 0,
+        message: '色值需大于0'
       },
     ];
 
@@ -395,7 +455,9 @@ Page({
       conductivityAsh: this.data.currentLabData.conductivityAsh,
       sucrose: this.data.currentLabData.sucrose,
       insolubleImpurity: this.data.currentLabData.insolubleImpurity,
-      phValue: this.data.currentLabData.phValue
+      phValue: this.data.currentLabData.phValue,
+      selectType: this.data.currentLabData.selectType,
+      relatedId: this.data.currentLabData.standardId
     };
   },
 

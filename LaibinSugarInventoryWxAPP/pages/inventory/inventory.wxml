@@ -71,6 +71,8 @@
           <button size="mini" class="detail-btn" wx:if="{{activeTab === 'inventory'}}" bindtap="showDetail" data-id="{{item.warehouseId}}">查看详情</button>
           <button size="mini" class="detail-btn" wx:if="{{activeTab === 'outbound'}}" bindtap="showQualifiedDetail" data-id="{{item.warehouseId}}">查看详情</button>
           <button size="mini" type="primary" class="outbound-btn" bindtap="startOutbound" data-id="{{item.warehouseId}}" data-name="{{item.warehouseName}}" data-capacity="{{item.curCapacity}}">出库</button>
+
+          <button size="mini" type="default" class="outbound-btn" wx:if="{{activeTab === 'inventory'}}" bindtap="startTransferOutbound" data-id="{{item.warehouseId}}" data-name="{{item.warehouseName}}" data-capacity="{{item.curCapacity}}">调拨</button>
         </view>
       </view>
     </view>
@@ -103,10 +105,8 @@
       <text class="modal-title">{{ isOutboundDetail ? '出库产品详情' : '库存详情' }}</text>
       <view class="modal-close" bindtap="hideDetail">×</view>
     </view>
-
     <scroll-view scroll-y class="modal-body">
       <view class="detail-list">
-
         <!-- 库存详情 -->
         <block wx:if="{{!isOutboundDetail}}">
           <view class="detail-header">
@@ -117,10 +117,13 @@
           </view>
 
           <view wx:if="{{detailList.length > 0}}">
-            <view class="detail-item" wx:for="{{detailList}}" wx:key="index">
+            <view class="detail-item" wx:for="{{detailList}}" wx:key="index"       bindtap="getProductAssayData"
+            data-index="{{index}}">
               <text class="col product">{{item.productName}}</text>
               <text class="col date">{{item.entryDate}}</text>
-              <text class="col quantity">{{item.totalQuantity}}</text>
+              <text class="col quantity">{{item.stockInfo}}</text>
+              <!-- <text class="col quantity">{{(item.totalQuantity > 0? item.totalQuantity + '板' :'') 
+      + (item.totalPieces > 0 ? item.totalPieces + '件' : '')}}</text> -->
               <text class="col weight">{{item.totalWeight}}kg</text>
             </view>
           </view>
@@ -170,6 +173,32 @@
   </view>
 </view>
 
+
+<!-- 化验数据 -->
+<view class="modal labData-data {{showAssayModal ? 'show' : ''}}">
+  <view class="modal-mask" bindtap="hideAssayDetail"></view>
+  <view class="modal-content">
+    <view class="modal-header">
+      <text class="modal-title">化验信息</text>
+      <view class="modal-close" bindtap="hideAssayDetail">×</view>
+    </view>
+      <view class="labData-item">
+        <view><text class="bold">ID：</text>{{productAssayInfo.assayId}}</view>
+        <view><text class="bold">采样日期：</text>{{productAssayInfo.sampleDate || '暂无数据'}}</view>
+        <view><text class="bold">色值(IU)：</text>{{productAssayInfo.colorValue != null ? productAssayInfo.colorValue : '暂无数据'}}</view>
+        <view><text class="bold">还原糖分：</text>{{productAssayInfo.reducingSugar != null ? productAssayInfo.reducingSugar + 'g/100g' : '暂无数据'}}</view>
+        <view><text class="bold">pH值：</text>{{productAssayInfo.phValue != null ? productAssayInfo.phValue : '暂无数据'}}</view>
+        <view><text class="bold">干燥失重：</text>{{productAssayInfo.dryWeight != null ? productAssayInfo.dryWeight + 'g/100g' : '暂无数据'}}</view>
+        <view><text class="bold">电导灰分：</text>{{productAssayInfo.conductivityAsh != null ? productAssayInfo.conductivityAsh + 'g/100g' : '暂无数据'}}</view>
+        <view><text class="bold">蔗糖分：</text>{{productAssayInfo.sucrose != null ? productAssayInfo.sucrose + 'g/100g' : '暂无数据'}}</view>
+        <view><text class="bold">不溶于水杂质：</text>{{productAssayInfo.insolubleImpurity != null ? productAssayInfo.insolubleImpurity + 'mg/kg' : '暂无数据'}}</view>
+        <view><text class="bold">符合标准：</text>{{productAssayInfo.qualifiedStandards || '暂无数据'}}</view>
+        <view><text class="bold">检验：</text>{{productAssayInfo.isQualified || '暂无数据'}}</view>
+        <view><text class="bold">操作员：</text>{{productAssayInfo.testerName || '暂无数据'}}</view>
+      </view>
+  </view>
+</view>
+
 <!-- 出库操作弹窗 -->
 <view class="modal {{showOutboundModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
   <view class="modal-mask" bindtap="hideOutbound"></view>
@@ -178,13 +207,21 @@
       <text class="modal-title">出库操作</text>
       <view class="modal-close" bindtap="hideOutbound">×</view>
     </view>
-
     <view class="modal-body">
       <view class="form-group">
         <text class="form-label">库位名称</text>
         <input disabled value="{{selectedWarehouse.warehouseName}}" />
       </view>
-
+      <view class="form-group">
+        <text class="form-label required">选择产品</text>
+        <picker mode="selector" range="{{warehouseProductList}}" range-key="productFullName" value="{{warehouseProductIndex}}"
+          bindchange="onProductChange"  class="custom-select-row">
+          <view class="picker-content">
+              {{warehouseProductName}}
+          </view>
+        </picker>
+        <text class="error-msg" wx:if="{{productError}}">{{productError}}</text>
+      </view>
       <view class="form-group">
         <text class="form-label">当前库存</text>
         <input disabled value="{{selectedWarehouse.curCapacity}}" />
@@ -192,7 +229,26 @@
 
       <view class="form-group">
         <text class="form-label required">出库数量</text>
-        <input type="digit" placeholder="请输入出库数量" bindinput="onQuantityInput" value="{{outboundQuantity}}" />
+        <view class="group-input">
+          <input 
+            type="digit" 
+            placeholder="请输入出库数量" 
+            bindinput="onQuantityInput" 
+            value="{{outboundQuantity}}" 
+            class="custom-input"
+          />
+          <picker 
+            mode="selector" 
+            range="{{['板', '件']}}" 
+            value="{{unitIndex}}" 
+            bindchange="onUnitChange"
+            class="custom-select"
+          >
+            <view class="picker-content">
+              {{unit === '0' ? '板' : '件'}}
+            </view>
+          </picker>
+        </view>
         <text class="error-msg" wx:if="{{quantityError}}">{{quantityError}}</text>
       </view>
 
@@ -207,11 +263,113 @@
           </label>
         </radio-group>
       </view>
+      <view class="form-group">
+        <text class="form-label required">出库方式</text>
+        <radio-group class="side-options" bindchange="onOutTypeChange">
+          <label class="radio-item">
+            <radio value="0" checked="{{outType === '0'}}" />整板优先
+          </label>
+          <label class="radio-item">
+            <radio value="1" checked="{{outType === '1'}}" />散件优先
+          </label>
+        </radio-group>
+      </view>
     </view>
 
     <view class="modal-footer">
       <button type="default" bindtap="hideOutbound">取消</button>
       <button type="primary" disabled="{{!isOutboundValid}}" bindtap="confirmOutbound">确认出库</button>
+    </view>
+  </view>
+</view>
+
+<!-- 调拨出库操作弹窗 -->
+<view class="modal {{showTransferOutboundModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+  <view class="modal-mask" bindtap="hideOutbound"></view>
+  <view class="modal-content">
+    <view class="modal-header">
+      <text class="modal-title">调拨操作</text>
+      <view class="modal-close" bindtap="hideOutbound">×</view>
+    </view>
+    <view class="modal-body">
+      <view class="form-group">
+        <text class="form-label">库位名称</text>
+        <input disabled value="{{selectedWarehouse.warehouseName}}" />
+      </view>
+      <view class="form-group">
+        <text class="form-label required">选择产品</text>
+        <picker mode="selector" range="{{warehouseProductList}}" range-key="productName" value="{{warehouseProductIndex}}"
+          bindchange="onProductChange"  class="custom-select-row">
+          <view class="picker-content">
+              {{warehouseProductName}}
+          </view>
+        </picker>
+        <text class="error-msg" wx:if="{{productError}}">{{productError}}</text>
+      </view>
+      <view class="form-group">
+        <text class="form-label">当前库存</text>
+        <input disabled value="{{selectedWarehouse.curCapacity}}" />
+      </view>
+      <view class="form-group">
+        <text class="form-label required">出库数量</text>
+        <view class="group-input">
+          <input 
+            type="digit" 
+            placeholder="请输入出库数量" 
+            bindinput="onQuantityInput" 
+            value="{{outboundQuantity}}" 
+            class="custom-input"
+          />
+          <picker 
+            mode="selector" 
+            range="{{['板', '件']}}" 
+            value="{{unitIndex}}" 
+            bindchange="onUnitChange"
+            class="custom-select"
+          >
+            <view class="picker-content">
+              {{unit === '0' ? '板' : '件'}}
+            </view>
+          </picker>
+        </view>
+        <text class="error-msg" wx:if="{{quantityError}}">{{quantityError}}</text>
+      </view>
+      <view class="form-group">
+        <text class="form-label required">出库顺序</text>
+        <radio-group class="side-options" bindchange="onSideChange">
+          <label class="radio-item">
+            <radio value="左" checked="{{outboundSide === '左'}}" />左
+          </label>
+          <label class="radio-item">
+            <radio value="右" checked="{{outboundSide === '右'}}" />右
+          </label>
+        </radio-group>
+      </view>
+      <view class="form-group">
+        <text class="form-label required">出库方式</text>
+        <radio-group class="side-options" bindchange="onSideChange">
+          <label class="radio-item">
+            <radio value="0" checked="{{outType === '0'}}" />整板优先
+          </label>
+          <label class="radio-item">
+            <radio value="1" checked="{{outType === '1'}}" />散件优先
+          </label>
+        </radio-group>
+      </view>
+      <view class="form-group">
+        <text class="form-label required">入库库位</text>
+        <picker mode="selector" range="{{CapacityList}}" range-key="warehouseName" value="{{unitIndex}}" 
+          bindchange="onInWarehouseNameChange"  class="custom-select-row">
+          <view class="picker-content">
+              {{inWarehouseName}}
+          </view>
+        </picker>
+        <text class="error-msg" wx:if="{{inWarehouseNameError}}">{{inWarehouseNameError}}</text>
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button type="default" bindtap="hideOutbound">取消</button>
+      <button type="primary" bindtap="confirmTransferOutbound">确认调拨</button>
     </view>
   </view>
 </view>

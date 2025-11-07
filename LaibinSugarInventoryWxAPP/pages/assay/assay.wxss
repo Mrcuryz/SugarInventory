@@ -85,7 +85,7 @@
   margin-top: 15rpx;
 }
 
-.edit-btn, .history-btn {
+.edit-btn, .history-btn, .del-btn {
   font-size: 26rpx;
   padding: 8rpx 20rpx;
   border-radius: 10rpx;
@@ -98,6 +98,11 @@
 
 .history-btn {
   background: #67C23A;
+  color: #fff;
+}
+
+.del-btn {
+  background:rgb(255, 0, 0);
   color: #fff;
 }
 
@@ -217,9 +222,28 @@
 .input, .picker {
   width: 90%;
   padding: 16rpx;
-  border: 1px solid #ddd;
+  border: 1px solid #ccc;
+  border-radius: 20rpx;
+  font-size: 42rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+}
+
+.input-1, .picker {
+  width: 90%;
+  padding: 16rpx;
+  border: 1px solid #ccc;
   border-radius: 20rpx;
   font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+}
+
+.input:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 8rpx rgba(0, 122, 255, 0.6);
 }
 
 .indicator-group {
@@ -230,7 +254,7 @@
 }
 
 .label {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 .required {

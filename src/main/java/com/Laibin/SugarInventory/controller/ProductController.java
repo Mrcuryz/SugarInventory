@@ -9,6 +9,7 @@ import com.Laibin.SugarInventory.domain.dto.ProductCreateDTO;
 import com.Laibin.SugarInventory.domain.vo.ProductInfoVO;
 import com.Laibin.SugarInventory.domain.dto.ProductUpdateDTO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
+import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -34,8 +35,11 @@ public class ProductController {
         return Result.success(productService.getById(id));
     }
 
+
+
     /**
      * 根据名称查询产品信息
+     *
      * @param name 产品名称
      * @return 产品列表
      */
@@ -48,7 +52,7 @@ public class ProductController {
             @RequestParam(required = false) String type,
             @Parameter(description = "产品状态，例如 '半成品' 或 '成品'", required = false)
             @RequestParam(required = false) String status
-            ) {
+    ) {
         try {
             System.out.println(name + " " + type + " " + status);
             return Result.success(productService.getProductsByCondition(name, type, status));
@@ -59,6 +63,7 @@ public class ProductController {
 
     /**
      * 查询所有半成品名称
+     *
      * @return 半成品名称列表
      */
     @Operation(summary = "查询所有半成品名称", description = "返回所有半成品的产品ID和产品名称列表")
@@ -69,6 +74,7 @@ public class ProductController {
 
     /**
      * 根据条件查询半成品名称
+     *
      * @param name 半成品名称
      * @param type 半成品类型
      * @return 半成品名称列表
@@ -86,6 +92,7 @@ public class ProductController {
 
     /**
      * 查询所有成品名称
+     *
      * @return 成品名称列表
      */
     @Operation(summary = "查询所有成品名称", description = "返回所有成品的产品ID和产品名称列表")
@@ -96,6 +103,7 @@ public class ProductController {
 
     /**
      * 根据条件查询成品名称
+     *
      * @param name 成品名称
      * @param type 成品类型
      * @return 成品名称列表
@@ -114,12 +122,13 @@ public class ProductController {
 
     /**
      * 创建产品
-     * @param vo 产品创建信息
-     * 参数：String productName;         产品名称（必填）
-            String productType;         产品类型（必填）
-            String status;              产品状态（必填）
-            String packagingMethod;     包装方式（选填）
-            BigDecimal weightPerPiece;  每份重量（必填）
+     *
+     * @param vo        产品创建信息
+     *                  参数：String productName;         产品名称（必填）
+     *                  String productType;         产品类型（必填）
+     *                  String status;              产品状态（必填）
+     *                  String packagingMethod;     包装方式（选填）
+     *                  BigDecimal weightPerPiece;  每份重量（必填）
      * @param loginUser 登录用户信息
      * @return 成功或失败信息
      */
@@ -142,15 +151,16 @@ public class ProductController {
 
     /**
      * 根据条件更新产品信息接口
+     *
      * @param vo 产品更新信息
-     * 参数：Integer productId;          产品id（必填）
-            String productName;         产品名称（选填）
-            String productType;         产品类型（选填）
-            String status;              产品状态（选填）
-            String packagingMethod;     包装方式（选填）
-            BigDecimal weightPerPiece;  每份重量（选填）
-     * 权限注解 @PreAuthorize("hasAuthority('product:update')") 用于控制用户是否有权限进行更新操作
-     * 注解 @AuthenticationPrincipal 用于获取当前登录用户信息
+     *           参数：Integer productId;          产品id（必填）
+     *           String productName;         产品名称（选填）
+     *           String productType;         产品类型（选填）
+     *           String status;              产品状态（选填）
+     *           String packagingMethod;     包装方式（选填）
+     *           BigDecimal weightPerPiece;  每份重量（选填）
+     *           权限注解 @PreAuthorize("hasAuthority('product:update')") 用于控制用户是否有权限进行更新操作
+     *           注解 @AuthenticationPrincipal 用于获取当前登录用户信息
      * @return 成功或失败信息
      */
     @Operation(summary = "更新产品", description = "根据产品ID更新产品信息，允许部分字段更新（产品名称、类型、状态、包装方式、单件重量）")
@@ -175,5 +185,17 @@ public class ProductController {
     ) {
         productService.deleteProduct(id, loginUser.getUser().getId());
         return Result.success(null);
+    }
+
+
+    @Operation(summary = "获取产品所有存放的库位", description = "获取产品所有存放的库位")
+    @LogOperation(value = "产品", type = OperationType.DELETE)
+    @GetMapping("getProductWarehouse/{id}")
+    public Result<List<VInventorySummary>> getProductWarehouse(
+            @Parameter(description = "产品ID", required = true)
+            @PathVariable Integer id
+    ) {
+        List<VInventorySummary> list = productService.getProductWarehouse(id);
+        return Result.success(list);
     }
 }

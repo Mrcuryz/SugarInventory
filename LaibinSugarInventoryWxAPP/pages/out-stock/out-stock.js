@@ -20,11 +20,14 @@ Page({
       warehouseName: null,
       quantity: null,
       side: null
-    }
+    },
+    role: ''
   },
 
   onLoad() {
     this.loadRecords();
+    const role = wx.getStorageSync("role") || '';
+    this.setData({ role });
   },
 
   async loadRecords() {

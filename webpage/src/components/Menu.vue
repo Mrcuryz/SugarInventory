@@ -10,16 +10,18 @@ const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
-import {House, Document, Histogram, Box, Filter, PieChart, Finished, Switch, User} from "@element-plus/icons-vue";
+import {House, Document, Histogram, Box, Filter, PieChart, Finished, Switch, User, ShoppingCart} from "@element-plus/icons-vue";
 // 菜单图标
 // 菜单数据
 const menuList = [
   {path: '/home', title: '首页', icon: House},
   {path: '/operationlogs', title: '操作日志', icon: Document},
   {path: '/product', title: '产品管理', icon: Histogram},
+  {path: '/productStock', title: '产品库存', icon: ShoppingCart},
   {path: '/warehouse', title: '库位管理', icon: Box},
   {path: '/screenMesh', title: '筛网管理', icon: Filter},
   {path: '/assay', title: '化验管理', icon: PieChart},
+  {path: '/assayGroup', title: '验收标准', icon: Document},
   {path: '/standard', title: '化验标准管理', icon: Finished},
   {path: '/stock', title: '出入库管理', icon: Switch},
   {path: '/employee', title: '员工管理', icon: User}
@@ -93,7 +95,7 @@ const activeMenu = computed(() => route.path)
     </div>
   </div>
 </template>
-<style scoped>
+<style scoped lang="scss">
 .app-container {
   display: flex;
   min-height: 100vh;

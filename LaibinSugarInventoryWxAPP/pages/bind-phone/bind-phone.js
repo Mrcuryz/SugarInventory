@@ -1,23 +1,9 @@
-import request from "../../utils/request";
-
+const BASE_URL = "https://ccgl.site";
+// const BASE_URL = "http://124.220.1.37:8080";
+// const BASE_URL = "http://cscgood.mynatapp.cc";
 Page({
   data: {
     code: "",
-  },
-
-  getPhoneNumber(e) {
-    if (e.detail.errMsg === 'getPhoneNumber:ok') {
-      // 用户同意授权，可以进行后续操作
-      console.log('用户同意授权');
-      // 这里可以进行手机号的获取和处理
-    } else {
-      // 用户拒绝授权
-      console.log('用户拒绝授权');
-      wx.showToast({
-        title: '您需要授权才能使用此功能',
-        icon: 'none'
-      });
-    }
   },
 
   onLoad() {
@@ -32,14 +18,14 @@ Page({
         } else {
           wx.showToast({ title: "获取登录凭证失败", icon: "none" });
         }
-      },
+      }
     });
   },
 
   onGetPhoneNumber(e) {
     if (e.detail.errMsg === "getPhoneNumber:ok") {
-      const phoneCode = e.detail.code; // ✅ 正确获取微信加密手机号的 code
-      console.log("getPhoneNumber detail:", e.detail);
+      const phoneCode = e.detail.code;
+
       wx.login({
         success: (res) => {
           const loginCode = res.code;
@@ -47,32 +33,45 @@ Page({
             wx.showToast({ title: "code获取失败", icon: "none" });
             return;
           }
-          console.log(loginCode)
-          console.log(phoneCode)
-  
-          request("/api/auth/phone-bind", "POST", {
-            code: loginCode,
-            phoneCode: phoneCode
-          })
-            .then((data) => {
-              wx.setStorageSync("token", data.token);
-              setTimeout(() => {
-                wx.showToast({ title: "绑定成功！", icon: "success" });
-                wx.switchTab({ url: "/pages/home/home" });
-              }, 1000);
-            })
-            .catch((err) => {
-              wx.showToast({ title: err.msg || "绑定失败", icon: "none" });
-              wx.showModal({
-                title: "绑定失败",
-                content: "是否通过工号绑定？",
-                success: (res) => {
-                  if (res.confirm) {
-                    wx.navigateTo({ url: "/pages/bind-manual/bind-manual" });
+
+          wx.request({
+            url: BASE_URL + "/api/auth/phone-bind",
+            method: "POST",
+            data: {
+              code: loginCode,
+              phoneCode: phoneCode
+            },
+            header: {
+              "Content-Type": "application/json"
+            },
+            success: (res) => {
+              if (res.statusCode === 200 && res.data.code === 200) {
+                const data = res.data.data;
+                wx.setStorageSync("token", data.token);
+                wx.setStorageSync("role", data.roleCode);
+
+                setTimeout(() => {
+                  wx.showToast({ title: "绑定成功！", icon: "success" });
+                  wx.switchTab({ url: "/pages/home/home" });
+                }, 1000);
+              } else {
+                wx.showToast({ title: res.data.msg || "绑定失败", icon: "none" });
+                wx.showModal({
+                  title: "绑定失败",
+                  content: "是否通过工号绑定？",
+                  success: (res) => {
+                    if (res.confirm) {
+                      wx.navigateTo({ url: "/pages/bind-manual/bind-manual" });
+                    }
                   }
-                },
-              });
-            });
+                });
+              }
+            },
+            fail: (err) => {
+              console.error("绑定失败：", err);
+              wx.showToast({ title: "网络错误，请稍后重试", icon: "none" });
+            }
+          });
         }
       });
     } else {
@@ -84,8 +83,8 @@ Page({
           if (res.confirm) {
             wx.navigateTo({ url: "/pages/bind-manual/bind-manual" });
           }
-        },
+        }
       });
     }
-  },  
+  }
 });

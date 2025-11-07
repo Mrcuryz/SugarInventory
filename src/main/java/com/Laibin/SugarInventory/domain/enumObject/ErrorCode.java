@@ -21,7 +21,6 @@ public enum ErrorCode {
     UPDATE_INVENTORY_FAILED(1015, "更新库存失败"),
     ASSAY_RECORD_NOT_FOUND(1016, "找不到化验记录"),
     INVENTORY_NOT_FOUND(1017, "找不到库存记录"),
-
     INSERT_INVENTORY_LOCATION_FAILED(1018, "插入库存位置失败"),
     DATA_IMPORT_FAILED(1019, "数据导入失败"),
     ASSAY_NOT_FOUND(1020, "找不到化验数据"),
@@ -29,6 +28,9 @@ public enum ErrorCode {
     INSUFFICIENT_STOCK(1022, "库存不足"),
     WAREHOUSE_NOT_FOUND(1023, "找不到库位"),
     WAREHOUSE_FULL(1024, "库位已满"),
+    MULTIPLE_USE_ASSAY_FLAGS(1025, "存在多次使用化验标记"),
+    INVALID_SEMI_RECORD(1026, "无效的半成品记录"),
+    ASSAY_GROUP_RECORD_NOT_FOUND(1027, "找不到化验验收标准"),
     ;
 
     // 获取 code 和 message

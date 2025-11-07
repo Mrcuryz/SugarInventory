@@ -36,7 +36,7 @@
         <!-- 指标信息区域 -->
         <view class="indicator">
           <view class="indicator-row">
-            <text>色值(IU): {{item.latest.colorValue}}</text>
+            <text>色值(IU): {{item.latest.colorValue != null ? item.latest.colorValue : '暂无数据'}}</text>
             <text>还原糖分: {{item.latest.reducingSugar != null ? item.latest.reducingSugar + 'g/100g' : '暂无数据'}}</text>
           </view>
           <view class="indicator-row">
@@ -45,7 +45,7 @@
           </view>
           <view class="indicator-row">
             <text>电导灰分: {{item.latest.conductivityAsh != null ? item.latest.conductivityAsh + 'g/100g': '暂无数据'}}</text>
-            <text>蔗糖分: {{item.latest.sucrose}}g/100g</text>
+            <text>蔗糖分: {{item.latest.sucrose != null ? item.latest.sucrose + 'g/100g' : '暂无数据'}}</text>
           </view>
           <view class="indicator-row">
             <text>不溶于水杂质: {{item.latest.insolubleImpurity != null ? item.latest.insolubleImpurity + 'mg/kg' : '暂无数据'}}</text>
@@ -63,6 +63,7 @@
         <!-- 操作按钮 -->
         <view class="action-buttons">
           <button class="edit-btn" bindtap="editLabData" data-id="{{item.latest.id}}">修改</button>
+          <button class="del-btn" bindtap="delLabData" data-id="{{item.latest.id}}">删除</button>
           <button class="history-btn" wx:if="{{item.history.length}}" bindtap="toggleHistory" data-record="{{index}}">
             {{item.showHistory ? '隐藏历史数据' : '查看历史数据'}}
           </button>
@@ -128,11 +129,40 @@
     </view>
 
     <scroll-view class="modal-body" scroll-y>
-      <view class="form-item">
+       <!-- 1. 选择类型切换（picker组件，1=产品，2=验收标准） -->
+       <view class="form-item">
+        <text class="required">*</text>
+        <text class="label">选择类型</text>
+        <picker 
+          mode="selector" 
+          range="{{selectTypeOptions}}" 
+          range-key="name"
+          value="{{currentLabData.selectType - 1}}" 
+          bindchange="onSelectTypeChange"
+        >
+        <input class="input-1" placeholder="请选择类型" value="{{currentLabData.selectTypeName}}" disabled />
+        </picker>
+      </view>
+
+      <view class="form-item" wx:if="{{currentLabData.selectType === 1}}">
         <text class="required">*</text>
         <text class="label">产品名称</text>
         <picker mode="multiSelector" range="{{productOptions}}" value="{{pickerIndexes}}" bindcolumnchange="onProductPickerColumnChange" bindchange="onProductPickerConfirm">
-          <input class="input" placeholder="请选择产品" value="{{currentLabData.      productName}}" disabled />
+          <input class="input-1" placeholder="请选择产品" value="{{currentLabData.productName}}" disabled />
+        </picker>
+      </view>
+      <view class="form-item" wx:if="{{currentLabData.selectType === 2}}">
+        <text class="required">*</text>
+        <text class="label">验收标准</text>
+        <picker mode="selector" 
+          range="{{standardOptions}}" 
+          range-key="standardName"
+          value="{{standardIndex}}"
+          bindchange="onStandardChange"
+        >
+          <view class="picker">
+            {{currentLabData.standardName || '请选择验收标准'}}
+          </view>
         </picker>
       </view>
 

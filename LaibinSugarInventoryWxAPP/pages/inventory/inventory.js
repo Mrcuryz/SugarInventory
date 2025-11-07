@@ -31,29 +31,47 @@ Page({
     detailCurrentPage: 1,
     detailTotalPages: 0,
     selectedWarehouseId: null,
-
+    // 化验信息
+    showAssayModal:false,
+    productAssayInfo:{},
     // 出库查询
     productName: '',
     standardNames: '',
     screenMeshId: '',
     startDate: '',
     endDate: '',
-
-
+    // 所有的库位
+    CapacityList:[
+    ],
     // 出库操作
     showOutboundModal: false,
     selectedWarehouse: {},
     outboundQuantity: '',
     outboundSide: '左',
     quantityError: '',
+    inWarehouseNameError:'',
+    productError:'',
     isOutboundValid: false,
-
+    outType: '0',
+    // 调拨出库操作
+    showTransferOutboundModal: false,
+    unitIndex: 0,
+    unit: '0',
+    inWarehouseName: '请选择库位',
+    inWarehouseValue: '',
+    inWarehouseNameIndex: 0,
+    // 产品选择
+    warehouseProductList:[],
+    warehouseProductId:'',
+    warehouseProductName: '请选择产品',
+    warehouseProductIndex: 0,
     // 加载状态
     isLoading: false,
   },
 
   onLoad() {
     this.loadInventory();
+    this.getAllWarehouseCapacity();
     this.loadStandardNameOptions();
     this.loadScreenMeshes();
   },
@@ -112,7 +130,82 @@ Page({
       console.error("筛网加载失败:", error);
     }
   },  
-
+ // 单位选择处理
+ onUnitChange(e) {
+  const index = e.detail.value;
+  this.setData({
+    unitIndex: index,
+    unit: index.toString()
+  });
+},
+getProductAssayData(e) {
+  const index = e.currentTarget.dataset.index;
+  const product = this.data.detailList[index];
+  let params = {
+    page: 1,
+    size: 100,
+    productId: product.productId,
+    entryDate:product.entryDate,
+    isQualified: '合格'
+  }
+  request('/api/assay/query', 'POST', params)
+  .then(res =>{
+    console.log(res)
+    this.setData({
+      showAssayModal: true,
+      productAssayInfo: res.records[0] || {}
+    });
+  })
+},
+  // 入库库位选择处理
+  onInWarehouseNameChange(e) {
+    const index = e.detail.value;
+    this.setData({
+      inWarehouseNameIndex: index,
+      inWarehouseName: this.data.CapacityList[index].warehouseName,
+      inWarehouseValue: this.data.CapacityList[index].warehouseName,
+    });
+  },
+  // 产品选择选择处理
+  onProductChange(e) {
+    const index = e.detail.value;
+    let product = this.data.warehouseProductList[index];
+    this.setData({
+      warehouseProductIndex: index,
+      'selectedWarehouse.curCapacity':(product.totalQuantity > 0? product.totalQuantity + '板' :'') 
+      + (product.totalPieces > 0 ? product.totalPieces + '件' : ''),
+      warehouseProductName: product.productFullName,
+      warehouseProductId: product.productId,
+    });
+    this.validateOutboundForm();
+  },
+getWarehouseProduct(warehouse) {
+  let params = {
+    warehouseId: warehouse,
+    page: 1,
+    size: 1000
+  }
+  request('/api/inventory/summary', 'POST', params)
+  .then(res =>{
+    if (res.records) {
+    const processedList = res.records.map(item => ({
+      ...item,
+      productFullName: `${item.productName}（${item.entryDate}）`
+    }));
+    this.setData({
+      warehouseProductList: processedList
+    });
+  }
+  })
+},
+getAllWarehouseCapacity() {
+  request('/api/inventory/warehouses', 'GET', {})
+  .then(res =>{
+    this.setData({
+      CapacityList: res || []
+    });
+  })
+},
   /**
    * 加载库存列表
    */
@@ -122,17 +215,14 @@ Page({
       this.setData({
         isLoading: true
       });
-
       const warehouseName = this.data.warehouseName === '' ? '' : this.data.warehouseName;
       const status = this.data.statusIndex === 0 ? '' : this.data.statusOptions[this.data.statusIndex];
-
       const res = await request('/api/inventory/query', 'GET', {
         warehouseName: warehouseName,
         page: this.data.currentPage,
         size: this.data.pageSize,
         status: status,
       });
-
       console.log("接口返回：", res);
 
       if (res && Array.isArray(res.records)) {
@@ -248,6 +338,16 @@ Page({
     this.setData({
       showDetailModal: false,
       detailList: []
+    });
+  },
+
+  /**
+   * 隐藏化验信息弹窗
+   */
+  hideAssayDetail() {
+    this.setData({
+      showAssayModal: false,
+      productAssayInfo: {}
     });
   },
 
@@ -411,18 +511,60 @@ Page({
       name,
       capacity
     } = e.currentTarget.dataset;
-
+    this.getWarehouseProduct(id)
     this.setData({
       showOutboundModal: true,
       selectedWarehouse: {
         warehouseId: id,
         warehouseName: name,
-        curCapacity: capacity
+        curCapacity: ''
       },
       outboundQuantity: '',
       outboundSide: '左',
       quantityError: '',
-      isOutboundValid: false
+      inWarehouseNameError: '',
+      productError: '',
+      isOutboundValid: false,
+      unitIndex: 0,
+      unit: '0',
+      inWarehouseName: '请选择库位',
+      inWarehouseValue: '',
+      inWarehouseNameIndex: 0,
+      // 产品选择
+      warehouseProductId:'',
+      warehouseProductName: '请选择产品',
+      warehouseProductIndex: 0,
+    });
+  },
+  startTransferOutbound(e) {
+    const {
+      id,
+      name,
+      capacity
+    } = e.currentTarget.dataset;
+    this.getWarehouseProduct(id)
+    this.setData({
+      showTransferOutboundModal: true,
+      selectedWarehouse: {
+        warehouseId: id,
+        warehouseName: name,
+        curCapacity: ''
+      },
+      outboundQuantity: '',
+      outboundSide: '左',
+      quantityError: '',
+      inWarehouseNameError: '',
+      productError: '',
+      isOutboundValid: false,
+      unitIndex: 0,
+      unit: '0',
+      inWarehouseName: '请选择库位',
+      inWarehouseValue: '',
+      inWarehouseNameIndex: 0,
+      // 产品选择
+      warehouseProductId:'',
+      warehouseProductName: '请选择产品',
+      warehouseProductIndex: 0,
     });
   },
 
@@ -431,6 +573,7 @@ Page({
    */
   hideOutbound() {
     this.setData({
+      showTransferOutboundModal: false,
       showOutboundModal: false
     });
   },
@@ -438,40 +581,30 @@ Page({
   /**
    * 确认出库
    */
-  async confirmOutbound() {
+confirmOutbound() {
     if (!this.validateOutboundForm()) {
       return;
     }
-
     try {
       this.setData({
         isLoading: true
       });
-
-      const res = await request('/api/out-stock/out', 'POST', {
+      request('/api/out-stock/out', 'POST', {
         warehouseId: this.data.selectedWarehouse.warehouseId,
         quantity: parseInt(this.data.outboundQuantity),
-        side: this.data.outboundSide
-      });
-
-      console.log(res)
-
-      if (res && res.code === 0) {
+        side: this.data.outboundSide,
+        outType: this.data.outType,
+        productId: this.data.warehouseProductId,
+        unit: this.data.unit
+      }).then(res => {
         wx.showToast({
-          title: '出库成功',
+          title: '调拨成功',
           icon: 'success'
         });
-
         this.hideOutbound();
         // 重新加载库存数据
         this.loadInventory();
-
-      } else {
-        wx.showToast({
-          title: res.message || '出库失败',
-          icon: 'none'
-        });
-      }
+      })
     } catch (error) {
       wx.showToast({
         title: '出库操作失败: ' + (error.message || '未知错误'),
@@ -483,7 +616,51 @@ Page({
       });
     }
   },
-
+  /**
+   * 确认调拨出库
+   */
+  async confirmTransferOutbound() {
+    if (!this.validateOutboundForm()) {
+      return;
+    }
+    if(!this.data.inWarehouseValue || this.data.inWarehouseValue === '') {
+      this.setData({
+        inWarehouseNameError: "请选择入库库位"
+      })
+      return;
+    }
+    try {
+      this.setData({
+        isLoading: true
+      });
+      request('/api/out-stock/transferOut', 'POST', {
+        warehouseId: this.data.selectedWarehouse.warehouseId,
+        quantity: parseInt(this.data.outboundQuantity),
+        side: this.data.outboundSide,
+        outType: this.data.outType,
+        productId: this.data.warehouseProductId,
+        inWarehouseName: this.data.inWarehouseValue,
+        unit: this.data.unit
+      }).then(res => {
+        wx.showToast({
+          title: '调拨成功',
+          icon: 'success'
+        });
+        this.hideOutbound();
+        // 重新加载库存数据
+        this.loadInventory();
+      })
+    } catch (error) {
+      wx.showToast({
+        title: '出库操作失败: ' + (error.message || '未知错误'),
+        icon: 'none'
+      });
+    } finally {
+      this.setData({
+        isLoading: false
+      });
+    }
+  },
   /**
    * 常规库存查询
    */
@@ -524,22 +701,24 @@ Page({
   validateOutboundForm() {
     const {
       outboundQuantity,
-      selectedWarehouse
+      selectedWarehouse,
+      warehouseProductId 
     } = this.data;
-
     let error = '';
-
     if (!outboundQuantity) {
       error = '请输入出库数量';
     } else if (isNaN(outboundQuantity) || parseInt(outboundQuantity) <= 0) {
       error = '请输入有效的出库数量';
-    } else if (parseInt(outboundQuantity) > parseInt(selectedWarehouse.curCapacity)) {
-      error = '出库数量不能超过当前库存';
+    }
+    let productError = '';
+    if(!warehouseProductId || warehouseProductId == '') {
+      productError = '请选择出库产品'
     }
 
     this.setData({
       quantityError: error,
-      isOutboundValid: !error
+      productError: productError,
+      isOutboundValid: !error && !productError
     });
 
     return !error;
@@ -597,6 +776,12 @@ Page({
     this.setData({
       outboundSide: e.detail.value
     });
+  },
+
+  onOutTypeChange(e) {
+    this.setData({
+      outType : e.detail.value
+    })
   },
 
   onStandardNameChange(e) {

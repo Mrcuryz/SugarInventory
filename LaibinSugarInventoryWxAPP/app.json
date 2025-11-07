@@ -13,7 +13,8 @@
     "pages/assay/assay",
     "pages/semi-product/semi-product",
     "pages/inventory/inventory",
-    "pages/out-stock/out-stock"
+    "pages/out-stock/out-stock",
+    "pages/inventory/productStock"
   ],
   "window": {
     "backgroundTextStyle": "light",
@@ -46,7 +47,7 @@
   },
   "permission": {
     "scope.phoneNumber": {
-      "desc":"用于获取您的手机号码"
+      "desc": "用于获取您的手机号码"
     }
   },
   "lazyCodeLoading": "requiredComponents"

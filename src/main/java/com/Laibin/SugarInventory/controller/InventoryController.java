@@ -34,6 +34,16 @@ public class InventoryController {
         return Result.success(inventoryService.getInventorySummary(query));
     }
 
+    @Operation(summary = "产品所有库存", description = "产品所有库存")
+    @GetMapping("/stock")
+    public Result<List<VInventorySummary>> getProductStock(@RequestParam String productStatus,
+                                                           @RequestParam(required = false) String productName) {
+        if (productName != null) {
+            productName = productName.trim();
+        }
+        return Result.success(inventoryService.getProductStock(productStatus, productName));
+    }
+
     @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @GetMapping("/warehouses")

@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 @Service
@@ -39,12 +40,17 @@ public class InventoryServiceImpl implements InventoryService {
         List<VInventorySummary> records = summaryMapper.selectSummaryList(
                 query, offset, query.getSize()
         );
-
+        String stockInfo = "%s板%s件";
         records.forEach(summary -> {
             Product product = productMapper.selectById(summary.getProductId());
-            summary.setTotalWeight(product.getWeightPerPiece()
-                    .multiply(new BigDecimal(product.getPiecesPerPallet() * summary.getTotalQuantity())));
-                });
+            BigDecimal totalWeight = product.getWeightPerPiece()
+                    .multiply(new BigDecimal(product.getPiecesPerPallet() * summary.getTotalQuantity()))
+                    .add(product.getWeightPerPiece().multiply(new BigDecimal(summary.getTotalPieces())));
+            summary.setTotalWeight(totalWeight);
+            summary.setStockInfo(String.format(stockInfo,
+                    summary.getTotalQuantity() + summary.getTotalPieces() / product.getPiecesPerPallet(),
+                    summary.getTotalPieces() % product.getPiecesPerPallet()));
+        });
 
         Long total = summaryMapper.countSummary(query);
 
@@ -78,10 +84,10 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     @Override
-    public PageResult<VWarehouseCapacity> batchQueryWarehouses(OutStockBatchQueryDTO queryDTO){
+    public PageResult<VWarehouseCapacity> batchQueryWarehouses(OutStockBatchQueryDTO queryDTO) {
         int offset = (queryDTO.getPage() - 1) * queryDTO.getSize();
 
-        if(queryDTO.getIds() == null || queryDTO.getIds().isEmpty()){
+        if (queryDTO.getIds() == null || queryDTO.getIds().isEmpty()) {
             return new PageResult<>(0L, null);
         }
 
@@ -94,5 +100,10 @@ public class InventoryServiceImpl implements InventoryService {
                         queryDTO.getSize());
         Long total = summaryMapper.countCapacityByStatus(null, null, queryDTO.getIds());
         return new PageResult<>(total, records);
+    }
+
+    @Override
+    public List<VInventorySummary> getProductStock(String productStatus, String productName) {
+        return summaryMapper.selectProductTotalStock(productStatus, productName);
     }
 }

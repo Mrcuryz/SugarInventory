@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.domain.vo;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -20,6 +21,9 @@ public class InStockVO {
 
     @Schema(description = "库位名称", example = "101")
     private String warehouseName;
+
+    @Schema(description = "出库单位：0板1件", example = "0")
+    private String unit;
 
     @Schema(description = "数量", example = "250")
     private Integer quantity;

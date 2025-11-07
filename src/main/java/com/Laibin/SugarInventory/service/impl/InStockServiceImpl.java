@@ -8,27 +8,31 @@ import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.vo.InStockVO;
 import com.Laibin.SugarInventory.domain.vo.InVO;
+import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.mapper.*;
-import com.Laibin.SugarInventory.service.AssayService;
-import com.Laibin.SugarInventory.service.InStockService;
-import com.Laibin.SugarInventory.service.LoggableService;
+import com.Laibin.SugarInventory.service.*;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author Mrcury
@@ -46,8 +50,9 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     private InventoryMapper inventoryMapper;
     @Autowired
     private AssayMapper assayMapper;
+    @Lazy
     @Autowired
-    private AssayService assayService;
+    private OutStockService outStockService;
     @Autowired
     private QualityStandardMapper qualityStandardMapper;
     @Autowired
@@ -55,9 +60,11 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     @Autowired
     private ObjectMapper objectMapper;
     @Autowired
-    private InventoryLocationMapper inventoryLocationMapper;
+    private SemiProductRecordService semiProductRecordService;
     @Autowired
     private UserMapper userMapper;
+    @Autowired
+    private InventorySummaryMapper inventorySummaryMapper;
 
     private final Integer page = 1;
     private final Integer size = 10;
@@ -75,22 +82,28 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         if (warehouse == null) {
             throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
-
         // 验证半成品记录中 useAssay 为 true 的记录数量
-        long useAssayCount = dto.getSemiRecords().stream()
+        List<SemiRecordDTO> semiRecords = dto.getSemiRecords();
+        long useAssayCount = semiRecords.stream()
                 .filter(SemiRecordDTO::getUseAssay)
                 .count();
 
         if (useAssayCount > 1) {
             throw new BusinessException(ErrorCode.MULTIPLE_USE_ASSAY_FLAGS);
         }
-
+        // 判断库存是否充足, 并且扣减半成品数量,
+        //returnInStockFlag等于1时为退货入库，不验证和扣减库存
+        if (!dto.getReturnInStockFlag().equals("1")) {
+            this.judgeInventory(semiRecords, operatorId);
+            // 这里要再拿一次库位信息，扣减库存后仓库容量更新
+           warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
+        }
         Assay assay = new Assay();
         Assay semiAssay;
 
         if (useAssayCount == 1) {
             // 获取标记为 useAssay 的半成品记录
-            SemiRecordDTO selectedSemi = dto.getSemiRecords().stream()
+            SemiRecordDTO selectedSemi = semiRecords.stream()
                     .filter(SemiRecordDTO::getUseAssay)
                     .findFirst()
                     .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_SEMI_RECORD));
@@ -111,7 +124,6 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             if (standards.isEmpty()) {
                 throw new BusinessException("未找到该产品的质量标准");
             }
-
             List<String> qualifiedStandards = new ArrayList<>();
             boolean isQualified = false;
 
@@ -121,20 +133,19 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                     isQualified = true;  // 只要有一个标准符合，就算合格
                 }
             }
-
             BeanUtils.copyProperties(dtoAssay, assay);
             assay.setTestedBy(operatorId);
             assay.setSucrose(dtoAssay.getSucrose());
-            assay.setIsQualified(isQualified? "合格" : "不合格");
+            assay.setIsQualified(isQualified ? "合格" : "不合格");
 
             Assay todaysAssay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
-            if (todaysAssay!= null) {
+            if (todaysAssay != null) {
                 int version = todaysAssay.getVersion() + 1;
                 assay.setVersion(version);
             } else {
                 assay.setVersion(1);
             }
-            if(!isQualified)
+            if (!isQualified)
                 qualifiedStandards.add("无");
             assay.setCreatedAt(LocalDateTime.now());
             try {
@@ -155,16 +166,15 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         }
 
         InStock inStock = new InStock();
-
         // 3. 解析前端传来的半成品 JSON，并查询数据库
-        if(dto.getSemiRecords() != null && !dto.getSemiRecords().isEmpty()) {
-            for (SemiRecordDTO recordDTO : dto.getSemiRecords()) {
+        if (!semiRecords.isEmpty()) {
+            for (SemiRecordDTO recordDTO : semiRecords) {
                 int count = semiProductRecordMapper.existsByProductIdAndDate
                         (recordDTO.getSemiProductId(), recordDTO.getProductionDate());
-                if(count == 0)
+                if (count == 0)
                     throw new BusinessException(ErrorCode.RECORD_NOT_FOUND);
             }
-            String semiProductRecordsJson = convertToJson(dto.getSemiRecords());
+            String semiProductRecordsJson = convertToJson(semiRecords);
             inStock.setSemiProductRecords(semiProductRecordsJson);
         }
 
@@ -183,15 +193,15 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
         // 计算库位剩余容量
         int remainingCapacity = 2 * maxRows - leftUsedRowsLayer1 - rightUsedRowsLayer1;
-        if(product.getCanStack() && currentLayer == 1) {
+        if (product.getCanStack() && currentLayer == 1) {
             remainingCapacity += 2 * maxRows;
         }
 
-        if(remainingCapacity <= 0){
+        if (remainingCapacity <= 0) {
             throw new BusinessException(ErrorCode.WAREHOUSE_FULL);
         }
 
-        int quantity = dto.getQuantity() > remainingCapacity? remainingCapacity : dto.getQuantity();
+        int quantity = dto.getQuantity() > remainingCapacity ? remainingCapacity : dto.getQuantity();
 
         BigDecimal totalWeight = product.getWeightPerPiece()
                 .multiply(new BigDecimal(quantity)
@@ -207,96 +217,151 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         inStock.setScreenMeshId(dto.getScreenMeshId());
         inStock.setTotalWeight(totalWeight);
         inStock.setCreatedAt(LocalDateTime.now());
-
+        inStock.setUnit(dto.getUnit());
         inStockMapper.insert(inStock);
-
         Integer inStockId = inStock.getId();
-
-        // **5. 开始存放**
-        while (remainingQuantity > 0) {
-            int usedRows = (currentSide.equals("左")) ?
-                    (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
-                    : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
-
-            if (usedRows < maxRows) {
-                int rowNumber = usedRows + 1;
-
-                // **存储单板**
-                Inventory inventory = new Inventory();
-                inventory.setWarehouseId(warehouse.getId());
-                inventory.setProductId(dto.getProductId());
-                inventory.setSide(currentSide);
-                inventory.setRowNumber(rowNumber);
-                inventory.setLayer(currentLayer);
-                inventory.setQuantity(1);
-                inventory.setEntryDate(dto.getEntryDate());
-                inventory.setInStockId(inStockId);
-                inventory.setScreenMeshId(dto.getScreenMeshId());
-                inventory.setAssayId(assay.getId());
-                inventory.setProductStatus(product.getStatus());
-                inventory.setSemiRecordId(null);
-                inventory.setCreatedAt(LocalDateTime.now());
-
-                try {
-                    inventoryMapper.insert(inventory);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    throw new BusinessException(ErrorCode.STOCK_IN_FAILED);
-                }
-                remainingQuantity--;
-
-                // **更新本地变量**
-                if (currentSide.equals("左")) {
-                    if (currentLayer == 1) leftUsedRowsLayer1++;
-                    else leftUsedRowsLayer2++;
-                } else {
-                    if (currentLayer == 1) rightUsedRowsLayer1++;
-                    else rightUsedRowsLayer2++;
-                }
-            }
-
-            // **如果当前列满，尝试切换到另一侧**
-            if (remainingQuantity > 0 && usedRows >= maxRows) {
-                currentSide = currentSide.equals("左") ? "右" : "左";
-                usedRows = (currentSide.equals("左")) ?
-                        (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
-                        : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
-            }
-
-            // **如果第一层满了，检查是否可以堆积**
-            if (remainingQuantity > 0 && leftUsedRowsLayer1 >= maxRows && rightUsedRowsLayer1 >= maxRows) {
-                if (canStack && currentLayer == 1) {
-                    // **切换到第二层**
-                    currentLayer = 2;
-                    leftUsedRowsLayer2 = 0;
-                    rightUsedRowsLayer2 = 0;
-                } else if (!canStack || (leftUsedRowsLayer2 >= maxRows && rightUsedRowsLayer2 >= maxRows)) {
-                    // **如果不可堆积，或者第二层也满了，则提示库位已满**
-                    warehouseMapper.updateCurCapacity(
-                            warehouse.getId(), warehouse.getCurCapacity() + quantity);
-                    if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
-                        warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
-
-                    InVO inVO = new InVO();
-                    inVO.setRemainingQuantity(remainingQuantity);
-                    inVO.setMessage("库位已满！剩余 " + remainingQuantity + " 板产品，请选择新库位");
-                    return inVO;
-                }
-            }
+        // 保存入库半成品明细
+        if (!semiRecords.isEmpty()) {
+            inStockMapper.saveInStockItem(semiRecords, inStockId);
         }
-
-        // **6. 同步更新库位信息**
-        warehouseMapper.updateCurCapacity(
-                warehouse.getId(), warehouse.getCurCapacity() + quantity);
-        if(product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
-            warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
-
-        InVO inVO = new InVO();
-        inVO.setRemainingQuantity(remainingQuantity);
-        if (inVO.getMessage() == null) {
-            inVO.setMessage("入库成功！");
+        dto.setInStockId(inStockId);
+        // 存入板数
+        InVO inVO;
+        if (dto.getUnit().equals("0")) {
+            // 整版入库
+            inVO = semiProductRecordService.handlerInStock(dto, product, warehouse, assay, false, 0);
+        } else {
+            // 总散件数
+            inVO = semiProductRecordService.handlerInStockPieces(dto, product, warehouse, assay);
         }
+//        // **5. 开始存放**
+//        while (remainingQuantity > 0) {
+//            int usedRows = (currentSide.equals("左")) ?
+//                    (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
+//                    : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
+//
+//            if (usedRows < maxRows) {
+//                int rowNumber = usedRows + 1;
+//
+//                // **存储单板**
+//                Inventory inventory = new Inventory();
+//                inventory.setWarehouseId(warehouse.getId());
+//                inventory.setProductId(dto.getProductId());
+//                inventory.setSide(currentSide);
+//                inventory.setRowNumber(rowNumber);
+//                inventory.setLayer(currentLayer);
+//                inventory.setQuantity(1);
+//                inventory.setEntryDate(dto.getEntryDate());
+//                inventory.setInStockId(inStockId);
+//                inventory.setScreenMeshId(dto.getScreenMeshId());
+//                inventory.setAssayId(assay.getId());
+//                inventory.setProductStatus(product.getStatus());
+//                inventory.setSemiRecordId(null);
+//                inventory.setCreatedAt(LocalDateTime.now());
+//
+//                try {
+//                    inventoryMapper.insert(inventory);
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                    throw new BusinessException(ErrorCode.STOCK_IN_FAILED);
+//                }
+//                remainingQuantity--;
+//
+//                // **更新本地变量**
+//                if (currentSide.equals("左")) {
+//                    if (currentLayer == 1) leftUsedRowsLayer1++;
+//                    else leftUsedRowsLayer2++;
+//                } else {
+//                    if (currentLayer == 1) rightUsedRowsLayer1++;
+//                    else rightUsedRowsLayer2++;
+//                }
+//            }
+//
+//            // **如果当前列满，尝试切换到另一侧**
+//            if (remainingQuantity > 0 && usedRows >= maxRows) {
+//                currentSide = currentSide.equals("左") ? "右" : "左";
+//                usedRows = (currentSide.equals("左")) ?
+//                        (currentLayer == 1 ? leftUsedRowsLayer1 : leftUsedRowsLayer2)
+//                        : (currentLayer == 1 ? rightUsedRowsLayer1 : rightUsedRowsLayer2);
+//            }
+//
+//            // **如果第一层满了，检查是否可以堆积**
+//            if (remainingQuantity > 0 && leftUsedRowsLayer1 >= maxRows && rightUsedRowsLayer1 >= maxRows) {
+//                if (canStack && currentLayer == 1) {
+//                    // **切换到第二层**
+//                    currentLayer = 2;
+//                    leftUsedRowsLayer2 = 0;
+//                    rightUsedRowsLayer2 = 0;
+//                } else if (!canStack || (leftUsedRowsLayer2 >= maxRows && rightUsedRowsLayer2 >= maxRows)) {
+//                    // **如果不可堆积，或者第二层也满了，则提示库位已满**
+//                    warehouseMapper.updateCurCapacity(
+//                            warehouse.getId(), warehouse.getCurCapacity() + quantity);
+//                    if (product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
+//                        warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
+//
+//                    InVO inVO = new InVO();
+//                    inVO.setRemainingQuantity(remainingQuantity);
+//                    inVO.setMessage("库位已满！剩余 " + remainingQuantity + " 板产品，请选择新库位");
+//                    return inVO;
+//                }
+//            }
+//        }
+//
+//        // **6. 同步更新库位信息**
+//        warehouseMapper.updateCurCapacity(
+//                warehouse.getId(), warehouse.getCurCapacity() + quantity);
+//        if (product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
+//            warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
+//
+//        InVO inVO = new InVO();
+//        inVO.setRemainingQuantity(remainingQuantity);
+//        if (inVO.getMessage() == null) {
+//            inVO.setMessage("入库成功！");
+//        }
         return inVO;
+    }
+
+    /**
+     * 判断库存是否满足入库要求
+     *
+     * @param semiRecords 半成品入库记录
+     */
+    private void judgeInventory(List<SemiRecordDTO> semiRecords, Integer operatorId) {
+        List<Product> products = productMapper.selectBatchIds(semiRecords.stream().map(SemiRecordDTO::getSemiProductId).distinct().toList());
+        Map<Integer, Product> productMap = products.stream().collect(Collectors.toMap(Product::getId, s -> s));
+        for (SemiRecordDTO semiRecord : semiRecords) {
+            Integer warehouseId = semiRecord.getWarehouseId();
+            LocalDate productionDate = semiRecord.getProductionDate();
+            Product product = productMap.get(semiRecord.getSemiProductId());
+            if (product == null) {
+                throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND.getCode(), "半成品:" + semiRecord.getProductName() + "已用完");
+            }
+            VInventorySummary inventorySummary = inventorySummaryMapper.selectOne(
+                    new LambdaQueryWrapper<VInventorySummary>()
+                            .eq(VInventorySummary::getWarehouseId, warehouseId)
+                            .eq(VInventorySummary::getProductId, semiRecord.getSemiProductId())
+                            .eq(VInventorySummary::getEntryDate, productionDate)
+                            .last("limit 1")
+            );
+            String msg = "半成品:" + semiRecord.getProductName() + ",生产日期:" + semiRecord.getProductionDate();
+            if (inventorySummary == null) {
+                throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND.getCode(), msg + "的库存信息未找到");
+            }
+            String inventoryMsg = (inventorySummary.getTotalQuantity() > 0 ? inventorySummary.getTotalQuantity() + "板" : "") + (inventorySummary.getTotalPieces() > 0 ? inventorySummary.getTotalPieces() + "件" : "");
+            // 0，整板，1散件
+            if (semiRecord.getUnit().equals("0")) {
+                if ((inventorySummary.getTotalQuantity() + inventorySummary.getTotalPieces() / product.getPiecesPerPallet()) < semiRecord.getQuantity()) {
+                    throw new BusinessException(ErrorCode.INSUFFICIENT_STOCK.getCode(), msg + "的库存不足,剩余:" + inventoryMsg);
+                }
+            } else {
+                //散件
+                if ((inventorySummary.getTotalQuantity() * product.getPiecesPerPallet() + inventorySummary.getTotalPieces()) < semiRecord.getQuantity()) {
+                    throw new BusinessException(ErrorCode.INSUFFICIENT_STOCK.getCode(), msg + "的库存不足,剩余:" + inventoryMsg);
+                }
+            }
+            // 扣减半成品数量
+            outStockService.outStock(product, warehouseId, semiRecord.getProductionDate(), semiRecord.getQuantity(), semiRecord.getUnit(), operatorId, 1);
+        }
     }
 
     private boolean checkStandardCompliance(AssaySubmitDTO assay, QualityStandard standard) {
@@ -448,13 +513,13 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                 queryDTO.getSize()
         );
 
-        for(InStockVO record : records){
+        for (InStockVO record : records) {
             Integer id = record.getTestedBy();
-            if(id == null) continue;
+            if (id == null) continue;
             String testerName = userMapper.selectById(id).getName();
             record.setTesterName(testerName);
 
-            if(isStaff){
+            if (isStaff) {
                 record.setAssayId(null);
                 record.setSampleDate(null);
                 record.setColorValue(null);

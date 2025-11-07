@@ -2,7 +2,11 @@ body {
     margin: 0;
     background-color: #f5f5f5;
 }
-
+.group-input {
+    display: flex;
+    align-items: center;
+    gap: 2px
+}
 /* fade-slide */
 .fade-slide-leave-active,
 .fade-slide-enter-active {

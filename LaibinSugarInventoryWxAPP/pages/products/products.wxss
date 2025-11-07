@@ -259,11 +259,12 @@
   border-radius: 6rpx;
   padding: 0 20rpx;
   font-size: 28rpx;
-  background-color: #fff;
-  color: #333;
   box-sizing: border-box;
   display: flex;
   align-items: center;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
 }
 
 .picker-value {

@@ -219,6 +219,35 @@
   border: 1px solid #ddd;
   border-radius: 20rpx;
   font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 30rpx; /* 控制 picker 与标识的间距 */
+}
+
+.picker-date {
+  padding: 16rpx;
+  border: 1px solid #ddd;
+  border-radius: 20rpx;
+  font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+  min-width: 240rpx;
+  line-height: 1.5;
+}
+
+.assay-status {
+  margin-left: 60px;
+  font-size: 32rpx;
+  font-weight: bold;
+  line-height: 1.5;
+  margin-top: -40rpx
 }
 
 .indicator-group {
@@ -333,3 +362,53 @@
   margin-bottom: 30rpx;
   color: #faad14;
 }
+
+
+
+.group-input {
+  display: flex;
+  align-items: center;
+}
+
+.custom-input {
+  flex: 1;
+  border: 1rpx solid #dcdfe6;
+  border-radius: 8rpx;
+  padding: 20rpx;
+  font-size: 28rpx;
+  margin-right: 20rpx;
+}
+
+.custom-select {
+  width: 100rpx;
+  padding: 0 20rpx;
+  height: 70rpx;
+  line-height: 70rpx;
+  border: 1px solid #ddd;
+  border-radius: 20rpx;
+  font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+  display: flex;         /* 新增 */
+  justify-content: center; /* 水平居中 */
+  align-items: center;    /* 垂直居中 */
+}
+
+.custom-select-row {
+  width: 100%;
+  border: 1rpx solid #dcdfe6;
+  border-radius: 8rpx;
+  padding: 0 20rpx;
+  height: 70rpx;
+  line-height: 70rpx;
+  font-size: 28rpx;
+}
+
+.picker-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #606266;
+}
+

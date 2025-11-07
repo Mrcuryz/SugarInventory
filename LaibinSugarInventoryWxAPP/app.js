@@ -1,11 +1,11 @@
 // app.js
 App({
   onLaunch() {
-    // 展示本地存储能力
-    const logs = wx.getStorageSync('logs') || []
-    logs.unshift(Date.now())
+    const role = wx.getStorageSync("role") || '';
+    this.globalData.role = role;
   },
   globalData: {
-    userInfo: null
+    userInfo: null,
+    role: ''
   }
 })

@@ -105,6 +105,44 @@
   padding: 8rpx 20rpx;
   border-radius: 10rpx;
 }
+.group-input {
+  display: flex;
+  align-items: center;
+}
+
+.custom-select {
+  width: 100rpx;
+  padding: 0 20rpx;
+  height: 70rpx;
+  line-height: 70rpx;
+  border: 1px solid #ddd;
+  border-radius: 20rpx;
+  font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+  display: flex;         /* 新增 */
+  justify-content: center; /* 水平居中 */
+  align-items: center;    /* 垂直居中 */
+}
+
+.custom-select-row {
+  width: 100%;
+  border: 1rpx solid #dcdfe6;
+  border-radius: 10rpx;
+  padding: 0 20rpx;
+  height: 70rpx;
+  line-height: 70rpx;
+  font-size: 28rpx;
+}
+
+.picker-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #606266;
+}
+
 
 .semi-product-btn {
   background: #ffd000;
@@ -122,6 +160,9 @@
   gap: 20rpx;
 }
 
+.used-assay {
+  color:rgba(0, 122, 255, 0.6)
+}
 
 .labData-item {
   background: #def1e1;
@@ -228,7 +269,6 @@
   padding: 2rpx;
   border-radius: 10rpx;
   margin-top: 20rpx;
-
 }
 
 .del-btn{
@@ -255,9 +295,46 @@
   border: 1px solid #ddd;
   border-radius: 20rpx;
   font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
 }
 
-.indicator-group {
+.row {
+  display: flex;
+  align-items: center;
+  gap: 30rpx; /* 控制 picker 与标识的间距 */
+}
+
+.picker-date {
+  padding: 16rpx;
+  border: 1px solid #ddd;
+  border-radius: 20rpx;
+  font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+  min-width: 240rpx;
+  line-height: 1.5;
+}
+
+.input-1, .picker {
+  width: 90%;
+  padding: 16rpx;
+  border: 1px solid #ccc;
+  border-radius: 20rpx;
+  font-size: 36rpx;
+  color: #222; /* 更深的字体颜色使文字更显眼 */
+  background-color: #e0e0e0; /* 更亮的背景提升可读性 */
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1); /* 添加阴影 */
+}
+
+.input:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 8rpx rgba(0, 122, 255, 0.6);
+}
+
+.indicator- {
   margin-top:15px;
   display: grid;
   width: 93%;
@@ -266,6 +343,14 @@
 
 .label {
   font-size: 16px;
+}
+
+.assay-status {
+  margin-left: 60px;
+  font-size: 32rpx;
+  font-weight: bold;
+  line-height: 1.5;
+  margin-top: -40rpx
 }
 
 .required {
@@ -368,4 +453,45 @@
   border-radius: 8rpx;
   margin-bottom: 30rpx;
   color: #faad14;
+}
+
+
+/* 选项卡样式 */
+.tabs {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.tab {
+  padding: 8px 16px;
+  margin-right: 10px;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+.tab.active {
+  background-color: #1890ff;
+  color: white;
+}
+
+/* 按钮切换样式 */
+.switch-container {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.switch-btn {
+  flex: 1;
+  margin: 0 5px;
+  padding: 8px 0;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  color: #666;
+  border: none;
+}
+
+.switch-btn.active {
+  background-color: #1890ff;
+  color: white;
 }

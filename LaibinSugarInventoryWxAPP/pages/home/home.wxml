@@ -6,22 +6,26 @@
   </view>
 
   <!-- 功能按钮 -->
-  <view class="icon-grid">
-    <view class="icon-item" bindtap="goToPage" data-url="/pages/products/products">
+  <view class="icon-grid-left">
+    <view class="icon-item-left" bindtap="goToPage" data-url="/pages/products/products">
       <image src="/assets/icons/product.png" class="icon-img"></image>
       <text>产品</text>
     </view>
-    <view class="icon-item" bindtap="goToPage" data-url="/pages/warehouse/warehouse">
+    <view class="icon-item-left" bindtap="goToPage" data-url="/pages/warehouse/warehouse">
       <image src="/assets/icons/warehouse.png" class="icon-img"></image>
       <text>库位</text>
     </view>
-    <view class="icon-item" bindtap="goToPage" data-url="/pages/screen-mesh/screen-mesh">
+    <view class="icon-item-left" bindtap="goToPage" data-url="/pages/screen-mesh/screen-mesh">
       <image src="/assets/icons/screen.png" class="icon-img"></image>
       <text>筛网</text>
     </view>
-    <view class="icon-item" bindtap="goToPage" data-url="/pages/out-stock/out-stock">
+    <view class="icon-item-left" bindtap="goToPage" data-url="/pages/out-stock/out-stock">
       <image src="/assets/icons/out-stock.png" class="icon-img"></image>
       <text>出库记录</text>
+    </view>
+    <view class="icon-item-left" bindtap="goToPage" data-url="/pages/inventory/productStock">
+        <image src="/assets/images/semi-product.png" class="icon-img"></image>
+        <text>库存</text>
     </view>
   </view>
 

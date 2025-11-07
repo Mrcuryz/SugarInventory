@@ -43,14 +43,14 @@
           </view>
           <view class="indicator-row">
             <text>操作员: {{item.operator}}</text>
-            <text>创建时间: {{item.createdAt}}</text>
+            <text>使用筛网: {{item.meshName != null ? item.meshName : '无数据'}}</text>
           </view>
         </view>
 
         <!-- 操作按钮 -->
         <view class="action-buttons">
-          <button class="labData-btn" wx:if="{{item.labData && item.labData.length}}" bindtap="toggleLabData" data-index="{{index}}">
-            {{item.showLabData ? '隐藏' : '查看化验数据'}}
+          <button class="labData-btn" wx:if="{{item.labData && item.labData.length && role != 'STAFF'}}" bindtap="toggleLabData" data-index="{{index}}">
+            {{item.showLabData ? '隐藏化验数据' : '查看化验数据'}}
           </button>
         </view>
 
@@ -121,13 +121,44 @@
         </picker>
       </view>
       <view class="form-item">
+        <text class="label">入库日期</text>
+        <view class="row">
+          <picker mode="date" bindchange="onEntryDateChange">
+            <view class="picker-date">
+              {{ currentRecord.entryDate || '请选择入库日期' }}
+            </view>
+          </picker>
+
+          <view wx:if="{{hasAssay !== null}}" class="assay-status">
+            <text style="color: {{hasAssay ? 'green' : 'red'}};">
+              {{hasAssay ? '✓ 已化验' : '× 未化验'}}
+            </text>
+          </view>
+        </view>
+      </view>
+      <view class="form-item">
         <text class="label">入库数量</text>
-        <input class="input" type="number" placeholder="输入入库数量" bindinput="onInputChange" data-field="quantity" value="{{currentRecord.quantity}}" />
+        <view class="group-input">
+          <input class="input" type="number" placeholder="输入入库数量" bindinput="onInputChange" data-field="quantity" value="{{currentRecord.quantity}}" />
+          <picker mode="selector" range="{{['板', '件']}}"  value="{{unit}}" 
+            bindchange="onUnitChange" class="custom-select"
+          >
+            <view class="picker-content">
+              {{unit == 0 ? '板' : '件'}}
+            </view>
+          </picker>
+        </view>
       </view>
       <view class="form-item">
         <text class="label">入库顺序</text>
         <picker mode="selector" range="{{sideOptions}}" bindchange="onsideChange">
           <view class="picker">{{currentRecord.side || "请选择入库顺序"}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="label">筛网</text>
+        <picker mode="selector" range="{{screenMeshOptions}}" bindchange="onScreenMeshChange" value="selectedScreenMeshIndex">
+          <view class="picker">{{screenMeshOptions[selectedScreenMeshIndex] || '请选择'}}</view>
         </picker>
       </view>
     </scroll-view>

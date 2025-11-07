@@ -26,6 +26,9 @@ public interface OutStockMapper extends BaseMapper<OutStock> {
             "   o.assay_id, " +
             "   o.total_weight, " +
             "   o.out_date, " +
+            "   o.pieces, " +
+            "   o.unit, " +
+            "   o.out_type, " +
             "   u.name as operator, " +
             "   o.created_at, " +
             "   a.* " +

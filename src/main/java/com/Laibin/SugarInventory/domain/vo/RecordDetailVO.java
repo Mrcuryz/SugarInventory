@@ -76,4 +76,7 @@ public class RecordDetailVO {
 
     @Schema(description = "JSON格式的合格标准列表")
     private String qualifiedStandards;
+
+    @Schema(description = "出库单位：0板1件", example = "0")
+    private String unit;
 }

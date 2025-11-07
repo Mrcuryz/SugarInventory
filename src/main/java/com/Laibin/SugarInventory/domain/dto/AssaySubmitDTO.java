@@ -12,9 +12,16 @@ import java.time.LocalDate;
 @Data
 @Schema(description = "化验记录提交DTO，用于导入或更新化验记录")
 public class AssaySubmitDTO {
-    @NotNull(message = "产品ID不能为空")
+
     @Schema(description = "产品ID", example = "1")
     private Integer productId;
+
+    @Schema(description = "选择类型：1产品默认，2添加的验收标准", example = "0")
+    private Integer selectType;
+
+
+    @Schema(description = "验收标准id", example = "0")
+    private Integer relatedId;
 
     @NotNull(message = "采样日期不能为空")
     @Schema(description = "采样日期", example = "2025-02-24")

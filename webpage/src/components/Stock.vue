@@ -51,7 +51,13 @@
       >
         <el-table-column prop="productName" label="产品名称" width="150"></el-table-column>
         <el-table-column prop="warehouseName" label="仓库名称" width="150"></el-table-column>
-        <el-table-column prop="quantity" label="数量（件）" width="150" sortable></el-table-column>
+        <el-table-column prop="quantity" label="数量" width="150" sortable>
+          <template #default="{ row }">
+            <el-tag v-if="row.unit === '0'">{{ row.quantity }}板</el-tag>
+            <el-tag v-else-if="row.unit === '1' && row.pieces">{{ row.pieces }}件</el-tag>
+            <el-tag v-else>{{ row.quantity }} 件</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="totalWeight" label="重量（kg）" width="150" sortable></el-table-column>
         <el-table-column prop="entryDate" label="入库日期" width="150" v-if="searchFormType === '入库'" sortable></el-table-column>
         <el-table-column prop="inDate" label="入库日期" width="150" v-if="searchFormType === '出库'" sortable></el-table-column>

@@ -5,19 +5,21 @@ import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.AssayCheckDTO;
 import com.Laibin.SugarInventory.domain.dto.AssayQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AssaySubmitDTO;
-import com.Laibin.SugarInventory.domain.po.Assay;
-import com.Laibin.SugarInventory.domain.po.Product;
-import com.Laibin.SugarInventory.domain.po.QualityStandard;
-import com.Laibin.SugarInventory.domain.po.User;
+import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.vo.AssayVO;
 import com.Laibin.SugarInventory.mapper.AssayMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.QualityStandardMapper;
+import com.Laibin.SugarInventory.service.AssayGroupService;
 import com.Laibin.SugarInventory.service.AssayService;
 import com.Laibin.SugarInventory.service.LoggableService;
+import com.Laibin.SugarInventory.service.ProductService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,13 +30,12 @@ import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author Mrcury
@@ -52,58 +53,134 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
     private ProductMapper productMapper;
 
     @Autowired
+    private ProductService productService;
+
+    @Autowired
     private ObjectMapper objectMapper;
+
+    @Resource
+    private AssayGroupService assayGroupService;
 
     @Override
     @Transactional
     public void importAssays(List<AssaySubmitDTO> dtos, Integer operatorId) {
-        List<Assay> assays = dtos.stream()
-                .map(dto -> {
-                    Product product = productMapper.selectById(dto.getProductId());
-                    List<QualityStandard> standards = qualityStandardMapper.selectByProductType(product.getProductType());
-                    if (standards.isEmpty()) {
-                        throw new BusinessException("未找到该产品的质量标准");
-                    }
-
-                    List<String> qualifiedStandards = new ArrayList<>();
-                    boolean isQualified = false;
-
-                    for (QualityStandard standard : standards) {
-                        if (checkStandardCompliance(dto, standard)) {
-                            qualifiedStandards.add(standard.getStandardName());
-                            isQualified = true;  // 只要有一个标准符合，就算合格
+        if (dtos.get(0).getSelectType() == null || dtos.get(0).getSelectType() == 1) {
+            List<Assay> assays = dtos.stream()
+                    .map(dto -> {
+                        if (dto.getProductId() == null) {
+                            throw new BusinessException("请选择产品");
                         }
+                        Product product = productMapper.selectById(dto.getProductId());
+                        List<QualityStandard> standards = qualityStandardMapper.selectByProductType(product.getProductType());
+                        if (standards.isEmpty()) {
+                            throw new BusinessException("未找到该产品的质量标准");
+                        }
+
+                        List<String> qualifiedStandards = new ArrayList<>();
+                        boolean isQualified = false;
+
+                        for (QualityStandard standard : standards) {
+                            if (checkStandardCompliance(dto, standard)) {
+                                qualifiedStandards.add(standard.getStandardName());
+                                isQualified = true;  // 只要有一个标准符合，就算合格
+                            }
+                        }
+
+                        Assay assay = new Assay();
+                        BeanUtils.copyProperties(dto, assay);
+                        assay.setTestedBy(operatorId);
+                        assay.setSucrose(dto.getSucrose());
+                        assay.setIsQualified(isQualified ? "合格" : "不合格");
+                        if (!isQualified)
+                            qualifiedStandards.add("无");
+                        assay.setCreatedAt(LocalDateTime.now());
+                        try {
+                            assay.setQualifiedStandards(objectMapper.writeValueAsString(qualifiedStandards));
+                        } catch (JsonProcessingException e) {
+                            throw new RuntimeException(e);
+                        }
+
+                        assayMapper.insert(assay);
+                        return assay;
+                    })
+                    .toList();
+            if (assays.isEmpty()) {
+                throw new BusinessException(ErrorCode.DATA_IMPORT_FAILED);
+            }
+        } else {
+            // 处理验收产品标准
+            AssaySubmitDTO dto = dtos.get(0);
+            if (dto.getSelectType() != 2) {
+                throw new BusinessException("请选择标准");
+            }
+            if (dto.getRelatedId() == null) {
+                throw new BusinessException("请选择标准");
+            }
+            AssayGroup assayGroup = assayGroupService.getById(dto.getRelatedId());
+            if (assayGroup == null) {
+                throw new BusinessException("验收标准不存在");
+            }
+            String relatedProducts = assayGroup.getRelatedProducts();
+            if (StringUtils.isBlank(relatedProducts)) {
+                return;
+            }
+            Collection<Product> products = productService.getMapByIds(Arrays.stream(relatedProducts.split(",")).map(Integer::valueOf).collect(Collectors.toList()))
+                    .values();
+            if (products.isEmpty()) {
+                return;
+            }
+            List<String> productTypes = products.stream().map(Product::getProductType)
+                    .distinct().toList();
+            Map<String, List<QualityStandard>> qualifiedStandardsMap = this.getQualifiedStandards(productTypes);
+            products.forEach(product -> {
+                List<QualityStandard> standards = qualifiedStandardsMap.get(product.getProductType());
+                if (standards.isEmpty()) {
+                    throw new BusinessException("未找到" + product.getProductType() + "的质量标准");
+                }
+                List<String> qualifiedStandards = new ArrayList<>();
+                boolean isQualified = false;
+
+                for (QualityStandard standard : standards) {
+                    if (checkStandardCompliance(dto, standard)) {
+                        qualifiedStandards.add(standard.getStandardName());
+                        isQualified = true;  // 只要有一个标准符合，就算合格
                     }
-
-                    Assay assay = new Assay();
-                    BeanUtils.copyProperties(dto, assay);
-                    assay.setTestedBy(operatorId);
-                    assay.setSucrose(dto.getSucrose());
-                    assay.setIsQualified(isQualified? "合格" : "不合格");
-                    if(!isQualified)
-                        qualifiedStandards.add("无");
-                    assay.setCreatedAt(LocalDateTime.now());
-                    try {
-                        assay.setQualifiedStandards(objectMapper.writeValueAsString(qualifiedStandards));
-                    } catch (JsonProcessingException e) {
-                        throw new RuntimeException(e);
-                    }
-
-                    assayMapper.insert(assay);
-                    return assay;
-                })
-                .toList();
-
-        if (assays.isEmpty()) {
-            throw new BusinessException(ErrorCode.DATA_IMPORT_FAILED);
+                }
+                Assay assay = new Assay();
+                BeanUtils.copyProperties(dto, assay);
+                assay.setProductId(product.getId());
+                assay.setTestedBy(operatorId);
+                assay.setSucrose(dto.getSucrose());
+                assay.setIsQualified(isQualified ? "合格" : "不合格");
+                if (!isQualified)
+                    qualifiedStandards.add("无");
+                assay.setCreatedAt(LocalDateTime.now());
+                try {
+                    assay.setQualifiedStandards(objectMapper.writeValueAsString(qualifiedStandards));
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException(e);
+                }
+                assayMapper.insert(assay);
+            });
         }
+    }
+
+    private Map<String, List<QualityStandard>> getQualifiedStandards(List<String> productTypes) {
+        if (productTypes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<QualityStandard> qualityStandards = qualityStandardMapper.selectList(new LambdaQueryWrapper<QualityStandard>().in(QualityStandard::getProductType, productTypes));
+        if (qualityStandards.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return qualityStandards.stream().collect(Collectors.groupingBy(QualityStandard::getProductType));
     }
 
     @Override
     public PageResult<AssayVO> queryAssays(AssayQueryDTO query) {
         List<AssayVO> records = assayMapper.selectAssayList(
                 query,
-                (query.getPage()-1)*query.getSize(),
+                (query.getPage() - 1) * query.getSize(),
                 query.getSize()
         );
 
@@ -145,8 +222,8 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
         newAssay.setProductId(dto.getProductId());
         BeanUtils.copyProperties(dto, newAssay);
         newAssay.setTestedBy(operator.getId());
-        newAssay.setIsQualified(isQualified? "合格" : "不合格");
-        if(!isQualified)
+        newAssay.setIsQualified(isQualified ? "合格" : "不合格");
+        if (!isQualified)
             qualifiedStandards.add("无");
         newAssay.setCreatedAt(LocalDateTime.now());
         newAssay.setQualifiedStandards(objectMapper.writeValueAsString(qualifiedStandards));

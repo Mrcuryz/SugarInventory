@@ -17,7 +17,7 @@ import lombok.Setter;
 
 /**
  * <p>
- * 
+ *
  * </p>
  *
  * @author Mrcury
@@ -62,6 +62,9 @@ public class InStock extends BaseEntity implements Serializable {
 
     @TableField("created_at")
     private LocalDateTime createdAt;
+
+    @TableField("unit")
+    private String unit;
 
     @Override
     public Integer getId() {

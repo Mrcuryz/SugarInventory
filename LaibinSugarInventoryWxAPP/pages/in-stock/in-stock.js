@@ -18,7 +18,11 @@ Page({
     semiProductOptions: [],
     semiProductRecords: [],
     screenMeshOptions: [],
+
     selectedScreenMeshId: null,
+    selectedProductId: null,
+    selectedEntryDate: null,
+    hasAssay: null,
     queryParams: {
       productName: '',
       warehouseName: '',
@@ -31,16 +35,20 @@ Page({
     totalPages: 1,
     currentPage: 1,
     showModal: false,
+    returnInstockFlag: 0,
+    unit: 0,
     sideOptions: ['左', '右'],
     currentRecord: {
       productId: null,
       productName: null,
       warehouseName: null,
+      entryDate: null,
       quantity: null,
       screenMeshId: null,
       semiRecords: null,
       side: null
-    }
+    },
+    role: ''
   },
 
   onLoad() {
@@ -48,6 +56,8 @@ Page({
     this.initFinishedProductPicker();
     this.initSemiProductPicker();
     this.loadScreenMeshes();
+    const role = wx.getStorageSync("role") || '';
+    this.setData({ role });
   },
 
   async loadScreenMeshes() {
@@ -155,6 +165,101 @@ Page({
     this.debouncedLoadData();
   },
 
+// 板件单位选择处理
+ onUnitChange(e) {
+  console.log("returnInStockFlag", this.data.returnInStockFlag)
+  const index = e.detail.value;
+  this.setData({
+    unit: index
+  });
+},
+
+onSemiUnitChange(e) {
+  const index = e.currentTarget.dataset.index;
+  const semiUnit = e.detail.value;
+  let records = this.data.currentRecord.semiRecords ? [...this.data.currentRecord.semiRecords] : [];
+  if (!records[index]) {
+    records[index] = { semiProductId: null, productName: '', productionDate: '', quantity: null, unit:0 };
+  }
+  records[index].unit = semiUnit; // 
+  this.setData({
+    'currentRecord.semiRecords': records
+  });
+},
+onInWarehouseNameChange(e) {
+  const index = e.currentTarget.dataset.index;
+  const warehouseIndex = e.detail.value;
+  let records = this.data.currentRecord.semiRecords ? [...this.data.currentRecord.semiRecords] : [];
+  if (!records[index]) {
+    records[index] = { semiProductId: null, productName: '', productionDate: '', quantity: null, unit:0 };
+  }
+  records[index].warehouseId = records[index].productWarehouse[warehouseIndex].warehouseId;
+  records[index].warehouseName = records[index].productWarehouse[warehouseIndex].warehouseName;
+  this.setData({
+    'currentRecord.semiRecords': records
+  });
+},
+
+onReturnWarehouseNameChange(e) {
+  let value = e.detail.value.trim();
+  const index = e.currentTarget.dataset.index;
+  const warehouseIndex = e.detail.value;
+  let records = this.data.currentRecord.semiRecords ? [...this.data.currentRecord.semiRecords] : [];
+  if (!records[index]) {
+    records[index] = { semiProductId: null, productName: '', productionDate: '', quantity: null, unit:0 };
+  }
+  records[index].warehouseId = value;
+  records[index].warehouseName = value;
+  this.setData({
+    'currentRecord.semiRecords': records
+  });
+},
+  onEntryDateChange(e) {
+    const date = e.detail.value;
+    this.setData({ selectedEntryDate: date }, this.checkAssayStatus);
+    this.setData({
+      'currentRecord.entryDate': date
+    });
+  },
+
+  // 切换选项卡
+  switchTab: function(e) {
+    const tab = e.currentTarget.dataset.tab;
+    this.setData({
+      returnInstockFlag: parseInt(tab)
+    });
+  },
+
+  async checkAssayStatus() {
+    const { selectedProductId, selectedEntryDate } = this.data;
+    console.log(selectedProductId + selectedEntryDate)
+    if (!selectedProductId || !selectedEntryDate) return;
+  
+    try {
+      const res = await request('/api/assay/exists', 'POST', {
+        productId: selectedProductId,
+        entryDate: selectedEntryDate
+      });
+
+      this.setData({
+        hasAssay: res
+      });
+
+    } catch (err) {
+      console.log("检测状态查询失败", err);
+      wx.showToast({ title: "检测状态查询失败", icon: "none" });
+      this.setData({ hasAssay: null });
+    }
+  },  
+
+  resetAssayStatus() {
+    this.setData({
+      selectedProductId: null,
+      selectedEntryDate: null,
+      hasAssay: null
+    });
+  },
+
   onDateChange(e) {
     const field = e.currentTarget.dataset.field;
     const value = dayjs(e.detail.value).format('YYYY-MM-DD');
@@ -218,9 +323,12 @@ Page({
     });
   },
 
-  showAddRecordModal() {
+  showAddRecordModal(e) {
+    const returnInstockFlag = e.currentTarget.dataset.type;
+    console.log("returnInstockFlag", returnInstockFlag)
     this.setData({
       showModal: true,
+      returnInstockFlag: returnInstockFlag? returnInstockFlag : 0,
       currentRecord: {
         productId: null,
         productName: null,
@@ -231,6 +339,7 @@ Page({
         side: null
       }
     });
+    console.log("returnInStockFlag", this.data.returnInstockFlag)
   },
 
   hideModal() {
@@ -238,6 +347,7 @@ Page({
       showModal: false,
       additionalStorage: false
     });
+    this.resetAssayStatus();
   },
 
   async loadSemiProducts() {
@@ -252,7 +362,9 @@ Page({
       semiProductId: null,
       productName: null,
       productionDate: null,
-      quantity: null
+      quantity: null,
+      unit: 0,
+      useAssay: false
     };
 
     let updatedRecords = [...this.data.currentRecord.semiRecords, newRecord];
@@ -286,7 +398,7 @@ Page({
       records[index] = { semiProductId: null, productName: '', productionDate: '', quantity: null };
     }
   
-    records[index].quantity = inputValue === "" ? null : parseFloat(inputValue); // 允许为空
+    records[index].quantity = inputValue === "" ? null : parseFloat(inputValue); // 
   
     this.setData({
       'currentRecord.semiRecords': records
@@ -410,7 +522,7 @@ Page({
     }
   
     const product = productList[productIdx];
-  
+    this.setData({ selectedProductId: product.id }, this.checkAssayStatus);
     this.setData({
       finishedPickerIndexes: pickerIndexes,
       'currentRecord.productId': product.id,
@@ -422,7 +534,7 @@ Page({
     const index = e.currentTarget.dataset.index; // 获取当前的索引
     const pickerIndexes = e.detail.value;
     const [typeIdx, productIdx] = pickerIndexes;
-  
+
     // 获取选中的产品类型
     const type = this.data.semiProductOptions[0][typeIdx];
     const productList = this.data.semiProductData[type];
@@ -446,11 +558,16 @@ Page({
 
     console.log(records);
     console.log(`选中的半成品记录 ${index}:`, records[index]);
-    // 更新数据
-    this.setData({
-      'currentRecord.semiRecords': records
-    });
+    request('/api/products/getProductWarehouse/' + selectedProduct.id, 'GET')
+    .then(res => {
+        records[index].productWarehouse = res
+        // 更新数据
+        this.setData({
+          'currentRecord.semiRecords': records
+        });
+    })
   },  
+
 
   onProductionDateChange(e) {
     const index = e.currentTarget.dataset.index; // 获取索引
@@ -467,6 +584,17 @@ Page({
     records[index].productionDate = selectedDate; // 更新生产日期
   
     this.setData({ 'currentRecord.semiRecords': records });
+  },  
+
+  onUseAssayChange(e) {
+    const index = e.currentTarget.dataset.index;
+    const semiRecords = this.data.currentRecord.semiRecords.map((item, i) => ({
+      ...item,
+      useAssay: i === index ? e.detail.value : false
+    }));
+    this.setData({
+      'currentRecord.semiRecords': semiRecords
+    });
   },  
 
   onScreenMeshChange(e) { 
@@ -518,31 +646,29 @@ Page({
 
   async submitNormalRecord() {
     try {
+      console.log(this.data.returnInStockFlag)
       if (!this.validateForm()) return;
-
+      
       const payload = {
         productId: this.data.currentRecord.productId,
         warehouseName: this.data.currentRecord.warehouseName,
+        entryDate: this.data.currentRecord.entryDate,
         quantity: parseFloat(this.data.currentRecord.quantity),
         side: this.data.currentRecord.side,
+        returnInStockFlag: this.data.returnInstockFlag,
+        unit: this.data.unit,
         semiRecords: this.data.currentRecord.semiRecords,
         screenMeshId: this.data.selectedScreenMeshId
       };
-
-      console.log(payload)
-
+      console.log("asds??????ad", payload)
       const res = await request('/api/in-stock/add', 'POST', payload);
-
-      console.log("res:", res);
-      console.log("remainingQuantity", res.remainingQuantity);
-      console.log("message", res.message);
 
       this.hideModal();
       // 处理剩余数量
       if (res.remainingQuantity && res.remainingQuantity > 0) {
         wx.showModal({
           title: '提示',
-          content: res.message || `当前库位已满，还剩${res.remainingQuantity}板，是否存入其他库位？`,
+          content: res.message || `当前已满，还剩${res.remainingQuantity}板，是否存入其他？`,
           confirmText: '是',
           cancelText: '否',
           success: (modalRes) => {
@@ -574,7 +700,7 @@ Page({
     }
   },
 
-  // 提示用户选择额外库位的方法
+  // 提示用户选择额外的方法
   promptAdditionalStorage(remainingQuantity) {
     this.setData({
       showModal: true,
@@ -590,7 +716,7 @@ Page({
     });
   },
 
-  // 提交额外库位入库请求
+  // 提交额外入库请求
   async submitAdditionalRecord() {
     try {
       if (!this.validateForm()) return;
@@ -598,21 +724,24 @@ Page({
       const payload = {
         productId: this.data.currentRecord.productId,
         warehouseName: this.data.currentRecord.warehouseName,
+        entryDate: this.data.currentRecord.entryDate,
         quantity: this.data.currentRecord.quantity,
         side: this.data.currentRecord.side,
+        returnInStockFlag: this.data.returnInstockFlag,
+        unit: this.data.unit,
         semiRecords: this.data.currentRecord.semiRecords,
         screenMeshId: this.data.selectedScreenMeshId
       };
-
+      console.log("asdsad", payload)
       const res = await request('/api/in-stock/add', 'POST', payload);
 
       console.log("remainingQuantity", res.remainingQuantity);
       console.log("message", res.message);
       if (res.remainingQuantity > 0) {
         wx.showModal({
-          title: '库位不足',
-          content: `当前库位已满！
-          还剩${res.remainingQuantity}板，确认不存入另一库位？`,
+          title: '不足',
+          content: `当前已满！
+          还剩${res.remainingQuantity}板，确认不存入另一？`,
           confirmText: '确定',
           cancelText: '继续入库',
           success: (confirmRes) => {
@@ -624,7 +753,7 @@ Page({
               this.hideModal();
               this.loadRecords();
             } else {
-              // 用户继续选择其他库位
+              // 用户继续选择其他
               this.promptAdditionalStorage(res.remainingQuantity);
             }
           }
@@ -639,19 +768,21 @@ Page({
     } catch (error) {
       console.log(error.message);
       wx.showToast({
-        title: error.message || '操作失败: 此库位已满！',
+        title: error.message || '操作失败: 此已满！',
         icon: 'none'
       });
     }
   },
 
-  // 修改 submitRecord 以区分普通提交和额外入库
+  // 区分普通提交和额外入库
   submitRecord() {
+    console.log(this.data.returnInstockFlag)
     if (this.data.additionalStorage) {
       this.submitAdditionalRecord();
     } else {
       this.submitNormalRecord();
     }
+    this.resetAssayStatus();
   },
 
   validateForm() {
@@ -665,7 +796,7 @@ Page({
       },
       {
         field: 'warehouseName',
-        message: '请输入库位名称',
+        message: '请输入名称',
         type: 'string'
       },
       {
