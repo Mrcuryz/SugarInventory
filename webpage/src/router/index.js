@@ -8,6 +8,7 @@ const routes = [
     { path: '/login', component: () => import('@/components/Login.vue')},
     { path: '/', component: MenuVue, redirect:'/home', children: [
             { path: 'home', meta: { title: '首页' }, component: () => import('@/components/Home.vue')},
+            { path: 'autoInbound', meta: { title: '自动入库' }, component: () => import('@/components/AutoInbound.vue')},
             { path: 'operationlogs', meta: { title: '操作日志' }, component: () => import('@/components/OperationLogs.vue')},
             { path: 'product', meta: { title: '产品管理' }, component: () => import('@/components/Product.vue')},
             { path: 'productStock', meta: { title: '产品库存' }, component: () => import('@/components/ProductStock.vue')},

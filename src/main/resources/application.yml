@@ -13,17 +13,29 @@ spring:
       validation-timeout: 5000  # 连接验证超时时间（毫秒）
       leak-detection-threshold: 60000 # 检测连接泄漏（毫秒）
       connection-test-query: SELECT 1  # MySQL 连接测试语句
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
   jackson:
     mapper:
       sort-properties-alphabetically: false
     serialization:
       WRITE_DATES_AS_TIMESTAMPS: false
       order-map-entries-by-keys: false
+knife4j:
+  enable: true
+springdoc:
+  api-docs.enabled: true
+  swagger-ui.enabled: true
 server:
   port: 8080
 wechat:
   appid: wxb2e24e10a7cb3ef8
   secret: 0e992128f83b91b6e618da3151f108f7
+openai:
+    api-url: https://api.gptsapi.net/v1
+    api-key: ${OPENAI_API_KEY}
 jwt:
   secret: xVqyO+0aawRF/LNpEjDDe1w/VXjnbgjJsm43uq0dbpTTt5EHbldZ3FLohntYJfRlXAhW2ZNww27q04Ja2C9kNw==
   expiration: 86400000

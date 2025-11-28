@@ -108,6 +108,7 @@ public interface ProductMapper extends BaseMapper<Product> {
             "   <if test='packagingMethod != null'>packaging_method = #{packagingMethod},</if>" +
             "   <if test='weightPerPiece != null'>weight_per_piece = #{weightPerPiece},</if>" +
             "   <if test='piecesPerPallet != null'>pieces_per_pallet = #{piecesPerPallet},</if>" +
+            "   <if test='screenMeshId != null'>screen_mesh_id = #{screenMeshId},</if>" +
             "   <if test='canStack != null'>can_stack = #{canStack},</if>" +
             "   updated_by = #{updatedBy}, " +
             "   updated_at = #{updatedAt} " +
@@ -122,6 +123,7 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("packagingMethod") String packagingMethod,
             @Param("weightPerPiece") BigDecimal weightPerPiece,
             @Param("piecesPerPallet") Integer piecesPerPallet,
+            @Param("screenMeshId") Integer screenMeshId,
             @Param("updatedBy") Integer updatedBy,
             @Param("updatedAt") LocalDateTime updatedAt,
             @Param("canStack") Boolean canStack

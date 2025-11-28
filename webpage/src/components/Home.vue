@@ -909,6 +909,15 @@ const locations = ref([
     status: 'default'
   },
   {
+    id: 1011,
+    name: '红糖库',
+    x: 860,
+    y: 600,
+    width: 100,
+    height: 80,
+    status: 'default'
+  },
+  {
     id: 1000,
     name: '包装间库',
     x: 320,
