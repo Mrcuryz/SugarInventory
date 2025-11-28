@@ -3,6 +3,7 @@ package com.Laibin.SugarInventory.SpringSecurity;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -34,8 +35,17 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**",
                                 "/v3/api-docs/**",
+                                "/doc.html",
                                 "/swagger-ui/**",
+                                "/webjars/**",
                                 "/swagger-ui.html").permitAll()
+//                        .requestMatchers(HttpMethod.GET,
+//                                "/*.html", "/**/*.html",
+//                                "/**/*.css", "/**/*.js",
+//                                "/**/*.png", "/**/*.jpg", "/**/*.svg",
+//                                "/**/*.woff", "/**/*.woff2", "/**/*.ttf", "/**/*.ico"
+//                        ).permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()
                 )
 
