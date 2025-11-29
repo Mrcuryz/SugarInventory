@@ -214,7 +214,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         inStock.setCreatedBy(operatorId);
         inStock.setEntryDate(dto.getEntryDate());
         inStock.setAssayId(assay.getId());
-        inStock.setScreenMeshId(dto.getScreenMeshId());
+        inStock.setScreenMeshId(product.getScreenMeshId());
         inStock.setTotalWeight(totalWeight);
         inStock.setCreatedAt(LocalDateTime.now());
         inStock.setUnit(dto.getUnit());

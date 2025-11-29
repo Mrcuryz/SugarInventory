@@ -909,6 +909,15 @@ const locations = ref([
     status: 'default'
   },
   {
+    id: 1011,
+    name: '红糖库',
+    x: 860,
+    y: 600,
+    width: 100,
+    height: 80,
+    status: 'default'
+  },
+  {
     id: 1000,
     name: '包装间库',
     x: 320,
@@ -942,70 +951,6 @@ const locations = ref([
     y: 430,
     width: 80,
     height: 130,
-    status: 'default'
-  },
-  {
-    id: 68,
-    x: 1080,
-    y: 500,
-    width: 100,
-    height: 50,
-    status: 'default'
-  },
-  {
-    id: 69,
-    x: 1080,
-    y: 450,
-    width: 100,
-    height: 50,
-    status: 'default'
-  },
-  {
-    id: 70,
-    x: 1080,
-    y: 390,
-    width: 100,
-    height: 50,
-    status: 'default'
-  },
-  {
-    id: 71,
-    x: 1080,
-    y: 340,
-    width: 100,
-    height: 50,
-    status: 'default'
-  },
-  {
-    id: 72,
-    x: 1080,
-    y: 290,
-    width: 100,
-    height: 50,
-    status: 'default'
-  },
-  {
-    id: 73,
-    x: 1080,
-    y: 240,
-    width: 100,
-    height: 50,
-    status: 'default'
-  },
-  {
-    id: 74,
-    x: 1080,
-    y: 190,
-    width: 100,
-    height: 50,
-    status: 'default'
-  },
-  {
-    id: 75,
-    x: 1080,
-    y: 90,
-    width: 100,
-    height: 50,
     status: 'default'
   },
   {
@@ -1605,6 +1550,70 @@ const locations = ref([
     y: 430,
     width: 30,
     height: 130,
+    status: 'default'
+  },
+  {
+    id: 68,
+    x: 1080,
+    y: 500,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 69,
+    x: 1080,
+    y: 450,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 70,
+    x: 1080,
+    y: 390,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 71,
+    x: 1080,
+    y: 340,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 72,
+    x: 1080,
+    y: 290,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 73,
+    x: 1080,
+    y: 240,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 74,
+    x: 1080,
+    y: 190,
+    width: 100,
+    height: 50,
+    status: 'default'
+  },
+  {
+    id: 75,
+    x: 1080,
+    y: 90,
+    width: 100,
+    height: 50,
     status: 'default'
   }
   // {

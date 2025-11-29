@@ -1,0 +1,54 @@
+<view class="app-container">
+  <view class="main-content">
+    <view class="search-form">
+      <view class="form-item">
+        <text class="form-label">产品名称</text>
+        <input class="form-input" type="text" placeholder="请输入产品名称" value="{{productName}}" bindinput="onProductNameInput" />
+        <button class="search-btn" type="primary" bindtap="handleClick">查询</button>
+      </view>
+    </view>
+    <view class="tabs">
+      <view class="tabs-header">
+        <view 
+          class="tab-item {{activeName === '成品' ? 'active' : ''}}" 
+          data-name="成品"
+          bindtap="switchTab"
+        >
+          产品库存
+        </view>
+        <view 
+          class="tab-item {{activeName === '半成品' ? 'active' : ''}}" 
+          data-name="半成品"
+          bindtap="switchTab"
+        >
+          半成品库存
+        </view>
+      </view>
+
+      <view class="tabs-content">
+        <scroll-view scroll-y class="table-container">
+          <view class="table">
+            <view class="table-header">
+              <view class="table-col" style="width: 300rpx;">产品名称</view>
+              <view class="table-col" style="width: 180rpx;">数量</view>
+              <view class="table-col" style="width: 180rpx;">重量（kg）</view>
+            </view>
+
+            <block wx:for="{{tableData}}" wx:key="index">
+              <view class="table-row">
+                <view class="table-col" style="width: 300rpx;">{{item.productName}}</view>
+                <view class="table-col" style="width: 180rpx;">
+                  <text class="tag">{{item.stockInfo}}</text>
+                  <!-- <text wx:if="{{item.totalQuantity > 0 && item.totalPieces <= 0}}" class="tag">{{item.totalQuantity}}板</text>
+                  <text wx:elif="{{item.totalQuantity <= 0 && item.totalPieces > 0}}" class="tag">{{item.totalPieces}}件</text>
+                  <text wx:else class="tag">{{item.totalQuantity}}板 {{item.totalPieces}}件</text> -->
+                </view>
+                <view class="table-col" style="width: 180rpx;">{{item.totalWeight}}</view>
+              </view>
+            </block>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+  </view>
+</view>

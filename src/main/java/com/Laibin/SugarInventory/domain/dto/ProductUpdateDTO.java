@@ -31,6 +31,9 @@ public class ProductUpdateDTO extends BaseDTO {
     @Schema(description = "每板数量", example = "25")
     private Integer piecesPerPallet;
 
+    @Schema(description = "筛网id")
+    private Integer ScreenMeshId;
+
     @Schema(description = "是否可堆叠", example = "false")
     private Boolean canStack;
 

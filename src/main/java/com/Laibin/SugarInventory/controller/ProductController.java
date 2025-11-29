@@ -152,13 +152,14 @@ public class ProductController {
     /**
      * 根据条件更新产品信息接口
      *
-     * @param vo 产品更新信息
+     * @param dto 产品更新信息
      *           参数：Integer productId;          产品id（必填）
      *           String productName;         产品名称（选填）
      *           String productType;         产品类型（选填）
      *           String status;              产品状态（选填）
      *           String packagingMethod;     包装方式（选填）
      *           BigDecimal weightPerPiece;  每份重量（选填）
+     *           Integer ScreenMeshId;       筛网ID（选填）
      *           权限注解 @PreAuthorize("hasAuthority('product:update')") 用于控制用户是否有权限进行更新操作
      *           注解 @AuthenticationPrincipal 用于获取当前登录用户信息
      * @return 成功或失败信息
@@ -168,10 +169,10 @@ public class ProductController {
     @PutMapping("")
     @PreAuthorize("hasAuthority('product:update')")
     public Result<Product> updateProduct(
-            @Validated @RequestBody ProductUpdateDTO vo,
+            @Validated @RequestBody ProductUpdateDTO dto,
             @AuthenticationPrincipal LoginUser loginUser
     ) {
-        return Result.success(productService.updateProduct(vo, loginUser.getUser().getId()));
+        return Result.success(productService.updateProduct(dto, loginUser.getUser().getId()));
     }
 
     @Operation(summary = "删除产品", description = "根据产品ID删除产品")

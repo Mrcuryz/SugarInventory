@@ -45,7 +45,7 @@ public interface AssayMapper extends BaseMapper<Assay> {
             "   <if test='query.isQualified != null'>AND a.is_qualified = #{query.isQualified}</if> " +
             "   <if test='query.testerName != null'>AND u.name LIKE CONCAT('%', #{query.testerName}, '%')</if> " +
             "</where> " +
-            "ORDER BY a.created_at DESC, a.product_id ASC, a.version DESC " +
+            "ORDER BY a.sample_date DESC, a.product_id ASC, a.version DESC " +
             "LIMIT #{offset}, #{size} " +
             "</script>")
     List<AssayVO> selectAssayList(@Param("query") AssayQueryDTO query,
