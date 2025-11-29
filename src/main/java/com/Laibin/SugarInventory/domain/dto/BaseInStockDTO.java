@@ -32,7 +32,6 @@ public class BaseInStockDTO {
     @Schema(description = "库位左/右列，默认为左", example = "左")
     private String side = "左";  // 默认左侧
 
-    @NotNull(message = "筛网规格ID不能为空")
     @Schema(description = "筛网规格ID", example = "2")
     private Integer screenMeshId;
 

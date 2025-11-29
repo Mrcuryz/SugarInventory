@@ -51,6 +51,9 @@ public class Product extends BaseEntity implements Serializable {
     @TableField("can_stack")
     private Boolean canStack;
 
+    @TableField("screen_mesh_id")
+    private Integer screenMeshId;
+
     @TableField("created_by")
     private Integer createdBy;
 

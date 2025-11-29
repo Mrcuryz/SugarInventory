@@ -34,7 +34,7 @@ public interface ProductService extends IService<Product> {
     List<ProductInfoVO> getFinishedProductsByCondition(String name, String type);
 
     @Transactional(rollbackFor = Exception.class)
-    Product updateProduct(ProductUpdateDTO vo, Integer currentUserId);
+    Product updateProduct(ProductUpdateDTO dto, Integer currentUserId);
 
     void createProduct(ProductCreateDTO vo, User operator);
 

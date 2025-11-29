@@ -58,14 +58,14 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="productName" label="产品名称" width="150" >
+        <el-table-column prop="productName" label="产品名称" width="200" >
           <template #default="{ row }">
             <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
               {{ row.productName }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="productType" label="产品类型" width="300" >
+        <el-table-column prop="productType" label="产品类型" width="100" >
         <template #default="{ row }">
             <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
               {{ row.productType }}
@@ -88,9 +88,14 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="packagingMethod" label="打包方式" width="120" />
-        <el-table-column prop="weightPerPiece" label="每件重量（kg）" min-width="auto"/>
+        <el-table-column prop="packagingMethod" label="打包方式" width="90" />
+        <el-table-column prop="weightPerPiece" label="每件重量（kg）" min-width="110"/>
         <el-table-column prop="piecesPerPallet" label="每板件数" width="auto"/>
+        <el-table-column label="筛网名称" width="140">
+          <template #default="{ row }">
+            {{ meshMap[row.screenMeshId] || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="canStack" label="是否可堆叠" width="auto">
           <template #default="{ row }">
             <span v-if="row.canStack">是</span>
@@ -145,6 +150,21 @@
         <el-form-item label="每板件数" prop="piecesPerPallet" required>
           <el-input v-model="productForm.piecesPerPallet" clearable />
         </el-form-item>
+        <el-form-item label="筛网名称" prop="screenMeshId">
+          <el-select
+              v-model="productForm.screenMeshId"
+              placeholder="选择默认筛网"
+              clearable
+              style="width: 200px"
+          >
+            <el-option
+                v-for="item in meshList"
+                :key="item.id"
+                :label="item.meshName"
+                :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="是否可堆叠" prop="canStack">
           <el-switch v-model="productForm.canStack" active-color="#13ce66" />
         </el-form-item>
@@ -162,6 +182,7 @@
 import { ref, onMounted } from 'vue'
 import { getProductList, addProduct, removeProduct, changeProduct} from '@/api/product'
 import { ElMessage, ElMessageBox} from 'element-plus'
+import { getMesh } from '@/api/mesh'
 // 在已有导入基础上添加XLSX
 import * as XLSX from 'xlsx';
 import {useI18n} from "vue-i18n";
@@ -192,6 +213,7 @@ const exportExcel = async () => {
         '打包方式': product.packagingMethod,
         '每件重量（kg）': product.weightPerPiece,
         '每板件数': product.piecesPerPallet,
+        '筛网名称': meshMap.value[product.screenMeshId] || '',
         '是否可堆叠': product.canStack ? '是' : '否'
       }));
       // 创建工作表
@@ -230,6 +252,24 @@ const productStatus = [
     { value: '半成品', label: '半成品' },
     { value: '成品', label: '成品' }
 ]
+const meshList = ref([])
+const meshMap = ref({})
+// 加载筛网列表
+const loadMeshList = async () => {
+  const res = await getMesh()
+  if (res.code === 200) {
+    meshList.value = res.data || []
+    const map = {}
+    meshList.value.forEach(item => {
+      if (item && item.id != null) {
+        map[item.id] = item.meshName
+      }
+    })
+    meshMap.value = map
+  } else {
+    ElMessage.error(res.msg || '获取筛网列表失败')
+  }
+}
 // 加载状态
 const loading = ref(false)
 // 处理搜索
@@ -280,6 +320,9 @@ const rule = {
   piecesPerPallet: [
     { required: true, message: '请输入每板件数', trigger: 'blur' },
     { type: 'string', message: '板数必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
+  ],
+  screenMeshId: [
+    { required: true, message: '请选择筛网', trigger: 'change' }
   ]
 }
 const dialogVisible = ref(false)
@@ -291,6 +334,7 @@ const handleClose = () => {
     packagingMethod: '',
     weightPerPiece: '',
     piecesPerPallet: '',
+    screenMeshId: null,
     canStack: false
   }
   dialogVisible.value = false
@@ -303,6 +347,7 @@ const productForm = ref({
   packagingMethod: '',
   weightPerPiece: '',
   piecesPerPallet: '',
+  screenMeshId: null,
   canStack: false
 })
 // 新增产品
@@ -340,6 +385,7 @@ const newProduct = async () => {
       packagingMethod: '',
       weightPerPiece: '',
       piecesPerPallet: '',
+      screenMeshId: null,
       canStack: false
     }
   } else {
@@ -390,6 +436,7 @@ const editProduct = (row) => {
     packagingMethod: row.packagingMethod,
     weightPerPiece: row.weightPerPiece,
     piecesPerPallet: row.piecesPerPallet,
+    screenMeshId: row.screenMeshId ?? null,
     canStack: row.canStack
   }
   dialogVisible.value = true
@@ -435,8 +482,9 @@ const updateProduct = async () => {
   }
 }
 
-onMounted(() => {
-  handleSearch()
+onMounted(async () => {
+  await loadMeshList()
+  await handleSearch()
 })
 </script>
 

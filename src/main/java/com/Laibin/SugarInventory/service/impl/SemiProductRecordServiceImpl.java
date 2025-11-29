@@ -82,7 +82,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         semiProductRecord.setWarehouseId(warehouse.getId());
         semiProductRecord.setProductId(dto.getProductId());
         semiProductRecord.setQuantity(quantity);
-        semiProductRecord.setScreenMeshId(dto.getScreenMeshId());
+        semiProductRecord.setScreenMeshId(product.getScreenMeshId());
         semiProductRecord.setOperator(operator);
         semiProductRecord.setOperationDate(dto.getEntryDate());
         semiProductRecord.setAssayId(assay.getId());
@@ -196,7 +196,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
                 inventory.setRowNumber(rowNumber);
                 inventory.setLayer(currentLayer);
                 inventory.setQuantity(1);
-                inventory.setScreenMeshId(dto.getScreenMeshId());
+                inventory.setScreenMeshId(product.getScreenMeshId());
                 inventory.setEntryDate(dto.getEntryDate());
                 inventory.setAssayId(assay.getId());
                 inventory.setProductStatus(product.getStatus());
@@ -350,7 +350,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         record.setWarehouseId(warehouse.getId());
         record.setProductId(dto.getProductId());
         record.setQuantity(dto.getQuantity() - vo.getRemainingQuantity());
-        record.setScreenMeshId(dto.getScreenMeshId());
+        record.setScreenMeshId(product.getScreenMeshId());
         record.setOperator(operator);
         record.setOperationDate(dto.getEntryDate());
         record.setAssayId(assay.getId());
@@ -443,7 +443,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
                 } else {
                     inv.setPieces(0);
                 }
-                inv.setScreenMeshId(dto.getScreenMeshId());
+                inv.setScreenMeshId(product.getScreenMeshId());
                 inv.setEntryDate(dto.getEntryDate());
                 inv.setAssayId(assay.getId());
                 inv.setProductStatus(product.getStatus());

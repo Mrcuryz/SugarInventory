@@ -15,6 +15,7 @@ import {House, Document, Histogram, Box, Filter, PieChart, Finished, Switch, Use
 // 菜单数据
 const menuList = [
   {path: '/home', title: '首页', icon: House},
+  {path: '/autoInbound', title: '自动入库', icon: Document},
   {path: '/operationlogs', title: '操作日志', icon: Document},
   {path: '/product', title: '产品管理', icon: Histogram},
   {path: '/productStock', title: '产品库存', icon: ShoppingCart},

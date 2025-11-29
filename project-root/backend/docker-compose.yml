@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  backend:
+    build: .
+    container_name: sugar-backend
+    depends_on:
+      - mysql
+    ports:
+      - "8080:8080"
+    networks:
+      - app-network
+    environment:
+      TZ: Asia/Shanghai
+
+  frontend:
+    build: ../frontend
+    container_name: sugar-frontend
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+
+volumes:
+  mysql-data:
+
+networks:
+  app-network:

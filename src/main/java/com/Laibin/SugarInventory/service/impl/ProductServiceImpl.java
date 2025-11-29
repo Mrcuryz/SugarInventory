@@ -168,6 +168,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
                 dto.getPackagingMethod(),
                 dto.getWeightPerPiece(),
                 dto.getPiecesPerPallet(),
+                dto.getScreenMeshId(),
                 currentUserId,
                 LocalDateTime.now(),
                 dto.getCanStack()
