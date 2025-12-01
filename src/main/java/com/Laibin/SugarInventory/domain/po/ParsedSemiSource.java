@@ -11,6 +11,9 @@ public class ParsedSemiSource {
     /** 报数里的品名原文，如“直破黄小颗粒”“40Kg黄碎冰” */
     private String productNameRaw;
 
+    private Integer semiProductId;
+    private String productName;
+
     /** 生产日期（如 2025-10-18），缺失则 null 或 "" */
     private String productionDate;
 

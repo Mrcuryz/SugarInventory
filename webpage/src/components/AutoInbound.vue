@@ -3,7 +3,139 @@
     <!-- 解析区 -->
     <el-card class="search-card" style="max-width: 1200px">
       <div class="card-title">自动入库解析</div>
+      <el-dialog
+          v-model="semiEditVisible"
+          title="关联半成品"
+          width="820px"
+      >
+        <el-form label-width="100px">
+          <div
+              v-for="(item, index) in semiEditRecords"
+              :key="index"
+              style="margin-bottom: 12px"
+          >
+            <el-row :gutter="16">
+              <!-- 半成品名称 -->
+              <el-col :span="11">
+                <el-form-item label="半成品名称">
+                  <el-select
+                      v-model="item.semiProductId"
+                      placeholder="选择半成品"
+                      clearable
+                      filterable
+                      @change="onSemiProductChange(item)"
+                  >
+                    <el-option
+                        v-for="semi in semiProductList"
+                        :key="semi.productId"
+                        :label="semi.productName"
+                        :value="semi.productId"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
 
+              <!-- 库位 -->
+              <el-col :span="10">
+                <el-form-item label="库位">
+                  <el-select
+                      v-model="item.warehouseId"
+                      placeholder="选择库位"
+                      clearable
+                      filterable
+                      style="width:100%"
+                  >
+                    <el-option
+                        v-for="w in warehouseList"
+                        :key="w.warehouseId || w.id"
+                        :label="w.warehouseName"
+                        :value="w.warehouseId || w.id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+
+              <!-- 数量 + 单位（板/件） -->
+            </el-row>
+
+            <el-row :gutter="16">
+              <!-- 生产日期 -->
+              <el-col :span="11">
+                <el-form-item label="生产日期">
+                  <el-date-picker
+                      v-model="item.productionDate"
+                      type="date"
+                      value-format="YYYY-MM-DD"
+                      placeholder="生产日期"
+                      style="width:100%"
+                  />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="9">
+                <el-form-item label="数量">
+                  <div style="display:flex;gap:4px">
+                    <el-input
+                        v-model="item.quantity"
+                        clearable
+                        width:20px
+                    />
+                    <el-select
+                        v-model="item.unit"
+                        placeholder="单位"
+                        style="width:110px"
+                    >
+                      <el-option label="板" value="0" />
+                      <el-option label="件" value="1" />
+                    </el-select>
+                  </div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-row :gutter="16">
+              <!-- 套用该半成品化验数据 -->
+              <el-col :span="8">
+                <el-form-item label=" ">
+                  <el-switch
+                      v-model="item.useAssay"
+                      active-text="套用化验数据"
+                      :active-value="true"
+                      :inactive-value="false"
+                      @change="handleSemiUseAssay(index)"
+                  />
+                </el-form-item>
+              </el-col>
+
+              <!-- 删除按钮 -->
+              <el-col :span="6" style="display:flex;align-items:center;margin-left:auto;margin-right:auto;">
+                <el-button
+                    type="danger"
+                    :icon="Delete"
+                    circle
+                    @click="removeSemiEditRecord(index)"
+                />
+              </el-col>
+            </el-row>
+
+            <el-divider v-if="index !== semiEditRecords.length - 1" />
+          </div>
+
+          <el-button
+              type="primary"
+              plain
+              size="small"
+              @click="addSemiEditRecord"
+          >
+            添加半成品
+          </el-button>
+        </el-form>
+
+        <template #footer>
+          <el-button @click="semiEditVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmSemiEdit">确定</el-button>
+        </template>
+      </el-dialog>
       <el-form :model="parseForm" label-width="90px" class="parse-form">
         <el-form-item label="入库日期">
           <el-date-picker
@@ -44,14 +176,14 @@
     <el-card class="table-card" style="max-width: 1200px" v-if="taskList.length || batchId">
       <div class="table-header">
         <div class="left">
-          <span>当前批次：</span>
-          <el-tag v-if="batchId" type="info" effect="plain">{{ batchId }}</el-tag>
           <el-button
               v-if="batchId"
-              size="small"
               type="primary"
               link
+              size="small"
+              :loading="loadingBatch"
               @click="handleReloadBatch"
+              style="margin-left: 8px"
           >
             重新加载
           </el-button>
@@ -84,71 +216,37 @@
           style="width: 100%"
           v-loading="loadingBatch"
           @selection-change="handleSelectionChange"
+          :row-key="row => row.taskId"
           height="480"
       >
+
         <el-table-column type="expand">
           <template #default="{ row }">
-            <div v-if="row.type === 'FINISHED_PRODUCT' && row.suggestedSemiRecords && row.suggestedSemiRecords.length">
-              <div class="semi-title">关联半成品记录</div>
+            <div v-if="row.type === 'FINISHED_PRODUCT'">
+              <div class="semi-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div class="semi-title">·  关联半成品记录</div>
+              </div>
+
               <el-table
-                  :data="row.suggestedSemiRecords"
+                  :data="row.semiRecords"
                   size="small"
                   border
                   style="width: 100%; margin-bottom: 8px"
               >
-                <el-table-column prop="productName" label="半成品" min-width="100" />
-
-                <el-table-column label="生产日期" width="140">
+                <el-table-column width="50" />
+                <el-table-column prop="productName" label="半成品" width="200" />
+                <el-table-column prop="productionDate" label="生产日期" width="200" />
+                <el-table-column prop="warehouseName" label="库位" width="200" />
+                <el-table-column label="数量" width="200">
                   <template #default="{ row: semi }">
-                    <el-date-picker
-                        v-model="semi.productionDate"
-                        type="date"
-                        value-format="YYYY-MM-DD"
-                        placeholder="日期"
-                        size="small"
-                        style="width: 120px"
-                    />
+                    {{ semi.quantity }} {{ semi.unit === '0' ? '板' : '件' }}
                   </template>
                 </el-table-column>
-
-                <el-table-column label="库位" min-width="100">
+                <el-table-column label="套用化验" min-width="150">
                   <template #default="{ row: semi }">
-                    <el-input
-                        v-model="semi.warehouseName"
-                        size="small"
-                        placeholder="库位名称"
-                        clearable
-                    />
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="数量" width="300">
-                  <template #default="{ row: semi }">
-                    <el-input-number
-                        v-model="semi.quantity"
-                        :min="0"
-                        size="small"
-                        style="width: 90px"
-                    />
-                    <el-select
-                        v-model="semi.unit"
-                        size="small"
-                        style="width: 70px; margin-left: 6px"
-                    >
-                      <el-option label="板" value="0" />
-                      <el-option label="件" value="1" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="套用化验" width="110">
-                  <template #default="{ row: semi }">
-                    <el-switch
-                        v-model="semi.useAssay"
-                        :active-value="true"
-                        :inactive-value="false"
-                        size="small"
-                    />
+                    <el-tag size="small" :type="semi.useAssay ? 'success' : 'info'">
+                      {{ semi.useAssay ? '是' : '否' }}
+                    </el-tag>
                   </template>
                 </el-table-column>
               </el-table>
@@ -159,15 +257,209 @@
           </template>
         </el-table-column>
 
-        <el-table-column type="selection" width="35" />
+        <!--        <el-table-column type="expand">-->
+<!--          <template #default="{ row }">-->
+<!--            <el-button type="primary" link @click="openSemiEditDialog(row)">-->
+<!--              {{ (row.semiRecords && row.semiRecords.length) ? '编辑' : '添加' }}-->
+<!--            </el-button>-->
+<!--            <div v-if="row.type === 'FINISHED_PRODUCT' && row.suggestedSemiRecords && row.suggestedSemiRecords.length">-->
+<!--              <div class="semi-title">关联半成品记录</div>-->
+<!--              <el-table-->
+<!--                  :data="row.suggestedSemiRecords"-->
+<!--                  size="small"-->
+<!--                  border-->
+<!--                  style="width: 100%; margin-bottom: 8px"-->
+<!--              >-->
+<!--                <el-table-column prop="productName" label="半成品" min-width="100" />-->
+<!--                <el-dialog-->
+<!--                    v-model="semiEditVisible"-->
+<!--                    title="关联半成品"-->
+<!--                    width="820px"-->
+<!--                >-->
+<!--                  <el-form>-->
+<!--                    <div v-for="(item, index) in semiEditRecords" :key="index" style="margin-bottom: 12px">-->
+<!--                      <el-row :gutter="16">-->
+<!--                        &lt;!&ndash; 半成品名称 &ndash;&gt;-->
+<!--                        <el-col :span="8">-->
+<!--                          <el-form-item :label="'半成品名称'" :prop="`semiEditRecords.${index}.semiProductId`">-->
+<!--                            <el-select-->
+<!--                                v-model="item.semiProductId"-->
+<!--                                placeholder="选择半成品"-->
+<!--                                clearable-->
+<!--                                filterable-->
+<!--                                @change="onSemiProductChange(item)"-->
+<!--                            >-->
+<!--                              <el-option-->
+<!--                                  v-for="semi in semiProductList"-->
+<!--                                  :key="semi.productId"-->
+<!--                                  :label="semi.productName"-->
+<!--                                  :value="semi.productId"-->
+<!--                              />-->
+<!--                            </el-select>-->
+<!--                          </el-form-item>-->
+<!--                        </el-col>-->
 
-        <el-table-column prop="rawBlock" label="原始文本" min-width="200">
-          <template #default="{ row }">
-            <el-tooltip effect="dark" :content="row.rawBlock" placement="top">
-              <span class="ellipsis-text">{{ row.rawBlock }}</span>
-            </el-tooltip>
-          </template>
-        </el-table-column>
+<!--                        &lt;!&ndash; 库位 &ndash;&gt;-->
+<!--                        <el-col :span="6">-->
+<!--                          <el-form-item :label="'库位'" :prop="`semiEditRecords.${index}.warehouseId`">-->
+<!--                            <el-select-->
+<!--                                v-model="item.warehouseId"-->
+<!--                                placeholder="选择库位"-->
+<!--                                clearable-->
+<!--                                filterable-->
+<!--                                style="width: 100%"-->
+<!--                            >-->
+<!--                              <el-option-->
+<!--                                  v-for="w in warehouseList"-->
+<!--                                  :key="w.warehouseId || w.id"-->
+<!--                                  :label="w.warehouseName"-->
+<!--                                  :value="w.warehouseId || w.id"-->
+<!--                              />-->
+<!--                            </el-select>-->
+<!--                          </el-form-item>-->
+<!--                        </el-col>-->
+
+<!--                        &lt;!&ndash; 数量 + 单位（板/件） &ndash;&gt;-->
+<!--                        <el-col :span="6">-->
+<!--                          <el-form-item :label="'数量'" :prop="`semiEditRecords.${index}.quantity`">-->
+<!--                            <div style="display: flex; gap: 4px">-->
+<!--                              <el-input-->
+<!--                                  v-model="item.quantity"-->
+<!--                                  clearable-->
+<!--                                  style="flex: 1"-->
+<!--                              />-->
+<!--                              <el-select-->
+<!--                                  v-model="item.unit"-->
+<!--                                  placeholder="单位"-->
+<!--                                  style="width: 80px"-->
+<!--                              >-->
+<!--                                <el-option label="板" value="0" />-->
+<!--                                <el-option label="件" value="1" />-->
+<!--                              </el-select>-->
+<!--                            </div>-->
+<!--                          </el-form-item>-->
+<!--                        </el-col>-->
+
+<!--                        &lt;!&ndash; 删除按钮 &ndash;&gt;-->
+<!--                        <el-col :span="4" style="display:flex;align-items:center">-->
+<!--                          <el-button-->
+<!--                              type="danger"-->
+<!--                              :icon="Delete"-->
+<!--                              circle-->
+<!--                              @click="removeSemiEditRecord(index)"-->
+<!--                          />-->
+<!--                        </el-col>-->
+<!--                      </el-row>-->
+
+<!--                      <el-row :gutter="16">-->
+<!--                        &lt;!&ndash; 生产日期 &ndash;&gt;-->
+<!--                        <el-col :span="8">-->
+<!--                          <el-form-item :label="'生产日期'" :prop="`semiEditRecords.${index}.productionDate`">-->
+<!--                            <el-date-picker-->
+<!--                                v-model="item.productionDate"-->
+<!--                                type="date"-->
+<!--                                placeholder="生产日期"-->
+<!--                                value-format="YYYY-MM-DD"-->
+<!--                                style="width: 100%"-->
+<!--                            />-->
+<!--                          </el-form-item>-->
+<!--                        </el-col>-->
+
+<!--                        &lt;!&ndash; 套用化验数据开关，可选 &ndash;&gt;-->
+<!--                        <el-col :span="8">-->
+<!--                          <el-form-item label=" " >-->
+<!--                            <el-switch-->
+<!--                                v-model="item.useAssay"-->
+<!--                                active-text="套用该半成品化验数据"-->
+<!--                                :active-value="true"-->
+<!--                                :inactive-value="false"-->
+<!--                                @change="handleSemiUseAssay(index)"-->
+<!--                            />-->
+<!--                          </el-form-item>-->
+<!--                        </el-col>-->
+<!--                      </el-row>-->
+
+<!--                      <el-divider v-if="index !== semiEditRecords.length - 1" />-->
+<!--                    </div>-->
+
+<!--                    <el-button-->
+<!--                        type="primary"-->
+<!--                        plain-->
+<!--                        size="small"-->
+<!--                        @click="addSemiEditRecord"-->
+<!--                    >-->
+<!--                      添加半成品-->
+<!--                    </el-button>-->
+<!--                  </el-form>-->
+
+<!--                  <template #footer>-->
+<!--                    <el-button @click="semiEditVisible = false">取消</el-button>-->
+<!--                    <el-button type="primary" @click="confirmSemiEdit">确定</el-button>-->
+<!--                  </template>-->
+<!--                </el-dialog>-->
+
+<!--                <el-table-column label="生产日期" width="140">-->
+<!--                  <template #default="{ row: semi }">-->
+<!--                    <el-date-picker-->
+<!--                        v-model="semi.productionDate"-->
+<!--                        type="date"-->
+<!--                        value-format="YYYY-MM-DD"-->
+<!--                        placeholder="日期"-->
+<!--                        size="small"-->
+<!--                        style="width: 120px"-->
+<!--                    />-->
+<!--                  </template>-->
+<!--                </el-table-column>-->
+
+<!--                <el-table-column label="库位" min-width="100">-->
+<!--                  <template #default="{ row: semi }">-->
+<!--                    <el-input-->
+<!--                        v-model="semi.warehouseName"-->
+<!--                        size="small"-->
+<!--                        placeholder="库位名称"-->
+<!--                        clearable-->
+<!--                    />-->
+<!--                  </template>-->
+<!--                </el-table-column>-->
+
+<!--                <el-table-column label="数量" width="300">-->
+<!--                  <template #default="{ row: semi }">-->
+<!--                    <el-input-number-->
+<!--                        v-model="semi.quantity"-->
+<!--                        :min="0"-->
+<!--                        size="small"-->
+<!--                        style="width: 90px"-->
+<!--                    />-->
+<!--                    <el-select-->
+<!--                        v-model="semi.unit"-->
+<!--                        size="small"-->
+<!--                        style="width: 70px; margin-left: 6px"-->
+<!--                    >-->
+<!--                      <el-option label="板" value="0" />-->
+<!--                      <el-option label="件" value="1" />-->
+<!--                    </el-select>-->
+<!--                  </template>-->
+<!--                </el-table-column>-->
+
+<!--                <el-table-column label="套用化验" width="110">-->
+<!--                  <template #default="{ row: semi }">-->
+<!--                    <el-switch-->
+<!--                        v-model="semi.useAssay"-->
+<!--                        :active-value="true"-->
+<!--                        :inactive-value="false"-->
+<!--                        size="small"-->
+<!--                    />-->
+<!--                  </template>-->
+<!--                </el-table-column>-->
+<!--              </el-table>-->
+<!--            </div>-->
+<!--            <div v-else class="no-semi-info">-->
+<!--              当前任务无关联半成品记录-->
+<!--            </div>-->
+<!--          </template>-->
+<!--        </el-table-column>-->
+
+        <el-table-column type="selection" width="35" />
 
         <el-table-column label="日期" width="150">
           <template #default="{ row }">
@@ -222,7 +514,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="板数" width="85">
+        <el-table-column label="板数" width="100">
           <template #default="{ row }">
             <el-input-number
                 v-if="row.type === 'SEMI_PRODUCT'"
@@ -230,7 +522,7 @@
                 :min="0"
                 size="small"
                 controls-position="right"
-                style="width: 60px"
+                style="width: 75px"
             />
             <el-input-number
                 v-else
@@ -238,12 +530,12 @@
                 :min="0"
                 size="small"
                 controls-position="right"
-                style="width: 60px"
+                style="width: 75px"
             />
           </template>
         </el-table-column>
 
-        <el-table-column label="件数" width="85">
+        <el-table-column label="件数" width="100">
           <template #default="{ row }">
             <el-input-number
                 v-if="row.type === 'SEMI_PRODUCT'"
@@ -251,7 +543,7 @@
                 :min="0"
                 size="small"
                 controls-position="right"
-                style="width: 60px"
+                style="width: 75px"
             />
             <el-input-number
                 v-else
@@ -259,7 +551,7 @@
                 :min="0"
                 size="small"
                 controls-position="right"
-                style="width: 60px"
+                style="width: 75px"
             />
           </template>
         </el-table-column>
@@ -272,7 +564,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="riskReason" label="风险原因" min-width="120">
+        <el-table-column prop="riskReason" label="风险原因" min-width="100">
           <template #default="{ row }">
             <el-tooltip effect="dark" :content="row.riskReason" placement="top">
               <span class="ellipsis-text">{{ row.riskReason || '-' }}</span>
@@ -301,8 +593,21 @@
             </el-tag>
           </template>
         </el-table-column>
-
-        <el-table-column prop="remark" label="备注" min-width="180">
+        <el-table-column label="关联半成品" width="100">
+          <template #default="{ row }">
+            <!-- 只有成品任务才需要关联半成品 -->
+            <el-button
+                v-if="row.type === 'FINISHED_PRODUCT'"
+                type="primary"
+                link
+                size="small"
+                @click.stop="openSemiEditDialog(row)"
+            >
+              {{ (row.semiRecords && row.semiRecords.length) ? '编辑' : '编辑' }}
+            </el-button>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" width="85">
           <template #default="{ row }">
             <el-tooltip effect="dark" :content="row.remark" placement="top">
               <span class="ellipsis-text">{{ row.remark || '-' }}</span>
@@ -355,11 +660,13 @@
 </template>
 
 <script setup>
-import { getSemiProduct, getStProduct } from '@/api/assay'
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { useTokenStore } from '@/stores/token'
-import { parseAutoInbound, getAutoInboundBatch, confirmAutoInbound } from '@/api/autoInbound'
+import {getSemiProduct, getStProduct} from '@/api/assay'
+import {computed, onMounted, ref} from 'vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {useTokenStore} from '@/stores/token'
+import {confirmAutoInbound, getAutoInboundBatch, parseAutoInbound} from '@/api/autoInbound'
+import {getWarehouse} from '@/api/warehouse'
+import {Delete} from '@element-plus/icons-vue'
 
 // ---------- 工具：从 JWT 里解析出当前用户ID（sub） ----------
 function decodeJwtSub(token) {
@@ -408,6 +715,151 @@ const selectedTaskIds = ref([])
 // 当前用户 ID（操作员）
 const tokenStore = useTokenStore()
 const operatorId = ref(decodeJwtSub(tokenStore.token))
+
+const semiEditVisible = ref(false)
+const semiEditRecords = ref([])          // 当前弹窗里的半成品行
+const semiEditTask = ref(null)           // 当前正在编辑的那条 自动入库任务
+
+const warehouseList = ref([])
+
+const loadWarehouseList = async () => {
+  try {
+    // 参数按你后端来，如果有分页就 page/size 给大一点
+    const res = await getWarehouse({ page: 1, size: 500 })
+    // 兼容两种返回结构：data 为数组 / data.records 为数组
+    const records = Array.isArray(res.data) ? res.data : (res.data.records || [])
+    warehouseList.value = records
+  } catch (e) {
+    console.error('获取库位列表失败', e)
+  }
+}
+
+const findWarehouseNameById = (id) => {
+  if (!id) return ''
+  const w = warehouseList.value.find(
+      w => w.warehouseId === id || w.id === id
+  )
+  return w ? w.warehouseName : ''
+}
+
+// 打开弹窗：把任务里的现有半成品解析出来
+const openSemiEditDialog = (task) => {
+  semiEditTask.value = task
+  let records = []
+
+  if (Array.isArray(task.semiRecords) && task.semiRecords.length) {
+    // 已经人工编辑过
+    records = task.semiRecords.map(r => ({
+      semiProductId: r.semiProductId || null,
+      productName: r.productName || '',
+      warehouseId: r.warehouseId || null,
+      warehouseName: findWarehouseNameById(r.warehouseId),
+      quantity: r.quantity ?? '',
+      unit: String(r.unit ?? '1'),
+      productionDate: r.productionDate || '',
+      useAssay: !!r.useAssay
+    }))
+  } else if (task.suggestedSemiRecords && task.suggestedSemiRecords.length) {
+    // 后端解析出来的建议 SemiRecordDTO
+    records = task.suggestedSemiRecords.map(s => ({
+      semiProductId: s.semiProductId || null,
+      productName: s.productName || '',
+      warehouseId: s.warehouseId || null,
+      warehouseName: findWarehouseNameById(s.warehouseId),
+      quantity: s.quantity ?? '',
+      unit: String(s.unit ?? '1'),
+      productionDate: s.productionDate || '',
+      useAssay: !!s.useAssay
+    }))
+  }
+
+  if (!records.length) {
+    records.push({
+      semiProductId: null,
+      productName: '',
+      warehouseId: null,
+      warehouseName: '',
+      quantity: '',
+      unit: '0',
+      productionDate: '',
+      useAssay: false
+    })
+  }
+
+  // 深拷贝一份给弹窗使用
+  semiEditRecords.value = JSON.parse(JSON.stringify(records))
+  semiEditVisible.value = true
+}
+
+// 新增 / 删除一行
+const addSemiEditRecord = () => {
+  semiEditRecords.value.push({
+    semiProductId: null,
+    productName: '',
+    warehouseId: null,
+    warehouseName: '',
+    quantity: '',
+    unit: '0',
+    productionDate: '',
+    useAssay: false
+  })
+}
+
+const removeSemiEditRecord = (index) => {
+  semiEditRecords.value.splice(index, 1)
+}
+
+// 选中半成品时，同步名称
+const onSemiProductChange = (item) => {
+  const found = semiProductList.value.find(p => p.productId === item.semiProductId)
+  if (found) {
+    item.productName = found.productName
+  }
+}
+
+// 只能勾选一个“套用化验”
+const handleSemiUseAssay = (index) => {
+  semiEditRecords.value.forEach((r, i) => {
+    if (i !== index) r.useAssay = false
+  })
+}
+
+// 确认：把结果回写到当前任务对象
+const confirmSemiEdit = () => {
+  if (!semiEditTask.value) return
+
+  for (const r of semiEditRecords.value) {
+    if (!r.semiProductId) {
+      ElMessage.error('请完整填写半成品名称')
+      return
+    }
+    if (!r.warehouseId) {
+      ElMessage.error('请选择库位')
+      return
+    }
+  }
+
+  const newRecords = semiEditRecords.value.map(r => ({
+    semiProductId: r.semiProductId,
+    productName: r.productName,
+    productionDate: r.productionDate || null,
+    warehouseId: r.warehouseId,
+    quantity: r.quantity ? Number(r.quantity) : null,
+    unit: r.unit,
+    useAssay: !!r.useAssay
+  }))
+
+  const taskId = semiEditTask.value.taskId
+  const idx = taskList.value.findIndex(t => t.taskId === taskId)
+  if (idx !== -1) {
+    const old = taskList.value[idx]
+    taskList.value[idx] = { ...old, semiRecords: newRecords }
+    semiEditTask.value = taskList.value[idx]
+  }
+
+  semiEditVisible.value = false
+  ElMessage.success('关联半成品已更新')
+}
 
 // ---------- 计算属性：过滤后的任务列表 ----------
 const filteredTasks = computed(() => {
@@ -559,7 +1011,6 @@ const handleParse = async () => {
     return
   }
 
-  // 确保日期不为空
   if (!parseForm.value.entryDate) {
     parseForm.value.entryDate = today
   }
@@ -577,6 +1028,7 @@ const handleParse = async () => {
     taskList.value = res.data.tasks || []
     globalRemarks.value = res.data.globalRemarks || []
 
+    // 给 cascader 用的选中值
     taskList.value.forEach(t => {
       t._productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
     })
@@ -597,6 +1049,11 @@ const handleReloadBatch = async () => {
   try {
     const res = await getAutoInboundBatch(batchId.value)
     taskList.value = res.data.tasks || []
+
+    taskList.value.forEach(t => {
+      t._productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
+    })
+
     selectedTaskIds.value = []
     ElMessage.success('已从服务器重新加载该批次')
   } catch (e) {
@@ -605,6 +1062,7 @@ const handleReloadBatch = async () => {
     loadingBatch.value = false
   }
 }
+
 
 // ---------- 清空解析表单 ----------
 const handleResetParse = () => {
@@ -684,8 +1142,9 @@ const handleConfirm = async () => {
 
 onMounted(() => {
   loadProductOptions()
-  // 如果你打算支持“从其它页面跳转并带 batchId”的场景，可以在这里处理 route.query
+  loadWarehouseList()
 })
+
 </script>
 
 <style scoped>

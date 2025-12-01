@@ -291,7 +291,8 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
     }
 
     /**
-     * 成品里的 sources，仅作为“建议用半成品记录”，不再做 Product / Warehouse 模糊匹配。
+     * 成品里的 sources，仅作为“建议用半成品记录”
+     * 每个 source 拆成多条 SemiRecordDTO（板一条、件一条）。
      */
     private List<SemiRecordDTO> buildSuggestedSemiRecords(List<ParsedSemiSource> sources,
                                                           List<String> reasons,
@@ -299,54 +300,98 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         if (sources == null || sources.isEmpty()) {
             return Collections.emptyList();
         }
-        List<SemiRecordDTO> list = new ArrayList<>();
+
+        List<SemiRecordDTO> result = new ArrayList<>();
+
         for (ParsedSemiSource src : sources) {
-            SemiRecordDTO dto = new SemiRecordDTO();
+            // ---------- 公共字段：名称、日期 ----------
 
-            // 只先填 productName，半成品ID、仓库ID由前端人工选
-            dto.setProductName(src.getProductNameRaw());
+            String productName = src.getProductName();
+            if (productName == null || productName.isBlank()) {
+                productName = src.getProductName(); // 兜底用规范名
+            }
 
-            // 日期：要求 LLM 输出 yyyy-MM-dd，解析失败只记一条 reason
+            Integer semiProductId = src.getSemiProductId();
+            if (semiProductId == null) {
+                reasons.add("半成品 " + productName + " 未匹配到产品ID");
+            }
+
+            LocalDate prodDate = null;
             if (notBlank(src.getProductionDate())) {
                 try {
-                    dto.setProductionDate(LocalDate.parse(src.getProductionDate()));
+                    prodDate = LocalDate.parse(src.getProductionDate());
                 } catch (Exception e) {
                     reasons.add("半成品生产日期格式无法解析：" + src.getProductionDate());
                 }
             } else {
-                reasons.add("半成品生产日期缺失：" + src.getProductNameRaw());
+                reasons.add("半成品生产日期缺失：" + productName);
             }
 
-            // 仓位提示放到 remark 里，方便前端看
+            // 仓位提示、备注、批号只追加一次到 remark 列表
             if (notBlank(src.getWarehouseHint())) {
                 remarks.add("半成品仓位提示：" + src.getWarehouseHint());
             }
-
-            // 数量：优先用件数，板数不自动折算，避免出错
-            int pieces = 0;
-            if (src.getPieceCount() != null) {
-                pieces += src.getPieceCount();
-            }
-            if (src.getBoardCount() != null && src.getBoardCount() > 0) {
-                reasons.add("半成品 " + src.getProductNameRaw() +
-                        " 包含板数 " + src.getBoardCount() +
-                        "，建议人工确认折算件数并修改 semiRecords");
-            }
-
-            dto.setQuantity(pieces);
-            dto.setUnit("1");      // 先全部按“件”
-            dto.setUseAssay(false); // 是否套用化验交给前端人工勾选
-
-            list.add(dto);
-
             if (notBlank(src.getRemark())) {
                 remarks.add("半成品备注：" + src.getRemark());
             }
             if (notBlank(src.getBatchNo())) {
                 remarks.add("半成品批号：" + src.getBatchNo());
             }
+
+            Integer boardCount = src.getBoardCount();
+            Integer pieceCount = src.getPieceCount();
+
+            boolean hasBoard = boardCount != null && boardCount > 0;
+            boolean hasPiece = pieceCount != null && pieceCount > 0;
+
+            // ---------- A. 有板数 -> 生成一条“板”的记录 ----------
+            if (hasBoard) {
+                SemiRecordDTO boardDto = new SemiRecordDTO();
+                boardDto.setSemiProductId(src.getSemiProductId());
+                boardDto.setProductName(productName);
+                boardDto.setProductionDate(prodDate);
+                boardDto.setWarehouseId(null);   // 库位同样交给前端选
+                boardDto.setQuantity(boardCount);
+                boardDto.setUnit("0");           // 0 = 板
+                boardDto.setUseAssay(false);
+
+                result.add(boardDto);
+            }
+
+            // ---------- B. 有件数 -> 生成一条“件”的记录 ----------
+            if (hasPiece) {
+                SemiRecordDTO pieceDto = new SemiRecordDTO();
+                // 同样只先填名称
+                pieceDto.setProductName(productName);
+                pieceDto.setSemiProductId(semiProductId);
+                pieceDto.setProductionDate(prodDate);
+                pieceDto.setWarehouseId(null);
+                pieceDto.setQuantity(pieceCount);
+                pieceDto.setUnit("1");           // 1 = 件
+                pieceDto.setUseAssay(false);
+
+                result.add(pieceDto);
+            }
+
+            // ---------- C. 板/件都没有识别到 ----------
+            if (!hasBoard && !hasPiece) {
+                reasons.add("半成品 " + productName +
+                        " 的板数和件数均无法识别，请人工补录数量");
+
+                SemiRecordDTO emptyDto = new SemiRecordDTO();
+                emptyDto.setSemiProductId(semiProductId);
+                emptyDto.setProductName(productName);
+                emptyDto.setProductionDate(prodDate);
+                emptyDto.setWarehouseId(null);
+                emptyDto.setQuantity(null);
+                emptyDto.setUnit("1");   // 默认件
+                emptyDto.setUseAssay(false);
+
+                result.add(emptyDto);
+            }
         }
-        return list;
+
+        return result;
     }
 
     private static String safe(String s) {
