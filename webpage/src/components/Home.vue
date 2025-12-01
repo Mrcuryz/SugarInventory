@@ -325,21 +325,6 @@
             <el-radio label="右" value="右">右</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="筛网名称" prop="screenMeshId">
-          <el-select
-              v-model="submitForm.screenMeshId"
-              placeholder="请选择"
-              clearable
-              style="width: 200px"
-          >
-            <el-option
-                v-for="item in meshList"
-                :key="item.id"
-                :label="item.meshName"
-                :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item label="半成品信息" v-if="firstLevelValues === '成品'">
           <div v-for="(item, index) in submitForm.semiRecords" :key="index">
             <el-row :gutter="20">
@@ -1812,7 +1797,6 @@ const rule = {
   warehouseName: [{required: true, message: '请输入仓库名称', trigger: 'blur'}],
   quantity: [{required: true, message: '请输入数量', trigger: 'blur'}],
   side: [{required: true, message: '请选择位置', trigger: 'blur'}],
-  meshName: [{required: true, message: '请输入筛网名称', trigger: 'blur'}],
   entryDate: [{required: true, message: '请选择入库日期', trigger: 'blur'}]
 }
 const rules = reactive({
@@ -1950,10 +1934,6 @@ const handleNew = async () => {
   }
   if (submitForm.value.side === '' && selectedLocation.value.warehouseId < 1000) {
     ElMessage.error('请选择位置')
-    return
-  }
-  if (submitForm.value.screenMeshId === '') {
-    ElMessage.error('请输入筛网名称')
     return
   }
   if (submitForm.value.entryDate === '') {
