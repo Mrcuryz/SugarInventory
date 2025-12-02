@@ -15,6 +15,7 @@ export default {
         weightPerPiece: "单件重量（kg）",
         piecesPerPallet: "一板产品数量",
         canStack: "是否可堆积",
+        screenMeshId: "筛网ID",
         //化验表字段翻译
         productId: "产品ID",
         sampleDate: "化验日期",

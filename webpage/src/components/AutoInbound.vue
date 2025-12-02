@@ -220,43 +220,6 @@
           height="480"
       >
 
-        <el-table-column type="expand">
-          <template #default="{ row }">
-            <div v-if="row.type === 'FINISHED_PRODUCT'">
-              <div class="semi-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <div class="semi-title">·  关联半成品记录</div>
-              </div>
-
-              <el-table
-                  :data="row.semiRecords"
-                  size="small"
-                  border
-                  style="width: 100%; margin-bottom: 8px"
-              >
-                <el-table-column width="50" />
-                <el-table-column prop="productName" label="半成品" width="200" />
-                <el-table-column prop="productionDate" label="生产日期" width="200" />
-                <el-table-column prop="warehouseName" label="库位" width="200" />
-                <el-table-column label="数量" width="200">
-                  <template #default="{ row: semi }">
-                    {{ semi.quantity }} {{ semi.unit === '0' ? '板' : '件' }}
-                  </template>
-                </el-table-column>
-                <el-table-column label="套用化验" min-width="150">
-                  <template #default="{ row: semi }">
-                    <el-tag size="small" :type="semi.useAssay ? 'success' : 'info'">
-                      {{ semi.useAssay ? '是' : '否' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-            <div v-else class="no-semi-info">
-              当前任务无关联半成品记录
-            </div>
-          </template>
-        </el-table-column>
-
         <!--        <el-table-column type="expand">-->
 <!--          <template #default="{ row }">-->
 <!--            <el-button type="primary" link @click="openSemiEditDialog(row)">-->
@@ -660,22 +623,21 @@
 </template>
 
 <script setup>
-import {getSemiProduct, getStProduct} from '@/api/assay'
-import {computed, onMounted, ref} from 'vue'
-import {ElMessage, ElMessageBox} from 'element-plus'
-import {useTokenStore} from '@/stores/token'
-import {confirmAutoInbound, getAutoInboundBatch, parseAutoInbound} from '@/api/autoInbound'
-import {getWarehouse} from '@/api/warehouse'
-import {Delete} from '@element-plus/icons-vue'
+import { getSemiProduct, getStProduct } from '@/api/assay'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useTokenStore } from '@/stores/token'
+import { confirmAutoInbound, getAutoInboundBatch, parseAutoInbound } from '@/api/autoInbound'
+import { getWarehouse } from '@/api/warehouse'
+import { Delete } from '@element-plus/icons-vue'
 
 // ---------- 工具：从 JWT 里解析出当前用户ID（sub） ----------
-function decodeJwtSub(token) {
+function decodeJwtSub (token) {
   if (!token) return null
   try {
     const parts = token.split('.')
     if (parts.length < 2) return null
     let payload = parts[1]
-    // base64url -> base64
     payload = payload.replace(/-/g, '+').replace(/_/g, '/')
     while (payload.length % 4 !== 0) {
       payload += '='
@@ -716,17 +678,16 @@ const selectedTaskIds = ref([])
 const tokenStore = useTokenStore()
 const operatorId = ref(decodeJwtSub(tokenStore.token))
 
+// ---------- 关联半成品弹窗 ----------
 const semiEditVisible = ref(false)
-const semiEditRecords = ref([])          // 当前弹窗里的半成品行
-const semiEditTask = ref(null)           // 当前正在编辑的那条 自动入库任务
+const semiEditRecords = ref([])  // 弹窗里的临时列表
+const semiEditTask = ref(null)   // 当前正在编辑的任务
 
 const warehouseList = ref([])
 
 const loadWarehouseList = async () => {
   try {
-    // 参数按你后端来，如果有分页就 page/size 给大一点
     const res = await getWarehouse({ page: 1, size: 500 })
-    // 兼容两种返回结构：data 为数组 / data.records 为数组
     const records = Array.isArray(res.data) ? res.data : (res.data.records || [])
     warehouseList.value = records
   } catch (e) {
@@ -742,13 +703,12 @@ const findWarehouseNameById = (id) => {
   return w ? w.warehouseName : ''
 }
 
-// 打开弹窗：把任务里的现有半成品解析出来
+// 打开弹窗：从 task.semiRecords / suggestedSemiRecords 里拷贝一份到 semiEditRecords
 const openSemiEditDialog = (task) => {
   semiEditTask.value = task
   let records = []
 
   if (Array.isArray(task.semiRecords) && task.semiRecords.length) {
-    // 已经人工编辑过
     records = task.semiRecords.map(r => ({
       semiProductId: r.semiProductId || null,
       productName: r.productName || '',
@@ -760,7 +720,6 @@ const openSemiEditDialog = (task) => {
       useAssay: !!r.useAssay
     }))
   } else if (task.suggestedSemiRecords && task.suggestedSemiRecords.length) {
-    // 后端解析出来的建议 SemiRecordDTO
     records = task.suggestedSemiRecords.map(s => ({
       semiProductId: s.semiProductId || null,
       productName: s.productName || '',
@@ -786,12 +745,10 @@ const openSemiEditDialog = (task) => {
     })
   }
 
-  // 深拷贝一份给弹窗使用
   semiEditRecords.value = JSON.parse(JSON.stringify(records))
   semiEditVisible.value = true
 }
 
-// 新增 / 删除一行
 const addSemiEditRecord = () => {
   semiEditRecords.value.push({
     semiProductId: null,
@@ -809,7 +766,6 @@ const removeSemiEditRecord = (index) => {
   semiEditRecords.value.splice(index, 1)
 }
 
-// 选中半成品时，同步名称
 const onSemiProductChange = (item) => {
   const found = semiProductList.value.find(p => p.productId === item.semiProductId)
   if (found) {
@@ -817,14 +773,14 @@ const onSemiProductChange = (item) => {
   }
 }
 
-// 只能勾选一个“套用化验”
+// 只能选一个“套用化验”
 const handleSemiUseAssay = (index) => {
   semiEditRecords.value.forEach((r, i) => {
     if (i !== index) r.useAssay = false
   })
 }
 
-// 确认：把结果回写到当前任务对象
+// 弹窗“确定”：把编辑结果写回对应 task 的 semiRecords，并让 expand 立刻刷新
 const confirmSemiEdit = () => {
   if (!semiEditTask.value) return
 
@@ -849,12 +805,18 @@ const confirmSemiEdit = () => {
     useAssay: !!r.useAssay
   }))
 
+  console.log('newRecords:', newRecords)
+
   const taskId = semiEditTask.value.taskId
+  console.log('taskId:', taskId)
   const idx = taskList.value.findIndex(t => t.taskId === taskId)
+  console.log('idx:', idx)
   if (idx !== -1) {
     const old = taskList.value[idx]
     taskList.value[idx] = { ...old, semiRecords: newRecords }
+    console.log('taskList[idx]:', taskList.value[idx])
     semiEditTask.value = taskList.value[idx]
+    console.log('semiEditTask:', semiEditTask.value)
   }
 
   semiEditVisible.value = false
@@ -874,11 +836,10 @@ const filteredTasks = computed(() => {
   })
 })
 
-// -------- 产品级联选择数据（复用手工入库页的结构） --------
+// -------- 产品级联选择数据 --------
 const semiProductList = ref([])
 const stProductList = ref([])
 
-// 和手工入库页一致的 cascader props
 const cascaderProps = {
   emitPath: false,
   label: 'label',
@@ -887,10 +848,6 @@ const cascaderProps = {
   expandTrigger: 'hover'
 }
 
-// 合并成品 + 半成品，构建三级结构：
-// 第一级：成品 / 半成品
-// 第二级：productType
-// 第三级：具体产品（productId, productName）
 const productOptions = computed(() => {
   const combined = [
     ...stProductList.value.map(p => ({ ...p, category: '成品' })),
@@ -932,7 +889,6 @@ const productOptions = computed(() => {
   }))
 })
 
-// 针对半成品/成品任务做过滤
 const semiProductOptions = computed(() =>
     productOptions.value.filter(o => o.label === '半成品')
 )
@@ -973,7 +929,7 @@ const riskLevelLabel = (level) => {
   return '-'
 }
 
-// 根据 productId 在级联数据中找到产品名
+// 根据 productId 在级联数据中找到产品名（只是为了回填 row.productName）
 const findProductLabelById = (id) => {
   if (!id || !productOptions.value.length) return null
 
@@ -1025,12 +981,20 @@ const handleParse = async () => {
   try {
     const res = await parseAutoInbound(payload)
     batchId.value = res.data.batchId
-    taskList.value = res.data.tasks || []
     globalRemarks.value = res.data.globalRemarks || []
 
-    // 给 cascader 用的选中值
-    taskList.value.forEach(t => {
-      t._productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
+    const rawTasks = res.data.tasks || []
+
+    // ⭐ 一次性构造：_productId + 初始 semiRecords
+    taskList.value = rawTasks.map(t => {
+      const _productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
+      return {
+        ...t,
+        _productId,
+        semiRecords: Array.isArray(t.semiRecords) && t.semiRecords.length
+            ? t.semiRecords
+            : (t.suggestedSemiRecords || [])
+      }
     })
 
     selectedTaskIds.value = []
@@ -1048,11 +1012,24 @@ const handleReloadBatch = async () => {
   loadingBatch.value = true
   try {
     const res = await getAutoInboundBatch(batchId.value)
-    taskList.value = res.data.tasks || []
+    const rawTasks = res.data.tasks || []
 
-    taskList.value.forEach(t => {
-      t._productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
+    console.log('res.data:', res.data)
+    console.log('rawTasks:', rawTasks)
+
+    taskList.value = rawTasks.map(t => {
+      const _productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
+      console.log('_productId:', _productId)
+      return {
+        ...t,
+        _productId,
+        semiRecords: Array.isArray(t.semiRecords) && t.semiRecords.length
+            ? t.semiRecords
+            : (t.suggestedSemiRecords || []),
+      }
     })
+
+    console.log('taskList:', taskList.value)
 
     selectedTaskIds.value = []
     ElMessage.success('已从服务器重新加载该批次')
@@ -1063,7 +1040,6 @@ const handleReloadBatch = async () => {
   }
 }
 
-
 // ---------- 清空解析表单 ----------
 const handleResetParse = () => {
   parseForm.value = {
@@ -1073,9 +1049,6 @@ const handleResetParse = () => {
   }
   batchId.value = ''
   taskList.value = []
-  taskList.value.forEach(t => {
-    t._productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
-  })
   selectedTaskIds.value = []
 }
 
@@ -1111,25 +1084,21 @@ const handleConfirm = async () => {
     return
   }
 
-  // 这里为了简单：把【被勾选的任务】作为 updatedTasks 发给后端
   const updatedTasks = taskList.value.filter((t) =>
       selectedTaskIds.value.includes(t.taskId)
   )
+  console.log('updatedTasks:', updatedTasks)
 
   const payload = {
     operatorId: operatorId.value,
     confirmedTaskIds: selectedTaskIds.value,
     updatedTasks
   }
-
+  console.log('payload:', payload)
   loadingConfirm.value = true
   try {
     await confirmAutoInbound(batchId.value, payload)
     ElMessage.success('入库成功')
-
-    // 入库成功后，可以选择：
-    // 1. 清空这批任务
-    // 2. 或者重新拉取看看还有未入库的（目前后端是直接删 redis，这里就清空）
     batchId.value = ''
     taskList.value = []
     selectedTaskIds.value = []
@@ -1144,7 +1113,6 @@ onMounted(() => {
   loadProductOptions()
   loadWarehouseList()
 })
-
 </script>
 
 <style scoped>
