@@ -635,3 +635,21 @@
 .bold {
   font-weight: bold;
 }
+.modal { 
+  pointer-events: none;  /* 隐藏态：不吃事件 */
+}
+
+.modal.show {
+  pointer-events: auto;  /* 显示态：可交互 */
+}
+
+/* 锁定背景滚动 */
+.page-root.lock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  width: 100%;
+  overflow: hidden; /* 禁掉背景滚动条 */
+  /* top 由内联 style 负责：style="top: {{pageLocked ? lockedTop : 0}}" */
+}
+
