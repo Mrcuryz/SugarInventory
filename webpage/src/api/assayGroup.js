@@ -13,6 +13,6 @@ export const updateAssayGroup = (id, params) => {
     return request.post('/assayGroup/' + id, params)
 }
 //删除化验记录
-export const deleteAssayGroup = (id)=>{
-    return request.delete('/assayGroup/'+id)
+export const deleteAssayGroup = (id) => {
+    return request.delete('/assayGroup/' + id)
 }

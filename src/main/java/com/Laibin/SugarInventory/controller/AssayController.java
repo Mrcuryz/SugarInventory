@@ -111,7 +111,7 @@ public class AssayController {
     @LogOperation(value = "化验数据", type = OperationType.DELETE)
     @PreAuthorize("hasAuthority('quality:test')")
     @DeleteMapping("/{id}")
-    public Result<Boolean> deleteAssay(@PathVariable("id") Integer id){
+    public Result<Boolean> deleteAssay(@PathVariable("id") Integer id) {
         try {
             assayService.deleteAssay(id);
             return Result.success(true);

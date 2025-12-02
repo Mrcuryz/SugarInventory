@@ -5,7 +5,7 @@ import lombok.Data;
 
 @Data
 @AllArgsConstructor
-public  class SessionInfo {
+public class SessionInfo {
     private String openid;
     private String sessionKey;
 }

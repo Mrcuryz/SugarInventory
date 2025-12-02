@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @Setter
 @Getter
 @NoArgsConstructor
-public class ScreenMesh extends BaseEntity{
+public class ScreenMesh extends BaseEntity {
     @TableId(value = "id", type = IdType.AUTO)
     private Integer id;
 

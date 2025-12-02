@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 
 /**
  * <p>
- *  Mapper 接口
+ * Mapper 接口
  * </p>
  *
  * @author Mrcury

@@ -62,8 +62,8 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="operationTime" label="时间" width="180" sortable />
-        <el-table-column prop="tableName" label="操作业务" width="120" />
+        <el-table-column prop="operationTime" label="时间" width="180" sortable/>
+        <el-table-column prop="tableName" label="操作业务" width="120"/>
         <el-table-column prop="operationType" label="操作类型" width="120">
           <template #default="{ row }">
             <el-tag :type="getTagType(row.operationType)" effect="dark" style="width: 70px" size="large">
@@ -73,16 +73,16 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="operator" label="操作人" width="120" />
+        <el-table-column prop="operator" label="操作人" width="120"/>
         <el-table-column prop="changedFields" label="操作内容" min-width="auto">
           <template #default="{ row }">
             <div v-if="row.changedFields && Object.keys(row.changedFields).length">
               <div v-for="(value, key) in row.changedFields" :key="key">
-                <div v-if="value === 'ADMIN'">{{ $t(`fields.${key}`) }}: {{ '管理员'}}</div>
-                <div v-else-if="value === 'QC'">{{ $t(`fields.${key}`) }}: {{ '化验员'}}</div>
-                <div v-else-if="value === 'STAFF'">{{ $t(`fields.${key}`) }}: {{ '员工'}}</div>
-                <div v-else-if="value === true">{{ $t(`fields.${key}`) }}: {{ '是'}}</div>
-                <div v-else-if="value === false">{{ $t(`fields.${key}`) }}: {{ '否'}}</div>
+                <div v-if="value === 'ADMIN'">{{ $t(`fields.${key}`) }}: {{ '管理员' }}</div>
+                <div v-else-if="value === 'QC'">{{ $t(`fields.${key}`) }}: {{ '化验员' }}</div>
+                <div v-else-if="value === 'STAFF'">{{ $t(`fields.${key}`) }}: {{ '员工' }}</div>
+                <div v-else-if="value === true">{{ $t(`fields.${key}`) }}: {{ '是' }}</div>
+                <div v-else-if="value === false">{{ $t(`fields.${key}`) }}: {{ '否' }}</div>
                 <div v-else>
                   {{ $t(`fields.${key}`) }}: {{ value }}
                 </div>
@@ -95,11 +95,11 @@
           <template #default="{ row }">
             <div v-if="row.oldData && Object.keys(row.oldData).length">
               <div v-for="(value, key) in row.oldData" :key="key">
-                <div v-if="value === 'ADMIN'">{{ $t(`fields.${key}`) }}: {{ '管理员'}}</div>
-                <div v-else-if="value === 'QC'">{{ $t(`fields.${key}`) }}: {{ '化验员'}}</div>
-                <div v-else-if="value === 'STAFF'">{{ $t(`fields.${key}`) }}: {{ '员工'}}</div>
-                <div v-else-if="value === true">{{ $t(`fields.${key}`) }}: {{ '是'}}</div>
-                <div v-else-if="value === false">{{ $t(`fields.${key}`) }}: {{ '否'}}</div>
+                <div v-if="value === 'ADMIN'">{{ $t(`fields.${key}`) }}: {{ '管理员' }}</div>
+                <div v-else-if="value === 'QC'">{{ $t(`fields.${key}`) }}: {{ '化验员' }}</div>
+                <div v-else-if="value === 'STAFF'">{{ $t(`fields.${key}`) }}: {{ '员工' }}</div>
+                <div v-else-if="value === true">{{ $t(`fields.${key}`) }}: {{ '是' }}</div>
+                <div v-else-if="value === false">{{ $t(`fields.${key}`) }}: {{ '否' }}</div>
                 <div v-else>
                   {{ $t(`fields.${key}`) }}: {{ value }}
                 </div>
@@ -125,13 +125,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getOperationLogs } from '@/api/operationLogs'
+import {ref, onMounted} from 'vue'
+import {getOperationLogs} from '@/api/operationLogs'
 import {ElMessage} from "element-plus"
 import * as XLSX from 'xlsx'
 import {useI18n} from "vue-i18n";
 
-const { t } = useI18n(); // 确保已经导入useI18n
+const {t} = useI18n(); // 确保已经导入useI18n
 
 const exportExcel = async () => {
   try {
@@ -182,7 +182,7 @@ const exportExcel = async () => {
       const excelData = data.map(log => ({
         时间: log.operationTime,
         操作业务: log.tableName,
-        操作类型: { INSERT: '新增', UPDATE: '修改', DELETE: '删除' }[log.operationType],
+        操作类型: {INSERT: '新增', UPDATE: '修改', DELETE: '删除'}[log.operationType],
         操作人: log.operator,
         操作内容: formatFields(log.changedFields),
         原数据: formatFields(log.oldData)
@@ -192,7 +192,7 @@ const exportExcel = async () => {
       const worksheet = XLSX.utils.json_to_sheet(excelData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, '操作日志');
-      XLSX.writeFile(workbook, `操作日志_${new Date().toISOString().slice(0,10)}.xlsx`);
+      XLSX.writeFile(workbook, `操作日志_${new Date().toISOString().slice(0, 10)}.xlsx`);
       ElMessage.success('导出成功');
     }
   } catch (error) {
@@ -210,11 +210,21 @@ const formatFields = (fields) => {
       .map(([key, value]) => {
         let displayValue = value;
         switch (value) {
-          case 'ADMIN': displayValue = '管理员'; break;
-          case 'QC': displayValue = '化验员'; break;
-          case 'STAFF': displayValue = '员工'; break;
-          case true: displayValue = '是'; break;
-          case false: displayValue = '否'; break;
+          case 'ADMIN':
+            displayValue = '管理员';
+            break;
+          case 'QC':
+            displayValue = '化验员';
+            break;
+          case 'STAFF':
+            displayValue = '员工';
+            break;
+          case true:
+            displayValue = '是';
+            break;
+          case false:
+            displayValue = '否';
+            break;
         }
         return `${t(`fields.${key}`)}: ${displayValue}`;
       })
@@ -238,9 +248,9 @@ const total = ref(0)
 
 // 操作类型选项
 const operationTypes = [
-  { value: 'INSERT', label: '新增' },
-  { value: 'UPDATE', label: '修改' },
-  { value: 'DELETE', label: '删除' },
+  {value: 'INSERT', label: '新增'},
+  {value: 'UPDATE', label: '修改'},
+  {value: 'DELETE', label: '删除'},
 ]
 
 // 加载状态
@@ -295,12 +305,12 @@ const handleSearch = async () => {
     })
     //处理操作日期格式，员格式2025-03-08T00:00:00 改为 2025年03月08日00:00:00
     filteredLogs.value.forEach(item => {
-      if(item.operationTime){
-        item.operationTime = item.operationTime.replace('T',' ').replace('Z',' ')
+      if (item.operationTime) {
+        item.operationTime = item.operationTime.replace('T', ' ').replace('Z', ' ')
       }
     })
     filteredLogs.value.forEach(item => {
-      if(item.changedFields.qualifiedStandards){
+      if (item.changedFields.qualifiedStandards) {
         item.changedFields.qualifiedStandards = JSON.parse(item.changedFields.qualifiedStandards)
       }
     })

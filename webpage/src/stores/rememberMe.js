@@ -1,20 +1,21 @@
 import {defineStore} from 'pinia'
 import {ref} from 'vue'
-const rememberMeStore = defineStore('userInfo',()=>{
+
+const rememberMeStore = defineStore('userInfo', () => {
     //定义状态相关的内容
 
     const info = ref({})
 
-    const setInfo = (newInfo)=>{
+    const setInfo = (newInfo) => {
         info.value = newInfo
     }
 
 
-    const removeInfo = ()=>{
+    const removeInfo = () => {
         info.value = {}
     }
 
-    return {info,setInfo,removeInfo}
+    return {info, setInfo, removeInfo}
 
-},{persist:true})
+}, {persist: true})
 export default rememberMeStore;

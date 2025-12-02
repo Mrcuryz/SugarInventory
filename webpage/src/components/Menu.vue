@@ -3,14 +3,24 @@ import {ref, computed} from 'vue'
 import {useRoute} from 'vue-router'
 
 
-
 // 侧边栏状态
 const isCollapse = ref(false)
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
-import {House, Document, Histogram, Box, Filter, PieChart, Finished, Switch, User, ShoppingCart} from "@element-plus/icons-vue";
+import {
+  House,
+  Document,
+  Histogram,
+  Box,
+  Filter,
+  PieChart,
+  Finished,
+  Switch,
+  User,
+  ShoppingCart
+} from "@element-plus/icons-vue";
 // 菜单图标
 // 菜单数据
 const menuList = [
@@ -91,7 +101,7 @@ const activeMenu = computed(() => route.path)
 
       <!-- 主内容区 -->
       <el-main>
-        <router-view />
+        <router-view/>
       </el-main>
     </div>
   </div>

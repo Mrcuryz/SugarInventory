@@ -40,6 +40,9 @@ public class ProductCreateDTO extends BaseDTO {
     @Schema(description = "是否可堆叠", example = "true")
     private Boolean canStack;
 
+    @Schema(description = "筛网id")
+    private Integer screenMeshId;
+
     @Override
     public Integer getId() {
         return null;

@@ -3,17 +3,17 @@
     <el-card class="search-card" style="max-width: 1200px">
       <el-form :model="searchForm" inline>
         <el-form-item label="员工编号" style="width: 200px">
-          <el-input v-model="searchForm.employeeId" clearable />
+          <el-input v-model="searchForm.employeeId" clearable/>
         </el-form-item>
         <el-form-item label="员工名称" style="width: 200px">
-          <el-input v-model="searchForm.name" clearable />
+          <el-input v-model="searchForm.name" clearable/>
         </el-form-item>
         <el-form-item label="员工手机" style="width: 300px">
-          <el-input v-model="searchForm.mobile" clearable />
+          <el-input v-model="searchForm.mobile" clearable/>
         </el-form-item>
         <br>
         <el-form-item label="部门" style="width: 200px">
-          <el-input v-model="searchForm.department" clearable />
+          <el-input v-model="searchForm.department" clearable/>
         </el-form-item>
         <el-form-item label="状态" style="width: 200px">
           <el-select v-model="searchForm.status">
@@ -80,7 +80,9 @@
         </el-table-column>
         <el-table-column label="操作" width="auto" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改筛网';handleEdit(row)">编辑</el-button>
+            <el-button type="primary" size="small"
+                       @click="dialogVisible = true;operationType='修改筛网';handleEdit(row)">编辑
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -104,19 +106,19 @@
     >
       <el-form :model="submitForm" :rules="rule" label-width="auto">
         <el-form-item label="员工编号" prop="employeeId">
-          <el-input v-model="submitForm.employeeId" clearable />
+          <el-input v-model="submitForm.employeeId" clearable/>
         </el-form-item>
         <el-form-item label="员工名称" prop="name">
-          <el-input v-model="submitForm.name" clearable />
+          <el-input v-model="submitForm.name" clearable/>
         </el-form-item>
         <el-form-item label="员工手机" prop="mobile">
-          <el-input v-model="submitForm.mobile" clearable />
+          <el-input v-model="submitForm.mobile" clearable/>
         </el-form-item>
         <el-form-item label="部门" prop="department">
-          <el-input v-model="submitForm.department" clearable />
+          <el-input v-model="submitForm.department" clearable/>
         </el-form-item>
         <el-form-item label="职位" prop="position">
-          <el-input v-model="submitForm.position" clearable />
+          <el-input v-model="submitForm.position" clearable/>
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="submitForm.status">
@@ -144,13 +146,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted,computed } from 'vue'
+import {ref, onMounted, computed} from 'vue'
 import {addMesh, deleteMesh, getMesh, updateMesh} from '@/api/mesh'
-import { ElMessage, ElMessageBox} from 'element-plus'
+import {ElMessage, ElMessageBox} from 'element-plus'
 import {addEmployee, deleteEmployee, getEmployeeList, updateEmployee, uploadFile} from "@/api/employee";
 
 // 新增上传相关代码
-import { useTokenStore } from '@/stores/token'
+import {useTokenStore} from '@/stores/token'
 
 // 文件上传配置
 const tokenStore = useTokenStore()
@@ -180,7 +182,7 @@ const beforeUpload = (file) => {
 }
 
 // 自定义上传请求
-const customRequest = async ({ file }) => {
+const customRequest = async ({file}) => {
   try {
     uploadLoading.value = true
 
@@ -209,9 +211,9 @@ const roleMap = {
 }
 
 const roleOptions = ref([
-  { value: 'ADMIN', label: '管理员' },
-  { value: 'QC', label: '化验员' },
-  { value: 'STAFF', label: '员工' }
+  {value: 'ADMIN', label: '管理员'},
+  {value: 'QC', label: '化验员'},
+  {value: 'STAFF', label: '员工'}
 ])
 // 搜索表单
 const searchForm = ref({
@@ -267,8 +269,7 @@ const handleSearch = async () => {
 }
 // 处理重置
 const handleReset = () => {
-  searchForm.value = {
-  }
+  searchForm.value = {}
   handleSearch()
 }
 // 分页处理
@@ -283,22 +284,21 @@ const handleCurrentChange = (page) => {
 
 const rule = {
   employeeId: [
-    { required: true, message: '请输入员工编号', trigger: 'blur' }
+    {required: true, message: '请输入员工编号', trigger: 'blur'}
   ],
   name: [
-    { required: true, message: '请输入员工名称', trigger: 'blur' }
+    {required: true, message: '请输入员工名称', trigger: 'blur'}
   ],
   mobile: [
-    { required: true, message: '请输入员工手机', trigger: 'blur' }
+    {required: true, message: '请输入员工手机', trigger: 'blur'}
   ],
   roleCode: [
-    { required: true, message: '请输入角色', trigger: 'blur' }
+    {required: true, message: '请输入角色', trigger: 'blur'}
   ]
 }
 const dialogVisible = ref(false)
 const handleClose = () => {
-  submitForm.value = {
-  }
+  submitForm.value = {}
   dialogVisible.value = false
 }
 const operationType = ref('')

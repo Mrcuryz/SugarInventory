@@ -96,7 +96,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         if (!dto.getReturnInStockFlag().equals("1")) {
             this.judgeInventory(semiRecords, operatorId);
             // 这里要再拿一次库位信息，扣减库存后仓库容量更新
-           warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
+            warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
         }
         Assay assay = new Assay();
         Assay semiAssay;

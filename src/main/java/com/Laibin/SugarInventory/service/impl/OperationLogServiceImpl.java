@@ -25,7 +25,7 @@ public class OperationLogServiceImpl implements OperationLogService {
     public PageResult<OperationLog> queryOperationLogs(OperationLogQueryDTO queryDTO) {
         int offset = (queryDTO.getPage() - 1) * queryDTO.getSize();
 
-        List<OperationLog> records =  operationLogMapper
+        List<OperationLog> records = operationLogMapper
                 .selectOperationLogs(queryDTO, offset, queryDTO.getSize());
 
         Long total = operationLogMapper.countOperationLogs(queryDTO);

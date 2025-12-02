@@ -60,6 +60,9 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         if (assay == null) {
             throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
         }
+        if(product.getScreenMeshId() == null){
+            throw new BusinessException(ErrorCode.SCREEN_MESH_NOT_FOUND);
+        }
         // 计算总重量
         BigDecimal totalWeight;
         // 存入板数

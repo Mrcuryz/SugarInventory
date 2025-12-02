@@ -27,16 +27,20 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="warehouseName" label="库位名称" width="200" sortable />
-        <el-table-column prop="status" label="库位状态" width="200" />
+        <el-table-column prop="warehouseName" label="库位名称" width="200" sortable/>
+        <el-table-column prop="status" label="库位状态" width="200"/>
         <el-table-column prop="maxCapacity" label="最大容量" width="150" sortable/>
         <el-table-column prop="curCapacity" label="当前容量" width="150" sortable/>
         <el-table-column prop="maxRows" label="最大行数" min-width="150"/>
         <el-table-column label="操作" width="220">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改库位';editWarehouse(row)">编辑</el-button>
+            <el-button type="primary" size="small"
+                       @click="dialogVisible = true;operationType='修改库位';editWarehouse(row)">编辑
+            </el-button>
             <el-button type="danger" size="small" @click="deleteWarehouse(row)">删除</el-button>
-            <el-button type="info" size="small" @click="dialogVisible = true;operationType='修改状态';editWarehouse(row)">修改状态</el-button>
+            <el-button type="info" size="small"
+                       @click="dialogVisible = true;operationType='修改状态';editWarehouse(row)">修改状态
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -50,10 +54,10 @@
     >
       <el-form :model="warehouseForm" :rules="rule" label-width="auto">
         <el-form-item label="库位名称" prop="warehouseName" v-if="operationType !== '修改状态'" required>
-          <el-input v-model="warehouseForm.warehouseName" clearable />
+          <el-input v-model="warehouseForm.warehouseName" clearable/>
         </el-form-item>
         <el-form-item label="最大行数" prop="maxRows" v-if="operationType !== '修改状态'" required>
-          <el-input v-model="warehouseForm.maxRows" clearable />
+          <el-input v-model="warehouseForm.maxRows" clearable/>
         </el-form-item>
         <el-form-item v-if="operationType === '修改状态'" label="正常" prop="status" required>
           <el-switch
@@ -66,7 +70,8 @@
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer" fixed="right">
-        <el-button type="primary" @click="operationType === '新增库位' ? newWarehouse() : updateWarehouse()">确定</el-button>
+        <el-button type="primary" @click="operationType === '新增库位' ? newWarehouse() : updateWarehouse()">确定
+        </el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
       </div>
     </el-dialog>
@@ -74,9 +79,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import {ref, onMounted} from 'vue'
 import {getWarehouse, addWarehouse, removeWarehouse, changeWarehouse, changeWarehouseStatus} from '@/api/warehouse'
-import { ElMessage, ElMessageBox} from 'element-plus'
+import {ElMessage, ElMessageBox} from 'element-plus'
 // 搜索表单
 const searchForm = ref({
   name: '',
@@ -90,7 +95,7 @@ const loading = ref(false)
 // 处理搜索
 const handleSearch = async () => {
   let params = {}
-  if(searchForm.value.name){
+  if (searchForm.value.name) {
     params.name = searchForm.value.name
   }
   loading.value = true
@@ -112,11 +117,11 @@ const handleReset = () => {
 
 const rule = {
   warehouseName: [
-    { required: true, message: '请输入库位名称', trigger: 'blur' }
+    {required: true, message: '请输入库位名称', trigger: 'blur'}
   ],
   maxRows: [
-    { required: true, message: '请输入最大行数', trigger: 'blur' },
-    { type: 'string', message: '请输入整数', trigger: 'blur' ,pattern: /^\d+$/}
+    {required: true, message: '请输入最大行数', trigger: 'blur'},
+    {type: 'string', message: '请输入整数', trigger: 'blur', pattern: /^\d+$/}
   ]
 }
 const dialogVisible = ref(false)
@@ -221,7 +226,7 @@ const updateWarehouse = async () => {
     if (res.code !== 200) {
       ElMessage.error(res.msg)
     }
-  }else{
+  } else {
     res = await changeWarehouse(warehouseForm.value)
   }
   if (res.code === 200) {

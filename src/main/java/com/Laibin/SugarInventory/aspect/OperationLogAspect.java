@@ -79,7 +79,8 @@ public class OperationLogAspect {
     }
 
     @Pointcut("@annotation(com.Laibin.SugarInventory.annotation.LogOperation)")
-    public void operationLogPointcut() {}
+    public void operationLogPointcut() {
+    }
 
     @Around("operationLogPointcut()")
     public Object logOperation(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -116,7 +117,7 @@ public class OperationLogAspect {
                         ids.add((Integer) arg);
                         System.out.println("id: " + arg);
                     } else if (arg instanceof BaseDTO) {
-                        if(((BaseDTO) arg).getId() != null)
+                        if (((BaseDTO) arg).getId() != null)
                             ids.add(((BaseDTO) arg).getId());
                     } else if (arg instanceof BaseEntity) {
                         ids.add(((BaseEntity) arg).getId());
@@ -152,8 +153,8 @@ public class OperationLogAspect {
             // **3. 执行目标方法**
             Object result = joinPoint.proceed();
 
-            if(result instanceof Result){
-                if(((Result<?>) result).getCode() != 200)
+            if (result instanceof Result) {
+                if (((Result<?>) result).getCode() != 200)
                     return result;
             }
 

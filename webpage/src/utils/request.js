@@ -2,28 +2,28 @@
 //导入axios  npm install axios
 import axios from 'axios';
 
-import { ElMessage } from 'element-plus'
+import {ElMessage} from 'element-plus'
 //定义一个变量,记录公共的前缀  ,  baseURL
 // const baseURL = 'http://localhost:8080/api';
 const baseURL = '/api';
-const instance = axios.create({ baseURL })
+const instance = axios.create({baseURL})
 
 import {useTokenStore} from '@/stores/token.js'
 //添加请求拦截器
 instance.interceptors.request.use(
-    (config)=>{
+    (config) => {
         //请求前的回调
         //添加token
         const tokenStore = useTokenStore();
         //判断有没有token
-        if(tokenStore.token){
-            let Bearer='Bearer '
+        if (tokenStore.token) {
+            let Bearer = 'Bearer '
             config.headers.Authorization = Bearer + tokenStore.token
         }
         return config;
     },
-    (err)=>{
-        if(err.response.code===401){
+    (err) => {
+        if (err.response.code === 401) {
             ElMessage.error('认证失败,请重新登录')
             router.push('/login')
         }
@@ -40,23 +40,23 @@ import router from '@/router'
 instance.interceptors.response.use(
     result => {
         //判断业务状态码
-        if(result.data.code===200){
+        if (result.data.code === 200) {
             return result.data;
         }
         //操作失败
         //JSON parse error
-        if(result.data.code===500 && result.data.msg.includes('JSON parse error')){
+        if (result.data.code === 500 && result.data.msg.includes('JSON parse error')) {
             ElMessage.error('请检查输入参数是否正确')
             return Promise.reject(result.data)
         }
-        ElMessage.error(result.data.msg?result.data.msg:'服务异常')
+        ElMessage.error(result.data.msg ? result.data.msg : '服务异常')
         //异步操作的状态转换为失败
         return Promise.reject(result.data)
 
     },
     err => {
         //判断响应状态码,如果为401,则证明未登录,提示请登录,并跳转到登录页面
-        if(err.response.status===401){
+        if (err.response.status === 401) {
             ElMessage.error(err.response.data)
             router.push('/login')
         }

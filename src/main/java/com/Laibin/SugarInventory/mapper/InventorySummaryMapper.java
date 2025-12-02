@@ -61,24 +61,24 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
     Long countSummary(@Param("query") InventoryQueryDTO query);
 
     @Select("""
-    SELECT 
-        w.id AS warehouse_id,
-        w.warehouse_name,
-        w.max_capacity,
-        COALESCE(vc.cur_capacity, 0) AS cur_capacity,
-        ROUND(COALESCE(vc.cur_capacity, 0) / w.max_capacity * 100, 2) AS capacity_percentage,
-        w.status,
-        w.created_at
-    FROM warehouse w
-    LEFT JOIN (
-        SELECT 
-            warehouse_id, 
-            SUM(quantity) AS cur_capacity 
-        FROM inventory 
-        GROUP BY warehouse_id
-    ) vc ON w.id = vc.warehouse_id
-    ORDER BY capacity_percentage DESC
-    """)
+            SELECT 
+                w.id AS warehouse_id,
+                w.warehouse_name,
+                w.max_capacity,
+                COALESCE(vc.cur_capacity, 0) AS cur_capacity,
+                ROUND(COALESCE(vc.cur_capacity, 0) / w.max_capacity * 100, 2) AS capacity_percentage,
+                w.status,
+                w.created_at
+            FROM warehouse w
+            LEFT JOIN (
+                SELECT 
+                    warehouse_id, 
+                    SUM(quantity) AS cur_capacity 
+                FROM inventory 
+                GROUP BY warehouse_id
+            ) vc ON w.id = vc.warehouse_id
+            ORDER BY capacity_percentage DESC
+            """)
     List<VWarehouseCapacity> selectCapacityList();
 
 

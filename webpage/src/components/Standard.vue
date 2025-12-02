@@ -42,10 +42,10 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="standardName" label="标准名称" width="150" />
-        <el-table-column prop="productType" label="产品类型" width="100" />
+        <el-table-column prop="standardName" label="标准名称" width="150"/>
+        <el-table-column prop="productType" label="产品类型" width="100"/>
         <el-table-column label="色值范围" width="200">
-<!--          改为最小值~x~最大值的形式-->
+          <!--          改为最小值~x~最大值的形式-->
           <template #default="{ row }">
             {{ row.colorMin }}
             <span v-if="row.colorMax === null && row.colorMin === null"> 无 </span>
@@ -103,7 +103,9 @@
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改标准';handleEdit(row)">编辑</el-button>
+            <el-button type="primary" size="small"
+                       @click="dialogVisible = true;operationType='修改标准';handleEdit(row)">编辑
+            </el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -118,7 +120,7 @@
     >
       <el-form :model="submitForm" :rules="rule" label-width="auto">
         <el-form-item label="标准名称" prop="standardName">
-          <el-input v-model="submitForm.standardName" clearable />
+          <el-input v-model="submitForm.standardName" clearable/>
         </el-form-item>
         <el-form-item label="产品类型" prop="productType">
           <el-select v-model="submitForm.productType" placeholder="请选择">
@@ -131,39 +133,39 @@
           </el-select>
         </el-form-item>
         <el-form-item label="色值范围" prop="colorMin">
-          <el-input-number v-model="submitForm.colorMin" controls-position="right" />
+          <el-input-number v-model="submitForm.colorMin" controls-position="right"/>
           <span> ~ </span>
-          <el-input-number v-model="submitForm.colorMax" controls-position="right" />
+          <el-input-number v-model="submitForm.colorMax" controls-position="right"/>
         </el-form-item>
         <el-form-item label="还原糖范围" prop="reducingSugarMin">
-          <el-input-number v-model="submitForm.reducingSugarMin" controls-position="right" />
+          <el-input-number v-model="submitForm.reducingSugarMin" controls-position="right"/>
           <span> ~ </span>
-          <el-input-number v-model="submitForm.reducingSugarMax" controls-position="right" />
+          <el-input-number v-model="submitForm.reducingSugarMax" controls-position="right"/>
         </el-form-item>
         <el-form-item label="干燥失重范围" prop="dryWeightMin">
-          <el-input-number v-model="submitForm.dryWeightMin" controls-position="right" />
+          <el-input-number v-model="submitForm.dryWeightMin" controls-position="right"/>
           <span> ~ </span>
-          <el-input-number v-model="submitForm.dryWeightMax" controls-position="right" />
+          <el-input-number v-model="submitForm.dryWeightMax" controls-position="right"/>
         </el-form-item>
         <el-form-item label="电导灰分范围" prop="conductivityAshMin">
-          <el-input-number v-model="submitForm.conductivityAshMin" controls-position="right" />
+          <el-input-number v-model="submitForm.conductivityAshMin" controls-position="right"/>
           <span> ~ </span>
-          <el-input-number v-model="submitForm.conductivityAshMax" controls-position="right" />
+          <el-input-number v-model="submitForm.conductivityAshMax" controls-position="right"/>
         </el-form-item>
         <el-form-item label="蔗糖分范围" prop="sucroseMin">
-          <el-input-number v-model="submitForm.sucroseMin" controls-position="right" />
+          <el-input-number v-model="submitForm.sucroseMin" controls-position="right"/>
           <span> ~ </span>
-          <el-input-number v-model="submitForm.sucroseMax" controls-position="right" />
+          <el-input-number v-model="submitForm.sucroseMax" controls-position="right"/>
         </el-form-item>
         <el-form-item label="不溶于水杂质范围" prop="insolubleImpurityMin">
-          <el-input-number v-model="submitForm.insolubleImpurityMin" controls-position="right" />
+          <el-input-number v-model="submitForm.insolubleImpurityMin" controls-position="right"/>
           <span> ~ </span>
-          <el-input-number v-model="submitForm.insolubleImpurityMax" controls-position="right" />
+          <el-input-number v-model="submitForm.insolubleImpurityMax" controls-position="right"/>
         </el-form-item>
         <el-form-item label="pH范围" prop="phMin">
-          <el-input-number v-model="submitForm.phMin" controls-position="right" />
+          <el-input-number v-model="submitForm.phMin" controls-position="right"/>
           <span> ~ </span>
-          <el-input-number v-model="submitForm.phMax" controls-position="right" />
+          <el-input-number v-model="submitForm.phMax" controls-position="right"/>
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
@@ -175,8 +177,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox} from 'element-plus'
+import {ref, onMounted} from 'vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
 import {addStandard, deleteStandard, getStandard, updateStandard} from "@/api/standard";
 // 搜索表单
 const searchForm = ref({
@@ -185,8 +187,8 @@ const searchForm = ref({
 })
 // 产品类型选项
 const productTypes = [
-  { value: '白冰糖', label: '白冰糖' },
-  { value: '黄冰糖', label: '黄冰糖' }
+  {value: '白冰糖', label: '白冰糖'},
+  {value: '黄冰糖', label: '黄冰糖'}
 ]
 // 结果列表
 const resultList = ref([])
@@ -197,10 +199,10 @@ const loading = ref(false)
 // 处理搜索
 const handleSearch = async () => {
   let params = {}
-  if(searchForm.value.productType){
+  if (searchForm.value.productType) {
     params.productType = searchForm.value.productType
   }
-  if(searchForm.value.standardName){
+  if (searchForm.value.standardName) {
     params.standardName = searchForm.value.standardName
   }
   loading.value = true
@@ -222,10 +224,10 @@ const handleReset = () => {
 
 const rule = {
   standardName: [
-    { required: true, message: '请输入标准名称', trigger: 'blur' }
+    {required: true, message: '请输入标准名称', trigger: 'blur'}
   ],
   productType: [
-    { required: true, message: '请选择产品类型', trigger: 'blur' }
+    {required: true, message: '请选择产品类型', trigger: 'blur'}
   ]
 }
 const dialogVisible = ref(false)

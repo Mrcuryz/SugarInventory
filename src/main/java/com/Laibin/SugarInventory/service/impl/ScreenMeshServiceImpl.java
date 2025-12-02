@@ -39,7 +39,7 @@ public class ScreenMeshServiceImpl implements ScreenMeshService, LoggableService
         screenMesh.setMeshName(dto.getMeshName());
         screenMesh.setDescription(dto.getDescription());
 
-        if(screenMeshMapper.existByName(screenMesh.getMeshName()) != null)
+        if (screenMeshMapper.existByName(screenMesh.getMeshName()) != null)
             throw new BusinessException("筛网名称已存在");
 
         screenMesh.setCreatedBy(userId);
@@ -58,13 +58,13 @@ public class ScreenMeshServiceImpl implements ScreenMeshService, LoggableService
             throw new BusinessException("筛网不存在");
         }
 
-        if (dto.getMeshName()!= null &&!dto.getMeshName().equals(screenMesh.getMeshName())) {
+        if (dto.getMeshName() != null && !dto.getMeshName().equals(screenMesh.getMeshName())) {
             if (screenMeshMapper.existByName(dto.getMeshName()) != null)
                 throw new BusinessException("筛网名称已存在");
             screenMesh.setMeshName(dto.getMeshName());
         }
 
-        if(dto.getDescription()!= null){
+        if (dto.getDescription() != null) {
             screenMesh.setDescription(dto.getDescription());
         }
 

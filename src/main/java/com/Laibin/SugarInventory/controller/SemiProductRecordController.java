@@ -23,7 +23,7 @@ import java.util.List;
 
 /**
  * <p>
- *  前端控制器
+ * 前端控制器
  * </p>
  *
  * @author Mrcury
@@ -38,8 +38,9 @@ public class SemiProductRecordController {
 
     /**
      * 新增半成品记录
-     * @param dto 半成品查询条件
-     *            产品名称、数量
+     *
+     * @param dto       半成品查询条件
+     *                  产品名称、数量
      * @param loginUser 登录用户信息
      * @return 半成品名称列表
      */
@@ -80,7 +81,8 @@ public class SemiProductRecordController {
 
     /**
      * 查询本人的半成品记录
-     * @param dto 操作日期（可选）
+     *
+     * @param dto       操作日期（可选）
      * @param loginUser 登录用户信息
      * @return 本人关联半成品记录列表
      */
@@ -100,6 +102,7 @@ public class SemiProductRecordController {
 
     /**
      * 查询半成品记录
+     *
      * @param dto 查询条件
      *            产品名称（可选）、操作日期（可选）、操作员姓名（可选）
      * @return 半成品记录列表

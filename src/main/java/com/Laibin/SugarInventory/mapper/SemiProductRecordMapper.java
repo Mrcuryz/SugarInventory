@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * <p>
- *  Mapper 接口
+ * Mapper 接口
  * </p>
  *
  * @author Mrcury
@@ -44,7 +44,7 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
             "WHERE product_id = #{productId} " +
             "AND operation_date = #{operationDate} ")
     int existsByProductIdAndDate(@Param("productId") Integer productId,
-                                               @Param("operationDate") LocalDate operationDate);
+                                 @Param("operationDate") LocalDate operationDate);
 
     @Select("<script>" +
             "SELECT s.*, p.product_name " +
