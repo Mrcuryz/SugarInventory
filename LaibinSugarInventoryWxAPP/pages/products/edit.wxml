@@ -45,6 +45,13 @@
         <view class="picker">{{product.canStack ? "是" : "否"}}</view>
       </picker>
     </view>
+    <view class="form-item">
+      <text class="form-label required">筛网</text>
+      <picker mode="selector" range="{{screenMeshOptions}}" bindchange="onScreenMeshChange" value="selectedScreenMeshIndex">
+        <view class="picker">{{screenMeshOptions[selectedScreenMeshIndex] || '请选择'}}</view>
+      </picker>
+    </view>
+
     <view class="button-group">
       <button class="cancel-btn" bindtap="hideModal">取消</button>
       <button class="submit-btn" bindtap="submitForm">保存修改</button>

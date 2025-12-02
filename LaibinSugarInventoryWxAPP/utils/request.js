@@ -1,5 +1,5 @@
 const BASE_URL = "https://ccgl.site";
-// const BASE_URL = "http://124.220.1.37:8080";
+// const BASE_URL = "http://localhost:8080";
 // const BASE_URL = "https://cscgood.mynatapp.cc";
 
 function request(url, method, data = {}) {

@@ -34,8 +34,9 @@
       <view class="product-card">
         <view class="product-info">
           <text class="bold">产品id: {{item.id}}</text>
-          <text class="bold">产品名称: {{item.productName}} <text wx:if="{{item.packagingMethod}}"> {{item.packagingMethod}}</text>
+          <text class="bold">产品名称: {{item.productName}}   <text wx:if="{{item.packagingMethod}}">  |  包装：{{item.packagingMethod}}</text>
           </text>
+          <text>筛网: {{screenMeshNameMap[item.screenMeshId] || '未选择'}}</text>
           <text>{{item.weightPerPiece}}kg/件 | {{item.piecesPerPallet}}件/板 | 可堆积: {{item.canStack ? '是' : '否'}}</text>
           <view class="action-buttons">
             <view class="edit-btn" bindtap="editProduct" data-id="{{item.id}}">
@@ -108,6 +109,19 @@
           <picker mode="selector" range="{{['是', '否']}}" bindchange="onPickerChange" data-field="canStack">
             <view class="picker-value">{{newProduct.canStack !== undefined ? (newProduct.canStack ? '是' : '否') : '请选择'}}</view>
           </picker>
+        </view>
+        <view class="form-group">
+          <text class="form-label required">筛网</text>
+          <picker
+  mode="selector"
+  range="{{screenMeshOptions}}"
+  bindchange="onScreenMeshChange"
+  value="{{selectedScreenMeshIndex}}"
+>
+  <view class="picker-value">
+    {{screenMeshOptions[selectedScreenMeshIndex] || '请选择'}}
+  </view>
+</picker>
         </view>
       </view>
 
