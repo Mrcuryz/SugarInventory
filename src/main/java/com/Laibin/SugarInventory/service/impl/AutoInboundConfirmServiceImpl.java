@@ -104,7 +104,7 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
         dto.setSide(task.getSide());
         dto.setReturnInStockFlag("0");
         dto.setSemiRecords(
-                task.getSuggestedSemiRecords() != null ? task.getSuggestedSemiRecords()
+                task.getSemiRecords() != null ? task.getSemiRecords()
                         : Collections.emptyList()
         );
         return dto;
