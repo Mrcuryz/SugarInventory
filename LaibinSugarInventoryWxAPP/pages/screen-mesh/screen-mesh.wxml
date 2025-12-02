@@ -1,0 +1,63 @@
+<view class="container">
+  <!-- 搜索框 -->
+  <view class="search-bar">
+    <input class="search-input" placeholder="请输入筛网名称" bindinput="onSearchInput" />
+    <image class="search-icon" src="/assets/icons/search.png" bindtap="getScreenMeshes"></image>
+  </view>
+
+  <!-- 筛网列表 -->
+  <view class="screen-mesh-list">
+    <block wx:for="{{screenMeshes}}" wx:key="id">
+      <view class="screen-mesh-card">
+        <view class="screen-mesh-info">
+          <text class="bold">筛网名称: {{item.meshName}}</text>
+        </view>
+        <text wx:if="{{item.description}}">描述: {{item.description}}</text>
+
+        <!-- 操作按钮 -->
+        <view class="action-buttons">
+          <button class="edit-btn" bindtap="editScreenMesh" data-id="{{item.id}}">修改</button>
+          <button class="delete-btn" bindtap="deleteScreenMesh" data-id="{{item.id}}">删除</button>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <!-- 悬浮新增按钮 -->
+  <view class="floating-button" bindtap="showAddScreenMeshModal">
+    <image class="icon" src="/assets/icons/add.png"></image>
+  </view>
+
+  <!-- 背景遮罩层 -->
+  <view wx:if="{{showModal}}" class="modal-overlay" bindtap="hideModal"></view>
+
+  <!-- 弹出表单 -->
+  <view wx:if="{{showModal}}" class="modal">
+    <view class="modal-content">
+      <text class="title">{{editMode ? "修改筛网" : "新增筛网"}}</text>
+
+      <!-- 表单 -->
+      <view class="form-item">
+        <text>筛网名称</text>
+        <input class="input" placeholder="输入筛网名称" bindinput="onInputChange" data-field="meshName" value="{{currentScreenMesh.meshName}}" />
+      </view>
+
+      <view class="form-item">
+        <text>筛网描述</text>
+        <textarea
+          class="input multi-line"
+          placeholder="输入描述"
+          bindinput="onInputChange"
+          data-field="description"
+          value="{{currentScreenMesh.description}}"
+          auto-height
+          fixed
+          show-confirm-bar="{{false}}"
+        ></textarea>
+      </view>
+
+      <!-- 提交按钮 -->
+      <button class="submit-btn" bindtap="submitScreenMesh">{{editMode ? "更新" : "新增"}}</button>
+    </view>
+  </view>
+</view>

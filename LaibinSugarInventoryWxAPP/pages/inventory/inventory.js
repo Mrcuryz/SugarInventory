@@ -4,6 +4,10 @@ Page({
   data: {
     activeTab: 'inventory',
 
+    pageLocked: false,     // 是否锁定背景
+    bodyScrollTop: 0,      // 锁定前的滚动位置
+    lockedTop: 0,           // 形如 "-123px" 的字符串，给 style 用
+
     // 库存列表
     warehouseList: [],
     totalItems: 0,
@@ -148,6 +152,7 @@ getProductAssayData(e) {
     entryDate:product.entryDate,
     isQualified: '合格'
   }
+  this.lockPage();
   request('/api/assay/query', 'POST', params)
   .then(res =>{
     console.log(res)
@@ -236,7 +241,7 @@ getAllWarehouseCapacity() {
 
         this.setData({
           warehouseList: list,
-          totalItems: res.total, // ✅ 使用 total 字段
+          totalItems: res.total, // 使用 total 字段
           totalPages: Math.ceil(res.total / this.data.pageSize)
         });
       }
@@ -249,6 +254,32 @@ getAllWarehouseCapacity() {
       this.setData({
         isLoading: false
       });
+    }
+  },
+
+  lockPage() {
+    wx.createSelectorQuery().selectViewport().scrollOffset(res => {
+      const y = (res && typeof res.scrollTop === 'number') ? res.scrollTop : 0;
+      this.setData({
+        bodyScrollTop: y,
+        lockedTop: '-' + y + 'px',
+        pageLocked: true
+      });
+    }).exec();
+  },
+  
+  // 如果没有任何弹窗在显示，就解锁并恢复滚动
+  unlockPageIfNoModal() {
+    const stillOpen =
+      this.data.showDetailModal ||
+      this.data.showOutboundModal ||
+      this.data.showTransferOutboundModal ||
+      this.data.showAssayModal;
+  
+    if (!stillOpen) {
+      const y = this.data.bodyScrollTop || 0;
+      this.setData({ pageLocked: false, lockedTop: 0 });
+      wx.pageScrollTo({ scrollTop: y, duration: 0 });
     }
   },
 
@@ -274,6 +305,7 @@ getAllWarehouseCapacity() {
    * 查看库存详情
    */
   async showDetail(e) {
+    this.lockPage();
     const warehouseId = e.currentTarget.dataset.id;
 
     this.setData({
@@ -339,6 +371,7 @@ getAllWarehouseCapacity() {
       showDetailModal: false,
       detailList: []
     });
+    this.unlockPageIfNoModal();
   },
 
   /**
@@ -349,6 +382,7 @@ getAllWarehouseCapacity() {
       showAssayModal: false,
       productAssayInfo: {}
     });
+    this.unlockPageIfNoModal();
   },
 
   // 出库搜索
@@ -432,7 +466,7 @@ getAllWarehouseCapacity() {
       startDate,
       endDate
     } = this.data;
-
+    this.lockPage();
     try {
       this.setData({
         isLoading: true
@@ -506,6 +540,7 @@ getAllWarehouseCapacity() {
    * 开始出库操作
    */
   startOutbound(e) {
+    this.lockPage();
     const {
       id,
       name,
@@ -537,6 +572,7 @@ getAllWarehouseCapacity() {
     });
   },
   startTransferOutbound(e) {
+    this.lockPage();
     const {
       id,
       name,
@@ -576,6 +612,7 @@ getAllWarehouseCapacity() {
       showTransferOutboundModal: false,
       showOutboundModal: false
     });
+    this.unlockPageIfNoModal();
   },
 
   /**
