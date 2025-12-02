@@ -375,7 +375,8 @@ public class OperationLogAspect {
     // 忽略自动填充字段（如 createdAt/updatedAt）
     private boolean isIgnoredField(String field) {
         return field.equals("createdAt") || field.equals("updatedAt") || field.equals("testedBy") ||
-                field.equals("createdBy") || field.equals("updatedBy") || field.isEmpty();
+                field.equals("createdBy") || field.equals("updatedBy") || field.equals("selectType") ||
+                field.equals("relatedId") || field.isEmpty();
     }
 
     // 将对象转换为 JSON 字符串

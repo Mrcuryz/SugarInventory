@@ -196,6 +196,8 @@ public class LlmParseServiceImpl implements LlmParseService {
                     - 文本可能包含所使用的半成品信息，如"用50kg白砂糖57件",解析后填入 `sources`,包含：
                       -   产品类型 `sourceType` 即SEMI_PRODUCT_IN;
                       -   品名原文 `productNameRaw`;
+                      -   产品 ID `semiProductId`；（必须从 productCatalog 中选择）
+                      -   产品名称 `productName`；（必须从 productCatalog 中选择）
                       -   生产日期 `productionDate`（如 2025-10-18），缺失则 null;
                       -   板数 / 件数 `boardCount` / `pieceCount`;
                       -   批号 / 其他附属信息 `batchNo`;
@@ -227,7 +229,7 @@ public class LlmParseServiceImpl implements LlmParseService {
                           "warehouse_name": "1",
                           "location": "6号烘房",
                           "production_date": "2025-11-25",
-                          "sources": ...,
+                          "sources": ,
                           "reason" : ...,
                           "remark": "直破；机破2组报数（14.15.16.17组）",
                         }
@@ -259,6 +261,8 @@ public class LlmParseServiceImpl implements LlmParseService {
                            {
                              "sourceType": "SEMI_PRODUCT_IN",
                              "productNameRaw": "直破黄小颗粒",
+                             "semiProductId":  50,
+                             "productName": "黄小颗粒",
                              "productionDate": "2025-10-05",
                              "boardCount": 2,
                              "pieceCount": 0,
@@ -268,6 +272,8 @@ public class LlmParseServiceImpl implements LlmParseService {
                            {
                              "sourceType": "SEMI_PRODUCT_IN",
                              "productNameRaw": "直破黄小颗粒",
+                             "semiProductId":  50,
+                             "productName": "黄小颗粒",
                              "productionDate": "2025-11-16",
                              "boardCount": 3,
                              "pieceCount": 20,
