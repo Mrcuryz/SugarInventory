@@ -155,12 +155,6 @@
           <view class="picker">{{currentRecord.side || "请选择入库顺序"}}</view>
         </picker>
       </view>
-      <view class="form-item">
-        <text class="label">筛网</text>
-        <picker mode="selector" range="{{screenMeshOptions}}" bindchange="onScreenMeshChange" value="selectedScreenMeshIndex">
-          <view class="picker">{{screenMeshOptions[selectedScreenMeshIndex] || '请选择'}}</view>
-        </picker>
-      </view>
     </scroll-view>
 
     <view wx:if="{{additionalStorage}}" class="storage-alert">
