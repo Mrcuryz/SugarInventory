@@ -21,7 +21,7 @@ import java.util.List;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author Mrcury
@@ -87,7 +87,7 @@ public class EmployeeServiceImpl extends ServiceImpl<EmployeeRosterMapper, Emplo
         if (rows < 1) {
             throw new RuntimeException("更新失败，员工ID不存在或数据未变更");
         }
-        if(dto.getRoleCode() != null){
+        if (dto.getRoleCode() != null) {
             try {
                 userMapper.updateRoleByEmployeeId(dto.getEmployeeId(), dto.getRoleCode());
             } catch (Exception e) {

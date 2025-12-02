@@ -75,7 +75,7 @@ public class AuthServiceImpl implements AuthService {
             userMapper.insert(user);
         }
 
-        if(!Objects.equals(user.getRoleCode(), "ADMIN")){
+        if(!Objects.equals(user.getRoleCode(), "ADMIN")) {
             System.out.println("User role is not admin" + user.getRoleCode());
             throw new BusinessException("无权限登录");
         }
@@ -195,7 +195,7 @@ public class AuthServiceImpl implements AuthService {
         return new AuthVO(jwtUtils.generateToken(userDetails), user.getName(), user.getRoleCode());
     }
 
-    private Object processWechatBind(SessionInfo session, EmployeeRoster roster) {                 
+    private Object processWechatBind(SessionInfo session, EmployeeRoster roster) {
         // 执行绑定前，检查是否已存在
         User existingUser = userMapper.selectByEmployeeId(roster.getEmployeeId());
         User user = new User();

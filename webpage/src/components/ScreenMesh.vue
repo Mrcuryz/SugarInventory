@@ -27,13 +27,15 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="meshName" label="筛网名称" width="200" />
-        <el-table-column prop="description" label="描述" width="352" />
+        <el-table-column prop="meshName" label="筛网名称" width="200"/>
+        <el-table-column prop="description" label="描述" width="352"/>
         <el-table-column prop="createdAt" label="创建时间" width="200" sortable/>
         <el-table-column prop="updatedAt" label="更新时间" width="200" sortable/>
         <el-table-column label="操作" width="150">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改筛网';handleEdit(row)">编辑</el-button>
+            <el-button type="primary" size="small"
+                       @click="dialogVisible = true;operationType='修改筛网';handleEdit(row)">编辑
+            </el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -48,10 +50,10 @@
     >
       <el-form :model="submitForm" :rules="rule" label-width="auto">
         <el-form-item label="筛网名称" prop="meshName" required>
-          <el-input v-model="submitForm.meshName" clearable />
+          <el-input v-model="submitForm.meshName" clearable/>
         </el-form-item>
         <el-form-item label="筛网描述" prop="description">
-          <el-input v-model="submitForm.description" clearable />
+          <el-input v-model="submitForm.description" clearable/>
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
@@ -63,9 +65,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import {ref, onMounted} from 'vue'
 import {addMesh, deleteMesh, getMesh, updateMesh} from '@/api/mesh'
-import { ElMessage, ElMessageBox} from 'element-plus'
+import {ElMessage, ElMessageBox} from 'element-plus'
 // 搜索表单
 const searchForm = ref({
   meshName: '',
@@ -79,7 +81,7 @@ const loading = ref(false)
 // 处理搜索
 const handleSearch = async () => {
   let params = {}
-  if(searchForm.value.meshName){
+  if (searchForm.value.meshName) {
     params.meshName = searchForm.value.meshName
   }
   loading.value = true
@@ -87,11 +89,11 @@ const handleSearch = async () => {
   if (res.code === 200) {
     resultList.value = res.data
     resultList.value.forEach(item => {
-      if(item.createdAt){
-        item.createdAt = item.createdAt.replace('T',' ').replace('Z',' ')
+      if (item.createdAt) {
+        item.createdAt = item.createdAt.replace('T', ' ').replace('Z', ' ')
       }
-      if(item.updatedAt){
-        item.updatedAt = item.updatedAt.replace('T',' ').replace('Z',' ')
+      if (item.updatedAt) {
+        item.updatedAt = item.updatedAt.replace('T', ' ').replace('Z', ' ')
       }
     })
     loading.value = false
@@ -109,7 +111,7 @@ const handleReset = () => {
 
 const rule = {
   meshName: [
-    { required: true, message: '请输入筛网名称', trigger: 'blur' }
+    {required: true, message: '请输入筛网名称', trigger: 'blur'}
   ]
 }
 const dialogVisible = ref(false)

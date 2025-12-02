@@ -10,7 +10,9 @@ import java.util.List;
 public class ParsedInboundItem {
 
     private Integer index;
-    /** "SEMI_PRODUCT_IN" / "FINISHED_PRODUCT_IN" / "OTHER" */
+    /**
+     * "SEMI_PRODUCT_IN" / "FINISHED_PRODUCT_IN" / "OTHER"
+     */
     private String type;
 
     @JsonProperty("raw_block")
@@ -36,15 +38,21 @@ public class ParsedInboundItem {
     @JsonProperty("warehouse_name")
     private String warehouseName;
 
-    /** 文本里的库位原文，如“6号烘房”“3号库位” */
+    /**
+     * 文本里的库位原文，如“6号烘房”“3号库位”
+     */
     @JsonProperty("location")
     private String location;
 
-    /** "2025-11-25" */
+    /**
+     * "2025-11-25"
+     */
     @JsonProperty("production_date")
     private String productionDate;
 
-    /** 数量对象 */
+    /**
+     * 数量对象
+     */
     private Quantity quantity;
 
     private List<ParsedSemiSource> sources;

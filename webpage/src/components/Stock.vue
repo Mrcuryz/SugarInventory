@@ -3,13 +3,13 @@
     <el-card class="search-card" style="max-width: 1200px">
       <el-form :model="searchForm" inline>
         <el-form-item label="产品名称">
-          <el-input v-model="searchForm.productName" clearable placeholder="请输入产品名称" />
+          <el-input v-model="searchForm.productName" clearable placeholder="请输入产品名称"/>
         </el-form-item>
         <el-form-item label="仓库名称">
-          <el-input v-model="searchForm.warehouseName" clearable  placeholder="请输入仓库名称" />
+          <el-input v-model="searchForm.warehouseName" clearable placeholder="请输入仓库名称"/>
         </el-form-item>
         <el-form-item label="操作人">
-          <el-input v-model="searchForm.operatorName" clearable  placeholder="请输入操作人" />
+          <el-input v-model="searchForm.operatorName" clearable placeholder="请输入操作人"/>
         </el-form-item>
         <br>
         <el-form-item label="查询类型">
@@ -59,16 +59,26 @@
           </template>
         </el-table-column>
         <el-table-column prop="totalWeight" label="重量（kg）" width="150" sortable></el-table-column>
-        <el-table-column prop="entryDate" label="入库日期" width="150" v-if="searchFormType === '入库'" sortable></el-table-column>
-        <el-table-column prop="inDate" label="入库日期" width="150" v-if="searchFormType === '出库'" sortable></el-table-column>
-        <el-table-column prop="outDate" label="出库日期" width="150" v-if="searchFormType === '出库'" sortable></el-table-column>
-        <el-table-column prop="operationDate" label="入库日期" width="150" v-if="searchFormType === '半成品入库'" sortable></el-table-column>
+        <el-table-column prop="entryDate" label="入库日期" width="150" v-if="searchFormType === '入库'"
+                         sortable></el-table-column>
+        <el-table-column prop="inDate" label="入库日期" width="150" v-if="searchFormType === '出库'"
+                         sortable></el-table-column>
+        <el-table-column prop="outDate" label="出库日期" width="150" v-if="searchFormType === '出库'"
+                         sortable></el-table-column>
+        <el-table-column prop="operationDate" label="入库日期" width="150" v-if="searchFormType === '半成品入库'"
+                         sortable></el-table-column>
         <el-table-column prop="operator" label="操作人" width="150"></el-table-column>
-        <el-table-column prop="meshName" label="筛网名称" width="150" v-if="searchFormType !== '出库'"></el-table-column>
+        <el-table-column prop="meshName" label="筛网名称" width="150"
+                         v-if="searchFormType !== '出库'"></el-table-column>
         <el-table-column label="操作" width="250" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="dialogVisible = true;operationType='查看半成品';handleEdit(row)" v-if="searchFormType === '入库'">查看半成品</el-button>
-            <el-button type="danger" size="small" @click="dialogVisible = true;operationType='查看化验记录';handleEdit(row)">查看化验记录</el-button>
+            <el-button type="primary" size="small"
+                       @click="dialogVisible = true;operationType='查看半成品';handleEdit(row)"
+                       v-if="searchFormType === '入库'">查看半成品
+            </el-button>
+            <el-button type="danger" size="small"
+                       @click="dialogVisible = true;operationType='查看化验记录';handleEdit(row)">查看化验记录
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -168,7 +178,7 @@
             </el-row>
 
             <!-- 底部状态栏 -->
-            <div class="status-bar" >
+            <div class="status-bar">
               <el-tag
                   :span="12"
                   :type="item.isQualified === '合格' ? 'success' : 'danger'"
@@ -184,19 +194,19 @@
         </el-card>
       </div>
       <div v-if="!semiProductRecords?.length && operationType === '查看半成品'" class="empty-container">
-        <el-empty description="暂无半成品记录" :image-size="100" />
+        <el-empty description="暂无半成品记录" :image-size="100"/>
       </div>
       <div v-if="!resultList.length" class="empty-container">
-        <el-empty description="暂无数据" :image-size="100" />
+        <el-empty description="暂无数据" :image-size="100"/>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, computed } from 'vue'
+import {ref, onMounted, reactive, computed} from 'vue'
 import {getMesh, updateMesh} from '@/api/mesh'
-import { ElMessage, ElMessageBox} from 'element-plus'
+import {ElMessage, ElMessageBox} from 'element-plus'
 import {addInStock, getInStock, getOutStock, getSemiProductList} from "@/api/stock";
 import {getProductList} from "@/api/product";
 import {getSemiProduct, getStProduct} from "@/api/assay";
@@ -227,7 +237,7 @@ const exportExcel = async () => {
 
   try {
     let res
-    switch(searchFormType.value) {
+    switch (searchFormType.value) {
       case '入库':
         res = await getInStock(params)
         break
@@ -266,7 +276,7 @@ const exportExcel = async () => {
         }
 
         // 添加类型特定字段
-        switch(searchFormType.value) {
+        switch (searchFormType.value) {
           case '入库':
             baseData['入库日期'] = item.entryDate
             baseData['筛网名称'] = item.meshName
@@ -366,7 +376,7 @@ const handleSearch = async () => {
     } else {
       ElMessage.error(res.msg)
     }
-  }else if (searchFormType.value === '半成品入库') {
+  } else if (searchFormType.value === '半成品入库') {
     let res = await getSemiProductList(params)
     console.log(res)
     if (res.code === 200) {
@@ -380,8 +390,7 @@ const handleSearch = async () => {
 }
 // 处理重置
 const handleReset = () => {
-  searchForm.value = {
-  }
+  searchForm.value = {}
   handleSearch()
 }
 const semiProductRecords = ref([])

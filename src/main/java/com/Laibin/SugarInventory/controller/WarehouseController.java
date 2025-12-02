@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * <p>
- *  前端控制器
+ * 前端控制器
  * </p>
  *
  * @author Mrcury
@@ -37,7 +37,8 @@ public class WarehouseController {
     public Result<Warehouse> updateWarehouseToMaintain(
             @Parameter(description = "库位ID")
             @PathVariable("id") Integer id) {
-        try {;
+        try {
+            ;
             return Result.success(warehouseService.setWarehouseToMaintain(id));
         } catch (Exception e) {
             return Result.error("仓库状态更新失败");
@@ -49,10 +50,10 @@ public class WarehouseController {
     @LogOperation(value = "库位", type = OperationType.INSERT)
     @PostMapping("/create")
     public Result<Warehouse> createWarehouse(@RequestBody WarehouseDTO warehouse) {
-        try{
+        try {
             return Result.success(warehouseService.createWarehouse(warehouse));
-        } catch (Exception e){
-            return Result.error(500,"仓库创建失败:" + e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, "仓库创建失败:" + e.getMessage());
         }
     }
 
@@ -71,7 +72,7 @@ public class WarehouseController {
         try {
             return Result.success(warehouseService.updateWarehouse(warehouse));
         } catch (Exception e) {
-            return Result.error(500,"仓库信息更新失败:" + e.getMessage());
+            return Result.error(500, "仓库信息更新失败:" + e.getMessage());
         }
     }
 
@@ -87,10 +88,10 @@ public class WarehouseController {
     // 根据ID查询库位，如果ID为空，则返回所有库位
     @GetMapping("/query")
     public Result<List<Warehouse>> queryWarehouse(@RequestParam(required = false) String name) {
-        try{
+        try {
             return Result.success(warehouseService.listAllWarehouses(name));
-        } catch (Exception e){
-            return Result.error(500,"查询库位失败:" + e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, "查询库位失败:" + e.getMessage());
         }
     }
 }

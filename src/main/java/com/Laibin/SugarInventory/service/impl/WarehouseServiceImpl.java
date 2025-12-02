@@ -22,7 +22,7 @@ import java.util.List;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author Mrcury
@@ -44,7 +44,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
     public Warehouse setWarehouseToMaintain(Integer id) {
         Warehouse warehouse = warehouseMapper.selectById(id);
         int rows = 0;
-        if(warehouse.getStatus().equals("维护"))
+        if (warehouse.getStatus().equals("维护"))
             rows = warehouseMapper.cancelMaintain(id);
         else
             rows = warehouseMapper.updateStatusToMaintain(id);
@@ -60,7 +60,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
     public Warehouse createWarehouse(WarehouseDTO dto) {
         //检查是否有重复的warehouseName
         Warehouse warehouseByWarehouseId = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
-        if(warehouseByWarehouseId != null) {
+        if (warehouseByWarehouseId != null) {
             throw new BusinessException("库位名称已存在");
         }
 
@@ -75,7 +75,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
 
         // 直接调用MyBatis-Plus的insert方法
         int result = warehouseMapper.insert(warehouse);
-        if(result < 1){
+        if (result < 1) {
             throw new RuntimeException("创建仓库失败");
         }
 
@@ -93,15 +93,15 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         Warehouse oldWarehouse = warehouseMapper.selectById(warehouse.getId());
         Warehouse newWarehouse = new Warehouse();
 
-            // 检查是否有重复的warehouseId
+        // 检查是否有重复的warehouseId
         Warehouse warehouseByWarehouseId = warehouseMapper.selectByWarehouseName(warehouse.getWarehouseName());
-        if(warehouseByWarehouseId != null && !warehouseByWarehouseId.getId().equals(warehouse.getId())) {
+        if (warehouseByWarehouseId != null && !warehouseByWarehouseId.getId().equals(warehouse.getId())) {
             throw new BusinessException("库位名称已存在");
         }
         newWarehouse.setWarehouseName(warehouse.getWarehouseName());
 
         // 如果修改了最大排数，需重新计算最大库存量，即maxCapacity = maxRows * 2。
-        if(warehouse.getMaxRows() != null && !warehouse.getMaxRows().equals(oldWarehouse.getMaxRows())) {
+        if (warehouse.getMaxRows() != null && !warehouse.getMaxRows().equals(oldWarehouse.getMaxRows())) {
             newWarehouse.setMaxCapacity(warehouse.getMaxRows() * 2);
         } else {
             newWarehouse.setMaxCapacity(oldWarehouse.getMaxCapacity());
@@ -115,7 +115,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         newWarehouse.setCreatedAt(oldWarehouse.getCreatedAt());
         // 更新时，不允许用户直接修改 status、curCapacity、createdAt 等字段
         int result = warehouseMapper.updateById(newWarehouse);
-        if(result < 1){
+        if (result < 1) {
             throw new RuntimeException("更新仓库信息失败");
         }
 
@@ -126,7 +126,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
     @Override
     public void deleteWarehouse(Integer id) {
         int result = warehouseMapper.deleteById(id);
-        if(result < 1){
+        if (result < 1) {
             throw new RuntimeException("删除仓库失败");
         }
     }

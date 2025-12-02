@@ -40,8 +40,8 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "AND side = #{side} " +
             "AND layer = #{layer}")
     List<Integer> getUsedRowList(@Param("warehouseId") int warehouseId,
-                    @Param("side") String side,
-                    @Param("layer") int layer);
+                                 @Param("side") String side,
+                                 @Param("layer") int layer);
 
 
     @Select("SELECT * FROM inventory " +

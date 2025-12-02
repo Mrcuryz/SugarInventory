@@ -25,7 +25,7 @@ public class VInventorySummary {
     private LocalDate entryDate;
     @Schema(description = "产品库存总板数")
     private Integer totalQuantity;
-   @Schema(description = "产品库存总件数")
+    @Schema(description = "产品库存总件数")
     private Integer totalPieces;
     @Schema(description = "产品最早入库时间")
     private Date firstEntryDate;

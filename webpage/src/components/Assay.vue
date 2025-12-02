@@ -127,7 +127,7 @@
     >
       <el-form :model="submitForm" :rules="rule" label-width="auto">
         <!-- 1. 选择类型切换（单选框版本） -->
-        <el-form-item label="选择类型" prop="selectType" required  v-if="operationType === '新增化验'">
+        <el-form-item label="选择类型" prop="selectType" required v-if="operationType === '新增化验'">
           <el-radio-group
               v-model="submitForm.selectType"
               class="radio-group"

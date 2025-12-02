@@ -148,7 +148,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         // === 数量：quantity.pallets / quantity.pieces ===
         ParsedInboundItem.Quantity qty = item.getQuantity();
         int pallets = (qty != null && qty.getPallets() != null) ? qty.getPallets() : 0;
-        int pieces  = (qty != null && qty.getPieces()  != null) ? qty.getPieces()  : 0;
+        int pieces = (qty != null && qty.getPieces() != null) ? qty.getPieces() : 0;
         task.setSemiBoardQuantity(pallets);
         task.setSemiPieceQuantity(pieces);
 
@@ -240,7 +240,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         // === 数量 ===
         ParsedInboundItem.Quantity qty = item.getQuantity();
         int pallets = (qty != null && qty.getPallets() != null) ? qty.getPallets() : 0;
-        int pieces  = (qty != null && qty.getPieces()  != null) ? qty.getPieces()  : 0;
+        int pieces = (qty != null && qty.getPieces() != null) ? qty.getPieces() : 0;
         task.setFinishedBoardQuantity(pallets);
         task.setFinishedPieceQuantity(pieces);
         if (pallets <= 0 && pieces <= 0) {

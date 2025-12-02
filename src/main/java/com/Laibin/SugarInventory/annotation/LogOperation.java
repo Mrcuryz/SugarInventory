@@ -9,5 +9,6 @@ import java.lang.annotation.*;
 @Documented
 public @interface LogOperation {
     String value();         // 操作的表名
+
     OperationType type();     // 操作类型，如 INSERT, UPDATE, DELETE
 }

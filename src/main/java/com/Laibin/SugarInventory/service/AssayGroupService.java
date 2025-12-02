@@ -22,25 +22,21 @@ public interface AssayGroupService extends IService<AssayGroup> {
 
     /**
      * 保存化验验收标准
-     *
      */
     void addAssays(AssayGroupSubmitDTO dto, Integer userId);
 
     /**
      * 查询化验验收标准数据
-     *
      */
     PageResult<AssayGroupVO> queryAssays(AssayGroupQueryDTO query);
 
     /**
      * 更新化验验收标准数据
-     *
      */
     AssayGroup updateAssay(Integer id, AssayGroupSubmitDTO dto, User user);
 
     /**
      * 删除化验验收标准数据
-     *
      */
     void deleteAssay(Integer id);
 }

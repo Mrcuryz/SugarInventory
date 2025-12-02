@@ -34,8 +34,8 @@ wechat:
   appid: wxb2e24e10a7cb3ef8
   secret: 0e992128f83b91b6e618da3151f108f7
 openai:
-    api-url: https://api.gptsapi.net/v1
-    api-key: sk-Qbp4a10d6c59e8529f3533906f3a8cf95cc0909c221iKSNH
+  api-url: https://www.dmxapi.com/v1
+  api-key: sk-cWKtu3aWp79NWSlKVmjDrk3N1PAicXGSIVYL1E1kEC6Nd4fm
 jwt:
   secret: xVqyO+0aawRF/LNpEjDDe1w/VXjnbgjJsm43uq0dbpTTt5EHbldZ3FLohntYJfRlXAhW2ZNww27q04Ja2C9kNw==
   expiration: 86400000

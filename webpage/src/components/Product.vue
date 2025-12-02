@@ -32,12 +32,12 @@
               clearable
               style="width: 200px"
           >
-           <el-option
-               v-for="item in productStatus"
-               :key="item.value"
-               :label="item.label"
-               :value="item.value"
-           />
+            <el-option
+                v-for="item in productStatus"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -58,15 +58,15 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="productName" label="产品名称" width="200" >
+        <el-table-column prop="productName" label="产品名称" width="200">
           <template #default="{ row }">
             <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
               {{ row.productName }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="productType" label="产品类型" width="100" >
-        <template #default="{ row }">
+        <el-table-column prop="productType" label="产品类型" width="100">
+          <template #default="{ row }">
             <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
               {{ row.productType }}
             </span>
@@ -75,7 +75,7 @@
         <el-table-column prop="status" label="产品状态" width="100">
           <template #default="{ row }">
             <span
-              :style="{
+                :style="{
                 color:
                   row.status === '半成品'
                     ? '#e60000'
@@ -88,7 +88,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="packagingMethod" label="打包方式" width="90" />
+        <el-table-column prop="packagingMethod" label="打包方式" width="90"/>
         <el-table-column prop="weightPerPiece" label="每件重量（kg）" min-width="110"/>
         <el-table-column prop="piecesPerPallet" label="每板件数" width="auto"/>
         <el-table-column label="筛网名称" width="140">
@@ -104,7 +104,9 @@
         </el-table-column>
         <el-table-column label="操作" width="150">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="dialogVisible = true;operationType='修改产品';editProduct(row)">编辑</el-button>
+            <el-button type="primary" size="small"
+                       @click="dialogVisible = true;operationType='修改产品';editProduct(row)">编辑
+            </el-button>
             <el-button type="danger" size="small" @click="deleteProduct(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -119,7 +121,7 @@
     >
       <el-form :model="productForm" :rules="rule" label-width="auto">
         <el-form-item label="产品名称" prop="productName" required>
-          <el-input v-model="productForm.productName" clearable />
+          <el-input v-model="productForm.productName" clearable/>
         </el-form-item>
         <el-form-item label="产品类型" prop="productType" required>
           <el-select v-model="productForm.productType" placeholder="请选择">
@@ -142,13 +144,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="打包方式" prop="packagingMethod">
-          <el-input v-model="productForm.packagingMethod" clearable />
+          <el-input v-model="productForm.packagingMethod" clearable/>
         </el-form-item>
         <el-form-item label="每件重量（kg）" prop="weightPerPiece" required>
-          <el-input v-model="productForm.weightPerPiece" clearable />
+          <el-input v-model="productForm.weightPerPiece" clearable/>
         </el-form-item>
         <el-form-item label="每板件数" prop="piecesPerPallet" required>
-          <el-input v-model="productForm.piecesPerPallet" clearable />
+          <el-input v-model="productForm.piecesPerPallet" clearable/>
         </el-form-item>
         <el-form-item label="筛网名称" prop="screenMeshId">
           <el-select
@@ -166,23 +168,24 @@
           </el-select>
         </el-form-item>
         <el-form-item label="是否可堆叠" prop="canStack">
-          <el-switch v-model="productForm.canStack" active-color="#13ce66" />
+          <el-switch v-model="productForm.canStack" active-color="#13ce66"/>
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
-<!--        符合规则的情况下才可以点击确定按钮 -->
-        <el-button type="primary" @click="operationType === '新增产品' ? newProduct() : updateProduct()">确定</el-button>
+        <!--        符合规则的情况下才可以点击确定按钮 -->
+        <el-button type="primary" @click="operationType === '新增产品' ? newProduct() : updateProduct()">确定
+        </el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
       </div>
     </el-dialog>
-    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getProductList, addProduct, removeProduct, changeProduct} from '@/api/product'
-import { ElMessage, ElMessageBox} from 'element-plus'
-import { getMesh } from '@/api/mesh'
+import {ref, onMounted} from 'vue'
+import {getProductList, addProduct, removeProduct, changeProduct} from '@/api/product'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {getMesh} from '@/api/mesh'
 // 在已有导入基础上添加XLSX
 import * as XLSX from 'xlsx';
 import {useI18n} from "vue-i18n";
@@ -244,13 +247,13 @@ const searchForm = ref({
 const productList = ref([])
 // 产品类型选项
 const productTypes = [
-   { value: '白冰糖', label: '白冰糖' },
-   { value: '黄冰糖', label: '黄冰糖' }
+  {value: '白冰糖', label: '白冰糖'},
+  {value: '黄冰糖', label: '黄冰糖'}
 ]
 // 产品状态选项
 const productStatus = [
-    { value: '半成品', label: '半成品' },
-    { value: '成品', label: '成品' }
+  {value: '半成品', label: '半成品'},
+  {value: '成品', label: '成品'}
 ]
 const meshList = ref([])
 const meshMap = ref({})
@@ -305,24 +308,24 @@ const handleReset = () => {
 
 const rule = {
   productName: [
-    { required: true, message: '请输入产品名称', trigger: 'blur' }
+    {required: true, message: '请输入产品名称', trigger: 'blur'}
   ],
   productType: [
-    { required: true, message: '请选择产品类型', trigger: 'blur' }
+    {required: true, message: '请选择产品类型', trigger: 'blur'}
   ],
   status: [
-    { required: true, message: '请选择产品状态', trigger: 'blur' }
+    {required: true, message: '请选择产品状态', trigger: 'blur'}
   ],
   weightPerPiece: [
-    { required: true, message: '请输入每件重量', trigger: 'blur' },
-    { type: 'string', message: '重量必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
+    {required: true, message: '请输入每件重量', trigger: 'blur'},
+    {type: 'string', message: '重量必须为数字', trigger: 'blur', pattern: /^-?\d+(\.\d+)?$/}
   ],
   piecesPerPallet: [
-    { required: true, message: '请输入每板件数', trigger: 'blur' },
-    { type: 'string', message: '板数必须为数字', trigger: 'blur' ,pattern: /^-?\d+(\.\d+)?$/}
+    {required: true, message: '请输入每板件数', trigger: 'blur'},
+    {type: 'string', message: '板数必须为数字', trigger: 'blur', pattern: /^-?\d+(\.\d+)?$/}
   ],
   screenMeshId: [
-    { required: true, message: '请选择筛网', trigger: 'change' }
+    {required: true, message: '请选择筛网', trigger: 'change'}
   ]
 }
 const dialogVisible = ref(false)

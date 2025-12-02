@@ -61,7 +61,6 @@ public class OutStockController {
     }
 
 
-
     @Operation(summary = "栈式出库操作", description = "新增特殊库位出库记录")
     @CheckWarehouseStatus
     @PostMapping("/stack-out")

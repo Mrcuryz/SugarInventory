@@ -26,7 +26,7 @@
                 label="数量"
                 width="180">
               <template #default="{ row }">
-               <el-tag>{{ row.stockInfo }}</el-tag>
+                <el-tag>{{ row.stockInfo }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column

@@ -20,6 +20,7 @@ public class SecurityConfig {
     public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
         this.jwtFilter = jwtFilter;
     }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -33,20 +34,20 @@ public class SecurityConfig {
 
                 // 权限配置
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**",
-                                "/v3/api-docs/**",
-                                "/doc.html",
-                                "/swagger-ui/**",
-                                "/webjars/**",
-                                "/swagger-ui.html").permitAll()
+                                .requestMatchers("/api/auth/**",
+                                        "/v3/api-docs/**",
+                                        "/doc.html",
+                                        "/swagger-ui/**",
+                                        "/webjars/**",
+                                        "/swagger-ui.html").permitAll()
 //                        .requestMatchers(HttpMethod.GET,
 //                                "/*.html", "/**/*.html",
 //                                "/**/*.css", "/**/*.js",
 //                                "/**/*.png", "/**/*.jpg", "/**/*.svg",
 //                                "/**/*.woff", "/**/*.woff2", "/**/*.ttf", "/**/*.ico"
 //                        ).permitAll()
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .anyRequest().authenticated()
+                                .requestMatchers("/api/auth/**").permitAll()
+                                .anyRequest().authenticated()
                 )
 
                 // 禁用自定义的异常处理（确保使用全局处理器）

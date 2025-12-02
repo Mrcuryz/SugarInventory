@@ -932,7 +932,7 @@ const locations = ref([
   {
     id: 1008,
     name: '电梯口',
-    x:800,
+    x: 800,
     y: 430,
     width: 80,
     height: 130,

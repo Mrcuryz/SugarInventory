@@ -28,7 +28,7 @@ public class OperationLogController {
             PageResult<OperationLog> logs = operationLogService.queryOperationLogs(queryDTO);
             return Result.success(logs);
         } catch (Exception e) {
-            return Result.error(500,"查询操作日志失败: " + e.getMessage());
+            return Result.error(500, "查询操作日志失败: " + e.getMessage());
         }
     }
 }

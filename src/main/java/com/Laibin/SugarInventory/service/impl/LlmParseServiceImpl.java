@@ -185,8 +185,9 @@ public class LlmParseServiceImpl implements LlmParseService {
                       - `warehouse_name`：来自 warehouseCatalog.warehouse_name，必须完全一致。
                     - 如果没有提到库位，`warehouse_id` 设为 null，`warehouse_name` 用空字符串。
                   - 日期：
-                    - 如果这一条中没有单独的日期，使用整体入库日期 `entryDate`（由用户传入），否则使用所在行的日期；
-                      输出到 `production_date` 字段，例如 `"2025-11-25"`。
+                    - 如果这一条中没有单独的日期，使用整体入库日期 `entryDate`（由用户传入），否则必须使用所在行的日期，
+                      比如“2025年11月28日\\n机破正中11月26号18板(6号库)”，则实际日期为2025-11-26。
+                    - 输出到 `production_date` 字段，例如 `"2025-11-25"`。
                   - 半成品关联：
                     - 当 `type` 为 `"FINISHED_PRODUCT_IN"` 且 parseType = "FINISHED_PRODUCT" 时，
                       - 当前 item 一定是成品；

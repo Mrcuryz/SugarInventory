@@ -1,10 +1,11 @@
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import {ref, reactive} from 'vue'
+import {useRouter} from 'vue-router'
+import {ElMessage} from 'element-plus'
 import {login} from '@/api/login.js'
 import {useTokenStore} from '@/stores/token'
 import rememberMeStore from '@/stores/rememberMe'
+
 const tokenStore = useTokenStore();
 const rememberStore = rememberMeStore();
 
@@ -22,17 +23,17 @@ const rememberMeData = async () => {
   form.name = rememberStore.info.name;
   form.password = rememberStore.info.password;
 }
-if(rememberStore.info){
+if (rememberStore.info) {
   rememberMeData();
 }
 // 验证规则
 const rules = reactive({
   name: [
-    { required: true, message: '用户名不能为空', trigger: 'blur' },
+    {required: true, message: '用户名不能为空', trigger: 'blur'},
   ],
   password: [
-    { required: true, message: '密码不能为空', trigger: 'blur' },
-    { min: 3, max: 18, message: '长度在3到18个字符', trigger: 'blur' }
+    {required: true, message: '密码不能为空', trigger: 'blur'},
+    {min: 3, max: 18, message: '长度在3到18个字符', trigger: 'blur'}
   ]
 })
 
@@ -41,10 +42,9 @@ const loading = ref(false)
 
 // 提交处理
 const handleSubmit = async () => {
-  if(rememberMe){
+  if (rememberMe) {
     rememberStore.setInfo(form);
-  }
-  else {
+  } else {
     rememberStore.removeInfo();
   }
   try {
