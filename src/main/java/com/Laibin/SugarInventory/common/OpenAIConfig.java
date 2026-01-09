@@ -20,15 +20,15 @@ public class OpenAIConfig {
      */
     @Bean
     public OpenAIClient openAIClient(@Value("${openai.api-key}") String apiKey, @Value("${openai.api-url}") String apiUrl) {
-        Proxy proxy = new Proxy(
-                Proxy.Type.HTTP,
-                new InetSocketAddress("127.0.0.1", 7890)
-        );
+//        Proxy proxy = new Proxy(
+//                Proxy.Type.HTTP,
+//                new InetSocketAddress("127.0.0.1", 7890)
+//        );
 
         return OpenAIOkHttpClient.builder()
                 .apiKey(apiKey)
                 .baseUrl(apiUrl)
-                .proxy(proxy)
+//                .proxy(proxy)
                 .build();
     }
 }

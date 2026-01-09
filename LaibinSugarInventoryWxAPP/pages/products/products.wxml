@@ -59,8 +59,8 @@
   </view>
 
   <!-- 新增产品弹窗 -->
-  <view class="modal {{showModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
-    <view class="modal-mask" bindtap="hideModal"></view>
+  <view class="modal {{showModal ? 'show' : ''}}">
+    <view class="modal-mask" bindtap="hideModal" catchtouchmove="true"></view>
     <view class="modal-content">
       <view class="modal-header">
         <text class="modal-title">新增产品</text>

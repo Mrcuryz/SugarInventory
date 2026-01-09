@@ -22,7 +22,7 @@ public class SemiRecordDTO {
     @Schema(description = "库位", example = "1")
     private Integer warehouseId;
 
-    @Schema(description = "使用的半成品重量", example = "20")
+    @Schema(description = "使用的半成品数量", example = "20")
     private Integer quantity;
 
     @NotNull(message = "单位不能为空")
