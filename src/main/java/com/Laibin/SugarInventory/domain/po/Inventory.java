@@ -66,5 +66,7 @@ public class Inventory extends BaseEntity implements Serializable {
 
     @TableField("product_status")
     private String productStatus;
-}
 
+    @TableField("pallet_code_id")
+    private Integer palletCodeId;
+}

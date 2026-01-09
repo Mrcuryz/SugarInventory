@@ -1,0 +1,41 @@
+package com.Laibin.SugarInventory.domain.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
+
+import java.time.LocalDate;
+
+@Data
+@Schema(description = "托盘入库任务分页查询条件")
+public class PalletTaskQueryDTO {
+    @Schema(description = "托盘码（精确匹配）")
+    private String code;
+
+    @Schema(description = "任务类型：SEMI_IN / FINISH_IN，可选")
+    private String taskType;
+
+    @Schema(description = "任务状态：PENDING / CONFIRMED / CANCELLED，可选")
+    private String status;
+
+    @Schema(description = "产品名称（模糊）")
+    private String productName;
+
+    @Schema(description = "产品类型（黄/白冰糖等），可选")
+    private String productType;
+
+    @Schema(description = "产品状态：半成品/成品，可选")
+    private String productStatus;
+
+    @Schema(description = "生产日期起")
+    private LocalDate productionDateStart;
+
+    @Schema(description = "生产日期止")
+    private LocalDate productionDateEnd;
+
+    @Schema(description = "页码，从1开始")
+    private Long pageNum;
+
+    @Schema(description = "每页大小，默认10")
+    private Long pageSize;
+}
+
