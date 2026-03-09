@@ -107,7 +107,7 @@ public class PalletCodeController {
                                         @AuthenticationPrincipal LoginUser loginUser) {
         try {
             palletCodeService.invalidatePalletCodes(dto, loginUser.getUser().getId());
-            return Result.success();
+            return Result.success(null);
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
         }
@@ -119,7 +119,7 @@ public class PalletCodeController {
                                     @AuthenticationPrincipal LoginUser loginUser) {
         try {
             palletCodeService.cancelTasksByCodes(dto, loginUser.getUser().getId());
-            return Result.success();
+            return Result.success(null);
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
         }
