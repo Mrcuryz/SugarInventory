@@ -11,7 +11,7 @@
  Target Server Version : 80033 (8.0.33)
  File Encoding         : 65001
 
- Date: 10/12/2025 14:25:34
+ Date: 10/04/2026 18:00:26
 */
 
 SET NAMES utf8mb4;
@@ -218,7 +218,7 @@ DROP TABLE IF EXISTS `pallet_code`;
 CREATE TABLE `pallet_code`  (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '托盘码ID',
   `code` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '托盘编码（BT+5位数+校验位）',
-  `status` enum('FREE','PENDING','INTASK','INSTOCK','CONSUMED') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'FREE' COMMENT '托盘状态',
+  `status` enum('FREE','PENDING','INSTOCK','INVALID') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'FREE' COMMENT '托盘状态',
   `product_id` int NULL DEFAULT NULL COMMENT '当前绑定产品ID',
   `product_status` enum('半成品','成品') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '当前产品状态',
   `production_date` date NULL DEFAULT NULL COMMENT '生产日期（用于关联化验）',
@@ -228,6 +228,7 @@ CREATE TABLE `pallet_code`  (
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `created_by` int NOT NULL COMMENT '创建人',
   `updated_by` int NULL DEFAULT NULL COMMENT '修改人',
+  `current_cycle_no` int NOT NULL DEFAULT 0 COMMENT '当前/最近一次循环号',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_pallet_code`(`code` ASC) USING BTREE,
   INDEX `fk_pallet_product`(`product_id` ASC) USING BTREE,
@@ -245,7 +246,7 @@ DROP TABLE IF EXISTS `pallet_flow_record`;
 CREATE TABLE `pallet_flow_record`  (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '流转记录ID',
   `pallet_code_id` int NOT NULL COMMENT '托盘码ID',
-  `operation_type` enum('SEMI_BIND','ASSAY','SEMI_IN','FINISH_BIND','FINISH_IN','TRANSFER','OUT') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '操作类型',
+  `operation_type` enum('SEMI_BIND','ASSAY','SEMI_INSTOCK','FINISH_BIND','FINISH_INSTOCK','TRANSFER','CONSUMED','OUT','CANCELED','PREPARE_CONSUMED') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '操作类型',
   `operation_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '操作名称（用于直接展示，如“半成品绑定”）',
   `operation_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
   `operator_id` int NOT NULL COMMENT '操作员ID（user.id）',
@@ -262,6 +263,7 @@ CREATE TABLE `pallet_flow_record`  (
   `to_layer` int NULL DEFAULT 1 COMMENT '目标层',
   `ext_data` json NULL COMMENT '扩展信息（件数、重量、原因等）',
   `remark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '备注',
+  `cycle_no` int NOT NULL DEFAULT 0 COMMENT '所属循环号',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `fk_flow_pallet`(`pallet_code_id` ASC) USING BTREE,
   INDEX `fk_flow_operator`(`operator_id` ASC) USING BTREE,
@@ -275,7 +277,7 @@ CREATE TABLE `pallet_flow_record`  (
   CONSTRAINT `fk_flow_pallet` FOREIGN KEY (`pallet_code_id`) REFERENCES `pallet_code` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_flow_product` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_flow_to_wh` FOREIGN KEY (`to_warehouse_id`) REFERENCES `warehouse` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '托盘流转记录' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '托盘流转记录' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for pallet_task
@@ -285,6 +287,7 @@ CREATE TABLE `pallet_task`  (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '任务ID',
   `pallet_code_id` int NOT NULL COMMENT '托盘码ID',
   `task_type` enum('SEMI_IN','FINISH_IN','OUT','TRANSFER') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '任务类型',
+  `biz_scene` enum('DIRECT_OUT','PREPARE_CONSUMED','FINISH_OUT') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '业务场景：普通出库/转入备料池/成品出库',
   `status` enum('PENDING','CONFIRMED','CANCELED') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'PENDING' COMMENT '任务状态',
   `product_id` int NOT NULL COMMENT '产品ID',
   `product_status` enum('半成品','成品') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '产品状态',
@@ -296,6 +299,7 @@ CREATE TABLE `pallet_task`  (
   `confirmed_by` int NULL DEFAULT NULL COMMENT '确认人ID',
   `confirmed_at` datetime NULL DEFAULT NULL COMMENT '确认时间',
   `remark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '备注',
+  `cycle_no` int NOT NULL DEFAULT 0 COMMENT '所属循环号',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `fk_task_pallet`(`pallet_code_id` ASC) USING BTREE,
   INDEX `fk_task_created_by`(`created_by` ASC) USING BTREE,
@@ -309,7 +313,7 @@ CREATE TABLE `pallet_task`  (
   CONSTRAINT `pallet_task_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `pallet_task_ibfk_2` FOREIGN KEY (`screen_mesh_id`) REFERENCES `screen_mesh` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `pallet_task_ibfk_3` FOREIGN KEY (`assay_id`) REFERENCES `assay` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '托盘扫码待确认任务' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '托盘扫码待确认任务' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for pallet_task_semi_item
@@ -323,12 +327,13 @@ CREATE TABLE `pallet_task_semi_item`  (
   `production_date` date NOT NULL COMMENT '半成品生产日期',
   `quantity` int NOT NULL COMMENT '数量',
   `unit` varchar(2) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '0' COMMENT '单位：0板，1件',
+  `use_assay` int NULL DEFAULT NULL COMMENT '是否套用化验',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_task`(`pallet_task_id` ASC) USING BTREE,
   INDEX `fk_task_semi_pallet`(`semi_pallet_code_id` ASC) USING BTREE,
   CONSTRAINT `fk_task_semi_pallet` FOREIGN KEY (`semi_pallet_code_id`) REFERENCES `pallet_code` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_task_semi_task` FOREIGN KEY (`pallet_task_id`) REFERENCES `pallet_task` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '托盘任务使用的半成品明细' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '托盘任务使用的半成品明细' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for permission
@@ -438,6 +443,34 @@ CREATE TABLE `screen_mesh`  (
   `updated_by` int NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 23 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
+
+-- ----------------------------
+-- Table structure for semi_prepare_pool
+-- ----------------------------
+DROP TABLE IF EXISTS `semi_prepare_pool`;
+CREATE TABLE `semi_prepare_pool`  (
+  `id` int NOT NULL AUTO_INCREMENT COMMENT '备料池记录ID',
+  `product_id` int NOT NULL COMMENT '半成品产品ID',
+  `production_date` date NOT NULL COMMENT '生产日期',
+  `pallet_code_id` int NOT NULL COMMENT '托盘码ID',
+  `cycle_no` int NOT NULL DEFAULT 0 COMMENT '所属托盘循环号',
+  `status` enum('ACTIVE','CONSUMED','CANCELED') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'ACTIVE' COMMENT '备料池状态',
+  `remark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '备注/实际备料位置',
+  `created_by` int NOT NULL COMMENT '创建人',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_by` int NULL DEFAULT NULL COMMENT '更新人',
+  `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_prepare_pallet_cycle`(`pallet_code_id` ASC, `cycle_no` ASC) USING BTREE,
+  INDEX `idx_prepare_product_date_status`(`product_id` ASC, `production_date` ASC, `status` ASC) USING BTREE,
+  INDEX `idx_prepare_pallet_cycle`(`pallet_code_id` ASC, `cycle_no` ASC) USING BTREE,
+  INDEX `fk_prepare_pool_created_by`(`created_by` ASC) USING BTREE,
+  INDEX `fk_prepare_pool_updated_by`(`updated_by` ASC) USING BTREE,
+  CONSTRAINT `fk_prepare_pool_created_by` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_prepare_pool_pallet` FOREIGN KEY (`pallet_code_id`) REFERENCES `pallet_code` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_prepare_pool_product` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_prepare_pool_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `user` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '半成品备料池记录表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for semi_product_record

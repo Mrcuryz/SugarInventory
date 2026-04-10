@@ -71,4 +71,7 @@ public class PalletFlowRecord implements Serializable {
 
     @TableField("remark")
     private String remark;
+
+    @TableField("cycle_no")
+    private Integer cycleNo;
 }

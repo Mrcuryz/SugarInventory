@@ -65,6 +65,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     private UserMapper userMapper;
     @Autowired
     private InventorySummaryMapper inventorySummaryMapper;
+    @Autowired
+    private PalletCodeMapper palletCodeMapper;
+    @Autowired
+    private SemiPreparePoolMapper semiPreparePoolMapper;
 
     private final Integer page = 1;
     private final Integer size = 10;
@@ -330,6 +334,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         List<Product> products = productMapper.selectBatchIds(semiRecords.stream().map(SemiRecordDTO::getSemiProductId).distinct().toList());
         Map<Integer, Product> productMap = products.stream().collect(Collectors.toMap(Product::getId, s -> s));
         for (SemiRecordDTO semiRecord : semiRecords) {
+            if (Boolean.TRUE.equals(semiRecord.getFromPreparePool())) {
+                validatePreparePoolSemiRecord(semiRecord);
+                continue;
+            }
             Integer warehouseId = semiRecord.getWarehouseId();
             LocalDate productionDate = semiRecord.getProductionDate();
             Product product = productMap.get(semiRecord.getSemiProductId());
@@ -361,6 +369,27 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             }
             // 扣减半成品数量
             outStockService.outStock(product, warehouseId, semiRecord.getProductionDate(), semiRecord.getQuantity(), semiRecord.getUnit(), operatorId, 1);
+        }
+    }
+
+    private void validatePreparePoolSemiRecord(SemiRecordDTO semiRecord) {
+        if (semiRecord.getSemiPalletCodeId() == null) {
+            throw new BusinessException("备料池半成品来源缺少托盘信息");
+        }
+        PalletCode semiPallet = palletCodeMapper.selectById(semiRecord.getSemiPalletCodeId());
+        if (semiPallet == null) {
+            throw new BusinessException("半成品托盘不存在");
+        }
+        if (!"INSTOCK".equalsIgnoreCase(semiPallet.getStatus())) {
+            throw new BusinessException("半成品托盘当前不在可消耗状态");
+        }
+        if (!"半成品".equals(semiPallet.getProductStatus())) {
+            throw new BusinessException("仅允许使用半成品托盘");
+        }
+        int cycleNo = semiRecord.getCycleNo() == null ? (semiPallet.getCurrentCycleNo() == null ? 0 : semiPallet.getCurrentCycleNo()) : semiRecord.getCycleNo();
+        SemiPreparePool preparePool = semiPreparePoolMapper.selectActiveByPalletAndCycle(semiPallet.getId(), cycleNo);
+        if (preparePool == null) {
+            throw new BusinessException("半成品托盘未进入备料池，不能用于成品入库");
         }
     }
 

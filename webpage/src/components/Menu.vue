@@ -103,6 +103,9 @@ const activeMenu = computed(() => route.path)
       <el-main>
         <router-view/>
       </el-main>
+      <footer class="icp-footer">
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂ICP备2025058642号-2</a>
+      </footer>
     </div>
   </div>
 </template>
@@ -137,6 +140,8 @@ const activeMenu = computed(() => route.path)
 
   .main-container {
     flex: 1;
+    display: flex;
+    flex-direction: column;
 
     .el-header {
       display: flex;
@@ -169,6 +174,27 @@ const activeMenu = computed(() => route.path)
     .el-main {
       padding: 20px;
       background: #f0f2f5;
+      flex: 1 1 auto;
+    }
+
+    .icp-footer {
+      flex: 0 0 auto;
+      text-align: center;
+      padding: 12px 0;
+      color: #8c8c8c;
+      font-size: 12px;
+      background: #fff;
+      border-top: 1px solid #e6e6e6;
+
+      a {
+        color: inherit;
+        text-decoration: none;
+
+        &:hover {
+          color: #1890ff;
+          text-decoration: underline;
+        }
+      }
     }
   }
 }

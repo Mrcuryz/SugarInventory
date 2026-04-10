@@ -3,8 +3,17 @@ package com.Laibin.SugarInventory.service;
 import com.Laibin.SugarInventory.domain.dto.BindPalletTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.BindTaskSemiItemsDTO;
 import com.Laibin.SugarInventory.domain.dto.CancelPalletBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmTransferBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInItemDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmFinishOutBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiConsumeBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiOutBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiPrepareBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateFinishOutTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateSemiOutTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
@@ -55,9 +64,27 @@ public interface PalletCodeService extends IService<PalletCode> {
     // 批量入库确认，任一失败整体回滚
     List<InVO> confirmFinishedTaskInBatch(ConfirmPalletInBatchDTO dto, Integer operatorId);
 
-    // 批量作废托盘码并取消关联任务
+    // 批量作废空闲托盘码
     void invalidatePalletCodes(CancelPalletBatchDTO dto, Integer operatorId);
 
-    // 批量取消任务（并同时作废托盘码）
+    // 批量取消当前轮次待处理任务，并释放托盘回 FREE
     void cancelTasksByCodes(CancelPalletBatchDTO dto, Integer operatorId);
+
+    void createSemiOutTasks(CreateSemiOutTaskDTO dto, Integer operatorId);
+
+    void confirmSemiOutTasks(ConfirmSemiOutBatchDTO dto, Integer operatorId);
+
+    void createSemiPrepareTasks(CreateSemiPrepareTaskDTO dto, Integer operatorId);
+
+    void confirmSemiPrepareTasks(ConfirmSemiPrepareBatchDTO dto, Integer operatorId);
+
+    void confirmSemiConsume(ConfirmSemiConsumeBatchDTO dto, Integer operatorId);
+
+    void createFinishOutTasks(CreateFinishOutTaskDTO dto, Integer operatorId);
+
+    void confirmFinishOutTasks(ConfirmFinishOutBatchDTO dto, Integer operatorId);
+
+    void createTransferTasks(CreateTransferTaskDTO dto, Integer operatorId);
+
+    void confirmTransferTasks(ConfirmTransferBatchDTO dto, Integer operatorId);
 }

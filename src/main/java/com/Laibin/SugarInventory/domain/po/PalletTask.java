@@ -64,6 +64,18 @@ public class PalletTask extends BaseEntity implements Serializable {
     @TableField("remark")
     private String remark;
 
+    @TableField("biz_scene")
+    private String bizScene;
+
+    @TableField("target_warehouse_id")
+    private Integer targetWarehouseId;
+
+    @TableField("target_side")
+    private String targetSide;
+
+    @TableField("cycle_no")
+    private Integer cycleNo;
+
     @Override
     public Integer getId() {
         return id;

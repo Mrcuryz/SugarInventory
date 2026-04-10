@@ -13,6 +13,9 @@ public class SemiRecordDTO {
     @Schema(description = "半成品ID", example = "1")
     private Integer semiProductId;
 
+    @Schema(description = "半成品托盘ID", example = "1")
+    private Integer semiPalletCodeId;
+
     @Schema(description = "产品名称")
     private String productName;
 
@@ -21,6 +24,12 @@ public class SemiRecordDTO {
 
     @Schema(description = "库位", example = "1")
     private Integer warehouseId;
+
+    @Schema(description = "是否来自备料池", example = "false")
+    private Boolean fromPreparePool = false;
+
+    @Schema(description = "半成品来源循环号", example = "1")
+    private Integer cycleNo;
 
     @Schema(description = "使用的半成品数量", example = "20")
     private Integer quantity;

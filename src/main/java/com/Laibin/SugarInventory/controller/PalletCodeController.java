@@ -8,8 +8,17 @@ import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.BindPalletTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.BindTaskSemiItemsDTO;
 import com.Laibin.SugarInventory.domain.dto.CancelPalletBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmFinishOutBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmTransferBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiConsumeBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiOutBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiPrepareBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateFinishOutTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateSemiOutTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
 import com.Laibin.SugarInventory.domain.vo.PalletCodeInfoVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodePageVO;
@@ -101,7 +110,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "批量作废托盘码", description = "将托盘码置为 INVALID 并取消关联任务")
+    @Operation(summary = "批量作废托盘码", description = "仅允许将空闲托盘码置为 INVALID")
     @PostMapping("/invalid")
     public Result<Void> invalidateCodes(@RequestBody @Valid CancelPalletBatchDTO dto,
                                         @AuthenticationPrincipal LoginUser loginUser) {
@@ -113,7 +122,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "批量取消入库任务", description = "按托盘码取消任务并作废托盘码")
+    @Operation(summary = "批量取消入库任务", description = "按托盘码取消当前轮次待处理入库任务，并释放托盘回 FREE")
     @PostMapping("/tasks/cancel")
     public Result<Void> cancelTasks(@RequestBody @Valid CancelPalletBatchDTO dto,
                                     @AuthenticationPrincipal LoginUser loginUser) {
@@ -185,6 +194,114 @@ public class PalletCodeController {
             // 覆盖式绑定：先删旧明细，再保存当前提交的半成品托盘列表
             List<TaskSemiItemVO> vo = palletCodeService.bindSemiItemsToTask(dto, operatorId);
             return Result.success(vo);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "创建半成品普通出库任务", description = "扫码一个或多个半成品托盘码，创建普通出库任务")
+    @PostMapping("/semi/out/create")
+    public Result<Void> createSemiOutTasks(@RequestBody @Valid CreateSemiOutTaskDTO dto,
+                                           @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.createSemiOutTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "确认半成品普通出库", description = "批量确认半成品普通出库任务")
+    @PostMapping("/semi/out/confirm")
+    public Result<Void> confirmSemiOutTasks(@RequestBody @Valid ConfirmSemiOutBatchDTO dto,
+                                            @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.confirmSemiOutTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "创建半成品转入备料池任务", description = "扫码一个或多个半成品托盘码，创建转入备料池任务")
+    @PostMapping("/semi/prepare/create")
+    public Result<Void> createSemiPrepareTasks(@RequestBody @Valid CreateSemiPrepareTaskDTO dto,
+                                               @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.createSemiPrepareTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "确认半成品转入备料池", description = "批量确认半成品转入备料池任务")
+    @PostMapping("/semi/prepare/confirm")
+    public Result<Void> confirmSemiPrepareTasks(@RequestBody @Valid ConfirmSemiPrepareBatchDTO dto,
+                                                @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.confirmSemiPrepareTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "确认半成品消耗", description = "批量确认备料池中的半成品托盘已最终消耗")
+    @PostMapping("/semi/consume/confirm")
+    public Result<Void> confirmSemiConsume(@RequestBody @Valid ConfirmSemiConsumeBatchDTO dto,
+                                           @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.confirmSemiConsume(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "创建成品出库任务", description = "扫码一个或多个成品托盘码，创建成品出库任务")
+    @PostMapping("/finish/out/create")
+    public Result<Void> createFinishOutTasks(@RequestBody @Valid CreateFinishOutTaskDTO dto,
+                                             @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.createFinishOutTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "确认成品出库", description = "批量确认成品出库任务")
+    @PostMapping("/finish/out/confirm")
+    public Result<Void> confirmFinishOutTasks(@RequestBody @Valid ConfirmFinishOutBatchDTO dto,
+                                              @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.confirmFinishOutTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "创建托盘调拨任务", description = "扫码一个或多个在库托盘码，创建托盘级调拨任务")
+    @PostMapping("/transfer/create")
+    public Result<Void> createTransferTasks(@RequestBody @Valid CreateTransferTaskDTO dto,
+                                            @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.createTransferTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "确认托盘调拨", description = "批量确认托盘级调拨任务")
+    @PostMapping("/transfer/confirm")
+    public Result<Void> confirmTransferTasks(@RequestBody @Valid ConfirmTransferBatchDTO dto,
+                                             @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.confirmTransferTasks(dto, loginUser.getUser().getId());
+            return Result.success(null);
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
         }

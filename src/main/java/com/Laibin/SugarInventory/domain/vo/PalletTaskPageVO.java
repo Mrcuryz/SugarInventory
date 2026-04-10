@@ -10,9 +10,13 @@ import java.util.List;
 public class PalletTaskPageVO {
     private Integer taskId;
     private String taskType;
+    private String bizScene;
     private String taskStatus;
     private Integer palletCodeId;
     private String code;
+    private Integer targetWarehouseId;
+    private String targetWarehouseName;
+    private String targetSide;
     private Integer productId;
     private String productName;
     private String productType;

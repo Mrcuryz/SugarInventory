@@ -6,8 +6,18 @@ import com.Laibin.SugarInventory.domain.dto.AddSemiProductRecordDTO;
 import com.Laibin.SugarInventory.domain.dto.BindPalletTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.BindTaskSemiItemsDTO;
 import com.Laibin.SugarInventory.domain.dto.CancelPalletBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmTransferBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInItemDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmFinishOutBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiConsumeBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiOutBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmSemiPrepareBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateFinishOutTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateSemiOutTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskItemDTO;
 import com.Laibin.SugarInventory.domain.dto.InStockRequestDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
@@ -21,8 +31,10 @@ import com.Laibin.SugarInventory.domain.po.PalletTask;
 import com.Laibin.SugarInventory.domain.po.PalletTaskSemiItem;
 import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.po.ScreenMesh;
+import com.Laibin.SugarInventory.domain.po.SemiPreparePool;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.po.Warehouse;
+import com.Laibin.SugarInventory.domain.po.OutStock;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.PalletAssayVO;
 import com.Laibin.SugarInventory.domain.vo.PalletBindResultVO;
@@ -33,6 +45,7 @@ import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
 import com.Laibin.SugarInventory.mapper.AssayMapper;
 import com.Laibin.SugarInventory.mapper.InventoryMapper;
+import com.Laibin.SugarInventory.mapper.OutStockMapper;
 import com.Laibin.SugarInventory.mapper.PalletCodeMapper;
 import com.Laibin.SugarInventory.mapper.PalletCodeQueryMapper;
 import com.Laibin.SugarInventory.mapper.PalletFlowRecordMapper;
@@ -41,6 +54,7 @@ import com.Laibin.SugarInventory.mapper.PalletTaskQueryMapper;
 import com.Laibin.SugarInventory.mapper.PalletTaskSemiItemMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.ScreenMeshMapper;
+import com.Laibin.SugarInventory.mapper.SemiPreparePoolMapper;
 import com.Laibin.SugarInventory.mapper.UserMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.InStockService;
@@ -54,13 +68,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -75,6 +92,8 @@ import java.util.stream.Collectors;
 public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletCode> implements PalletCodeService, LoggableService<PalletCode> {
 
     private static final int MAX_BATCH_SIZE = 100;
+    private static final String LEFT_SIDE = "左";
+    private static final String RIGHT_SIDE = "右";
 
     @Autowired
     private ProductMapper productMapper;
@@ -89,6 +108,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     @Autowired
     private InventoryMapper inventoryMapper;
     @Autowired
+    private OutStockMapper outStockMapper;
+    @Autowired
     private WarehouseMapper warehouseMapper;
     @Autowired
     private PalletTaskMapper palletTaskMapper;
@@ -96,6 +117,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     private PalletFlowRecordMapper palletFlowRecordMapper;
     @Autowired
     private PalletTaskSemiItemMapper palletTaskSemiItemMapper;
+    @Autowired
+    private SemiPreparePoolMapper semiPreparePoolMapper;
     @Autowired
     private PalletTaskQueryMapper palletTaskQueryMapper;
     @Autowired
@@ -117,6 +140,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             palletCode.setStatus("FREE");
             palletCode.setCreatedBy(userId);
             palletCode.setCreatedAt(LocalDateTime.now());
+            palletCode.setCurrentCycleNo(0);
             this.baseMapper.insert(palletCode);
 
             String code = PalletCodeGenerator.generateCode(palletCode.getId().longValue());
@@ -228,11 +252,34 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
 
     // 根据托盘码ID查库存记录（limit 1）
     private Inventory lambdaQueryInventoryByPalletId(Integer palletCodeId) {
+        return lambdaQueryInventoryByPalletId(palletCodeId, false);
+    }
+
+    private Inventory lambdaQueryInventoryByPalletId(Integer palletCodeId, boolean forUpdate) {
         return this.inventoryMapper.selectOne(
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Inventory>()
                         .eq("pallet_code_id", palletCodeId)
-                        .last("limit 1")
+                        .last(forUpdate ? "limit 1 for update" : "limit 1")
         );
+    }
+
+    /**
+     * 释放托盘到 FREE 状态：清空绑定信息，保留当前轮次号。
+     */
+    private void releasePalletToFree(PalletCode palletCode, Integer operatorId) {
+        palletCode.setStatus("FREE");
+        palletCode.setProductId(null);
+        palletCode.setProductStatus(null);
+        palletCode.setProductionDate(null);
+        palletCode.setScreenMeshId(null);
+        palletCode.setAssayId(null);
+        palletCode.setUpdatedBy(operatorId);
+        palletCode.setUpdatedAt(LocalDateTime.now());
+        this.updateById(palletCode);
+    }
+
+    private int getCurrentCycleNo(PalletCode palletCode) {
+        return palletCode == null || palletCode.getCurrentCycleNo() == null ? 0 : palletCode.getCurrentCycleNo();
     }
 
     /**
@@ -242,7 +289,10 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (palletCode.getAssayId() != null) {
             return palletCode.getAssayId();
         }
-        PalletTask latestWithAssay = palletTaskMapper.selectLatestWithAssay(palletCode.getId());
+        PalletTask latestWithAssay = palletTaskMapper.selectLatestWithAssay(
+                palletCode.getId(),
+                getCurrentCycleNo(palletCode)
+        );
         if (latestWithAssay != null && latestWithAssay.getAssayId() != null) {
             palletCode.setAssayId(latestWithAssay.getAssayId());
             this.updateById(palletCode);
@@ -263,10 +313,14 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     /**
      * 更新最近一条托盘流转记录的化验ID（若存在流转记录）。
      */
-    private void updateLatestFlowAssay(Integer palletCodeId, Integer assayId) {
+    private void updateLatestFlowAssay(Integer palletCodeId, Integer assayId, Integer cycleNo) {
+        if (cycleNo == null) {
+            return;
+        }
         PalletFlowRecord latest = palletFlowRecordMapper.selectOne(
                 new LambdaQueryWrapper<PalletFlowRecord>()
                         .eq(PalletFlowRecord::getPalletCodeId, palletCodeId)
+                        .eq(PalletFlowRecord::getCycleNo, cycleNo)
                         .orderByDesc(PalletFlowRecord::getId)
                         .last("limit 1")
         );
@@ -290,10 +344,14 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         }
         Integer screenMeshId = product.getScreenMeshId();
 
-        long pending = palletTaskMapper.countPendingInTasks(palletCode.getId());
+        int currentCycleNo = getCurrentCycleNo(palletCode);
+        long pending = palletTaskMapper.countPendingInTasks(palletCode.getId(), currentCycleNo);
         if (pending > 0) {
             throw new BusinessException("该托盘已存在未完成的入库任务");
         }
+
+        // 新一轮绑定：cycle 递增
+        int nextCycle = currentCycleNo + 1;
 
         String productStatus = dto.getProductStatus();
         String taskType;
@@ -317,6 +375,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         task.setCreatedBy(operatorId);
         task.setCreatedAt(LocalDateTime.now());
         task.setRemark(dto.getRemark());
+        task.setCycleNo(nextCycle);
         palletTaskMapper.insert(task);
 
         palletCode.setStatus("PENDING");
@@ -324,6 +383,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         palletCode.setProductStatus(productStatus);
         palletCode.setProductionDate(dto.getProductionDate());
         palletCode.setScreenMeshId(screenMeshId);
+        palletCode.setCurrentCycleNo(nextCycle);
         palletCode.setUpdatedBy(operatorId);
         palletCode.setUpdatedAt(LocalDateTime.now());
         this.updateById(palletCode);
@@ -337,6 +397,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         flow.setProductId(product.getId());
         flow.setProductStatus(productStatus);
         flow.setAssayId(null);
+        flow.setCycleNo(nextCycle);
         flow.setRemark(dto.getRemark());
         palletFlowRecordMapper.insert(flow);
 
@@ -370,22 +431,23 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             throw new BusinessException("明细不能为空");
         }
         PalletCode finishedPallet = parseAndFind(dto.getCode());
-        // 查找成品待办任务（FINISH_IN + PENDING）
-        PalletTask task = palletTaskMapper.selectOne(
-                new LambdaQueryWrapper<PalletTask>()
-                        .eq(PalletTask::getPalletCodeId, finishedPallet.getId())
-                        .eq(PalletTask::getTaskType, "FINISH_IN")
-                        .eq(PalletTask::getStatus, "PENDING")
-                        .last("limit 1")
+        // 查找当前轮次的成品待办任务（FINISH_IN + PENDING + cycle）
+        PalletTask task = palletTaskMapper.selectPendingByCycle(
+                finishedPallet.getId(),
+                getCurrentCycleNo(finishedPallet)
         );
         if (task == null) {
             throw new BusinessException("未找到待处理的成品入库任务");
+        }
+        if (!"FINISH_IN".equals(task.getTaskType())) {
+            throw new BusinessException("当前托盘待处理任务不是成品入库任务");
         }
 
         int useAssayCount = 0;
         Integer selectedAssayId = null;
         List<PalletTaskSemiItem> entities = new ArrayList<>();
         List<TaskSemiItemVO> voList = new ArrayList<>();
+        Set<Integer> seenSemiPalletIds = new LinkedHashSet<>();
 
         for (TaskSemiItemDTO itemDTO : dto.getItems()) {
             // 累计 useAssay 数量，校验托盘状态
@@ -395,9 +457,13 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             if (!"半成品".equals(semiPallet.getProductStatus())) {
                 throw new BusinessException("仅允许绑定半成品托盘");
             }
-            if (!"INSTOCK".equalsIgnoreCase(semiPallet.getStatus()) && !"CONSUMED".equalsIgnoreCase(semiPallet.getStatus())) {
+            if (!"INSTOCK".equalsIgnoreCase(semiPallet.getStatus())) {
                 throw new BusinessException("半成品托盘未在库，无法使用");
             }
+            if (!seenSemiPalletIds.add(semiPallet.getId())) {
+                throw new BusinessException("同一请求中不允许重复绑定同一半成品托盘");
+            }
+            requireActivePreparePoolForBinding(semiPallet);
 
             Integer assayId = null;
             if (useAssay) {
@@ -447,7 +513,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             this.updateById(finishedPallet);
             task.setAssayId(selectedAssayId);
             palletTaskMapper.updateById(task);
-            updateLatestFlowAssay(finishedPallet.getId(), selectedAssayId);
+            updateLatestFlowAssay(finishedPallet.getId(), selectedAssayId, finishedPallet.getCurrentCycleNo());
         }
         return voList;
     }
@@ -484,7 +550,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (!"PENDING".equalsIgnoreCase(palletCode.getStatus())) {
             throw new BusinessException("当前托盘状态不支持入库确认");
         }
-        PalletTask task = findPendingInboundTask(palletCode.getId());
+        PalletTask task = findPendingInboundTask(palletCode);
         if (task == null) {
             throw new BusinessException("未找到待处理的入库任务");
         }
@@ -529,6 +595,687 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             results.add(confirmSingleFinishedTaskIn(item, operatorId));
         }
         return results;
+    }
+
+    @Override
+    @Transactional
+    public void createSemiOutTasks(CreateSemiOutTaskDTO dto, Integer operatorId) {
+        createSemiOutTasks(dto.getCodes(), dto.getRemark(), operatorId, "DIRECT_OUT");
+    }
+
+    @Override
+    @Transactional
+    public void confirmSemiOutTasks(ConfirmSemiOutBatchDTO dto, Integer operatorId) {
+        confirmSemiOutTasks(dto.getCodes(), dto.getRemark(), operatorId, "DIRECT_OUT");
+    }
+
+    @Override
+    @Transactional
+    public void createSemiPrepareTasks(CreateSemiPrepareTaskDTO dto, Integer operatorId) {
+        createSemiOutTasks(dto.getCodes(), dto.getRemark(), operatorId, "PREPARE_CONSUMED");
+    }
+
+    @Override
+    @Transactional
+    public void confirmSemiPrepareTasks(ConfirmSemiPrepareBatchDTO dto, Integer operatorId) {
+        confirmSemiOutTasks(dto.getCodes(), dto.getRemark(), operatorId, "PREPARE_CONSUMED");
+    }
+
+    @Override
+    @Transactional
+    public void confirmSemiConsume(ConfirmSemiConsumeBatchDTO dto, Integer operatorId) {
+        List<String> codes = normalizeAndValidateUniqueCodes(dto.getCodes());
+        for (String code : codes) {
+            PalletCode palletCode = parseAndFind(code);
+            validateSemiPalletForOutFlow(palletCode);
+
+            SemiPreparePool preparePool = findActivePreparePool(palletCode, true);
+            if (preparePool == null) {
+                throw new BusinessException("当前托盘不存在待消耗的备料池记录");
+            }
+            if (lambdaQueryInventoryByPalletId(palletCode.getId(), true) != null) {
+                throw new BusinessException("当前托盘仍在正常库存中，不能确认消耗");
+            }
+
+            PalletFlowRecord flow = new PalletFlowRecord();
+            flow.setPalletCodeId(palletCode.getId());
+            flow.setOperationType("CONSUMED");
+            flow.setOperationName("半成品消耗");
+            flow.setOperationTime(LocalDateTime.now());
+            flow.setOperatorId(operatorId);
+            flow.setProductId(palletCode.getProductId());
+            flow.setProductStatus("半成品");
+            flow.setAssayId(palletCode.getAssayId());
+            flow.setCycleNo(getCurrentCycleNo(palletCode));
+            flow.setRemark(buildPrepareConsumeRemark(palletCode, preparePool, dto.getRemark()));
+            palletFlowRecordMapper.insert(flow);
+
+            preparePool.setStatus("CONSUMED");
+            preparePool.setUpdatedBy(operatorId);
+            preparePool.setUpdatedAt(LocalDateTime.now());
+            semiPreparePoolMapper.updateById(preparePool);
+
+            releasePalletToFree(palletCode, operatorId);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void createFinishOutTasks(CreateFinishOutTaskDTO dto, Integer operatorId) {
+        createOutTasks(dto.getCodes(), dto.getRemark(), operatorId, "FINISH_OUT", "成品");
+    }
+
+    @Override
+    @Transactional
+    public void confirmFinishOutTasks(ConfirmFinishOutBatchDTO dto, Integer operatorId) {
+        confirmOutTasks(dto.getCodes(), dto.getRemark(), operatorId, "FINISH_OUT", "成品");
+    }
+
+    @Override
+    @Transactional
+    public void createTransferTasks(CreateTransferTaskDTO dto, Integer operatorId) {
+        if (dto == null || dto.getItems() == null || dto.getItems().isEmpty()) {
+            throw new BusinessException("调拨任务列表不能为空");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        Set<String> seenCodes = new LinkedHashSet<>();
+        for (CreateTransferTaskItemDTO item : dto.getItems()) {
+            String code = normalizeCode(item.getCode());
+            if (!seenCodes.add(code)) {
+                throw new BusinessException("同一请求中不允许重复扫码同一托盘");
+            }
+            PalletCode palletCode = parseAndFind(code);
+            validatePalletForTransfer(palletCode);
+            Inventory inventory = requireInventoryByPallet(palletCode, false);
+            Warehouse targetWarehouse = requireTargetWarehouse(item.getTargetWarehouseName());
+            String targetSide = normalizeAndValidateSide(item.getTargetSide());
+
+            int cycleNo = getCurrentCycleNo(palletCode);
+            if (palletTaskMapper.countPendingOutTasks(palletCode.getId(), cycleNo) > 0) {
+                throw new BusinessException("当前托盘已存在未完成的出库任务");
+            }
+            if (palletTaskMapper.countPendingTransferTasks(palletCode.getId(), cycleNo) > 0) {
+                throw new BusinessException("当前托盘已存在未完成的调拨任务");
+            }
+
+            PalletTask task = new PalletTask();
+            task.setPalletCodeId(palletCode.getId());
+            task.setTaskType("TRANSFER");
+            task.setBizScene(null);
+            task.setStatus("PENDING");
+            task.setProductId(palletCode.getProductId());
+            task.setProductStatus(palletCode.getProductStatus());
+            task.setProductionDate(palletCode.getProductionDate());
+            task.setScreenMeshId(palletCode.getScreenMeshId());
+            task.setAssayId(palletCode.getAssayId());
+            task.setCreatedBy(operatorId);
+            task.setCreatedAt(now);
+            task.setRemark(item.getRemark());
+            task.setCycleNo(cycleNo);
+            task.setTargetWarehouseId(targetWarehouse.getId());
+            task.setTargetSide(targetSide);
+            palletTaskMapper.insert(task);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void confirmTransferTasks(ConfirmTransferBatchDTO dto, Integer operatorId) {
+        List<String> codes = normalizeAndValidateUniqueCodes(dto.getCodes());
+        for (String code : codes) {
+            PalletCode palletCode = parseAndFind(code);
+            validatePalletForTransfer(palletCode);
+            PalletTask task = requirePendingTransferTask(palletCode);
+            Inventory inventory = requireInventoryByPallet(palletCode, true);
+            Warehouse targetWarehouse = requireTargetWarehouse(task.getTargetWarehouseId());
+            String targetSide = normalizeAndValidateSide(task.getTargetSide());
+
+            Product product = productMapper.selectById(palletCode.getProductId());
+            if (product == null) {
+                throw new BusinessException("产品不存在");
+            }
+
+            TransferTargetLocation targetLocation = allocateTransferTargetLocation(targetWarehouse, targetSide, product);
+            if (Objects.equals(inventory.getWarehouseId(), targetWarehouse.getId())
+                    && Objects.equals(inventory.getSide(), targetLocation.side())
+                    && Objects.equals(inventory.getRowNumber(), targetLocation.rowNumber())
+                    && Objects.equals(inventory.getLayer(), targetLocation.layer())) {
+                throw new BusinessException("目标库位与当前库存位置相同，不能确认调拨");
+            }
+
+            TransferSourceLocation sourceLocation = new TransferSourceLocation(
+                    inventory.getWarehouseId(),
+                    inventory.getSide(),
+                    inventory.getRowNumber(),
+                    inventory.getLayer()
+            );
+            moveInventoryForTransfer(inventory, targetWarehouse, targetLocation);
+            insertTransferFlow(palletCode, task, sourceLocation, targetLocation, operatorId, dto.getRemark());
+            touchPallet(palletCode, operatorId);
+            confirmOutTask(task, operatorId, dto.getRemark());
+        }
+    }
+
+    private void createSemiOutTasks(List<String> rawCodes, String remark, Integer operatorId, String bizScene) {
+        createOutTasks(rawCodes, remark, operatorId, bizScene, "半成品");
+    }
+
+    private void createOutTasks(List<String> rawCodes, String remark, Integer operatorId,
+                                String bizScene, String productStatus) {
+        List<String> codes = normalizeAndValidateUniqueCodes(rawCodes);
+        LocalDateTime now = LocalDateTime.now();
+        for (String code : codes) {
+            PalletCode palletCode = parseAndFind(code);
+            validatePalletForOutFlow(palletCode, productStatus);
+            int cycleNo = getCurrentCycleNo(palletCode);
+
+            if (lambdaQueryInventoryByPalletId(palletCode.getId()) == null) {
+                throw new BusinessException("当前托盘不在正常库存中");
+            }
+            if ("半成品".equals(productStatus) && findActivePreparePool(palletCode, false) != null) {
+                throw new BusinessException("当前托盘已存在激活中的备料池记录");
+            }
+            if (palletTaskMapper.countPendingOutTasks(palletCode.getId(), cycleNo) > 0) {
+                throw new BusinessException("当前托盘已存在未完成的出库任务");
+            }
+
+            PalletTask task = new PalletTask();
+            task.setPalletCodeId(palletCode.getId());
+            task.setTaskType("OUT");
+            task.setBizScene(bizScene);
+            task.setStatus("PENDING");
+            task.setProductId(palletCode.getProductId());
+            task.setProductStatus(palletCode.getProductStatus());
+            task.setProductionDate(palletCode.getProductionDate());
+            task.setScreenMeshId(palletCode.getScreenMeshId());
+            task.setAssayId(palletCode.getAssayId());
+            task.setCreatedBy(operatorId);
+            task.setCreatedAt(now);
+            task.setRemark(remark);
+            task.setCycleNo(cycleNo);
+            palletTaskMapper.insert(task);
+        }
+    }
+
+    private void confirmSemiOutTasks(List<String> rawCodes, String remark, Integer operatorId, String bizScene) {
+        confirmOutTasks(rawCodes, remark, operatorId, bizScene, "半成品");
+    }
+
+    private void confirmOutTasks(List<String> rawCodes, String remark, Integer operatorId,
+                                 String bizScene, String productStatus) {
+        List<String> codes = normalizeAndValidateUniqueCodes(rawCodes);
+        for (String code : codes) {
+            PalletCode palletCode = parseAndFind(code);
+            validatePalletForOutFlow(palletCode, productStatus);
+
+            PalletTask task = requirePendingOutTask(palletCode, bizScene);
+            Inventory inventory = requireInventoryByPallet(palletCode, true);
+
+            if ("DIRECT_OUT".equals(bizScene) && findActivePreparePool(palletCode, false) != null) {
+                throw new BusinessException("当前托盘已在备料池中，不能再做普通出库");
+            }
+
+            executePalletLevelOutStock(palletCode, inventory, operatorId);
+
+            if ("DIRECT_OUT".equals(bizScene)) {
+                insertOutFlow(palletCode, task, inventory, operatorId, remark, "半成品出库");
+                releasePalletToFree(palletCode, operatorId);
+            } else if ("PREPARE_CONSUMED".equals(bizScene)) {
+                if (findActivePreparePool(palletCode, true) != null) {
+                    throw new BusinessException("当前托盘已存在激活中的备料池记录");
+                }
+                createSemiPreparePoolRecord(palletCode, task, operatorId, remark);
+                insertPreparePoolFlow(palletCode, task, inventory, operatorId, remark);
+                touchPallet(palletCode, operatorId);
+            } else if ("FINISH_OUT".equals(bizScene)) {
+                insertOutFlow(palletCode, task, inventory, operatorId, remark, "成品出库");
+                releasePalletToFree(palletCode, operatorId);
+            } else {
+                throw new BusinessException("不支持的出库业务场景");
+            }
+
+            confirmOutTask(task, operatorId, remark);
+        }
+    }
+
+    private List<String> normalizeAndValidateUniqueCodes(List<String> rawCodes) {
+        if (rawCodes == null || rawCodes.isEmpty()) {
+            throw new BusinessException("托盘码列表不能为空");
+        }
+        List<String> normalized = new ArrayList<>(rawCodes.size());
+        Set<String> seen = new LinkedHashSet<>();
+        for (String rawCode : rawCodes) {
+            String code = normalizeCode(rawCode);
+            if (!seen.add(code)) {
+                throw new BusinessException("同一请求中不允许重复扫码同一托盘");
+            }
+            normalized.add(code);
+        }
+        return normalized;
+    }
+
+    private String normalizeCode(String rawCode) {
+        String code = rawCode == null ? null : rawCode.trim().toUpperCase();
+        if (code == null || code.isBlank()) {
+            throw new BusinessException("托盘码不能为空");
+        }
+        return code;
+    }
+
+    private void validateSemiPalletForOutFlow(PalletCode palletCode) {
+        validatePalletForOutFlow(palletCode, "半成品");
+    }
+
+    private void validatePalletForOutFlow(PalletCode palletCode, String expectedProductStatus) {
+        if (!"INSTOCK".equalsIgnoreCase(palletCode.getStatus())) {
+            throw new BusinessException(expectedProductStatus + "托盘当前不在可出库状态");
+        }
+        if (!expectedProductStatus.equals(palletCode.getProductStatus())) {
+            throw new BusinessException("仅支持" + expectedProductStatus + "托盘操作");
+        }
+        if (palletCode.getProductId() == null || palletCode.getProductionDate() == null) {
+            throw new BusinessException(expectedProductStatus + "托盘当前绑定信息不完整");
+        }
+    }
+
+    private void validatePalletForTransfer(PalletCode palletCode) {
+        if (!"INSTOCK".equalsIgnoreCase(palletCode.getStatus())) {
+            throw new BusinessException("托盘当前不在可调拨状态");
+        }
+        if (!"半成品".equals(palletCode.getProductStatus()) && !"成品".equals(palletCode.getProductStatus())) {
+            throw new BusinessException("仅支持在库的半成品或成品托盘调拨");
+        }
+        if (palletCode.getProductId() == null || palletCode.getProductionDate() == null) {
+            throw new BusinessException("托盘当前绑定信息不完整");
+        }
+    }
+
+    private PalletTask requirePendingOutTask(PalletCode palletCode, String bizScene) {
+        PalletTask task = palletTaskMapper.selectPendingOutTaskByScene(
+                palletCode.getId(),
+                getCurrentCycleNo(palletCode),
+                bizScene
+        );
+        if (task == null) {
+            if ("DIRECT_OUT".equals(bizScene)) {
+                throw new BusinessException("未找到待确认的半成品普通出库任务");
+            }
+            if ("PREPARE_CONSUMED".equals(bizScene)) {
+                throw new BusinessException("未找到待确认的转入备料池任务");
+            }
+            if ("FINISH_OUT".equals(bizScene)) {
+                throw new BusinessException("未找到待确认的成品出库任务");
+            }
+            throw new BusinessException("未找到待确认的出库任务");
+        }
+        return task;
+    }
+
+    private PalletTask requirePendingTransferTask(PalletCode palletCode) {
+        PalletTask task = palletTaskMapper.selectPendingTransferTaskByCycle(
+                palletCode.getId(),
+                getCurrentCycleNo(palletCode)
+        );
+        if (task == null) {
+            throw new BusinessException("未找到待确认的调拨任务");
+        }
+        return task;
+    }
+
+    private Inventory requireInventoryByPallet(PalletCode palletCode, boolean forUpdate) {
+        Inventory inventory = lambdaQueryInventoryByPalletId(palletCode.getId(), forUpdate);
+        if (inventory == null) {
+            throw new BusinessException("当前托盘不在正常库存中");
+        }
+        return inventory;
+    }
+
+    private Warehouse requireTargetWarehouse(String warehouseName) {
+        if (warehouseName == null || warehouseName.isBlank()) {
+            throw new BusinessException("目标仓库不能为空");
+        }
+        Warehouse warehouse = warehouseMapper.selectByWarehouseName(warehouseName);
+        if (warehouse == null) {
+            throw new BusinessException("目标仓库不存在");
+        }
+        return warehouse;
+    }
+
+    private Warehouse requireTargetWarehouse(Integer warehouseId) {
+        if (warehouseId == null) {
+            throw new BusinessException("调拨任务缺少目标仓库");
+        }
+        Warehouse warehouse = warehouseMapper.selectById(warehouseId);
+        if (warehouse == null) {
+            throw new BusinessException("目标仓库不存在");
+        }
+        return warehouse;
+    }
+
+    private String normalizeAndValidateSide(String side) {
+        String normalized = normalizeSide(side);
+        if (!LEFT_SIDE.equals(normalized) && !RIGHT_SIDE.equals(normalized)) {
+            throw new BusinessException("侧向仅支持左或右");
+        }
+        return normalized;
+    }
+
+    private SemiPreparePool findActivePreparePool(PalletCode palletCode, boolean forUpdate) {
+        int cycleNo = getCurrentCycleNo(palletCode);
+        return forUpdate
+                ? semiPreparePoolMapper.selectActiveByPalletAndCycleForUpdate(palletCode.getId(), cycleNo)
+                : semiPreparePoolMapper.selectActiveByPalletAndCycle(palletCode.getId(), cycleNo);
+    }
+
+    private SemiPreparePool requireActivePreparePoolForBinding(PalletCode semiPallet) {
+        SemiPreparePool preparePool = findActivePreparePool(semiPallet, false);
+        if (preparePool == null) {
+            throw new BusinessException("半成品托盘未进入备料池，不能用于成品绑定");
+        }
+        return preparePool;
+    }
+
+    private SemiPreparePool requireActivePreparePoolForConsumption(PalletCode semiPallet, boolean forUpdate) {
+        SemiPreparePool preparePool = findActivePreparePool(semiPallet, forUpdate);
+        if (preparePool == null) {
+            throw new BusinessException("半成品托盘当前轮次不存在可消耗的备料池记录");
+        }
+        return preparePool;
+    }
+
+    private TransferTargetLocation allocateTransferTargetLocation(Warehouse targetWarehouse, String targetSide, Product product) {
+        int warehouseId = targetWarehouse.getId();
+        int maxRows = targetWarehouse.getMaxRows();
+        List<Integer> leftUsedRowsLayer1 = inventoryMapper.getUsedRowList(warehouseId, LEFT_SIDE, 1);
+        List<Integer> rightUsedRowsLayer1 = inventoryMapper.getUsedRowList(warehouseId, RIGHT_SIDE, 1);
+        List<Integer> targetUnusedRowsLayer1 = getUnusedRowNumbers(
+                LEFT_SIDE.equals(targetSide) ? leftUsedRowsLayer1 : rightUsedRowsLayer1,
+                maxRows
+        );
+
+        boolean layerOneFull = leftUsedRowsLayer1.size() >= maxRows && rightUsedRowsLayer1.size() >= maxRows;
+        if (!layerOneFull) {
+            if (targetUnusedRowsLayer1.isEmpty()) {
+                throw new BusinessException("目标仓库指定侧第一层已满，无法调拨");
+            }
+            return new TransferTargetLocation(warehouseId, targetSide, targetUnusedRowsLayer1.get(0), 1);
+        }
+
+        if (!Boolean.TRUE.equals(product.getCanStack())) {
+            throw new BusinessException("目标仓库已满，无法调拨");
+        }
+
+        List<Integer> leftUsedRowsLayer2 = inventoryMapper.getUsedRowList(warehouseId, LEFT_SIDE, 2);
+        List<Integer> rightUsedRowsLayer2 = inventoryMapper.getUsedRowList(warehouseId, RIGHT_SIDE, 2);
+        List<Integer> targetUnusedRowsLayer2 = getUnusedRowNumbers(
+                LEFT_SIDE.equals(targetSide) ? leftUsedRowsLayer2 : rightUsedRowsLayer2,
+                maxRows
+        );
+        if (targetUnusedRowsLayer2.isEmpty()) {
+            throw new BusinessException("目标仓库指定侧已满，无法调拨");
+        }
+        return new TransferTargetLocation(warehouseId, targetSide, targetUnusedRowsLayer2.get(0), 2);
+    }
+
+    private List<Integer> getUnusedRowNumbers(List<Integer> usedRowNumbers, int maxRows) {
+        List<Integer> unusedRowNumbers = new ArrayList<>();
+        for (int i = 1; i <= maxRows; i++) {
+            if (!usedRowNumbers.contains(i)) {
+                unusedRowNumbers.add(i);
+            }
+        }
+        return unusedRowNumbers;
+    }
+
+    private void moveInventoryForTransfer(Inventory inventory, Warehouse targetWarehouse, TransferTargetLocation targetLocation) {
+        Integer sourceWarehouseId = inventory.getWarehouseId();
+        if (!Objects.equals(sourceWarehouseId, targetWarehouse.getId())) {
+            Warehouse sourceWarehouse = warehouseMapper.selectById(sourceWarehouseId);
+            if (sourceWarehouse == null) {
+                throw new BusinessException("原仓库不存在");
+            }
+            warehouseMapper.updateCurCapacity(sourceWarehouse.getId(), sourceWarehouse.getCurCapacity() - 1);
+            warehouseMapper.updateCurCapacity(targetWarehouse.getId(), targetWarehouse.getCurCapacity() + 1);
+        }
+        inventory.setWarehouseId(targetWarehouse.getId());
+        inventory.setSide(targetLocation.side());
+        inventory.setRowNumber(targetLocation.rowNumber());
+        inventory.setLayer(targetLocation.layer());
+        inventoryMapper.updateById(inventory);
+    }
+
+    private void executePalletLevelOutStock(PalletCode palletCode, Inventory inventory, Integer operatorId) {
+        Product product = productMapper.selectById(inventory.getProductId());
+        if (product == null) {
+            throw new BusinessException("产品不存在");
+        }
+        Warehouse warehouse = warehouseMapper.selectById(inventory.getWarehouseId());
+        if (warehouse == null) {
+            throw new BusinessException("仓库不存在");
+        }
+
+        int pieces = inventory.getPieces() != null ? inventory.getPieces() : 0;
+        int quantity = (pieces > 0) ? 0 : (inventory.getQuantity() == null ? 1 : inventory.getQuantity());
+
+        OutStock outStock = new OutStock();
+        outStock.setWarehouseId(inventory.getWarehouseId());
+        outStock.setProductId(inventory.getProductId());
+        outStock.setQuantity(quantity);
+        outStock.setPieces(pieces);
+        outStock.setOutType(0);
+        outStock.setUnit(pieces > 0 ? "1" : "0");
+        outStock.setInDate(inventory.getEntryDate());
+        outStock.setOutDate(LocalDate.now());
+        outStock.setOperatorId(operatorId);
+        outStock.setAssayId(inventory.getAssayId());
+        outStock.setCreatedAt(LocalDateTime.now());
+        outStock.setTotalWeight(buildPalletOutWeight(product, inventory));
+        outStockMapper.insert(outStock);
+
+        inventoryMapper.deleteInventoryById(inventory.getId());
+        warehouseMapper.updateCurCapacity(warehouse.getId(), warehouse.getCurCapacity() - 1);
+    }
+
+    private BigDecimal buildPalletOutWeight(Product product, Inventory inventory) {
+        int pieces = inventory.getPieces() != null && inventory.getPieces() > 0
+                ? inventory.getPieces()
+                : (inventory.getQuantity() == null ? 1 : inventory.getQuantity()) * product.getPiecesPerPallet();
+        return product.getWeightPerPiece().multiply(BigDecimal.valueOf(pieces));
+    }
+
+    private void insertOutFlow(PalletCode palletCode, PalletTask task, Inventory inventory,
+                               Integer operatorId, String remark, String operationName) {
+        PalletFlowRecord flow = new PalletFlowRecord();
+        flow.setPalletCodeId(palletCode.getId());
+        flow.setOperationType("OUT");
+        flow.setOperationName(operationName);
+        flow.setOperationTime(LocalDateTime.now());
+        flow.setOperatorId(operatorId);
+        flow.setProductId(palletCode.getProductId());
+        flow.setProductStatus(palletCode.getProductStatus());
+        flow.setAssayId(palletCode.getAssayId());
+        flow.setFromWarehouseId(inventory.getWarehouseId());
+        flow.setFromSide(inventory.getSide());
+        flow.setFromRowNumber(inventory.getRowNumber());
+        flow.setFromLayer(inventory.getLayer());
+        flow.setCycleNo(task.getCycleNo());
+        flow.setRemark(appendTraceRemark(remark, "托盘[" + palletCode.getCode() + "]" + operationName + "，任务ID=" + task.getId()));
+        palletFlowRecordMapper.insert(flow);
+    }
+
+    private void insertTransferFlow(PalletCode palletCode, PalletTask task, TransferSourceLocation sourceLocation,
+                                    TransferTargetLocation targetLocation, Integer operatorId, String remark) {
+        PalletFlowRecord flow = new PalletFlowRecord();
+        flow.setPalletCodeId(palletCode.getId());
+        flow.setOperationType("TRANSFER");
+        flow.setOperationName("托盘调拨");
+        flow.setOperationTime(LocalDateTime.now());
+        flow.setOperatorId(operatorId);
+        flow.setProductId(palletCode.getProductId());
+        flow.setProductStatus(palletCode.getProductStatus());
+        flow.setAssayId(palletCode.getAssayId());
+        flow.setFromWarehouseId(sourceLocation.warehouseId());
+        flow.setFromSide(sourceLocation.side());
+        flow.setFromRowNumber(sourceLocation.rowNumber());
+        flow.setFromLayer(sourceLocation.layer());
+        flow.setToWarehouseId(targetLocation.warehouseId());
+        flow.setToSide(targetLocation.side());
+        flow.setToRowNumber(targetLocation.rowNumber());
+        flow.setToLayer(targetLocation.layer());
+        flow.setCycleNo(task.getCycleNo());
+        flow.setRemark(appendTraceRemark(remark, "托盘[" + palletCode.getCode() + "]调拨，任务ID=" + task.getId()));
+        palletFlowRecordMapper.insert(flow);
+    }
+
+    private void insertPreparePoolFlow(PalletCode palletCode, PalletTask task, Inventory inventory,
+                                       Integer operatorId, String remark) {
+        PalletFlowRecord flow = new PalletFlowRecord();
+        flow.setPalletCodeId(palletCode.getId());
+        flow.setOperationType("PREPARE_CONSUMED");
+        flow.setOperationName("转入备料池");
+        flow.setOperationTime(LocalDateTime.now());
+        flow.setOperatorId(operatorId);
+        flow.setProductId(palletCode.getProductId());
+        flow.setProductStatus("半成品");
+        flow.setAssayId(palletCode.getAssayId());
+        flow.setFromWarehouseId(inventory.getWarehouseId());
+        flow.setFromSide(inventory.getSide());
+        flow.setFromRowNumber(inventory.getRowNumber());
+        flow.setFromLayer(inventory.getLayer());
+        flow.setCycleNo(task.getCycleNo());
+        flow.setRemark(appendTraceRemark(
+                firstNonBlank(task.getRemark(), remark),
+                "托盘[" + palletCode.getCode() + "]转入备料池，任务ID=" + task.getId()
+        ));
+        palletFlowRecordMapper.insert(flow);
+    }
+
+    private void createSemiPreparePoolRecord(PalletCode palletCode, PalletTask task, Integer operatorId, String remark) {
+        LocalDateTime now = LocalDateTime.now();
+        SemiPreparePool preparePool = new SemiPreparePool();
+        preparePool.setProductId(palletCode.getProductId());
+        preparePool.setProductionDate(palletCode.getProductionDate());
+        preparePool.setPalletCodeId(palletCode.getId());
+        preparePool.setCycleNo(task.getCycleNo());
+        preparePool.setStatus("ACTIVE");
+        preparePool.setRemark(firstNonBlank(task.getRemark(), remark));
+        preparePool.setCreatedBy(operatorId);
+        preparePool.setCreatedAt(now);
+        preparePool.setUpdatedBy(operatorId);
+        preparePool.setUpdatedAt(now);
+        semiPreparePoolMapper.insert(preparePool);
+    }
+
+    private void confirmOutTask(PalletTask task, Integer operatorId, String remark) {
+        task.setStatus("CONFIRMED");
+        task.setConfirmedBy(operatorId);
+        task.setConfirmedAt(LocalDateTime.now());
+        task.setRemark(mergeRemarks(task.getRemark(), remark));
+        palletTaskMapper.updateById(task);
+    }
+
+    private void touchPallet(PalletCode palletCode, Integer operatorId) {
+        palletCode.setUpdatedBy(operatorId);
+        palletCode.setUpdatedAt(LocalDateTime.now());
+        this.updateById(palletCode);
+    }
+
+    private String buildPrepareConsumeRemark(PalletCode palletCode, SemiPreparePool preparePool, String remark) {
+        String trace = "托盘[" + palletCode.getCode() + "]备料池确认消耗";
+        if (preparePool.getRemark() != null && !preparePool.getRemark().isBlank()) {
+            trace = trace + "，备料位置=" + preparePool.getRemark();
+        }
+        return appendTraceRemark(remark, trace);
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        if (second != null && !second.isBlank()) {
+            return second;
+        }
+        return null;
+    }
+
+    private String mergeRemarks(String left, String right) {
+        if (left == null || left.isBlank()) {
+            return right;
+        }
+        if (right == null || right.isBlank()) {
+            return left;
+        }
+        if (left.equals(right)) {
+            return left;
+        }
+        return left + "；" + right;
+    }
+
+    private String appendTraceRemark(String remark, String traceRemark) {
+        if (remark == null || remark.isBlank()) {
+            return traceRemark;
+        }
+        return remark + "；" + traceRemark;
+    }
+
+    private static final class TransferSourceLocation {
+        private final Integer warehouseId;
+        private final String side;
+        private final Integer rowNumber;
+        private final Integer layer;
+
+        private TransferSourceLocation(Integer warehouseId, String side, Integer rowNumber, Integer layer) {
+            this.warehouseId = warehouseId;
+            this.side = side;
+            this.rowNumber = rowNumber;
+            this.layer = layer;
+        }
+
+        private Integer warehouseId() {
+            return warehouseId;
+        }
+
+        private String side() {
+            return side;
+        }
+
+        private Integer rowNumber() {
+            return rowNumber;
+        }
+
+        private Integer layer() {
+            return layer;
+        }
+    }
+
+    private static final class TransferTargetLocation {
+        private final Integer warehouseId;
+        private final String side;
+        private final Integer rowNumber;
+        private final Integer layer;
+
+        private TransferTargetLocation(Integer warehouseId, String side, Integer rowNumber, Integer layer) {
+            this.warehouseId = warehouseId;
+            this.side = side;
+            this.rowNumber = rowNumber;
+            this.layer = layer;
+        }
+
+        private Integer warehouseId() {
+            return warehouseId;
+        }
+
+        private String side() {
+            return side;
+        }
+
+        private Integer rowNumber() {
+            return rowNumber;
+        }
+
+        private Integer layer() {
+            return layer;
+        }
     }
 
     private InVO handleSemiInTask(String remark, PalletCode palletCode, PalletTask task,
@@ -583,9 +1330,68 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         requestDTO.setReturnInStockFlag("0");
         requestDTO.setSemiRecords(semiRecords == null ? new ArrayList<>() : semiRecords);
         InVO result = inStockService.stockIn(requestDTO, operatorId);
-        // 入库成功后同步托盘/任务/流转记录
+        // 入库成功后先收尾成品托盘/任务，再处理本任务绑定的半成品托盘消耗释放。
         finalizeTask(palletCode, task, assayId, warehouse, side, remark, operatorId);
+        consumeSemiPalletsAfterFinishIn(task, palletCode.getCode(), operatorId, remark);
         return result;
+    }
+
+    private void consumeSemiPalletsAfterFinishIn(PalletTask finishTask, String finishPalletCode,
+                                                 Integer operatorId, String remark) {
+        List<PalletTaskSemiItem> semiItems = palletTaskSemiItemMapper.selectList(
+                new LambdaQueryWrapper<PalletTaskSemiItem>()
+                        .eq(PalletTaskSemiItem::getPalletTaskId, finishTask.getId())
+        );
+        if (semiItems == null || semiItems.isEmpty()) {
+            return;
+        }
+
+        Set<Integer> semiPalletIds = semiItems.stream()
+                .map(PalletTaskSemiItem::getSemiPalletCodeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        for (Integer semiPalletId : semiPalletIds) {
+            PalletCode semiPallet = this.getById(semiPalletId);
+            if (semiPallet == null) {
+                throw new BusinessException("半成品托盘不存在");
+            }
+            if (!"半成品".equals(semiPallet.getProductStatus())) {
+                throw new BusinessException("仅允许消耗半成品托盘");
+            }
+            if (!"INSTOCK".equalsIgnoreCase(semiPallet.getStatus())) {
+                throw new BusinessException("半成品托盘当前不在可消耗状态");
+            }
+            SemiPreparePool preparePool = requireActivePreparePoolForConsumption(semiPallet, true);
+
+            PalletFlowRecord flow = new PalletFlowRecord();
+            flow.setPalletCodeId(semiPallet.getId());
+            flow.setOperationType("CONSUMED");
+            flow.setOperationName("半成品消耗");
+            flow.setOperationTime(LocalDateTime.now());
+            flow.setOperatorId(operatorId);
+            flow.setProductId(semiPallet.getProductId());
+            flow.setProductStatus("半成品");
+            flow.setAssayId(semiPallet.getAssayId());
+            flow.setCycleNo(getCurrentCycleNo(semiPallet));
+            flow.setRemark(buildSemiConsumedRemark(finishTask, finishPalletCode, remark));
+            palletFlowRecordMapper.insert(flow);
+
+            preparePool.setStatus("CONSUMED");
+            preparePool.setUpdatedBy(operatorId);
+            preparePool.setUpdatedAt(LocalDateTime.now());
+            semiPreparePoolMapper.updateById(preparePool);
+
+            releasePalletToFree(semiPallet, operatorId);
+        }
+    }
+
+    private String buildSemiConsumedRemark(PalletTask finishTask, String finishPalletCode, String remark) {
+        String traceRemark = "成品托盘[" + finishPalletCode + "]确认入库后消耗，任务ID=" + finishTask.getId();
+        if (remark == null || remark.isBlank()) {
+            return traceRemark;
+        }
+        return remark + "；" + traceRemark;
     }
 
     private List<SemiRecordDTO> buildSemiRecords(PalletTask task) {
@@ -607,24 +1413,28 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                 .collect(Collectors.toMap(Product::getId, p -> p));
         List<SemiRecordDTO> semiRecords = new ArrayList<>();
         for (PalletTaskSemiItem item : semiItems) {
-            // 根据托盘明细取托盘、库存位置，用于扣减半成品库存
             PalletCode semiPallet = this.getById(item.getSemiPalletCodeId());
             if (semiPallet == null) {
                 throw new BusinessException("半成品托盘不存在");
             }
-            Inventory inventory = lambdaQueryInventoryByPalletId(semiPallet.getId());
-            if (inventory == null || inventory.getWarehouseId() == null) {
-                throw new BusinessException("半成品托盘不在库，无法扣减库存");
+            if (!"半成品".equals(semiPallet.getProductStatus())) {
+                throw new BusinessException("仅允许使用半成品托盘");
             }
+            if (!"INSTOCK".equalsIgnoreCase(semiPallet.getStatus())) {
+                throw new BusinessException("半成品托盘当前不在可消耗状态");
+            }
+            requireActivePreparePoolForConsumption(semiPallet, false);
             SemiRecordDTO record = new SemiRecordDTO();
             record.setSemiProductId(item.getSemiProductId());
+            record.setSemiPalletCodeId(semiPallet.getId());
             Product semiProduct = productMap.get(item.getSemiProductId());
             record.setProductName(semiProduct != null ? semiProduct.getProductName() : null);
             record.setProductionDate(item.getProductionDate() != null ? item.getProductionDate() : semiPallet.getProductionDate());
-            record.setWarehouseId(inventory.getWarehouseId());
             record.setQuantity(item.getQuantity());
             record.setUnit(item.getUnit());
             record.setUseAssay(Boolean.TRUE.equals(item.getUseAssay()));
+            record.setFromPreparePool(Boolean.TRUE);
+            record.setCycleNo(getCurrentCycleNo(semiPallet));
             semiRecords.add(record);
         }
         return semiRecords;
@@ -655,7 +1465,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         task.setConfirmedBy(operatorId);
         task.setConfirmedAt(now);
         palletTaskMapper.updateById(task);
-        updateLatestFlowAssay(palletCode.getId(), assayId);
+        updateLatestFlowAssay(palletCode.getId(), assayId, task.getCycleNo());
         PalletFlowRecord flow = new PalletFlowRecord();
         flow.setPalletCodeId(palletCode.getId());
         flow.setOperationType("SEMI_IN".equals(task.getTaskType()) ? "SEMI_INSTOCK" : "FINISH_INSTOCK");
@@ -667,17 +1477,15 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         flow.setAssayId(assayId);
         flow.setToWarehouseId(warehouse.getId());
         flow.setToSide(side);
+        flow.setCycleNo(task.getCycleNo());
         flow.setRemark(remark);
         palletFlowRecordMapper.insert(flow);
     }
 
-    private PalletTask findPendingInboundTask(Integer palletCodeId) {
-        return palletTaskMapper.selectOne(
-                new LambdaQueryWrapper<PalletTask>()
-                        .eq(PalletTask::getPalletCodeId, palletCodeId)
-                        .eq(PalletTask::getStatus, "PENDING")
-                        .in(PalletTask::getTaskType, List.of("SEMI_IN", "FINISH_IN"))
-                        .last("limit 1")
+    private PalletTask findPendingInboundTask(PalletCode palletCode) {
+        return palletTaskMapper.selectPendingByCycle(
+                palletCode.getId(),
+                getCurrentCycleNo(palletCode)
         );
     }
 
@@ -733,12 +1541,13 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         }
         for (String rawCode : dto.getCodes()) {
             PalletCode palletCode = parseAndFind(rawCode);
+            if (!"FREE".equalsIgnoreCase(palletCode.getStatus())) {
+                throw new BusinessException("仅空闲托盘可作废");
+            }
             palletCode.setStatus("INVALID");
             palletCode.setUpdatedBy(operatorId);
             palletCode.setUpdatedAt(LocalDateTime.now());
             this.updateById(palletCode);
-            // 取消关联任务
-            cancelTasksForPallet(palletCode.getId(), operatorId, dto.getRemark());
             // 作废流转记录
             PalletFlowRecord flow = new PalletFlowRecord();
             flow.setPalletCodeId(palletCode.getId());
@@ -749,6 +1558,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             flow.setProductId(palletCode.getProductId());
             flow.setProductStatus(palletCode.getProductStatus());
             flow.setAssayId(palletCode.getAssayId());
+            flow.setCycleNo(palletCode.getCurrentCycleNo());
             flow.setRemark(dto.getRemark());
             palletFlowRecordMapper.insert(flow);
         }
@@ -762,25 +1572,26 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         }
         for (String rawCode : dto.getCodes()) {
             PalletCode palletCode = parseAndFind(rawCode);
-            // 先取消任务并写入流转
-            cancelTasksForPallet(palletCode.getId(), operatorId, dto.getRemark());
+            cancelTasksForPallet(palletCode, operatorId, dto.getRemark());
         }
-        // 作废托盘码（内部再次幂等取消任务）
-        invalidatePalletCodes(dto, operatorId);
     }
 
-    private void cancelTasksForPallet(Integer palletCodeId, Integer operatorId, String remark) {
+    private void cancelTasksForPallet(PalletCode palletCode, Integer operatorId, String remark) {
         List<PalletTask> tasks = palletTaskMapper.selectList(
                 new LambdaQueryWrapper<PalletTask>()
-                        .eq(PalletTask::getPalletCodeId, palletCodeId)
-                        .ne(PalletTask::getStatus, "CANCELED")
+                        .eq(PalletTask::getPalletCodeId, palletCode.getId())
+                        .eq(PalletTask::getStatus, "PENDING")
+                        .eq(PalletTask::getCycleNo, getCurrentCycleNo(palletCode))
         );
+        if (tasks.isEmpty()) {
+            return;
+        }
         LocalDateTime now = LocalDateTime.now();
         for (PalletTask task : tasks) {
-                              task.setStatus("CANCELED");
+            task.setStatus("CANCELED");
             palletTaskMapper.updateById(task);
             PalletFlowRecord flow = new PalletFlowRecord();
-            flow.setPalletCodeId(palletCodeId);
+            flow.setPalletCodeId(palletCode.getId());
             flow.setOperationType("CANCELED");
             flow.setOperationName("取消入库任务");
             flow.setOperationTime(now);
@@ -788,8 +1599,12 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             flow.setProductId(task.getProductId());
             flow.setProductStatus(task.getProductStatus());
             flow.setAssayId(task.getAssayId());
+            flow.setCycleNo(task.getCycleNo());
             flow.setRemark(remark);
             palletFlowRecordMapper.insert(flow);
+        }
+        if ("PENDING".equalsIgnoreCase(palletCode.getStatus())) {
+            releasePalletToFree(palletCode, operatorId);
         }
     }
 

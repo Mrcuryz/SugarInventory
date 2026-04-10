@@ -11,10 +11,13 @@ public class PalletTaskQueryDTO {
     @Schema(description = "托盘码（精确匹配）")
     private String code;
 
-    @Schema(description = "任务类型：SEMI_IN / FINISH_IN，可选")
+    @Schema(description = "任务类型：SEMI_IN / FINISH_IN / OUT，可选")
     private String taskType;
 
-    @Schema(description = "任务状态：PENDING / CONFIRMED / CANCELLED，可选")
+    @Schema(description = "任务业务场景：DIRECT_OUT / PREPARE_CONSUMED / FINISH_OUT，可选")
+    private String bizScene;
+
+    @Schema(description = "任务状态：PENDING / CONFIRMED / CANCELED，可选")
     private String status;
 
     @Schema(description = "产品名称（模糊）")
