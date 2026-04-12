@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="operation-logs">
     <el-card class="search-card" style="max-width: 1200px">
       <el-form :model="searchForm" inline>
@@ -33,6 +33,14 @@
         </el-form-item>
         <br>
         <el-form-item>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+    <el-card class="table-card" style="max-width: 1200px">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
           <el-upload
               class="upload-demo"
               :show-file-list="false"
@@ -40,19 +48,14 @@
               :http-request="customRequest"
               accept=".xlsx,.xls"
           >
-            <el-button type="success" :loading="uploadLoading">
+            <el-button :loading="uploadLoading">
               {{ uploadLoading ? '上传中...' : '导入Excel' }}
             </el-button>
           </el-upload>
-          &nbsp;&nbsp;
-          <el-button type="success" @click="handleAdd">新增员工</el-button>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button type="primary" @click="handleAdd">新增员工</el-button>
           <el-button type="danger" @click="handleDelete">删除离职员工</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-    <el-card class="table-card" style="max-width: 1200px">
+        </div>
+      </div>
       <el-table
           :data="resultList"
           style="width: 95%"
@@ -72,6 +75,9 @@
         <el-table-column prop="position" label="职位" width="120">
         </el-table-column>
         <el-table-column prop="status" label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="row.status === '在职' ? 'success' : 'info'">{{ row.status }}</el-tag>
+          </template>
         </el-table-column>
         <el-table-column prop="roleCode" label="角色" width="120">
           <template #default="{ row }">
@@ -443,11 +449,11 @@ onMounted(() => {
 
 .search-card {
   margin-bottom: 20px;
-  background: rgb(255, 255, 255);
+  background: var(--app-panel);
 }
 
 .table-card {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--app-panel);
 }
 
 .el-form--inline .el-form-item {
@@ -461,17 +467,17 @@ onMounted(() => {
 }
 
 :deep(.el-table) {
-  --el-table-border-color: #d3d3d3;
-  --el-table-header-bg-color: #969696;
-  --el-table-row-hover-bg-color: rgb(75, 75, 75);
+  --el-table-border-color: var(--app-border-soft);
+  --el-table-header-bg-color: #f7f8fb;
+  --el-table-row-hover-bg-color: var(--app-hover);
 }
 
 :deep(.el-table__header th) {
-  background-color: #fdfdfd !important;
-  color: #525252;
+  background-color: #f7f8fb !important;
+  color: var(--app-text-secondary);
 }
 
 :deep(.el-table__body tr:hover > td) {
-  background-color: rgb(159, 234, 252) !important;
+  background-color: var(--app-hover) !important;
 }
 </style>

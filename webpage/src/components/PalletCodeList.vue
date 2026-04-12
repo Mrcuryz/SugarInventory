@@ -1,0 +1,780 @@
+<template>
+  <div class="operation-logs">
+    <el-card class="search-card" style="max-width: 1400px">
+      <el-form :model="searchForm" inline>
+        <el-form-item label="托盘码">
+          <el-input v-model="searchForm.code" clearable placeholder="请输入托盘码" style="width: 180px"/>
+        </el-form-item>
+        <el-form-item label="产品名称">
+          <el-input v-model="searchForm.productName" clearable placeholder="请输入产品名称" style="width: 180px"/>
+        </el-form-item>
+        <el-form-item label="产品类型">
+          <el-select v-model="searchForm.productType" clearable placeholder="请选择" style="width: 150px">
+            <el-option v-for="item in PRODUCT_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="产品状态">
+          <el-select v-model="searchForm.productStatus" clearable placeholder="请选择" style="width: 150px">
+            <el-option v-for="item in PRODUCT_STATUS_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="生产日期">
+          <el-date-picker
+              v-model="searchForm.productionDateRange"
+              type="daterange"
+              value-format="YYYY-MM-DD"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              style="width: 260px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card class="table-card" style="max-width: 1400px">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <el-button type="primary" @click="openGenerateDialog">生成托盘码</el-button>
+          <el-button type="danger" :disabled="!selectedRows.length" @click="handleBatchInvalid">批量作废</el-button>
+        </div>
+      </div>
+      <el-table
+          :data="resultList"
+          style="width: 100%"
+          height="560"
+          stripe
+          v-loading="loading"
+          @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="45"/>
+        <el-table-column prop="code" label="托盘码" width="130" fixed="left"/>
+        <el-table-column prop="status" label="托盘状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getDictType(PALLET_STATUS_MAP, row.status)">
+              {{ getDictLabel(PALLET_STATUS_MAP, row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productName" label="产品名称" min-width="140"/>
+        <el-table-column prop="productType" label="产品类型" width="90"/>
+        <el-table-column prop="productStatus" label="产品状态" width="100"/>
+        <el-table-column prop="productionDate" label="生产日期" width="100"/>
+        <el-table-column prop="screenMeshName" label="筛网" width="90"/>
+        <el-table-column prop="createdAt" label="创建时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column prop="updatedAt" label="更新时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="410" fixed="right">
+          <template #default="{ row }">
+            <el-button v-if="row.status === 'FREE'" type="success" size="small" @click="openBindDialog(row)">绑定</el-button>
+            <el-button type="primary" size="small" @click="openQrDialog(row)">二维码</el-button>
+            <el-button type="info" size="small" @click="openAssayDialog(row)">化验</el-button>
+            <el-button type="info" size="small" @click="openInventoryDialog(row)">位置</el-button>
+            <el-button type="primary" size="small" @click="openFlowDrawer(row)">流转</el-button>
+            <el-button v-if="row.status === 'FREE'" type="danger" size="small" @click="handleInvalid(row)">作废</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="pagination-wrapper">
+        <el-pagination
+            background
+            layout="total, sizes, prev, pager, next"
+            :total="total"
+            :current-page="currentPage"
+            :page-size="pageSize"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+        />
+      </div>
+    </el-card>
+
+    <el-dialog title="生成托盘码" v-model="generateDialogVisible" width="420px" :before-close="closeGenerateDialog">
+      <el-form :model="generateForm" label-width="100px">
+        <el-form-item label="生成数量" required>
+          <el-input-number v-model="generateForm.count" :min="1" :max="100"/>
+        </el-form-item>
+      </el-form>
+      <div v-if="generatedCodes.length" class="code-result">
+        <el-tag v-for="code in generatedCodes" :key="code" class="code-tag">{{ code }}</el-tag>
+      </div>
+      <template #footer>
+        <el-button @click="closeGenerateDialog">关闭</el-button>
+        <el-button type="primary" @click="submitGenerate">生成</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog title="绑定托盘并创建入库任务" v-model="bindDialogVisible" width="560px" :before-close="closeBindDialog">
+      <el-form ref="bindFormRef" :model="bindForm" :rules="bindRules" label-width="110px">
+        <el-form-item label="托盘码" prop="code">
+          <el-input v-model="bindForm.code" clearable/>
+        </el-form-item>
+        <el-form-item label="产品" prop="productId">
+          <el-cascader
+              v-model="bindForm.productId"
+              :options="productOptions"
+              :props="productCascaderProps"
+              clearable
+              filterable
+              placeholder="请选择产品"
+              style="width: 100%"
+              @change="handleBindProductChange"
+          />
+        </el-form-item>
+        <el-form-item label="生产日期" prop="productionDate">
+          <el-date-picker v-model="bindForm.productionDate" value-format="YYYY-MM-DD" type="date" style="width: 100%"/>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="bindForm.remark" type="textarea" :rows="2"/>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="closeBindDialog">取消</el-button>
+        <el-button type="primary" @click="submitBind">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog title="托盘二维码" v-model="qrDialogVisible" width="360px" :before-close="closeQrDialog">
+      <div class="qr-wrapper">
+        <div class="qr-code">{{ currentCode }}</div>
+        <el-image v-if="qrImageUrl" :src="qrImageUrl" fit="contain" class="qr-image"/>
+      </div>
+    </el-dialog>
+
+    <el-dialog title="托盘化验数据" v-model="assayDialogVisible" width="560px">
+      <el-descriptions v-if="assayInfo" :column="1" border>
+        <el-descriptions-item label="产品名称">{{ assayInfo.productName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="采样日期">{{ assayInfo.sampleDate || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="色值">{{ assayInfo.colorValue || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="还原糖分">{{ assayInfo.reducingSugar || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="干燥失重">{{ assayInfo.dryWeight || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="电导灰分">{{ assayInfo.conductivityAsh || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="蔗糖分">{{ assayInfo.sucrose || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="不溶于水杂质">{{ assayInfo.insolubleImpurity || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="pH值">{{ assayInfo.phValue || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="化验员">{{ assayInfo.testerName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="是否合格">{{ assayInfo.isQualified || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <el-empty v-else description="暂无化验数据"/>
+    </el-dialog>
+
+    <el-dialog title="托盘库存位置" v-model="inventoryDialogVisible" width="520px">
+      <el-descriptions v-if="inventoryInfo" :column="1" border>
+        <el-descriptions-item label="仓库">{{ inventoryInfo.warehouseName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="侧">{{ inventoryInfo.side || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="排">{{ inventoryInfo.rowNumber || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="层">{{ inventoryInfo.layer || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="数量">{{ inventoryInfo.quantity ?? '-' }} {{ inventoryInfo.unit ? '件' : '板' }}</el-descriptions-item>
+        <el-descriptions-item label="入库时间">{{ formatDateTime(inventoryInfo.inStockTime) }}</el-descriptions-item>
+      </el-descriptions>
+      <el-empty v-else description="暂无库存位置"/>
+    </el-dialog>
+
+    <el-drawer v-model="flowDrawerVisible" title="托盘流转记录" size="70%" :before-close="closeFlowDrawer">
+      <div class="flow-drawer">
+        <div class="cycle-panel">
+          <div class="panel-title">{{ currentCode }} 的循环轮次</div>
+          <div class="cycle-list" v-loading="cycleLoading">
+            <div class="cycle-list-header">
+              <span>轮次</span>
+              <span>产品</span>
+              <span>状态</span>
+              <span>flow</span>
+            </div>
+            <button
+                v-for="row in cycleList"
+                :key="row.cycleNo"
+                class="cycle-item"
+                :class="{ active: selectedCycle?.cycleNo === row.cycleNo }"
+                type="button"
+                @click="selectCycle(row)"
+            >
+              <span class="cycle-no">{{ row.cycleNo }}{{ row.isCurrentCycle ? '*' : '' }}</span>
+              <span class="cycle-product" :title="row.productName || '-'">{{ row.productName || '-' }}</span>
+              <span class="cycle-status">{{ row.productStatus || '-' }}</span>
+              <span class="cycle-count">{{ row.flowCount ?? 0 }}</span>
+            </button>
+            <el-empty v-if="!cycleLoading && !cycleList.length" description="暂无轮次" :image-size="72"/>
+          </div>
+          <div class="pagination-wrapper">
+            <el-pagination
+                small
+                background
+                layout="prev, pager, next"
+                :total="cycleTotal"
+                :current-page="cyclePageNum"
+                :page-size="cyclePageSize"
+                @current-change="handleCyclePageChange"
+            />
+          </div>
+        </div>
+        <div class="flow-panel">
+          <div class="panel-title">
+            第 {{ selectedCycle?.cycleNo ?? '-' }} 轮明细
+            <el-button type="danger" size="small" :disabled="!selectedFlowIds.length" @click="handleDeleteFlows">批量删除历史flow</el-button>
+          </div>
+          <el-table
+              :data="flowList"
+              border
+              stripe
+              height="610"
+              v-loading="flowLoading"
+              @selection-change="handleFlowSelectionChange"
+          >
+            <el-table-column type="selection" width="45" :selectable="canSelectFlow"/>
+            <el-table-column prop="operationTime" label="时间" width="180">
+              <template #default="{ row }">{{ formatDateTime(row.operationTime) }}</template>
+            </el-table-column>
+            <el-table-column prop="operationType" label="动作" width="120">
+              <template #default="{ row }">
+                <el-tag :type="getDictType(FLOW_OPERATION_MAP, row.operationType)">
+                  {{ row.operationName || getDictLabel(FLOW_OPERATION_MAP, row.operationType) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="operatorName" label="操作人" width="90"/>
+            <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip/>
+            <el-table-column prop="productStatus" label="产品状态" width="90"/>
+            <el-table-column label="位置" width="76">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="openLocationDialog(row)">查看</el-button>
+              </template>
+            </el-table-column>
+            <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip/>
+          </el-table>
+        </div>
+      </div>
+    </el-drawer>
+
+    <el-dialog title="流转位置" v-model="locationDialogVisible" width="460px">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="原位置">{{ formatLocation(currentFlowLocation, 'from', '无') }}</el-descriptions-item>
+        <el-descriptions-item label="目标位置">{{ formatLocation(currentFlowLocation, 'to', '无') }}</el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import {computed, onBeforeUnmount, onMounted, ref} from 'vue'
+import dayjs from 'dayjs'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {getProductList} from '@/api/product'
+import {formatDateTime} from '@/utils/dateTime'
+import {buildProductCascaderOptions, productCascaderProps} from '@/utils/productCascader'
+import {
+  bindPalletTask,
+  deletePalletFlows,
+  generatePalletCodes,
+  getPalletAssay,
+  getPalletInventory,
+  getPalletQrCode,
+  invalidatePalletCodes,
+  listPalletFlowsByCycle,
+  pagePalletCodes,
+  pagePalletFlowCycles
+} from '@/api/palletCode'
+import {
+  FLOW_OPERATION_MAP,
+  PALLET_STATUS_MAP,
+  PRODUCT_STATUS_OPTIONS,
+  PRODUCT_TYPE_OPTIONS,
+  getDictLabel,
+  getDictType
+} from '@/utils/palletCodeDict'
+
+const searchForm = ref({
+  code: '',
+  productName: '',
+  productType: '',
+  productStatus: '',
+  productionDateRange: []
+})
+const resultList = ref([])
+const selectedRows = ref([])
+const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+
+const productList = ref([])
+const productOptions = computed(() => buildProductCascaderOptions(productList.value))
+const currentCode = ref('')
+
+const generateDialogVisible = ref(false)
+const generateForm = ref({count: 20})
+const generatedCodes = ref([])
+
+const bindDialogVisible = ref(false)
+const bindFormRef = ref(null)
+const bindForm = ref(defaultBindForm())
+const bindRules = {
+  code: [{required: true, message: '请输入托盘码', trigger: 'blur'}],
+  productId: [{required: true, message: '请选择产品', trigger: 'change'}],
+  productStatus: [{required: true, message: '请选择产品状态', trigger: 'change'}],
+  productionDate: [{required: true, message: '请选择生产日期', trigger: 'change'}]
+}
+
+const qrDialogVisible = ref(false)
+const qrImageUrl = ref('')
+const assayDialogVisible = ref(false)
+const assayInfo = ref(null)
+const inventoryDialogVisible = ref(false)
+const inventoryInfo = ref(null)
+
+const flowDrawerVisible = ref(false)
+const cycleLoading = ref(false)
+const cycleList = ref([])
+const cycleTotal = ref(0)
+const cyclePageNum = ref(1)
+const cyclePageSize = ref(5)
+const selectedCycle = ref(null)
+const flowLoading = ref(false)
+const flowList = ref([])
+const selectedFlowIds = ref([])
+const locationDialogVisible = ref(false)
+const currentFlowLocation = ref(null)
+
+function defaultBindForm() {
+  return {
+    code: '',
+    productId: null,
+    productStatus: '',
+    productionDate: '',
+    quantity: 1,
+    unit: '0',
+    remark: ''
+  }
+}
+
+const buildQuery = () => {
+  const params = {
+    pageNum: currentPage.value,
+    pageSize: pageSize.value
+  }
+  Object.entries(searchForm.value).forEach(([key, value]) => {
+    if (key !== 'productionDateRange' && value !== '' && value != null) {
+      params[key] = value
+    }
+  })
+  if (searchForm.value.productionDateRange?.length === 2) {
+    params.productionDateStart = searchForm.value.productionDateRange[0]
+    params.productionDateEnd = searchForm.value.productionDateRange[1]
+  }
+  return params
+}
+
+const handleSearch = async () => {
+  loading.value = true
+  try {
+    const res = await pagePalletCodes(buildQuery())
+    resultList.value = res.data?.records || []
+    total.value = res.data?.total || 0
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleReset = () => {
+  searchForm.value = {
+    code: '',
+    productName: '',
+    productType: '',
+    productStatus: '',
+    productionDateRange: []
+  }
+  currentPage.value = 1
+  handleSearch()
+}
+
+const handleSizeChange = (size) => {
+  pageSize.value = size
+  currentPage.value = 1
+  handleSearch()
+}
+
+const handleCurrentChange = (page) => {
+  currentPage.value = page
+  handleSearch()
+}
+
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
+const openGenerateDialog = () => {
+  generatedCodes.value = []
+  generateForm.value = {count: 20}
+  generateDialogVisible.value = true
+}
+
+const closeGenerateDialog = () => {
+  generateDialogVisible.value = false
+  generatedCodes.value = []
+}
+
+const submitGenerate = async () => {
+  const res = await generatePalletCodes(generateForm.value)
+  generatedCodes.value = res.data || []
+  ElMessage.success('生成成功')
+  await handleSearch()
+}
+
+const openBindDialog = (row) => {
+  bindForm.value = defaultBindForm()
+  bindForm.value.code = row.code
+  currentCode.value = row.code
+  bindDialogVisible.value = true
+}
+
+const closeBindDialog = () => {
+  bindDialogVisible.value = false
+  bindFormRef.value?.resetFields()
+  bindForm.value = defaultBindForm()
+}
+
+const handleBindProductChange = (productId) => {
+  const product = productList.value.find(item => item.id === productId)
+  bindForm.value.productStatus = product?.status || ''
+}
+
+const submitBind = async () => {
+  await bindFormRef.value?.validate()
+  await bindPalletTask({
+    ...bindForm.value,
+    // 前端兼容现有后端接口的过渡处理：创建任务阶段不让用户录入数量。
+    quantity: 1,
+    unit: '0'
+  })
+  ElMessage.success('绑定成功')
+  closeBindDialog()
+  await handleSearch()
+}
+
+const openQrDialog = async (row) => {
+  currentCode.value = row.code
+  revokeQrImage()
+  const res = await getPalletQrCode(row.code)
+  qrImageUrl.value = URL.createObjectURL(res.data)
+  qrDialogVisible.value = true
+}
+
+const closeQrDialog = () => {
+  qrDialogVisible.value = false
+  revokeQrImage()
+}
+
+const revokeQrImage = () => {
+  if (qrImageUrl.value) {
+    URL.revokeObjectURL(qrImageUrl.value)
+    qrImageUrl.value = ''
+  }
+}
+
+const openAssayDialog = async (row) => {
+  currentCode.value = row.code
+  const res = await getPalletAssay(row.code)
+  assayInfo.value = res.data || null
+  assayDialogVisible.value = true
+}
+
+const openInventoryDialog = async (row) => {
+  currentCode.value = row.code
+  const res = await getPalletInventory(row.code)
+  inventoryInfo.value = res.data || null
+  inventoryDialogVisible.value = true
+}
+
+const handleInvalid = async (row) => {
+  await invalidateByCodes([row.code])
+}
+
+const handleBatchInvalid = async () => {
+  await invalidateByCodes(selectedRows.value.map(row => row.code))
+}
+
+const invalidateByCodes = async (codes) => {
+  if (!codes.length) {
+    ElMessage.warning('请选择托盘码')
+    return
+  }
+  await ElMessageBox.confirm(`确认作废 ${codes.length} 个托盘码吗？`, '温馨提示', {type: 'warning'})
+  await invalidatePalletCodes({codes, remark: 'Web管理端作废'})
+  ElMessage.success('作废成功')
+  await handleSearch()
+}
+
+const openFlowDrawer = async (row) => {
+  currentCode.value = row.code
+  cyclePageNum.value = 1
+  selectedCycle.value = null
+  flowList.value = []
+  selectedFlowIds.value = []
+  flowDrawerVisible.value = true
+  await loadFlowCycles()
+}
+
+const closeFlowDrawer = () => {
+  flowDrawerVisible.value = false
+  cycleList.value = []
+  flowList.value = []
+  selectedCycle.value = null
+  selectedFlowIds.value = []
+  currentFlowLocation.value = null
+  locationDialogVisible.value = false
+}
+
+const loadFlowCycles = async () => {
+  cycleLoading.value = true
+  try {
+    const res = await pagePalletFlowCycles(currentCode.value, {
+      pageNum: cyclePageNum.value,
+      pageSize: cyclePageSize.value
+    })
+    cycleList.value = res.data?.records || []
+    cycleTotal.value = res.data?.total || 0
+    if (cycleList.value.length) {
+      await selectCycle(cycleList.value[0])
+    }
+  } finally {
+    cycleLoading.value = false
+  }
+}
+
+const handleCyclePageChange = async (page) => {
+  cyclePageNum.value = page
+  await loadFlowCycles()
+}
+
+const selectCycle = async (row) => {
+  selectedCycle.value = row
+  selectedFlowIds.value = []
+  flowLoading.value = true
+  try {
+    const res = await listPalletFlowsByCycle(currentCode.value, row.cycleNo)
+    flowList.value = res.data || []
+  } finally {
+    flowLoading.value = false
+  }
+}
+
+const handleFlowSelectionChange = (rows) => {
+  selectedFlowIds.value = rows.map(row => row.id)
+}
+
+const canSelectFlow = (row) => {
+  if (selectedCycle.value?.isCurrentCycle) {
+    return false
+  }
+  if (!row.operationTime) {
+    return false
+  }
+  return dayjs(row.operationTime).isBefore(dayjs().subtract(180, 'day'))
+}
+
+const handleDeleteFlows = async () => {
+  if (!selectedFlowIds.value.length) {
+    ElMessage.warning('请选择可删除的历史flow')
+    return
+  }
+  await ElMessageBox.confirm(`确认删除 ${selectedFlowIds.value.length} 条历史flow吗？`, '温馨提示', {type: 'warning'})
+  await deletePalletFlows({ids: selectedFlowIds.value})
+  ElMessage.success('删除成功')
+  await selectCycle(selectedCycle.value)
+  await loadFlowCycles()
+}
+
+const openLocationDialog = (row) => {
+  currentFlowLocation.value = row
+  locationDialogVisible.value = true
+}
+
+const formatLocation = (row, prefix, emptyText = '-') => {
+  if (!row) {
+    return emptyText
+  }
+  const warehouse = row[`${prefix}WarehouseName`]
+  if (!warehouse) {
+    return emptyText
+  }
+  const side = row[`${prefix}Side`] || '-'
+  const rowNumber = row[`${prefix}RowNumber`] ?? '-'
+  const layer = row[`${prefix}Layer`] ?? '-'
+  return `${warehouse} ${side}侧 ${rowNumber}排 ${layer}层`
+}
+
+const loadProducts = async () => {
+  const res = await getProductList({})
+  productList.value = Array.isArray(res.data) ? res.data : (res.data?.records || [])
+}
+
+onMounted(async () => {
+  await loadProducts()
+  await handleSearch()
+})
+
+onBeforeUnmount(() => {
+  revokeQrImage()
+})
+</script>
+
+<style scoped>
+.operation-logs {
+  padding: 0;
+}
+
+.search-card {
+  margin-bottom: 20px;
+  background: var(--app-panel);
+}
+
+.table-card {
+  background: var(--app-panel);
+}
+
+.el-form--inline .el-form-item {
+  margin-right: 24px;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.code-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.code-tag {
+  margin-right: 4px;
+}
+
+.qr-wrapper {
+  text-align: center;
+}
+
+.qr-code {
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.qr-image {
+  width: 256px;
+  height: 256px;
+}
+
+.flow-drawer {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.flow-panel,
+.cycle-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: var(--app-panel);
+  box-shadow: var(--app-shadow-soft);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  color: var(--app-text);
+  font-weight: 650;
+}
+
+.cycle-list {
+  min-height: 560px;
+}
+
+.cycle-list-header,
+.cycle-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px 42px;
+  align-items: center;
+  gap: 8px;
+}
+
+.cycle-list-header {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: #f7f8fb;
+  color: var(--app-text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cycle-item {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.cycle-item:hover {
+  background: var(--app-hover);
+  color: var(--app-text);
+}
+
+.cycle-item.active {
+  border-color: #cfe0ff;
+  background: var(--app-primary-light);
+  color: var(--app-primary);
+  font-weight: 650;
+}
+
+.cycle-no,
+.cycle-status,
+.cycle-count {
+  white-space: nowrap;
+}
+
+.cycle-product {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cycle-status,
+.cycle-count {
+  text-align: center;
+}
+
+:deep(.el-table) {
+  --el-table-border-color: var(--app-border-soft);
+}
+
+:deep(.el-table__header th) {
+  background-color: #f7f8fb;
+  color: var(--app-text-secondary);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: var(--app-hover) !important;
+}
+</style>

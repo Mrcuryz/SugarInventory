@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="operation-logs">
     <el-card class="search-card" style="max-width: 1200px">
       <el-form :model="searchForm" inline>
@@ -13,12 +13,16 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="dialogVisible = true;operationType='新增库位'">新增</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card class="table-card" style="max-width: 1200px">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <el-button type="primary" @click="dialogVisible = true;operationType='新增库位'">新增</el-button>
+        </div>
+      </div>
       <el-table
           :data="warehouseList"
           style="width: 95%"
@@ -28,7 +32,11 @@
           v-loading="loading"
       >
         <el-table-column prop="warehouseName" label="库位名称" width="200" sortable/>
-        <el-table-column prop="status" label="库位状态" width="200"/>
+        <el-table-column prop="status" label="库位状态" width="200">
+          <template #default="{ row }">
+            <el-tag :type="row.status === '正常' ? 'success' : 'warning'">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="maxCapacity" label="最大容量" width="150" sortable/>
         <el-table-column prop="curCapacity" label="当前容量" width="150" sortable/>
         <el-table-column prop="maxRows" label="最大行数" min-width="150"/>
@@ -254,11 +262,11 @@ onMounted(() => {
 
 .search-card {
   margin-bottom: 20px;
-  background: rgb(255, 255, 255);
+  background: var(--app-panel);
 }
 
 .table-card {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--app-panel);
 }
 
 .el-form--inline .el-form-item {
@@ -272,17 +280,17 @@ onMounted(() => {
 }
 
 :deep(.el-table) {
-  --el-table-border-color: #d3d3d3;
-  --el-table-header-bg-color: #969696;
-  --el-table-row-hover-bg-color: rgb(75, 75, 75);
+  --el-table-border-color: var(--app-border-soft);
+  --el-table-header-bg-color: #f7f8fb;
+  --el-table-row-hover-bg-color: var(--app-hover);
 }
 
 :deep(.el-table__header th) {
-  background-color: #fdfdfd;
-  color: #525252;
+  background-color: #f7f8fb;
+  color: var(--app-text-secondary);
 }
 
 :deep(.el-table__body tr:hover > td) {
-  background-color: rgb(159, 234, 252) !important;
+  background-color: var(--app-hover) !important;
 }
 </style>

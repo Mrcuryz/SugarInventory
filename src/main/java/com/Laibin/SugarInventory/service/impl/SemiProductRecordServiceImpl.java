@@ -14,6 +14,7 @@ import com.Laibin.SugarInventory.service.SemiProductRecordService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +22,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -34,6 +34,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordMapper, SemiProductRecord> implements SemiProductRecordService, LoggableService<SemiProductRecord> {
+    private static final int MAX_LOCATION_RETRY = 3;
+
     @Autowired
     private SemiProductRecordMapper recordMapper;
     @Autowired
@@ -151,112 +153,48 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     @Override
     public InVO handlerInStock(BaseInStockDTO dto, Product product, Warehouse warehouse,
                                Assay assay, Boolean isPieces, Integer piecesNum) {
-        int maxRows = warehouse.getMaxRows();
         int remainingQuantity = dto.getQuantity();
-        String currentSide = dto.getSide(); // 默认从左侧存放
-        boolean canStack = product.getCanStack(); // 是否可堆积
-
-        // **3. 预获取当前库位的存储情况**
-        List<Integer> leftUsedRowList = inventoryMapper.getUsedRowList(warehouse.getId(), "左", 1);
-        List<Integer> leftUnusedRowList = this.getUnusedRowNumbers(leftUsedRowList, maxRows);
-        int leftUsedRowsLayer1 = leftUsedRowList.size();
-        List<Integer> rightUsedRowList = inventoryMapper.getUsedRowList(warehouse.getId(), "右", 1);
-        List<Integer> rightUnusedRowList = this.getUnusedRowNumbers(rightUsedRowList, maxRows);
-        int rightUsedRowsLayer1 = rightUsedRowList.size();
-        List<Integer> leftUsedRow2List = inventoryMapper.getUsedRowList(warehouse.getId(), "左", 2);
-        List<Integer> leftUnusedRow2List = this.getUnusedRowNumbers(leftUsedRow2List, maxRows);
-        int leftUsedRowsLayer2 = leftUsedRow2List.size();
-        List<Integer> rightUsedRow2List = inventoryMapper.getUsedRowList(warehouse.getId(), "右", 2);
-        int rightUsedRowsLayer2 = rightUsedRow2List.size();
-        List<Integer> rightUnusedRow2List = this.getUnusedRowNumbers(rightUsedRow2List, maxRows);
-
-        int currentLayer = leftUnusedRowList.isEmpty() && rightUnusedRowList.isEmpty() ? 2 : 1;
-
-        // 计算库位剩余容量
-        int remainingCapacity = 2 * maxRows - leftUsedRowsLayer1 - rightUsedRowsLayer1
-                - leftUsedRowsLayer2 - rightUsedRowsLayer2;
-        if (canStack) {
-            remainingCapacity += 2 * maxRows;
-        }
-
-        if (remainingCapacity <= 0) {
-            throw new BusinessException(ErrorCode.WAREHOUSE_FULL);
-        }
-
-        int quantity = dto.getQuantity() > remainingCapacity ? remainingCapacity : dto.getQuantity();
-        boolean isCheckSite = false;
-        // **5. 开始存放**
+        int insertedCount = 0;
+        int conflictCount = 0;
+        String preferredSide = dto.getSide();
         while (remainingQuantity > 0) {
-            Integer rowNumber = this.createRowNumber(leftUnusedRowList, rightUnusedRowList,
-                    leftUnusedRow2List, rightUnusedRow2List,
-                    currentSide, currentLayer);
-            if (rowNumber != null) {
-                // **存储单板**
-                Inventory inventory = new Inventory();
-                inventory.setWarehouseId(warehouse.getId());
-                inventory.setProductId(dto.getProductId());
-                inventory.setSide(currentSide);
-                inventory.setRowNumber(rowNumber);
-                inventory.setLayer(currentLayer);
-                inventory.setQuantity(1);
-                inventory.setScreenMeshId(product.getScreenMeshId());
-                inventory.setEntryDate(dto.getEntryDate());
-                inventory.setAssayId(assay.getId());
-                inventory.setProductStatus(product.getStatus());
-                inventory.setCreatedAt(LocalDateTime.now());
-                inventory.setInStockId(dto.getInStockId());
-                // 散件凑一板
-                if (isPieces) {
-                    inventory.setPieces(piecesNum);
-                } else {
-                    inventory.setPieces(0);
-                }
+            warehouse = warehouseMapper.selectById(warehouse.getId());
+            List<InventoryLocationCandidate> candidates = findAvailableLocationCandidates(
+                    warehouse.getId(),
+                    preferredSide,
+                    warehouse.getMaxRows(),
+                    Boolean.TRUE.equals(product.getCanStack())
+            );
+            if (candidates.isEmpty()) {
+                break;
+            }
 
+            boolean inserted = false;
+            for (InventoryLocationCandidate candidate : candidates) {
+                Inventory inventory = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
+                try {
                 inventoryMapper.insert(inventory);
                 remainingQuantity--;
-
-                // **更新本地变量**
-                if (currentSide.equals("左")) {
-                    if (currentLayer == 1) leftUsedRowsLayer1++;
-                    else leftUsedRowsLayer2++;
-                } else {
-                    if (currentLayer == 1) rightUsedRowsLayer1++;
-                    else rightUsedRowsLayer2++;
+                    insertedCount++;
+                    preferredSide = candidate.side();
+                    inserted = true;
+                    break;
+                } catch (DuplicateKeyException e) {
+                    conflictCount++;
+                    if (conflictCount >= MAX_LOCATION_RETRY) {
+                        throw new BusinessException("库位分配冲突，请重试");
+                    }
+                    break;
                 }
             }
-
-            // **如果当前列满，尝试切换到另一侧**
-            if (remainingQuantity > 0 && rowNumber == null && !isCheckSite) {
-                currentSide = currentSide.equals("左") ? "右" : "左";
-                isCheckSite = true;
-            }
-
-            // **如果第一层满了，检查是否可以堆积**
-            if (remainingQuantity > 0 && leftUsedRowsLayer1 >= maxRows && rightUsedRowsLayer1 >= maxRows) {
-                if (canStack && currentLayer == 1) {
-                    // **切换到第二层**
-                    isCheckSite = false;
-                    currentLayer = 2;
-                    leftUsedRowsLayer2 = 0;
-                    rightUsedRowsLayer2 = 0;
-                } else if (!canStack || (leftUsedRowsLayer2 >= maxRows && rightUsedRowsLayer2 >= maxRows)) {
-                    // **如果当前是第二层且满了，则提示库位已满**
-                    warehouseMapper.updateCurCapacity(
-                            warehouse.getId(), warehouse.getCurCapacity() + quantity);
-                    if (product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
-                        warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
-
-                    InVO inVO = new InVO();
-                    inVO.setRemainingQuantity(remainingQuantity);
-                    inVO.setMessage("库位已满！剩余 " + remainingQuantity + " 板产品，请选择新库位");
-                    return inVO;
-                }
+            if (!inserted && candidates.isEmpty()) {
+                break;
             }
         }
 
         // **6. 同步更新库位信息**
         warehouseMapper.updateCurCapacity(
-                warehouse.getId(), warehouse.getCurCapacity() + quantity);
+                warehouse.getId(), warehouse.getCurCapacity() + insertedCount);
         if (product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
             warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
         // **7. 返回入库信息**
@@ -314,6 +252,78 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
             }
         }
         return unusedRowNumbers;
+    }
+
+    private List<InventoryLocationCandidate> findAvailableLocationCandidates(Integer warehouseId, String preferredSide,
+                                                                             int maxRows, boolean canStack) {
+        List<InventoryLocationCandidate> candidates = new ArrayList<>();
+        List<String> sides = preferredSides(preferredSide);
+        addAvailableLocationCandidates(candidates, warehouseId, sides, maxRows, 1);
+        if (canStack) {
+            addAvailableLocationCandidates(candidates, warehouseId, sides, maxRows, 2);
+        }
+        return candidates;
+    }
+
+    private void addAvailableLocationCandidates(List<InventoryLocationCandidate> candidates, Integer warehouseId,
+                                                List<String> sides, int maxRows, int layer) {
+        for (String side : sides) {
+            List<Integer> usedRows = inventoryMapper.getUsedRowListForUpdate(warehouseId, side, layer);
+            for (Integer rowNumber : getUnusedRowNumbers(usedRows, maxRows)) {
+                candidates.add(new InventoryLocationCandidate(side, rowNumber, layer));
+            }
+        }
+    }
+
+    private List<String> preferredSides(String preferredSide) {
+        if ("右".equals(preferredSide)) {
+            return List.of("右", "左");
+        }
+        return List.of("左", "右");
+    }
+
+    private Inventory buildInventory(BaseInStockDTO dto, Product product, Warehouse warehouse, Assay assay,
+                                     Boolean isPieces, Integer piecesNum, InventoryLocationCandidate candidate) {
+        Inventory inventory = new Inventory();
+        inventory.setWarehouseId(warehouse.getId());
+        inventory.setProductId(dto.getProductId());
+        inventory.setSide(candidate.side());
+        inventory.setRowNumber(candidate.rowNumber());
+        inventory.setLayer(candidate.layer());
+        inventory.setQuantity(1);
+        inventory.setScreenMeshId(product.getScreenMeshId());
+        inventory.setEntryDate(dto.getEntryDate());
+        inventory.setAssayId(assay.getId());
+        inventory.setProductStatus(product.getStatus());
+        inventory.setCreatedAt(LocalDateTime.now());
+        inventory.setInStockId(dto.getInStockId());
+        inventory.setPalletCodeId(dto.getPalletCodeId());
+        inventory.setPieces(Boolean.TRUE.equals(isPieces) ? piecesNum : 0);
+        return inventory;
+    }
+
+    private static final class InventoryLocationCandidate {
+        private final String side;
+        private final Integer rowNumber;
+        private final Integer layer;
+
+        private InventoryLocationCandidate(String side, Integer rowNumber, Integer layer) {
+            this.side = side;
+            this.rowNumber = rowNumber;
+            this.layer = layer;
+        }
+
+        private String side() {
+            return side;
+        }
+
+        private Integer rowNumber() {
+            return rowNumber;
+        }
+
+        private Integer layer() {
+            return layer;
+        }
     }
 
     @Override
@@ -414,49 +424,47 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
 
     private Integer stackModeInStockQuantity(AddSemiProductRecordDTO dto, Warehouse warehouse,
                                              Assay assay, Product product, Boolean isPieces, Integer piecesNum) {
-        int maxRows = warehouse.getMaxRows();
-        int maxCapacity = maxRows * 2;
-        int curCapacity = warehouse.getCurCapacity();
-        int available = maxCapacity - curCapacity;
+        int remaining = dto.getQuantity();
+        int insertedCount = 0;
+        int conflictCount = 0;
+        String preferredSide = dto.getSide();
 
-        if (available <= 0) throw new BusinessException(ErrorCode.WAREHOUSE_FULL);
+        while (remaining > 0) {
+            warehouse = warehouseMapper.selectById(warehouse.getId());
+            List<InventoryLocationCandidate> candidates = findAvailableLocationCandidates(
+                    warehouse.getId(),
+                    preferredSide,
+                    warehouse.getMaxRows(),
+                    false
+            );
+            if (candidates.isEmpty()) {
+                break;
+            }
 
-        int inQty = Math.min(dto.getQuantity(), available);
-        int remaining = dto.getQuantity() - inQty;
-        // 计算当前最大 row_number
-        List<Inventory> existList = inventoryMapper.selectByWarehouseOrdered(warehouse.getId());
-        Set<String> occupied = existList.stream()
-                .map(inv -> inv.getSide() + "-" + inv.getRowNumber())
-                .collect(Collectors.toSet());
-        int count = 0;
-        // 入库顺序：左1～左N → 右1～右N
-        for (String side : List.of("左", "右")) {
-            for (int row = 1; row <= maxRows && count < inQty; row++) {
-                String key = side + "-" + row;
-                if (occupied.contains(key)) continue;
-                Inventory inv = new Inventory();
-                inv.setWarehouseId(warehouse.getId());
-                inv.setProductId(dto.getProductId());
-                inv.setSide(side);
-                inv.setRowNumber(row);
-                inv.setLayer(1); // 固定为第一层
-                inv.setQuantity(1);
-                if (isPieces) {
-                    inv.setPieces(piecesNum);
-                } else {
-                    inv.setPieces(0);
+            boolean inserted = false;
+            for (InventoryLocationCandidate candidate : candidates) {
+                Inventory inv = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
+                try {
+                    inventoryMapper.insert(inv);
+                    insertedCount++;
+                    remaining--;
+                    preferredSide = candidate.side();
+                    inserted = true;
+                    break;
+                } catch (DuplicateKeyException e) {
+                    conflictCount++;
+                    if (conflictCount >= MAX_LOCATION_RETRY) {
+                        throw new BusinessException("库位分配冲突，请重试");
+                    }
+                    break;
                 }
-                inv.setScreenMeshId(product.getScreenMeshId());
-                inv.setEntryDate(dto.getEntryDate());
-                inv.setAssayId(assay.getId());
-                inv.setProductStatus(product.getStatus());
-                inv.setCreatedAt(LocalDateTime.now());
-                inventoryMapper.insert(inv);
-                count++;
+            }
+            if (!inserted && candidates.isEmpty()) {
+                break;
             }
         }
-        // 更新仓库当前容量
-        warehouseMapper.updateCurCapacity(warehouse.getId(), curCapacity + inQty);
+
+        warehouseMapper.updateCurCapacity(warehouse.getId(), warehouse.getCurCapacity() + insertedCount);
         return remaining;
     }
 

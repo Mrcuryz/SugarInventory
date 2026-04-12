@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="operation-logs">
     <el-card class="search-card" style="max-width: 1200px">
       <el-form :model="searchForm" inline>
@@ -43,13 +43,17 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="dialogVisible = true;operationType='新增产品'">新增</el-button>
-          <el-button type="warning" @click="exportExcel">导出Excel</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card class="table-card" style="max-width: 1200px">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <el-button type="primary" @click="dialogVisible = true;operationType='新增产品'">新增</el-button>
+          <el-button @click="exportExcel">导出Excel</el-button>
+        </div>
+      </div>
       <el-table
           :data="productList"
           style="width: 95%"
@@ -60,32 +64,19 @@
       >
         <el-table-column prop="productName" label="产品名称" width="200">
           <template #default="{ row }">
-            <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
-              {{ row.productName }}
-            </span>
+            <span>{{ row.productName }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="productType" label="产品类型" width="100">
           <template #default="{ row }">
-            <span :style="{ color: row.productType === '黄冰糖' ? '#DAA520' : 'inherit' }">
-              {{ row.productType }}
-            </span>
+            <el-tag>{{ row.productType }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="产品状态" width="100">
           <template #default="{ row }">
-            <span
-                :style="{
-                color:
-                  row.status === '半成品'
-                    ? '#e60000'
-                    : row.status === '成品'
-                    ? 'green'
-                    : '#000'
-              }"
-            >
+            <el-tag :type="row.status === '成品' ? 'success' : row.status === '半成品' ? 'warning' : 'info'">
               {{ row.status }}
-            </span>
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="packagingMethod" label="打包方式" width="90"/>
@@ -98,8 +89,7 @@
         </el-table-column>
         <el-table-column prop="canStack" label="是否可堆叠" width="auto">
           <template #default="{ row }">
-            <span v-if="row.canStack">是</span>
-            <span v-else>否</span>
+            <el-tag :type="row.canStack ? 'success' : 'info'">{{ row.canStack ? '是' : '否' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150">
@@ -498,11 +488,11 @@ onMounted(async () => {
 
 .search-card {
   margin-bottom: 20px;
-  background: rgb(255, 255, 255);
+  background: var(--app-panel);
 }
 
 .table-card {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--app-panel);
 }
 
 .el-form--inline .el-form-item {
@@ -516,17 +506,17 @@ onMounted(async () => {
 }
 
 :deep(.el-table) {
-  --el-table-border-color: #d3d3d3;
-  --el-table-header-bg-color: #969696;
-  --el-table-row-hover-bg-color: rgb(75, 75, 75);
+  --el-table-border-color: var(--app-border-soft);
+  --el-table-header-bg-color: #f7f8fb;
+  --el-table-row-hover-bg-color: var(--app-hover);
 }
 
 :deep(.el-table__header th) {
-  background-color: #fdfdfd;
-  color: #525252;
+  background-color: #f7f8fb;
+  color: var(--app-text-secondary);
 }
 
 :deep(.el-table__body tr:hover > td) {
-  background-color: rgb(159, 234, 252) !important;
+  background-color: var(--app-hover) !important;
 }
 </style>

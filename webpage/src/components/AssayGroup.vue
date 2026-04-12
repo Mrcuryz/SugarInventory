@@ -14,25 +14,16 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="openDialog('新增验收标准')">新增</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <!-- 表格区域 -->
     <el-card class="table-card" style="max-width: 1200px">
-      <!-- 分页+条数选择 -->
-      <div class="table-header">
-        <el-pagination
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-            :current-page="pageInfo.currentPage"
-            :page-sizes="[10, 20, 50, 100]"
-            :page-size="pageInfo.pageSize"
-            layout="sizes, ->, jumper, ->, total"
-            :total="pageInfo.total"
-            style="margin-bottom: 16px"
-        />
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <el-button type="primary" @click="openDialog('新增验收标准')">新增</el-button>
+        </div>
       </div>
 
       <!-- 验收标准表格 -->

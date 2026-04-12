@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="operation-logs">
     <el-card class="search-card" style="max-width: 1200px">
       <el-form :model="searchForm" inline>
@@ -21,10 +21,10 @@
               style="width: 150px"
           />
         </el-form-item>
-        <el-form-item label="化验员名称">
+        <el-form-item label="化验员">
           <el-input
               v-model="searchForm.testerName"
-              placeholder="请输入化验员名称名称"
+              placeholder="请输入化验员姓名"
               clearable
               style="width: 165px"
           />
@@ -32,12 +32,16 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="dialogVisible = true;operationType='新增化验'">新增</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card class="table-card" style="max-width: 1200px">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <el-button type="primary" @click="dialogVisible = true;operationType='新增化验'">新增</el-button>
+        </div>
+      </div>
       <el-table
           :data="resultList"
           style="width: 95%"
@@ -57,7 +61,7 @@
         <el-table-column prop="sucrose" label="蔗糖分" width="120" sortable/>
         <el-table-column prop="insolubleImpurity" label="不溶于水杂质" width="150" sortable/>
         <el-table-column prop="phValue" label="pH值" width="120" sortable/>
-        <el-table-column prop="testerName" label="化验员名称" width="120"/>
+        <el-table-column prop="testerName" label="化验员" width="120"/>
         <el-table-column prop="version" label="版本" width="120"/>
         <el-table-column prop="isQualified" label="是否合格" width="120">
           <template #default="{ row }">
@@ -68,31 +72,36 @@
         <el-table-column prop="qualifiedStandards" label="合格标准" width="200"/>
         <el-table-column type="expand" width="100" label="历史版本" fixed="left">
           <template #default="{ row }">
-            <div v-if="row.historyVersions && row.historyVersions.length > 0">
-              <el-table :data="row.historyVersions" border style="background-color: #03791e">
-                <el-table-column width="100"/>
-                <el-table-column prop="productName" label="化验产品名称" width="120"/>
-                <el-table-column prop="sampleDate" label="采样日期" width="120" sortable/>
-                <el-table-column prop="colorValue" label="色值" width="120" sortable/>
-                <el-table-column prop="reducingSugar" label="还原糖分" width="120" sortable/>
-                <el-table-column prop="dryWeight" label="干燥失重" width="120" sortable/>
-                <el-table-column prop="conductivityAsh" label="电导灰分" width="120" sortable/>
-                <el-table-column prop="sucrose" label="蔗糖分" width="120" sortable/>
-                <el-table-column prop="insolubleImpurity" label="不溶于水杂质" width="150" sortable/>
-                <el-table-column prop="phValue" label="pH值" width="120" sortable/>
-                <el-table-column prop="testerName" label="化验员名称" width="120"/>
-                <el-table-column prop="version" label="版本" width="120"/>
-                <el-table-column prop="isQualified" label="是否合格" width="120">
-                  <template #default="{ row: historyRow }">
-                    <el-tag type="success" v-if="historyRow.isQualified === '合格'">合格</el-tag>
-                    <el-tag type="danger" v-else>不合格</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="qualifiedStandards" label="合格标准" width="200"/>
-                <el-table-column width="150"/>
-              </el-table>
+            <div v-if="row.historyVersions && row.historyVersions.length > 0" class="history-panel">
+              <div class="history-panel-title">历史化验版本</div>
+              <div class="history-list">
+                <div v-for="history in row.historyVersions" :key="history.id || `${history.productName}-${history.version}`" class="history-card">
+                  <div class="history-main">
+                    <div class="history-title">
+                      <span>{{ history.productName || row.productName }}</span>
+                      <el-tag size="small">V{{ history.version || '-' }}</el-tag>
+                    </div>
+                    <el-tag :type="history.isQualified === '合格' ? 'success' : 'danger'">
+                      {{ history.isQualified || '未知' }}
+                    </el-tag>
+                  </div>
+                  <div class="history-meta">
+                    <span>采样日期：{{ history.sampleDate || '-' }}</span>
+                    <span>化验员：{{ history.testerName || '-' }}</span>
+                    <span>创建时间：{{ history.createdAt || '-' }}</span>
+                  </div>
+                  <div class="history-metrics">
+                    <span>色值 {{ history.colorValue ?? '-' }}</span>
+                    <span>还原糖 {{ history.reducingSugar ?? '-' }}</span>
+                    <span>干燥失重 {{ history.dryWeight ?? '-' }}</span>
+                    <span>电导灰分 {{ history.conductivityAsh ?? '-' }}</span>
+                    <span>蔗糖分 {{ history.sucrose ?? '-' }}</span>
+                    <span>pH {{ history.phValue ?? '-' }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div v-else>
+            <div v-else class="history-empty">
               无历史版本数据
             </div>
           </template>
@@ -638,11 +647,11 @@ onMounted(() => {
 
 .search-card {
   margin-bottom: 20px;
-  background: rgb(255, 255, 255);
+  background: var(--app-panel);
 }
 
 .table-card {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--app-panel);
 }
 
 .el-form--inline .el-form-item {
@@ -656,18 +665,84 @@ onMounted(() => {
 }
 
 :deep(.el-table) {
-  --el-table-border-color: #d3d3d3;
-  --el-table-header-bg-color: #969696;
-  --el-table-row-hover-bg-color: rgb(75, 75, 75);
+  --el-table-border-color: var(--app-border-soft);
+  --el-table-header-bg-color: #f7f8fb;
+  --el-table-row-hover-bg-color: var(--app-hover);
 }
 
 :deep(.el-table__header th) {
-  background-color: #fdfdfd !important;
-  color: #525252;
+  background-color: #f7f8fb !important;
+  color: var(--app-text-secondary);
 }
 
 :deep(.el-table__body tr:hover > td) {
-  background-color: rgb(159, 234, 252) !important;
+  background-color: var(--app-hover) !important;
+}
+
+.history-panel {
+  padding: 14px 18px;
+  background: #fbfcff;
+}
+
+.history-panel-title {
+  margin-bottom: 12px;
+  color: var(--app-text);
+  font-weight: 650;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-card {
+  padding: 12px 14px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: var(--app-panel);
+  box-shadow: var(--app-shadow-soft);
+}
+
+.history-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--app-text);
+  font-weight: 650;
+}
+
+.history-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-meta,
+.history-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 8px;
+  color: var(--app-text-tertiary);
+  font-size: 13px;
+}
+
+.history-metrics span {
+  color: var(--app-text-secondary);
+}
+
+.history-empty {
+  padding: 18px;
+  color: var(--app-text-tertiary);
+  background: #fbfcff;
 }
 
 </style>

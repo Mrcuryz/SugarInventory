@@ -1,265 +1,146 @@
 <template>
-  <div class="dashboard-container">
-    <el-card class="clock-card">
-      <!-- 粒子背景画布 -->
-      <canvas ref="canvas" class="particle-canvas"></canvas>
+  <div class="home-workbench">
+    <el-card class="workbench-hero">
+      <div>
+        <div class="hero-eyebrow">仓储管理工作台</div>
+        <div class="hero-title">欢迎回来，今天是 {{ formattedDate }} {{ dayOfWeek }}</div>
+        <div class="hero-subtitle">聚合库位状态、库存概览和常用业务入口，快速进入托盘码、任务和化验流程。</div>
+      </div>
+      <div class="hero-time">{{ hours }}:{{ minutes }}:{{ seconds }}</div>
+    </el-card>
 
-      <!-- 时钟主体 -->
-      <div class="clock-wrapper">
-        <!-- 数字时钟 -->
-        <div class="digital-clock">
-          <span class="time-number">{{ hours }}</span>
-          <span class="time-colon">:</span>
-          <span class="time-number">{{ minutes }}</span>
-          <span class="time-colon">:</span>
-          <span class="time-number">{{ seconds }}</span>
-        </div>
+    <div class="overview-grid">
+      <el-card v-for="item in dashboardStats" :key="item.label" class="metric-card">
+        <div class="metric-label">{{ item.label }}</div>
+        <div class="metric-value">{{ item.value }}</div>
+        <div class="metric-hint">{{ item.hint }}</div>
+      </el-card>
+    </div>
 
-        <!-- 日期信息 -->
-        <div class="date-info">
-          <el-icon>
-            <calendar/>
-          </el-icon>
-          <span>{{ formattedDate }}</span>
-          <el-icon>
-            <timer/>
-          </el-icon>
-          <span>{{ dayOfWeek }}</span>
+    <el-card class="quick-card">
+      <div class="section-title">快捷入口</div>
+      <div class="quick-grid">
+        <div v-for="item in quickEntries" :key="item.path" class="quick-entry" @click="router.push(item.path)">
+          <div class="quick-title">{{ item.title }}</div>
+          <div class="quick-desc">{{ item.desc }}</div>
         </div>
       </div>
     </el-card>
-  </div>
-  <el-card class="search-card">
-    <el-form :model="searchWarehouseForm" inline>
-      <el-form-item label="产品名称">
-        <el-input
-            v-model="searchWarehouseForm.productName"
-            placeholder="请输入产品名称"
-            clearable
-            style="width: 200px"
-        >
-        </el-input>
-      </el-form-item>
-      <el-form-item label="标准名称">
-        <el-select v-model="searchWarehouseForm.standardNames"
-                   placeholder="请选择"
-                   clearable
-                   style="width: 200px">
-          <el-option
-              v-for="item in standards"
-              :key="item.standardName"
-              :label="item.label"
-              :value="item.standardName"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="筛网名称" prop="screenMeshId">
-        <el-select
-            v-model="searchWarehouseForm.screenMeshId"
-            placeholder="请选择"
-            clearable
-            style="width: 200px"
-        >
-          <el-option
-              v-for="item in meshList"
-              :key="item.id"
-              :label="item.meshName"
-              :value="item.id"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="时间范围">
-        <el-date-picker
-            v-model="searchWarehouseForm.dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            style="width: 400px"
-        />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
-      </el-form-item>
-    </el-form>
-  </el-card>
-  <el-container class="h-screen">
-    <!-- 左侧库位图 -->
-    <el-main
-        class="p-4 bg-gray-50 transition-all duration-300"
-        :style="{ flex: `0 0 ${selectedLocation ? 'calc(100% - 360px)' : '100%'}`}"
-        v-loading="loadingMap"
-    >
-      <div class="border rounded-lg bg-white p-4 h-full">
-        <svg
-            :viewBox="`0 0 ${viewBoxWidth} ${viewBoxHeight}`"
-            class="warehouse-map w-full h-full"
-            @click.self.stop="handleCanvasClick"
-        >
-          <g v-for="location in locations" :key="location.id">
-            <rect v-if="location.shape !=='polygon'"
-                  :x="location.x"
-                  :y="location.y"
-                  :width="location.width"
-                  :height="location.height"
-                  :class="[
-                    'location',
-                    location.status,
-                    { 'selected': location.id === selectedLocation?.id,
-                      'disabled': location.status === 'default'
-                    }
-                  ]"
-                  :style="getLocationStyle(location)"
-                  @click="location.status !== 'default' && handleSelectLocation(location)"
-            />
-            <polygon v-else-if="location.shape === 'polygon'"
-                     :points="getPolygonPoints(location)"
-                     :class="[
-                        'location',
-                        location.status,
-                        { 'selected': location.id === selectedLocation?.id,
-                          'disabled': location.status === 'default'
-                        }
-                     ]"
-                     :style="getLocationStyle(location)"
-                     @click="location.status !== 'default' && handleSelectLocation(location)"
-            />
-            <text
-                :x="location.x + location.width/2"
-                :y="location.y + location.height/2"
-                :class="{ 'vertical-text': verticalTextIds.includes(location.id) }"
-                text-anchor="middle"
-                dominant-baseline="middle"
-                :style="{
-      fontSize: verticalTextIds.includes(location.id) ? '16px' : '14px',
-      fill: verticalTextIds.includes(location.id) ? '#333' : '#666'
-    }"
-            >
-              {{ location.name ? location.name : location.id }}
-            </text>
-          </g>
-        </svg>
-      </div>
-    </el-main>
 
-    <!-- 右侧信息面板 -->
-    <transition name="slide-fade">
-      <el-aside
-          v-if="selectedLocation"
-          key="aside"
-          width="360px"
-          class="border-l p-4 bg-white h-full"
-      >
+    <el-card class="search-card">
+      <el-form :model="searchWarehouseForm" inline>
+        <el-form-item label="产品名称">
+          <el-input v-model="searchWarehouseForm.productName" placeholder="请输入产品名称" clearable style="width: 200px"/>
+        </el-form-item>
+        <el-form-item label="标准名称">
+          <el-select v-model="searchWarehouseForm.standardNames" placeholder="请选择" clearable style="width: 200px">
+            <el-option v-for="item in standards" :key="item.standardName" :label="item.label" :value="item.standardName"/>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="筛网名称" prop="screenMeshId">
+          <el-select v-model="searchWarehouseForm.screenMeshId" placeholder="请选择" clearable style="width: 200px">
+            <el-option v-for="item in meshList" :key="item.id" :label="item.meshName" :value="item.id"/>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="时间范围">
+          <el-date-picker
+              v-model="searchWarehouseForm.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              style="width: 320px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">查询库位</el-button>
+          <el-button @click="handleReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card class="table-card" v-loading="loadingMap">
+      <div class="table-toolbar">
         <div>
-          <h2 class="text-lg font-bold mb-4">{{ selectedLocation.warehouseName }} 详情</h2>
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="状态">
-              <el-tag :type="statusTagMap[selectedLocation.status]">
-                {{ statusMap[selectedLocation.status] }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="库名">
-              {{ selectedLocation.warehouseName }}
-            </el-descriptions-item>
-            <el-descriptions-item label="产品信息">
-              <el-row :gutter="12" class="product-cards">
-                <el-col
-                    v-for="(item, index) in selectedLocationInfo"
-                    :key="index"
-                    :xs="24"
-                    :sm="24"
-                    class="mb-3"
-                >
-                  <el-card
-                      shadow="hover"
-                      class="product-card"
-                      body-class="p-3"
-                  >
-                    <div class="flex justify-between items-center">
-                      <div class="font-medium text-primary">产品名称：{{ item.productName }}</div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span class="text-gray-500">数量：</span>
-                        <span class="font-medium">{{ item.stockInfo }}</span>
-                      </div>
-                      <div>
-                        <span class="text-gray-500">重量：</span>
-                        <span class="font-medium">{{ item.totalWeight.toFixed(2) }} kg</span>
-                      </div>
-                      <div class="col-span-2">
-                        <span class="text-gray-500">入库日期：</span>
-                        <span class="font-medium">{{ item.entryDate }}</span>
-                      </div>
-                      <div class="col-span-2">
-                        <button @click="assayDialogVisible=true;getAssayInfo(item)">化验信息</button>
-                      </div>
-                    </div>
-                  </el-card>
-                </el-col>
-              </el-row>
-            </el-descriptions-item>
-            <el-descriptions-item label="操作">
-              <el-button type="success"
-                         @click="visible = true;returnInStockFlag='0';operationTypeLabel = '新增入库';operationType='新增入库';disableBtn=false">
-                新增入库
-              </el-button>
-              <el-button type="success"
-                         @click="visible = true;operationTypeLabel='新增出库'; operationType='新增出库';warehouseProductList=selectedLocationInfo">
-                新增出库
-              </el-button>
-            </el-descriptions-item>
-            <el-descriptions-item label="操作" v-show="selectedLocation.id < 1000">
-              <el-button
-                  @click="visible = true;returnInStockFlag= '1';operationTypeLabel='退货入库'; operationType='新增入库';disableBtn=false">
-                退货入库
-              </el-button>
-              <el-button type="success"
-                         @click="visible = true;operationTypeLabel='调拨出库';operationType='新增出库';warehouseProductList=selectedLocationInfo">
-                调拨出库
-              </el-button>
-            </el-descriptions-item>
-          </el-descriptions>
+          <div class="section-title">库位占用概览</div>
+          <div class="section-subtitle">按库位状态和容量查看当前仓储概况，点击库位可查看产品明细。</div>
         </div>
-        <!-- 修改后的模板 -->
-        <div class="location-layout-container"
-             v-if="selectedLocation.status === 'filtered' && selectedLocation.id < 1000">
-          <!-- 添加flex横向布局容器 -->
-          <div class="columns-wrapper">
-            <!-- LEFT列 -->
-            <div class="column">
-              <div class="rows-container">
-                <div
-                    v-for="row in maxRowNum"
-                    :key="`left-${row}`"
-                    class="cell"
-                    :class="getCellClass('左', row)"
-                >
-                  {{ row }}
-                </div>
-              </div>
-              <div class="column-title">左</div>
-            </div>
+      </div>
+      <div class="status-overview">
+        <div v-for="item in warehouseStatusOverview" :key="item.label" class="status-card">
+          <el-tag :type="item.type">{{ item.label }}</el-tag>
+          <span>{{ item.value }}</span>
+        </div>
+      </div>
+      <el-table :data="warehouseOverviewRows" stripe height="360">
+        <el-table-column prop="warehouseName" label="库位名称" min-width="140" show-overflow-tooltip/>
+        <el-table-column prop="status" label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="getWarehouseStatusTag(row.status)">{{ row.status || '未知' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="curCapacity" label="当前容量" width="110"/>
+        <el-table-column prop="maxCapacity" label="最大容量" width="110"/>
+        <el-table-column prop="capacityPercentage" label="占用率" min-width="180">
+          <template #default="{ row }">
+            <el-progress :percentage="normalizePercent(row.capacityPercentage)" :stroke-width="8"/>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" @click="handleSelectLocation(buildLocationFromWarehouse(row))">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
-            <!-- RIGHT列 -->
-            <div class="column">
-              <div class="rows-container">
-                <div
-                    v-for="row in maxRowNum"
-                    :key="`right-${row}`"
-                    class="cell"
-                    :class="getCellClass('右', row)"
-                >
-                  {{ row }}
-                </div>
-              </div>
-              <div class="column-title">右</div>
+    <el-card v-if="selectedLocation" class="table-card location-detail-card">
+      <div class="table-toolbar">
+        <div>
+          <div class="section-title">{{ selectedLocation.warehouseName }} 详情</div>
+          <div class="section-subtitle">当前库位产品明细和可执行操作。</div>
+        </div>
+        <div class="table-toolbar-right">
+          <el-tag :type="statusTagMap[selectedLocation.status]">{{ statusMap[selectedLocation.status] }}</el-tag>
+          <el-button @click="selectedLocation = null">关闭</el-button>
+        </div>
+      </div>
+      <div class="location-actions">
+        <el-button type="primary" @click="visible = true;returnInStockFlag='0';operationTypeLabel = '新增入库';operationType='新增入库';disableBtn=false">新增入库</el-button>
+        <el-button @click="visible = true;operationTypeLabel='新增出库'; operationType='新增出库';warehouseProductList=selectedLocationInfo">新增出库</el-button>
+        <el-button v-if="selectedLocation.id < 1000" @click="visible = true;returnInStockFlag= '1';operationTypeLabel='退货入库'; operationType='新增入库';disableBtn=false">退货入库</el-button>
+        <el-button v-if="selectedLocation.id < 1000" @click="visible = true;operationTypeLabel='调拨出库';operationType='新增出库';warehouseProductList=selectedLocationInfo">调拨出库</el-button>
+      </div>
+      <el-empty v-if="!selectedLocationInfo.length" description="暂无产品明细"/>
+      <div v-else class="product-detail-grid">
+        <div v-for="(item, index) in selectedLocationInfo" :key="index" class="product-detail-card">
+          <div class="product-detail-title">{{ item.productName }}</div>
+          <div class="product-detail-meta">
+            <span>数量：{{ item.stockInfo }}</span>
+            <span>重量：{{ item.totalWeight?.toFixed ? item.totalWeight.toFixed(2) : item.totalWeight || '-' }} kg</span>
+            <span>入库日期：{{ item.entryDate || '-' }}</span>
+          </div>
+          <el-button text type="primary" @click="assayDialogVisible=true;getAssayInfo(item)">查看化验</el-button>
+        </div>
+      </div>
+      <div class="location-layout-container" v-if="selectedLocation.status === 'filtered' && selectedLocation.id < 1000">
+        <div class="columns-wrapper">
+          <div class="column">
+            <div class="rows-container">
+              <div v-for="row in maxRowNum" :key="`left-${row}`" class="cell" :class="getCellClass('左', row)">{{ row }}</div>
             </div>
+            <div class="column-title">左</div>
+          </div>
+          <div class="column">
+            <div class="rows-container">
+              <div v-for="row in maxRowNum" :key="`right-${row}`" class="cell" :class="getCellClass('右', row)">{{ row }}</div>
+            </div>
+            <div class="column-title">右</div>
           </div>
         </div>
-      </el-aside>
-    </transition>
+      </div>
+    </el-card>
+
     <el-dialog
         :title=operationTypeLabel
         v-model="visible"
@@ -572,12 +453,13 @@
         </el-card>
       </div>
     </el-dialog>
-  </el-container>
+  </div>
 </template>
 
 <script setup>
 import {ref, computed, onMounted, onUnmounted, reactive, onBeforeMount, watchEffect, watch} from 'vue'
 import {Calendar, Delete, Timer} from '@element-plus/icons-vue'
+import {useRouter} from 'vue-router'
 import {throttle} from 'lodash-es'
 import {
   getWarehouseInfo,
@@ -600,6 +482,19 @@ import {
 } from "@/api/stock";
 import {getMesh} from "@/api/mesh";
 import dayjs from "dayjs";
+
+const router = useRouter()
+const quickEntries = [
+  {title: '托盘码管理', desc: '生成、查看和追溯托盘码', path: '/pallet-code/list'},
+  {title: '半成品入库任务', desc: '处理半成品入库确认', path: '/pallet-task/semi/in'},
+  {title: '成品入库任务', desc: '绑定半成品并确认入库', path: '/pallet-task/finish/in'},
+  {title: '半成品出库任务', desc: '普通出库与备料池转入', path: '/pallet-task/semi/out'},
+  {title: '成品出库任务', desc: '创建并确认成品出库', path: '/pallet-task/finish/out'},
+  {title: '调拨任务', desc: '创建与确认库位调拨', path: '/pallet-task/transfer'},
+  {title: '仓库平面图', desc: '查看仓区分布与库位状态', path: '/warehouse-map'},
+  {title: '化验管理', desc: '维护产品化验记录', path: '/assay'}
+]
+
 //查询仓库信息
 let searchWarehouseForm = ref({
   productName: '',
@@ -822,7 +717,6 @@ const initParticles = () => {
 // 组件生命周期
 onMounted(() => {
   setInterval(() => time.value = new Date(), 1000)
-  setTimeout(initParticles, 100) // 延迟初始化确保容器渲染
   getAll()
 })
 
@@ -849,6 +743,7 @@ const statusTagMap = reactive({
   danger: 'warning',
   maintenance: 'info',
   default: 'info',
+  filtered: 'primary',
 })
 // 需要垂直排列的ID列表
 const verticalIds = ['办公室门', '仓库入口', '特殊区域']
@@ -1644,7 +1539,7 @@ const handleSelectLocation = async (location) => {
   if (result.code === 200) {
     console.log(result.value)
     selectedLocation.value.warehouseId = location.id
-    selectedLocation.value.warehouseName = CapacityList.value.find(item => item.warehouseId === location.id).warehouseName
+    selectedLocation.value.warehouseName = CapacityList.value.find(item => item.warehouseId === location.id)?.warehouseName || location.warehouseName || location.name || location.id
     if (result.data.records[0].productName) {
       selectedLocation.value.productName = result.data.records[0].productName
     }
@@ -1680,10 +1575,12 @@ const handleSelectLocation = async (location) => {
   loading.value = false
   //颜色变深
   const locationElement = document.querySelector(`.location[data-id="${location.id}"]`)
-  locationElement.classList.add('selected')
-  setTimeout(() => {
-    locationElement.classList.remove('selected')
-  }, 1000)
+  if (locationElement) {
+    locationElement.classList.add('selected')
+    setTimeout(() => {
+      locationElement.classList.remove('selected')
+    }, 1000)
+  }
 }
 // 状态颜色映射（不带透明度）
 const statusColorMap = reactive({
@@ -1713,6 +1610,58 @@ const getLocationStyle = (location) => {
   }
 }
 let CapacityList = ref([]);
+const warehouseOverviewRows = computed(() => CapacityList.value.slice(0, 12))
+const warehouseStatusOverview = computed(() => {
+  const summary = {
+    normal: {label: '正常', value: 0, type: 'success'},
+    empty: {label: '空置', value: 0, type: 'info'},
+    danger: {label: '临期预警', value: 0, type: 'warning'},
+    full: {label: '满仓', value: 0, type: 'danger'},
+    maintenance: {label: '维护', value: 0, type: 'info'}
+  }
+  CapacityList.value.forEach(item => {
+    const key = getWarehouseStatusKey(item.status)
+    if (summary[key]) summary[key].value += 1
+  })
+  return Object.values(summary)
+})
+const dashboardStats = computed(() => {
+  const total = CapacityList.value.length
+  const warning = CapacityList.value.filter(item => item.status === '临期预警').length
+  const full = CapacityList.value.filter(item => item.status === '满仓').length
+  const normal = CapacityList.value.filter(item => item.status === '正常').length
+  return [
+    {label: '库位总数', value: total, hint: '当前纳入统计的库位'},
+    {label: '正常库位', value: normal, hint: '可正常周转使用'},
+    {label: '临期预警', value: warning, hint: '需要优先关注'},
+    {label: '满仓库位', value: full, hint: '容量已接近或达到上限'}
+  ]
+})
+const getWarehouseStatusKey = (status) => {
+  if (status === '正常') return 'normal'
+  if (status === '空置') return 'empty'
+  if (status === '临期预警') return 'danger'
+  if (status === '满仓') return 'full'
+  if (status === '维护') return 'maintenance'
+  return 'default'
+}
+const getWarehouseStatusTag = (status) => statusTagMap[getWarehouseStatusKey(status)] || 'info'
+const normalizePercent = (value) => {
+  const number = Number(value)
+  if (Number.isNaN(number)) return 0
+  if (number <= 1) return Math.round(number * 100)
+  return Math.min(Math.round(number), 100)
+}
+const buildLocationFromWarehouse = (row) => {
+  const matched = locations.value.find(location => location.id === row.warehouseId) || {}
+  return {
+    ...matched,
+    id: row.warehouseId,
+    warehouseId: row.warehouseId,
+    warehouseName: row.warehouseName,
+    status: matched.status || getWarehouseStatusKey(row.status)
+  }
+}
 const getAll = async () => {
   let result = await getAllWarehouseCapacity();
 
@@ -2143,6 +2092,172 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.home-workbench {
+  display: grid;
+  gap: 14px;
+}
+
+.workbench-hero {
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background:
+      linear-gradient(135deg, rgba(22, 93, 255, 0.08) 0%, rgba(255, 255, 255, 0.94) 48%),
+      var(--app-panel);
+  box-shadow: var(--app-shadow-soft);
+}
+
+.workbench-hero :deep(.el-card__body) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.hero-eyebrow,
+.section-subtitle,
+.metric-hint,
+.quick-desc {
+  color: var(--app-text-tertiary);
+  font-size: 13px;
+}
+
+.hero-title {
+  margin-top: 6px;
+  color: var(--app-text);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.hero-subtitle {
+  margin-top: 8px;
+  color: var(--app-text-secondary);
+}
+
+.hero-time {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: #fff;
+  color: var(--app-primary);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.overview-grid,
+.quick-grid,
+.product-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metric-card,
+.quick-card,
+.product-detail-card {
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: var(--app-panel);
+  box-shadow: var(--app-shadow-soft);
+}
+
+.metric-card :deep(.el-card__body) {
+  padding: 16px;
+}
+
+.metric-label {
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
+.metric-value {
+  margin-top: 8px;
+  color: var(--app-text);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.section-title {
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.quick-grid {
+  margin-top: 14px;
+}
+
+.quick-entry {
+  min-height: 76px;
+  padding: 14px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: #fbfcff;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.quick-entry:hover {
+  border-color: #cfe0ff;
+  box-shadow: var(--app-shadow-soft);
+  transform: translateY(-1px);
+}
+
+.quick-title,
+.product-detail-title {
+  color: var(--app-text);
+  font-weight: 650;
+}
+
+.quick-desc {
+  margin-top: 6px;
+}
+
+.status-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: #fbfcff;
+}
+
+.status-card span {
+  color: var(--app-text);
+  font-weight: 700;
+}
+
+.location-detail-card {
+  margin-bottom: 18px;
+}
+
+.location-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.product-detail-card {
+  padding: 14px;
+}
+
+.product-detail-meta {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 10px;
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
 .clock-card {
   position: relative;
   overflow: hidden;

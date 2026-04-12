@@ -28,6 +28,9 @@ public interface WarehouseMapper extends BaseMapper<Warehouse> {
     @Select("SELECT * FROM warehouse WHERE warehouse_name = #{warehouseName}")
     Warehouse selectByWarehouseName(@Param("warehouseName") String warehouseName);
 
+    @Select("SELECT * FROM warehouse WHERE id = #{id} FOR UPDATE")
+    Warehouse selectByIdForUpdate(@Param("id") Integer id);
+
     @Update("UPDATE warehouse SET cur_capacity = #{curCapacity} WHERE id = #{id}")
     void updateCurCapacity(@Param("id") Integer id, @Param("curCapacity") Integer curCapacity);
 

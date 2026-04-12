@@ -19,12 +19,15 @@ import com.Laibin.SugarInventory.domain.dto.CreateFinishOutTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateSemiOutTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
 import com.Laibin.SugarInventory.domain.vo.PalletCodeInfoVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodePageVO;
 import com.Laibin.SugarInventory.domain.vo.PalletAssayVO;
 import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.PalletBindResultVO;
+import com.Laibin.SugarInventory.domain.vo.PalletFlowCyclePageVO;
+import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
 import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.InVO;
@@ -91,6 +94,42 @@ public class PalletCodeController {
         try {
             PageResult<PalletTaskPageVO> page = palletCodeService.pagePalletTasks(queryDTO);
             return Result.success(page);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "托盘流转轮次分页", description = "按托盘码分页查询历史循环轮次摘要")
+    @GetMapping("/{code}/flows/cycles")
+    public Result<PageResult<PalletFlowCyclePageVO>> pageFlowCycles(@PathVariable("code") String code,
+                                                                    @RequestParam(value = "pageNum", defaultValue = "1") Long pageNum,
+                                                                    @RequestParam(value = "pageSize", defaultValue = "5") Long pageSize) {
+        try {
+            PageResult<PalletFlowCyclePageVO> page = palletCodeService.pagePalletFlowCycles(code, pageNum, pageSize);
+            return Result.success(page);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "托盘流转明细", description = "按托盘码和循环号查询流转时间线")
+    @GetMapping("/{code}/flows")
+    public Result<List<PalletFlowDetailVO>> listFlowsByCycle(@PathVariable("code") String code,
+                                                             @RequestParam("cycleNo") Integer cycleNo) {
+        try {
+            List<PalletFlowDetailVO> records = palletCodeService.listPalletFlowsByCycle(code, cycleNo);
+            return Result.success(records);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "批量删除托盘流转记录", description = "仅允许删除超过180天且非当前轮次的历史流转记录")
+    @PostMapping("/flows/delete")
+    public Result<Void> deleteFlows(@RequestBody @Valid DeletePalletFlowBatchDTO dto) {
+        try {
+            palletCodeService.deletePalletFlows(dto);
+            return Result.success(null);
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
         }

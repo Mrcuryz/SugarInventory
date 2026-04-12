@@ -668,6 +668,94 @@
 
 ---
 
+### 3.3.3 查询托盘流转轮次分页
+- **URL**：`GET /api/pallet-codes/{code}/flows/cycles?pageNum=1&pageSize=5`
+- **功能**：按托盘码分页查询该托盘所有历史循环轮次摘要；默认每页 5 个 cycle。
+- **响应 data**：`PageResult<PalletFlowCyclePageVO>`
+
+字段：
+`cycleNo, productId, productName, productStatus, startTime, endTime, flowCount, isCurrentCycle, isEnded`
+
+说明：
+- `isCurrentCycle = cycleNo == pallet_code.current_cycle_no`。
+- `isEnded` 表示该轮已结束；历史轮次必然为 `true`，当前轮次在托盘已释放回 `FREE` 或作废为 `INVALID` 时也为 `true`。
+- 兼容历史数据：`cycle_no = 0` 的流转记录会作为第 0 轮返回。
+
+示例：
+
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "total": 2,
+    "records": [
+      {
+        "cycleNo": 2,
+        "productId": 10,
+        "productName": "一级白砂糖",
+        "productStatus": "成品",
+        "startTime": "2026-04-11T08:00:00",
+        "endTime": "2026-04-11T12:00:00",
+        "flowCount": 3,
+        "isCurrentCycle": true,
+        "isEnded": false
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 3.3.4 查询托盘指定轮次流转明细
+- **URL**：`GET /api/pallet-codes/{code}/flows?cycleNo=3`
+- **功能**：按托盘码 + 循环号查询该轮全部 flow 明细，按 `operation_time ASC, id ASC` 排序。
+- **响应 data**：`PalletFlowDetailVO[]`
+
+字段：
+`id, cycleNo, taskId, operationType, operationName, operationTime, operatorId, operatorName, productId, productName, productStatus, assayId, fromWarehouseId, fromWarehouseName, fromSide, fromRowNumber, fromLayer, toWarehouseId, toWarehouseName, toSide, toRowNumber, toLayer, remark, extData`
+
+说明：任务触发的流转记录会写入 `taskId`，追溯时优先使用该结构化字段关联 `pallet_task.id`，`remark` 仅保留为人工说明。
+
+---
+
+### 3.3.5 批量删除托盘流转记录
+- **URL**：`POST /api/pallet-codes/flows/delete`
+- **功能**：按 flow 记录 ID 批量删除历史记录。
+- **删除限制**：
+  - 记录必须全部存在。
+  - 不允许删除当前轮次：`pallet_flow_record.cycle_no == pallet_code.current_cycle_no` 时拒绝。
+  - 不允许删除 180 天内记录：仅 `operation_time < now - 180 days` 可删除。
+
+请求体：
+
+```json
+{
+  "ids": [101, 102, 103]
+}
+```
+
+响应：
+
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": null
+}
+```
+
+---
+
+### 3.3.6 流转记录定时清理
+- **执行时间**：每天凌晨 3 点。
+- **清理范围**：`operation_time < now - 180 days` 且 `pallet_flow_record.cycle_no <> pallet_code.current_cycle_no` 的流转记录。
+- **保护规则**：当前轮次不删，180 天内不删。
+- **实现方式**：批量 SQL 删除，执行前打印可清理数量。
+
+---
+
 ## 4. 模块工作流程
 
 ## 4.1 主流程（扫码绑定到入库）
@@ -760,6 +848,13 @@ stateDiagram-v2
 ---
 
 ## 6. 联调建议
+
+### 6.1 并发与历史收尾约束
+
+- `inventory` 增加唯一约束 `uk_inventory_location(warehouse_id, side, row_number, layer)`，同一具体库位同一时刻只允许一块托盘/一板库存占用。
+- 入库与托盘调拨在写入目标库位时，如果遇到唯一约束冲突，会重新读取最新库位占用并最多重试 3 次；超过后返回“库位分配冲突，请重试”。
+- 托盘开始新一轮绑定前，会自动将该托盘 `cycle_no < current_cycle_no` 且 `status = PENDING` 的旧任务置为 `CANCELED`，并写入 `operation_type = CANCELED` 的流转记录。
+- `pallet_flow_record.task_id` 用于结构化关联触发该 flow 的任务；无任务触发的作废、人工消耗确认等记录允许为空。
 
 1. **前端先做字典统一**：状态/单位统一 map，避免硬编码散落。
 2. **提交前预校验**：

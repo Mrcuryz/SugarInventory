@@ -14,6 +14,7 @@ import com.Laibin.SugarInventory.domain.dto.CreateFinishOutTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateSemiOutTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
+import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
@@ -22,6 +23,8 @@ import com.Laibin.SugarInventory.domain.vo.PalletAssayVO;
 import com.Laibin.SugarInventory.domain.vo.PalletBindResultVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodeInfoVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodePageVO;
+import com.Laibin.SugarInventory.domain.vo.PalletFlowCyclePageVO;
+import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
 import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
@@ -57,6 +60,14 @@ public interface PalletCodeService extends IService<PalletCode> {
     List<TaskSemiItemVO> bindSemiItemsToTask(BindTaskSemiItemsDTO dto, Integer operatorId);
 
     PageResult<PalletTaskPageVO> pagePalletTasks(PalletTaskQueryDTO queryDTO);
+
+    PageResult<PalletFlowCyclePageVO> pagePalletFlowCycles(String code, Long pageNum, Long pageSize);
+
+    List<PalletFlowDetailVO> listPalletFlowsByCycle(String code, Integer cycleNo);
+
+    void deletePalletFlows(DeletePalletFlowBatchDTO dto);
+
+    int cleanExpiredPalletFlows(int retentionDays);
 
     // 单托盘入库确认（封装 DTO 后调用 stockIn/addSemiProductRecord）
     InVO confirmSingleFinishedTaskIn(ConfirmPalletInItemDTO dto, Integer operatorId);

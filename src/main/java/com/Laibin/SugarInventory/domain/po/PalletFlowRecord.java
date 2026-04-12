@@ -21,6 +21,9 @@ public class PalletFlowRecord implements Serializable {
     @TableField("pallet_code_id")
     private Integer palletCodeId;
 
+    @TableField("task_id")
+    private Integer taskId;
+
     @TableField("operation_type")
     private String operationType;
 

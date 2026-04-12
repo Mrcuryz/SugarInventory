@@ -38,10 +38,21 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
             "AND side = #{side} " +
-            "AND layer = #{layer}")
+            "AND layer = #{layer} " +
+            "ORDER BY `row_number` ASC")
     List<Integer> getUsedRowList(@Param("warehouseId") int warehouseId,
                                  @Param("side") String side,
                                  @Param("layer") int layer);
+
+    @Select("SELECT `row_number` " +
+            "FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
+            "AND side = #{side} " +
+            "AND layer = #{layer} " +
+            "ORDER BY `row_number` ASC FOR UPDATE")
+    List<Integer> getUsedRowListForUpdate(@Param("warehouseId") int warehouseId,
+                                          @Param("side") String side,
+                                          @Param("layer") int layer);
 
 
     @Select("SELECT * FROM inventory " +
@@ -55,11 +66,18 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
                                  @Param("screenMeshId") Integer screenMeshId);
 
     @Insert("INSERT INTO inventory (warehouse_id, product_id, entry_date, side, `row_number`, layer, quantity, " +
-            "screen_mesh_id, assay_id, created_at, in_stock_id, semi_record_id, product_status, pieces) " +
+            "screen_mesh_id, assay_id, created_at, in_stock_id, semi_record_id, product_status, pieces, pallet_code_id) " +
             "VALUES (#{warehouseId}, #{productId}, #{entryDate}, #{side}, #{rowNumber}, #{layer}, #{quantity}, " +
-            "#{screenMeshId}, #{assayId}, #{createdAt}, #{inStockId}, #{semiRecordId}, #{productStatus}, #{pieces} )")
+            "#{screenMeshId}, #{assayId}, #{createdAt}, #{inStockId}, #{semiRecordId}, #{productStatus}, #{pieces}, #{palletCodeId} )")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Inventory inventory);
+
+    @Update("UPDATE inventory SET warehouse_id = #{warehouseId}, side = #{side}, `row_number` = #{rowNumber}, layer = #{layer} WHERE id = #{id}")
+    int updateLocation(@Param("id") Integer id,
+                       @Param("warehouseId") Integer warehouseId,
+                       @Param("side") String side,
+                       @Param("rowNumber") Integer rowNumber,
+                       @Param("layer") Integer layer);
 
     @Select("SELECT * " +
             "FROM inventory " +

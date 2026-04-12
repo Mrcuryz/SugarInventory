@@ -137,38 +137,47 @@
         </template>
       </el-dialog>
       <el-form :model="parseForm" label-width="90px" class="parse-form">
-        <el-form-item label="入库日期">
-          <el-date-picker
-              v-model="parseForm.entryDate"
-              type="date"
-              value-format="YYYY-MM-DD"
-              placeholder="选择日期"
-              style="width: 180px"
+        <div class="parse-basic-panel">
+          <el-form-item label="入库日期">
+            <el-date-picker
+                v-model="parseForm.entryDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 180px"
+            />
+          </el-form-item>
+
+          <el-form-item label="产品类型">
+            <el-radio-group v-model="parseForm.parseType">
+              <el-radio label="SEMI_PRODUCT">半成品</el-radio>
+              <el-radio label="FINISHED_PRODUCT">成品</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </div>
+
+        <div class="parse-text-panel">
+          <div class="parse-text-header">
+            <div>
+              <div class="parse-text-title">原始报数文本</div>
+              <div class="parse-text-subtitle">直接粘贴报数内容，系统会按入库日期和产品类型解析成待入库任务。</div>
+            </div>
+          </div>
+          <el-form-item label="报数文本" class="raw-text-item">
+            <el-input
+                v-model="parseForm.rawText"
+                type="textarea"
+                :rows="10"
+                placeholder="直接粘贴报数文本"
           />
-        </el-form-item>
-
-        <el-form-item label="产品类型">
-          <el-radio-group v-model="parseForm.parseType">
-            <el-radio label="SEMI_PRODUCT">半成品</el-radio>
-            <el-radio label="FINISHED_PRODUCT">成品</el-radio>
-          </el-radio-group>
-        </el-form-item>
-
-        <el-form-item label="原始报数">
-          <el-input
-              v-model="parseForm.rawText"
-              type="textarea"
-              :rows="8"
-              placeholder="直接粘贴报数文本"
-          />
-        </el-form-item>
-
-        <el-form-item>
-          <el-button type="primary" :loading="loadingParse" @click="handleParse">
-            解析报数
-          </el-button>
-          <el-button @click="handleResetParse">清空</el-button>
-        </el-form-item>
+          </el-form-item>
+          <div class="parse-actions">
+            <el-button type="primary" :loading="loadingParse" @click="handleParse">
+              解析报数
+            </el-button>
+            <el-button @click="handleResetParse">清空</el-button>
+          </div>
+        </div>
       </el-form>
     </el-card>
 
@@ -1136,7 +1145,75 @@ onMounted(() => {
 }
 
 .parse-form {
+  display: block !important;
   margin-top: 10px;
+}
+
+.parse-form :deep(.el-form-item:last-child) {
+  margin-left: 0 !important;
+  padding-left: 0;
+}
+
+.parse-basic-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--app-border-soft);
+}
+
+.parse-text-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: #fbfcff;
+}
+
+.parse-text-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.parse-text-title {
+  color: var(--app-text);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.parse-text-subtitle {
+  margin-top: 4px;
+  color: var(--app-text-tertiary);
+  font-size: 13px;
+}
+
+.raw-text-item {
+  display: block;
+}
+
+.raw-text-item :deep(.el-form-item__label) {
+  float: none;
+  display: block;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.raw-text-item :deep(.el-form-item__content) {
+  margin-left: 0 !important;
+}
+
+.raw-text-item :deep(.el-textarea__inner) {
+  min-height: 220px;
+  line-height: 1.6;
+}
+
+.parse-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .table-header {

@@ -29,6 +29,9 @@ public class PalletTaskQueryDTO {
     @Schema(description = "产品状态：半成品/成品，可选")
     private String productStatus;
 
+    @Schema(description = "目标仓库名称（模糊）")
+    private String targetWarehouseName;
+
     @Schema(description = "生产日期起")
     private LocalDate productionDateStart;
 

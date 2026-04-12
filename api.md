@@ -495,6 +495,7 @@
   "weightPerPiece": 40,
   "piecesPerPallet": 100,
   "canStack": true,
+  "screenMeshId": 0,
   "id": 0
 }
 ```
@@ -513,6 +514,7 @@
 |&emsp;&emsp;weightPerPiece|每件产品重量（kg）||false|number||
 |&emsp;&emsp;piecesPerPallet|每板产品数量||false|integer(int32)||
 |&emsp;&emsp;canStack|是否可堆叠||false|boolean||
+|&emsp;&emsp;screenMeshId|筛网id||false|integer(int32)||
 |&emsp;&emsp;id|||false|integer(int32)||
 
 
@@ -576,7 +578,8 @@
   "weightPerPiece": 1.5,
   "piecesPerPallet": 25,
   "canStack": false,
-  "id": 0
+  "id": 0,
+  "screenMeshId": 0
 }
 ```
 
@@ -596,6 +599,7 @@
 |&emsp;&emsp;piecesPerPallet|每板数量||false|integer(int32)||
 |&emsp;&emsp;canStack|是否可堆叠||false|boolean||
 |&emsp;&emsp;id|||false|integer(int32)||
+|&emsp;&emsp;screenMeshId|||false|integer(int32)||
 
 
 **响应状态**:
@@ -622,6 +626,7 @@
 |&emsp;&emsp;weightPerPiece||number||
 |&emsp;&emsp;piecesPerPallet||integer(int32)||
 |&emsp;&emsp;canStack||boolean||
+|&emsp;&emsp;screenMeshId||integer(int32)||
 |&emsp;&emsp;createdBy||integer(int32)||
 |&emsp;&emsp;createdAt||string(date-time)||
 |&emsp;&emsp;updatedBy||integer(int32)||
@@ -642,6 +647,7 @@
 		"weightPerPiece": 0,
 		"piecesPerPallet": 0,
 		"canStack": true,
+		"screenMeshId": 0,
 		"createdBy": 0,
 		"createdAt": "",
 		"updatedBy": 0,
@@ -702,6 +708,7 @@
 |&emsp;&emsp;weightPerPiece||number||
 |&emsp;&emsp;piecesPerPallet||integer(int32)||
 |&emsp;&emsp;canStack||boolean||
+|&emsp;&emsp;screenMeshId||integer(int32)||
 |&emsp;&emsp;createdBy||integer(int32)||
 |&emsp;&emsp;createdAt||string(date-time)||
 |&emsp;&emsp;updatedBy||integer(int32)||
@@ -722,6 +729,7 @@
 		"weightPerPiece": 0,
 		"piecesPerPallet": 0,
 		"canStack": true,
+		"screenMeshId": 0,
 		"createdBy": 0,
 		"createdAt": "",
 		"updatedBy": 0,
@@ -974,6 +982,7 @@
 |&emsp;&emsp;weightPerPiece||number||
 |&emsp;&emsp;piecesPerPallet||integer(int32)||
 |&emsp;&emsp;canStack||boolean||
+|&emsp;&emsp;screenMeshId||integer(int32)||
 |&emsp;&emsp;createdBy||integer(int32)||
 |&emsp;&emsp;createdAt||string(date-time)||
 |&emsp;&emsp;updatedBy||integer(int32)||
@@ -995,6 +1004,7 @@
 			"weightPerPiece": 0,
 			"piecesPerPallet": 0,
 			"canStack": true,
+			"screenMeshId": 0,
 			"createdBy": 0,
 			"createdAt": "",
 			"updatedBy": 0,
@@ -1438,6 +1448,7 @@
 |&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;weightPerPiece||number||
 |&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;piecesPerPallet||integer(int32)||
 |&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;canStack||boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;screenMeshId||integer(int32)||
 |&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdBy||integer(int32)||
 |&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt||string(date-time)||
 |&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;updatedBy||integer(int32)||
@@ -4391,9 +4402,12 @@
   "semiRecords": [
     {
       "semiProductId": 1,
+      "semiPalletCodeId": 1,
       "productName": "",
       "productionDate": "2025-01-01",
       "warehouseId": 1,
+      "fromPreparePool": false,
+      "cycleNo": 1,
       "quantity": 20,
       "unit": "30",
       "useAssay": false
@@ -4415,14 +4429,17 @@
 |&emsp;&emsp;quantity|数量（板）||true|integer(int32)||
 |&emsp;&emsp;unit|单位0板1件（板/件）||true|string||
 |&emsp;&emsp;side|库位左/右列，默认为左||false|string||
-|&emsp;&emsp;screenMeshId|筛网规格ID||true|integer(int32)||
+|&emsp;&emsp;screenMeshId|筛网规格ID||false|integer(int32)||
 |&emsp;&emsp;returnInStockFlag|标记是否退货入库：0不是1是||false|string||
 |&emsp;&emsp;semiRecords|半成品DTO，包含半成品产品id、半成品生产日期、生产该批成品使用的原料数量||false|array|SemiRecordDTO|
 |&emsp;&emsp;&emsp;&emsp;semiProductId|半成品ID||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiPalletCodeId|半成品托盘ID||false|integer(int32)||
 |&emsp;&emsp;&emsp;&emsp;productName|产品名称||false|string||
 |&emsp;&emsp;&emsp;&emsp;productionDate|生产日期||false|string(date)||
 |&emsp;&emsp;&emsp;&emsp;warehouseId|库位||false|integer(int32)||
-|&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品重量||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;fromPreparePool|是否来自备料池||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;cycleNo|半成品来源循环号||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品数量||false|integer(int32)||
 |&emsp;&emsp;&emsp;&emsp;unit|单位0板1件（板/件）||true|string||
 |&emsp;&emsp;&emsp;&emsp;useAssay|是否套用该半成品的化验数据||false|boolean||
 
@@ -4563,6 +4580,1939 @@
 ```
 
 
+# 托盘码
+
+
+## 托盘码列表查询
+
+
+**接口地址**:`/api/pallet-codes`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>托盘码管理页分页查询接口</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "code": "",
+  "productName": "",
+  "productType": "",
+  "productStatus": "",
+  "productionDateStart": "",
+  "productionDateEnd": "",
+  "pageNum": 0,
+  "pageSize": 0
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|palletCodeQueryDTO|PalletCodeQueryDTO|body|true|PalletCodeQueryDTO|PalletCodeQueryDTO|
+|&emsp;&emsp;code|||false|string||
+|&emsp;&emsp;productName|||false|string||
+|&emsp;&emsp;productType|||false|string||
+|&emsp;&emsp;productStatus|||false|string||
+|&emsp;&emsp;productionDateStart|||false|string(date)||
+|&emsp;&emsp;productionDateEnd|||false|string(date)||
+|&emsp;&emsp;pageNum|||false|integer(int64)||
+|&emsp;&emsp;pageSize|||false|integer(int64)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultPageResultPalletCodePageVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||PageResultPalletCodePageVO|PageResultPalletCodePageVO|
+|&emsp;&emsp;total||integer(int64)||
+|&emsp;&emsp;records||array|PalletCodePageVO|
+|&emsp;&emsp;&emsp;&emsp;id||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;code||string||
+|&emsp;&emsp;&emsp;&emsp;status||string||
+|&emsp;&emsp;&emsp;&emsp;productName||string||
+|&emsp;&emsp;&emsp;&emsp;productType||string||
+|&emsp;&emsp;&emsp;&emsp;productStatus||string||
+|&emsp;&emsp;&emsp;&emsp;productionDate||string(date)||
+|&emsp;&emsp;&emsp;&emsp;screenMeshName||string||
+|&emsp;&emsp;&emsp;&emsp;assayId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;createdAt||string(date-time)||
+|&emsp;&emsp;&emsp;&emsp;createdByName||string||
+|&emsp;&emsp;&emsp;&emsp;updatedAt||string(date-time)||
+|&emsp;&emsp;&emsp;&emsp;updatedByName||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"total": 0,
+		"records": [
+			{
+				"id": 0,
+				"code": "",
+				"status": "",
+				"productName": "",
+				"productType": "",
+				"productStatus": "",
+				"productionDate": "",
+				"screenMeshName": "",
+				"assayId": 0,
+				"createdAt": "",
+				"createdByName": "",
+				"updatedAt": "",
+				"updatedByName": ""
+			}
+		]
+	}
+}
+```
+
+
+## 创建托盘调拨任务
+
+
+**接口地址**:`/api/pallet-codes/transfer/create`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>扫码一个或多个在库托盘码，创建托盘级调拨任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "items": [
+    {
+      "code": "",
+      "targetWarehouseName": "",
+      "targetSide": "",
+      "remark": ""
+    }
+  ]
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|createTransferTaskDTO|创建托盘调拨任务请求|body|true|CreateTransferTaskDTO|CreateTransferTaskDTO|
+|&emsp;&emsp;items|调拨任务明细列表||true|array|CreateTransferTaskItemDTO|
+|&emsp;&emsp;&emsp;&emsp;code|托盘码||true|string||
+|&emsp;&emsp;&emsp;&emsp;targetWarehouseName|目标仓库名称||true|string||
+|&emsp;&emsp;&emsp;&emsp;targetSide|目标侧，左/右，默认左||false|string||
+|&emsp;&emsp;&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 确认托盘调拨
+
+
+**接口地址**:`/api/pallet-codes/transfer/confirm`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>批量确认托盘级调拨任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|confirmTransferBatchDTO|确认托盘调拨请求|body|true|ConfirmTransferBatchDTO|ConfirmTransferBatchDTO|
+|&emsp;&emsp;codes|托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 成品任务绑定半成品明细
+
+
+**接口地址**:`/api/pallet-codes/tasks/semi-bind`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>为成品入库任务绑定使用的半成品托盘明细（全量覆盖）</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "code": "",
+  "items": [
+    {
+      "semiPalletCode": "",
+      "quantity": 0,
+      "unit": "",
+      "useAssay": true
+    }
+  ]
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|bindTaskSemiItemsDTO|BindTaskSemiItemsDTO|body|true|BindTaskSemiItemsDTO|BindTaskSemiItemsDTO|
+|&emsp;&emsp;code|成品托盘码||true|string||
+|&emsp;&emsp;items|半成品明细列表（全量覆盖）||true|array|TaskSemiItemDTO|
+|&emsp;&emsp;&emsp;&emsp;semiPalletCode|半成品托盘码||true|string||
+|&emsp;&emsp;&emsp;&emsp;quantity|数量||true|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;unit|单位：0板，1件||true|string||
+|&emsp;&emsp;&emsp;&emsp;useAssay|是否套用化验数据||false|boolean||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultListTaskSemiItemVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||array|TaskSemiItemVO|
+|&emsp;&emsp;id||integer(int32)||
+|&emsp;&emsp;semiPalletCode||string||
+|&emsp;&emsp;semiProductId||integer(int32)||
+|&emsp;&emsp;semiProductName||string||
+|&emsp;&emsp;productionDate||string(date)||
+|&emsp;&emsp;quantity||integer(int32)||
+|&emsp;&emsp;unit||string||
+|&emsp;&emsp;useAssay||boolean||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": [
+		{
+			"id": 0,
+			"semiPalletCode": "",
+			"semiProductId": 0,
+			"semiProductName": "",
+			"productionDate": "",
+			"quantity": 0,
+			"unit": "",
+			"useAssay": true
+		}
+	]
+}
+```
+
+
+## 托盘入库任务列表
+
+
+**接口地址**:`/api/pallet-codes/tasks/list`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>托盘任务分页查询接口</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "code": "",
+  "taskType": "",
+  "bizScene": "",
+  "status": "",
+  "productName": "",
+  "productType": "",
+  "productStatus": "",
+  "productionDateStart": "",
+  "productionDateEnd": "",
+  "pageNum": 0,
+  "pageSize": 0
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|palletTaskQueryDTO|托盘入库任务分页查询条件|body|true|PalletTaskQueryDTO|PalletTaskQueryDTO|
+|&emsp;&emsp;code|托盘码（精确匹配）||false|string||
+|&emsp;&emsp;taskType|任务类型：SEMI_IN / FINISH_IN / OUT，可选||false|string||
+|&emsp;&emsp;bizScene|任务业务场景：DIRECT_OUT / PREPARE_CONSUMED / FINISH_OUT，可选||false|string||
+|&emsp;&emsp;status|任务状态：PENDING / CONFIRMED / CANCELED，可选||false|string||
+|&emsp;&emsp;productName|产品名称（模糊）||false|string||
+|&emsp;&emsp;productType|产品类型（黄/白冰糖等），可选||false|string||
+|&emsp;&emsp;productStatus|产品状态：半成品/成品，可选||false|string||
+|&emsp;&emsp;productionDateStart|生产日期起||false|string(date)||
+|&emsp;&emsp;productionDateEnd|生产日期止||false|string(date)||
+|&emsp;&emsp;pageNum|页码，从1开始||false|integer(int64)||
+|&emsp;&emsp;pageSize|每页大小，默认10||false|integer(int64)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultPageResultPalletTaskPageVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||PageResultPalletTaskPageVO|PageResultPalletTaskPageVO|
+|&emsp;&emsp;total||integer(int64)||
+|&emsp;&emsp;records||array|PalletTaskPageVO|
+|&emsp;&emsp;&emsp;&emsp;taskId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;taskType||string||
+|&emsp;&emsp;&emsp;&emsp;bizScene||string||
+|&emsp;&emsp;&emsp;&emsp;taskStatus||string||
+|&emsp;&emsp;&emsp;&emsp;palletCodeId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;code||string||
+|&emsp;&emsp;&emsp;&emsp;targetWarehouseId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;targetWarehouseName||string||
+|&emsp;&emsp;&emsp;&emsp;targetSide||string||
+|&emsp;&emsp;&emsp;&emsp;productId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productName||string||
+|&emsp;&emsp;&emsp;&emsp;productType||string||
+|&emsp;&emsp;&emsp;&emsp;productStatus||string||
+|&emsp;&emsp;&emsp;&emsp;productionDate||string(date)||
+|&emsp;&emsp;&emsp;&emsp;screenMeshId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;screenMeshName||string||
+|&emsp;&emsp;&emsp;&emsp;hasSemiItems||boolean||
+|&emsp;&emsp;&emsp;&emsp;semiItemCount||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiItems||array|TaskSemiItemVO|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;id||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiPalletCode||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductName||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productionDate||string(date)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;quantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unit||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;useAssay||boolean||
+|&emsp;&emsp;&emsp;&emsp;assayId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;createdBy||string||
+|&emsp;&emsp;&emsp;&emsp;createdAt||string(date-time)||
+|&emsp;&emsp;&emsp;&emsp;confirmedBy||string||
+|&emsp;&emsp;&emsp;&emsp;confirmedAt||string(date-time)||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"total": 0,
+		"records": [
+			{
+				"taskId": 0,
+				"taskType": "",
+				"bizScene": "",
+				"taskStatus": "",
+				"palletCodeId": 0,
+				"code": "",
+				"targetWarehouseId": 0,
+				"targetWarehouseName": "",
+				"targetSide": "",
+				"productId": 0,
+				"productName": "",
+				"productType": "",
+				"productStatus": "",
+				"productionDate": "",
+				"screenMeshId": 0,
+				"screenMeshName": "",
+				"hasSemiItems": true,
+				"semiItemCount": 0,
+				"semiItems": [
+					{
+						"id": 0,
+						"semiPalletCode": "",
+						"semiProductId": 0,
+						"semiProductName": "",
+						"productionDate": "",
+						"quantity": 0,
+						"unit": "",
+						"useAssay": true
+					}
+				],
+				"assayId": 0,
+				"createdBy": "",
+				"createdAt": "",
+				"confirmedBy": "",
+				"confirmedAt": ""
+			}
+		]
+	}
+}
+```
+
+
+## 托盘任务确认入库
+
+
+**接口地址**:`/api/pallet-codes/tasks/confirm`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>批量确认托盘入库任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "items": [
+    {
+      "code": "",
+      "warehouseName": "",
+      "entryDate": "",
+      "side": "",
+      "quantity": 0,
+      "unit": "",
+      "remark": ""
+    }
+  ]
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|confirmPalletInBatchDTO|托盘入库确认批量请求|body|true|ConfirmPalletInBatchDTO|ConfirmPalletInBatchDTO|
+|&emsp;&emsp;items|待确认入库的托盘列表||true|array|ConfirmPalletInItemDTO|
+|&emsp;&emsp;&emsp;&emsp;code|托盘码，例如 BT0A3ZK||true|string||
+|&emsp;&emsp;&emsp;&emsp;warehouseName|入库仓库名称，对应 warehouse.warehouse_name||true|string||
+|&emsp;&emsp;&emsp;&emsp;entryDate|入库日期，默认使用任务的生产日期||false|string(date)||
+|&emsp;&emsp;&emsp;&emsp;side|优先存放侧，左/右，默认左||false|string||
+|&emsp;&emsp;&emsp;&emsp;quantity|本次入库数量（板/件），不传默认1||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;unit|单位：0=板，1=件，不传默认0||false|string||
+|&emsp;&emsp;&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultListInVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||array|InVO|
+|&emsp;&emsp;remainingQuantity|多余的产品数量（板）|integer(int32)||
+|&emsp;&emsp;message|详细信息|string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": [
+		{
+			"remainingQuantity": 0,
+			"message": ""
+		}
+	]
+}
+```
+
+
+## 批量取消入库任务
+
+
+**接口地址**:`/api/pallet-codes/tasks/cancel`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>按托盘码取消当前轮次待处理入库任务，并释放托盘回 FREE</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|cancelPalletBatchDTO|托盘批量作废/取消请求|body|true|CancelPalletBatchDTO|CancelPalletBatchDTO|
+|&emsp;&emsp;codes|托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 创建半成品转入备料池任务
+
+
+**接口地址**:`/api/pallet-codes/semi/prepare/create`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>扫码一个或多个半成品托盘码，创建转入备料池任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|createSemiPrepareTaskDTO|创建半成品转入备料池任务请求|body|true|CreateSemiPrepareTaskDTO|CreateSemiPrepareTaskDTO|
+|&emsp;&emsp;codes|半成品托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，建议填写备料池实际位置||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 确认半成品转入备料池
+
+
+**接口地址**:`/api/pallet-codes/semi/prepare/confirm`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>批量确认半成品转入备料池任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|confirmSemiPrepareBatchDTO|确认半成品转入备料池请求|body|true|ConfirmSemiPrepareBatchDTO|ConfirmSemiPrepareBatchDTO|
+|&emsp;&emsp;codes|半成品托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 创建半成品普通出库任务
+
+
+**接口地址**:`/api/pallet-codes/semi/out/create`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>扫码一个或多个半成品托盘码，创建普通出库任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|createSemiOutTaskDTO|创建半成品普通出库任务请求|body|true|CreateSemiOutTaskDTO|CreateSemiOutTaskDTO|
+|&emsp;&emsp;codes|半成品托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 确认半成品普通出库
+
+
+**接口地址**:`/api/pallet-codes/semi/out/confirm`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>批量确认半成品普通出库任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|confirmSemiOutBatchDTO|确认半成品普通出库请求|body|true|ConfirmSemiOutBatchDTO|ConfirmSemiOutBatchDTO|
+|&emsp;&emsp;codes|半成品托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 确认半成品消耗
+
+
+**接口地址**:`/api/pallet-codes/semi/consume/confirm`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>批量确认备料池中的半成品托盘已最终消耗</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|confirmSemiConsumeBatchDTO|确认半成品备料池消耗请求|body|true|ConfirmSemiConsumeBatchDTO|ConfirmSemiConsumeBatchDTO|
+|&emsp;&emsp;codes|半成品托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 批量作废托盘码
+
+
+**接口地址**:`/api/pallet-codes/invalid`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>仅允许将空闲托盘码置为 INVALID</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|cancelPalletBatchDTO|托盘批量作废/取消请求|body|true|CancelPalletBatchDTO|CancelPalletBatchDTO|
+|&emsp;&emsp;codes|托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 批量生成托盘码
+
+
+**接口地址**:`/api/pallet-codes/generate`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>根据数量批量生成托盘码</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "count": 0
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|generatePalletCodeDTO|批量生成托盘码请求|body|true|GeneratePalletCodeDTO|GeneratePalletCodeDTO|
+|&emsp;&emsp;count|||true|integer(int32)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultListString|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||array||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": []
+}
+```
+
+
+## 批量删除托盘流转记录
+
+
+**接口地址**:`/api/pallet-codes/flows/delete`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>仅允许删除超过180天且非当前轮次的历史流转记录</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "ids": []
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|deletePalletFlowBatchDTO|批量删除托盘流转记录请求|body|true|DeletePalletFlowBatchDTO|DeletePalletFlowBatchDTO|
+|&emsp;&emsp;ids|流转记录ID列表||true|array|integer(int64)|
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 创建成品出库任务
+
+
+**接口地址**:`/api/pallet-codes/finish/out/create`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>扫码一个或多个成品托盘码，创建成品出库任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|createFinishOutTaskDTO|创建成品出库任务请求|body|true|CreateFinishOutTaskDTO|CreateFinishOutTaskDTO|
+|&emsp;&emsp;codes|成品托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 确认成品出库
+
+
+**接口地址**:`/api/pallet-codes/finish/out/confirm`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>批量确认成品出库任务</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "codes": [],
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|confirmFinishOutBatchDTO|确认成品出库请求|body|true|ConfirmFinishOutBatchDTO|ConfirmFinishOutBatchDTO|
+|&emsp;&emsp;codes|成品托盘码列表||true|array|string|
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 扫码绑定托盘并创建入库任务
+
+
+**接口地址**:`/api/pallet-codes/bind`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>小程序/PC 扫描托盘二维码后，绑定产品信息并创建入库任务（不处理化验记录）</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "code": "",
+  "productId": 0,
+  "productStatus": "",
+  "productionDate": "",
+  "quantity": 20,
+  "unit": "0",
+  "remark": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|bindPalletTaskDTO|BindPalletTaskDTO|body|true|BindPalletTaskDTO|BindPalletTaskDTO|
+|&emsp;&emsp;code|扫码得到的托盘码，例如 BT0A3ZK||true|string||
+|&emsp;&emsp;productId|绑定的产品ID||true|integer(int32)||
+|&emsp;&emsp;productStatus|产品状态：半成品/成品||true|string||
+|&emsp;&emsp;productionDate|生产日期||true|string(date)||
+|&emsp;&emsp;quantity|数量，默认为1板；件数需单独输入||false|integer(int32)||
+|&emsp;&emsp;unit|单位0板1件（板/件）||true|string||
+|&emsp;&emsp;remark|备注，可选||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultPalletBindResultVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||PalletBindResultVO|PalletBindResultVO|
+|&emsp;&emsp;palletCodeId||integer(int32)||
+|&emsp;&emsp;code||string||
+|&emsp;&emsp;palletStatus||string||
+|&emsp;&emsp;taskId||integer(int32)||
+|&emsp;&emsp;taskType||string||
+|&emsp;&emsp;taskStatus||string||
+|&emsp;&emsp;productId||integer(int32)||
+|&emsp;&emsp;productName||string||
+|&emsp;&emsp;productType||string||
+|&emsp;&emsp;productStatus||string||
+|&emsp;&emsp;screenMeshId||integer(int32)||
+|&emsp;&emsp;screenMeshName||string||
+|&emsp;&emsp;productionDate||string(date)||
+|&emsp;&emsp;createdAt||string(date-time)||
+|&emsp;&emsp;remark||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"palletCodeId": 0,
+		"code": "",
+		"palletStatus": "",
+		"taskId": 0,
+		"taskType": "",
+		"taskStatus": "",
+		"productId": 0,
+		"productName": "",
+		"productType": "",
+		"productStatus": "",
+		"screenMeshId": 0,
+		"screenMeshName": "",
+		"productionDate": "",
+		"createdAt": "",
+		"remark": ""
+	}
+}
+```
+
+
+## 托盘码二维码
+
+
+**接口地址**:`/api/pallet-codes/{code}/qrcode`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>生成托盘码对应的二维码图片(PNG)</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|code||path|true|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK||
+
+
+**响应参数**:
+
+
+暂无
+
+
+**响应示例**:
+```javascript
+
+```
+
+
+## 托盘库存位置
+
+
+**接口地址**:`/api/pallet-codes/{code}/inventory`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>根据托盘码查询当前库存位置</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|code||path|true|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultPalletInventoryVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||PalletInventoryVO|PalletInventoryVO|
+|&emsp;&emsp;warehouseName||string||
+|&emsp;&emsp;side||string||
+|&emsp;&emsp;rowNumber||integer(int32)||
+|&emsp;&emsp;layer||integer(int32)||
+|&emsp;&emsp;quantity||integer(int32)||
+|&emsp;&emsp;unit||boolean||
+|&emsp;&emsp;inStockTime||string(date-time)||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"warehouseName": "",
+		"side": "",
+		"rowNumber": 0,
+		"layer": 0,
+		"quantity": 0,
+		"unit": true,
+		"inStockTime": ""
+	}
+}
+```
+
+
+## 托盘流转明细
+
+
+**接口地址**:`/api/pallet-codes/{code}/flows`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>按托盘码和循环号查询流转时间线</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|code||path|true|string||
+|cycleNo||query|true|integer(int32)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultListPalletFlowDetailVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||array|PalletFlowDetailVO|
+|&emsp;&emsp;id||integer(int64)||
+|&emsp;&emsp;cycleNo||integer(int32)||
+|&emsp;&emsp;taskId||integer(int32)||
+|&emsp;&emsp;operationType||string||
+|&emsp;&emsp;operationName||string||
+|&emsp;&emsp;operationTime||string(date-time)||
+|&emsp;&emsp;operatorId||integer(int32)||
+|&emsp;&emsp;operatorName||string||
+|&emsp;&emsp;productId||integer(int32)||
+|&emsp;&emsp;productName||string||
+|&emsp;&emsp;productStatus||string||
+|&emsp;&emsp;assayId||integer(int32)||
+|&emsp;&emsp;fromWarehouseId||integer(int32)||
+|&emsp;&emsp;fromWarehouseName||string||
+|&emsp;&emsp;fromSide||string||
+|&emsp;&emsp;fromRowNumber||integer(int32)||
+|&emsp;&emsp;fromLayer||integer(int32)||
+|&emsp;&emsp;toWarehouseId||integer(int32)||
+|&emsp;&emsp;toWarehouseName||string||
+|&emsp;&emsp;toSide||string||
+|&emsp;&emsp;toRowNumber||integer(int32)||
+|&emsp;&emsp;toLayer||integer(int32)||
+|&emsp;&emsp;remark||string||
+|&emsp;&emsp;extData||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": [
+		{
+			"id": 0,
+			"cycleNo": 0,
+			"taskId": 0,
+			"operationType": "",
+			"operationName": "",
+			"operationTime": "",
+			"operatorId": 0,
+			"operatorName": "",
+			"productId": 0,
+			"productName": "",
+			"productStatus": "",
+			"assayId": 0,
+			"fromWarehouseId": 0,
+			"fromWarehouseName": "",
+			"fromSide": "",
+			"fromRowNumber": 0,
+			"fromLayer": 0,
+			"toWarehouseId": 0,
+			"toWarehouseName": "",
+			"toSide": "",
+			"toRowNumber": 0,
+			"toLayer": 0,
+			"remark": "",
+			"extData": ""
+		}
+	]
+}
+```
+
+
+## 托盘流转轮次分页
+
+
+**接口地址**:`/api/pallet-codes/{code}/flows/cycles`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>按托盘码分页查询历史循环轮次摘要</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|code||path|true|string||
+|pageNum||query|false|integer(int64)||
+|pageSize||query|false|integer(int64)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultPageResultPalletFlowCyclePageVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||PageResultPalletFlowCyclePageVO|PageResultPalletFlowCyclePageVO|
+|&emsp;&emsp;total||integer(int64)||
+|&emsp;&emsp;records||array|PalletFlowCyclePageVO|
+|&emsp;&emsp;&emsp;&emsp;cycleNo||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productName||string||
+|&emsp;&emsp;&emsp;&emsp;productStatus||string||
+|&emsp;&emsp;&emsp;&emsp;startTime||string(date-time)||
+|&emsp;&emsp;&emsp;&emsp;endTime||string(date-time)||
+|&emsp;&emsp;&emsp;&emsp;flowCount||integer(int64)||
+|&emsp;&emsp;&emsp;&emsp;isCurrentCycle||boolean||
+|&emsp;&emsp;&emsp;&emsp;isEnded||boolean||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"total": 0,
+		"records": [
+			{
+				"cycleNo": 0,
+				"productId": 0,
+				"productName": "",
+				"productStatus": "",
+				"startTime": "",
+				"endTime": "",
+				"flowCount": 0,
+				"isCurrentCycle": true,
+				"isEnded": true
+			}
+		]
+	}
+}
+```
+
+
+## 托盘化验数据
+
+
+**接口地址**:`/api/pallet-codes/{code}/assay`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>根据托盘码查询化验数据</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|code||path|true|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultPalletAssayVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||PalletAssayVO|PalletAssayVO|
+|&emsp;&emsp;productName||string||
+|&emsp;&emsp;sampleDate||string(date)||
+|&emsp;&emsp;colorValue||number||
+|&emsp;&emsp;reducingSugar||number||
+|&emsp;&emsp;dryWeight||number||
+|&emsp;&emsp;conductivityAsh||number||
+|&emsp;&emsp;sucrose||number||
+|&emsp;&emsp;insolubleImpurity||number||
+|&emsp;&emsp;phValue||number||
+|&emsp;&emsp;testerName||string||
+|&emsp;&emsp;isQualified||string||
+|&emsp;&emsp;qualifiedStandards||string||
+|&emsp;&emsp;createdAt||string(date-time)||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"productName": "",
+		"sampleDate": "",
+		"colorValue": 0,
+		"reducingSugar": 0,
+		"dryWeight": 0,
+		"conductivityAsh": 0,
+		"sucrose": 0,
+		"insolubleImpurity": 0,
+		"phValue": 0,
+		"testerName": "",
+		"isQualified": "",
+		"qualifiedStandards": "",
+		"createdAt": ""
+	}
+}
+```
+
+
+## 解析托盘码
+
+
+**接口地址**:`/api/pallet-codes/parse`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>小程序扫码后解析托盘码并返回基础信息</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|code||query|true|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultPalletCodeInfoVO|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||PalletCodeInfoVO|PalletCodeInfoVO|
+|&emsp;&emsp;id||integer(int32)||
+|&emsp;&emsp;code||string||
+|&emsp;&emsp;status||string||
+|&emsp;&emsp;productName||string||
+|&emsp;&emsp;productStatus||string||
+|&emsp;&emsp;productionDate||string(date)||
+|&emsp;&emsp;screenMeshName||string||
+|&emsp;&emsp;assayId||integer(int32)||
+|&emsp;&emsp;createdAt||string(date-time)||
+|&emsp;&emsp;createdBy||string||
+|&emsp;&emsp;updatedAt||string(date-time)||
+|&emsp;&emsp;updatedBy||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"id": 0,
+		"code": "",
+		"status": "",
+		"productName": "",
+		"productStatus": "",
+		"productionDate": "",
+		"screenMeshName": "",
+		"assayId": 0,
+		"createdAt": "",
+		"createdBy": "",
+		"updatedAt": "",
+		"updatedBy": ""
+	}
+}
+```
+
+
 # 半成品记录管理
 
 
@@ -4614,7 +6564,7 @@
 |&emsp;&emsp;quantity|数量（板）||true|integer(int32)||
 |&emsp;&emsp;unit|单位0板1件（板/件）||true|string||
 |&emsp;&emsp;side|库位左/右列，默认为左||false|string||
-|&emsp;&emsp;screenMeshId|筛网规格ID||true|integer(int32)||
+|&emsp;&emsp;screenMeshId|筛网规格ID||false|integer(int32)||
 |&emsp;&emsp;returnInStockFlag|标记是否退货入库：0不是1是||false|string||
 
 
@@ -4942,7 +6892,7 @@
 |&emsp;&emsp;quantity|数量（板）||true|integer(int32)||
 |&emsp;&emsp;unit|单位0板1件（板/件）||true|string||
 |&emsp;&emsp;side|库位左/右列，默认为左||false|string||
-|&emsp;&emsp;screenMeshId|筛网规格ID||true|integer(int32)||
+|&emsp;&emsp;screenMeshId|筛网规格ID||false|integer(int32)||
 |&emsp;&emsp;returnInStockFlag|标记是否退货入库：0不是1是||false|string||
 
 
@@ -5473,5 +7423,590 @@
 	"code": 0,
 	"msg": "",
 	"data": ""
+}
+```
+
+
+# AI解析自动入库
+
+
+## 自动入库确认
+
+
+**接口地址**:`/api/auto-inbound/{batchId}/confirm`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "confirmedTaskIds": [],
+  "operator": {
+    "id": 0,
+    "name": "",
+    "openid": "",
+    "roleCode": "",
+    "employeeId": "",
+    "createdAt": "",
+    "bindStatus": "",
+    "bindMethod": "",
+    "loginType": "",
+    "enabled": true,
+    "password": "",
+    "username": "",
+    "authorities": [
+      {
+        "authority": ""
+      }
+    ],
+    "accountNonExpired": true,
+    "credentialsNonExpired": true,
+    "accountNonLocked": true
+  },
+  "updatedTasks": [
+    {
+      "taskId": "",
+      "batchId": "",
+      "type": "",
+      "riskLevel": "",
+      "riskReason": "",
+      "rawBlock": "",
+      "remark": "",
+      "entryDate": "",
+      "side": "",
+      "hasAssay": true,
+      "semiProductId": 0,
+      "semiProductName": "",
+      "semiWarehouseId": 0,
+      "semiWarehouseName": "",
+      "semiBoardQuantity": 0,
+      "semiPieceQuantity": 0,
+      "productId": 0,
+      "productName": "",
+      "warehouseId": 0,
+      "warehouseName": "",
+      "finishedBoardQuantity": 0,
+      "finishedPieceQuantity": 0,
+      "suggestedSemiRecords": [
+        {
+          "semiProductId": 1,
+          "semiPalletCodeId": 1,
+          "productName": "",
+          "productionDate": "2025-01-01",
+          "warehouseId": 1,
+          "fromPreparePool": false,
+          "cycleNo": 1,
+          "quantity": 20,
+          "unit": "30",
+          "useAssay": false
+        }
+      ],
+      "semiRecords": [
+        {
+          "semiProductId": 1,
+          "semiPalletCodeId": 1,
+          "productName": "",
+          "productionDate": "2025-01-01",
+          "warehouseId": 1,
+          "fromPreparePool": false,
+          "cycleNo": 1,
+          "quantity": 20,
+          "unit": "30",
+          "useAssay": false
+        }
+      ],
+      "canAutoStockIn": true
+    }
+  ]
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|batchId||path|true|string||
+|autoInboundConfirmRequest|AutoInboundConfirmRequest|body|true|AutoInboundConfirmRequest|AutoInboundConfirmRequest|
+|&emsp;&emsp;confirmedTaskIds|||false|array|string|
+|&emsp;&emsp;operator|||false|User|User|
+|&emsp;&emsp;&emsp;&emsp;id|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;name|||false|string||
+|&emsp;&emsp;&emsp;&emsp;openid|||false|string||
+|&emsp;&emsp;&emsp;&emsp;roleCode|||false|string||
+|&emsp;&emsp;&emsp;&emsp;employeeId|||false|string||
+|&emsp;&emsp;&emsp;&emsp;createdAt|||false|string(date-time)||
+|&emsp;&emsp;&emsp;&emsp;bindStatus|可用值:UNBOUND,WECHAT_BOUND,MANUAL_BOUND||false|string||
+|&emsp;&emsp;&emsp;&emsp;bindMethod|可用值:WECHAT,MANUAL||false|string||
+|&emsp;&emsp;&emsp;&emsp;loginType|||false|string||
+|&emsp;&emsp;&emsp;&emsp;enabled|||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;password|||false|string||
+|&emsp;&emsp;&emsp;&emsp;username|||false|string||
+|&emsp;&emsp;&emsp;&emsp;authorities|||false|array|GrantedAuthority|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;authority|||false|string||
+|&emsp;&emsp;&emsp;&emsp;accountNonExpired|||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;credentialsNonExpired|||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;accountNonLocked|||false|boolean||
+|&emsp;&emsp;updatedTasks|||false|array|AutoInboundTask|
+|&emsp;&emsp;&emsp;&emsp;taskId|||false|string||
+|&emsp;&emsp;&emsp;&emsp;batchId|||false|string||
+|&emsp;&emsp;&emsp;&emsp;type|可用值:SEMI_PRODUCT,FINISHED_PRODUCT||false|string||
+|&emsp;&emsp;&emsp;&emsp;riskLevel|可用值:GREEN,YELLOW,RED||false|string||
+|&emsp;&emsp;&emsp;&emsp;riskReason|||false|string||
+|&emsp;&emsp;&emsp;&emsp;rawBlock|||false|string||
+|&emsp;&emsp;&emsp;&emsp;remark|||false|string||
+|&emsp;&emsp;&emsp;&emsp;entryDate|||false|string(date)||
+|&emsp;&emsp;&emsp;&emsp;side|||false|string||
+|&emsp;&emsp;&emsp;&emsp;hasAssay|||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;semiProductId|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiProductName|||false|string||
+|&emsp;&emsp;&emsp;&emsp;semiWarehouseId|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiWarehouseName|||false|string||
+|&emsp;&emsp;&emsp;&emsp;semiBoardQuantity|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiPieceQuantity|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productId|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productName|||false|string||
+|&emsp;&emsp;&emsp;&emsp;warehouseId|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;warehouseName|||false|string||
+|&emsp;&emsp;&emsp;&emsp;finishedBoardQuantity|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;finishedPieceQuantity|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;suggestedSemiRecords|||false|array|SemiRecordDTO|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductId|半成品ID||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiPalletCodeId|半成品托盘ID||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productName|产品名称||false|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productionDate|生产日期||false|string(date)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;warehouseId|库位||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;fromPreparePool|是否来自备料池||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;cycleNo|半成品来源循环号||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品数量||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unit|单位0板1件（板/件）||true|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;useAssay|是否套用该半成品的化验数据||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;semiRecords|||false|array|SemiRecordDTO|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductId|半成品ID||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiPalletCodeId|半成品托盘ID||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productName|产品名称||false|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productionDate|生产日期||false|string(date)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;warehouseId|库位||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;fromPreparePool|是否来自备料池||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;cycleNo|半成品来源循环号||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品数量||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unit|单位0板1件（板/件）||true|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;useAssay|是否套用该半成品的化验数据||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;canAutoStockIn|||false|boolean||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultVoid|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||object||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {}
+}
+```
+
+
+## 自动入库文本解析
+
+
+**接口地址**:`/api/auto-inbound/parse`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "rawText": "",
+  "entryDate": "",
+  "operator": {
+    "id": 0,
+    "name": "",
+    "openid": "",
+    "roleCode": "",
+    "employeeId": "",
+    "createdAt": "",
+    "bindStatus": "",
+    "bindMethod": "",
+    "loginType": "",
+    "enabled": true,
+    "password": "",
+    "username": "",
+    "authorities": [
+      {
+        "authority": ""
+      }
+    ],
+    "accountNonExpired": true,
+    "credentialsNonExpired": true,
+    "accountNonLocked": true
+  },
+  "parseType": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|autoInboundParseRequest|AutoInboundParseRequest|body|true|AutoInboundParseRequest|AutoInboundParseRequest|
+|&emsp;&emsp;rawText|||false|string||
+|&emsp;&emsp;entryDate|||false|string(date)||
+|&emsp;&emsp;operator|||false|User|User|
+|&emsp;&emsp;&emsp;&emsp;id|||false|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;name|||false|string||
+|&emsp;&emsp;&emsp;&emsp;openid|||false|string||
+|&emsp;&emsp;&emsp;&emsp;roleCode|||false|string||
+|&emsp;&emsp;&emsp;&emsp;employeeId|||false|string||
+|&emsp;&emsp;&emsp;&emsp;createdAt|||false|string(date-time)||
+|&emsp;&emsp;&emsp;&emsp;bindStatus|可用值:UNBOUND,WECHAT_BOUND,MANUAL_BOUND||false|string||
+|&emsp;&emsp;&emsp;&emsp;bindMethod|可用值:WECHAT,MANUAL||false|string||
+|&emsp;&emsp;&emsp;&emsp;loginType|||false|string||
+|&emsp;&emsp;&emsp;&emsp;enabled|||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;password|||false|string||
+|&emsp;&emsp;&emsp;&emsp;username|||false|string||
+|&emsp;&emsp;&emsp;&emsp;authorities|||false|array|GrantedAuthority|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;authority|||false|string||
+|&emsp;&emsp;&emsp;&emsp;accountNonExpired|||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;credentialsNonExpired|||false|boolean||
+|&emsp;&emsp;&emsp;&emsp;accountNonLocked|||false|boolean||
+|&emsp;&emsp;parseType|可用值:SEMI_PRODUCT,FINISHED_PRODUCT||false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultAutoInboundParseResponse|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||AutoInboundParseResponse|AutoInboundParseResponse|
+|&emsp;&emsp;batchId||string||
+|&emsp;&emsp;tasks||array|AutoInboundTask|
+|&emsp;&emsp;&emsp;&emsp;taskId||string||
+|&emsp;&emsp;&emsp;&emsp;batchId||string||
+|&emsp;&emsp;&emsp;&emsp;type|可用值:SEMI_PRODUCT,FINISHED_PRODUCT|string||
+|&emsp;&emsp;&emsp;&emsp;riskLevel|可用值:GREEN,YELLOW,RED|string||
+|&emsp;&emsp;&emsp;&emsp;riskReason||string||
+|&emsp;&emsp;&emsp;&emsp;rawBlock||string||
+|&emsp;&emsp;&emsp;&emsp;remark||string||
+|&emsp;&emsp;&emsp;&emsp;entryDate||string(date)||
+|&emsp;&emsp;&emsp;&emsp;side||string||
+|&emsp;&emsp;&emsp;&emsp;hasAssay||boolean||
+|&emsp;&emsp;&emsp;&emsp;semiProductId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiProductName||string||
+|&emsp;&emsp;&emsp;&emsp;semiWarehouseId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiWarehouseName||string||
+|&emsp;&emsp;&emsp;&emsp;semiBoardQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiPieceQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productName||string||
+|&emsp;&emsp;&emsp;&emsp;warehouseId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;warehouseName||string||
+|&emsp;&emsp;&emsp;&emsp;finishedBoardQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;finishedPieceQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;suggestedSemiRecords||array|SemiRecordDTO|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductId|半成品ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiPalletCodeId|半成品托盘ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productName|产品名称|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productionDate|生产日期|string(date)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;warehouseId|库位|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;fromPreparePool|是否来自备料池|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;cycleNo|半成品来源循环号|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品数量|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unit|单位0板1件（板/件）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;useAssay|是否套用该半成品的化验数据|boolean||
+|&emsp;&emsp;&emsp;&emsp;semiRecords||array|SemiRecordDTO|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductId|半成品ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiPalletCodeId|半成品托盘ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productName|产品名称|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productionDate|生产日期|string(date)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;warehouseId|库位|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;fromPreparePool|是否来自备料池|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;cycleNo|半成品来源循环号|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品数量|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unit|单位0板1件（板/件）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;useAssay|是否套用该半成品的化验数据|boolean||
+|&emsp;&emsp;&emsp;&emsp;canAutoStockIn||boolean||
+|&emsp;&emsp;globalRemarks||array|string|
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"batchId": "",
+		"tasks": [
+			{
+				"taskId": "",
+				"batchId": "",
+				"type": "",
+				"riskLevel": "",
+				"riskReason": "",
+				"rawBlock": "",
+				"remark": "",
+				"entryDate": "",
+				"side": "",
+				"hasAssay": true,
+				"semiProductId": 0,
+				"semiProductName": "",
+				"semiWarehouseId": 0,
+				"semiWarehouseName": "",
+				"semiBoardQuantity": 0,
+				"semiPieceQuantity": 0,
+				"productId": 0,
+				"productName": "",
+				"warehouseId": 0,
+				"warehouseName": "",
+				"finishedBoardQuantity": 0,
+				"finishedPieceQuantity": 0,
+				"suggestedSemiRecords": [
+					{
+						"semiProductId": 1,
+						"semiPalletCodeId": 1,
+						"productName": "",
+						"productionDate": "2025-01-01",
+						"warehouseId": 1,
+						"fromPreparePool": false,
+						"cycleNo": 1,
+						"quantity": 20,
+						"unit": "30",
+						"useAssay": false
+					}
+				],
+				"semiRecords": [
+					{
+						"semiProductId": 1,
+						"semiPalletCodeId": 1,
+						"productName": "",
+						"productionDate": "2025-01-01",
+						"warehouseId": 1,
+						"fromPreparePool": false,
+						"cycleNo": 1,
+						"quantity": 20,
+						"unit": "30",
+						"useAssay": false
+					}
+				],
+				"canAutoStockIn": true
+			}
+		],
+		"globalRemarks": []
+	}
+}
+```
+
+
+## 查询自动入库批次
+
+
+**接口地址**:`/api/auto-inbound/{batchId}`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|batchId||path|true|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ResultAutoInboundParseResponse|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|msg||string||
+|data||AutoInboundParseResponse|AutoInboundParseResponse|
+|&emsp;&emsp;batchId||string||
+|&emsp;&emsp;tasks||array|AutoInboundTask|
+|&emsp;&emsp;&emsp;&emsp;taskId||string||
+|&emsp;&emsp;&emsp;&emsp;batchId||string||
+|&emsp;&emsp;&emsp;&emsp;type|可用值:SEMI_PRODUCT,FINISHED_PRODUCT|string||
+|&emsp;&emsp;&emsp;&emsp;riskLevel|可用值:GREEN,YELLOW,RED|string||
+|&emsp;&emsp;&emsp;&emsp;riskReason||string||
+|&emsp;&emsp;&emsp;&emsp;rawBlock||string||
+|&emsp;&emsp;&emsp;&emsp;remark||string||
+|&emsp;&emsp;&emsp;&emsp;entryDate||string(date)||
+|&emsp;&emsp;&emsp;&emsp;side||string||
+|&emsp;&emsp;&emsp;&emsp;hasAssay||boolean||
+|&emsp;&emsp;&emsp;&emsp;semiProductId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiProductName||string||
+|&emsp;&emsp;&emsp;&emsp;semiWarehouseId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiWarehouseName||string||
+|&emsp;&emsp;&emsp;&emsp;semiBoardQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;semiPieceQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;productName||string||
+|&emsp;&emsp;&emsp;&emsp;warehouseId||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;warehouseName||string||
+|&emsp;&emsp;&emsp;&emsp;finishedBoardQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;finishedPieceQuantity||integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;suggestedSemiRecords||array|SemiRecordDTO|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductId|半成品ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiPalletCodeId|半成品托盘ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productName|产品名称|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productionDate|生产日期|string(date)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;warehouseId|库位|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;fromPreparePool|是否来自备料池|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;cycleNo|半成品来源循环号|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品数量|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unit|单位0板1件（板/件）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;useAssay|是否套用该半成品的化验数据|boolean||
+|&emsp;&emsp;&emsp;&emsp;semiRecords||array|SemiRecordDTO|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiProductId|半成品ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;semiPalletCodeId|半成品托盘ID|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productName|产品名称|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;productionDate|生产日期|string(date)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;warehouseId|库位|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;fromPreparePool|是否来自备料池|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;cycleNo|半成品来源循环号|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;quantity|使用的半成品数量|integer(int32)||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unit|单位0板1件（板/件）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;useAssay|是否套用该半成品的化验数据|boolean||
+|&emsp;&emsp;&emsp;&emsp;canAutoStockIn||boolean||
+|&emsp;&emsp;globalRemarks||array|string|
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"msg": "",
+	"data": {
+		"batchId": "",
+		"tasks": [
+			{
+				"taskId": "",
+				"batchId": "",
+				"type": "",
+				"riskLevel": "",
+				"riskReason": "",
+				"rawBlock": "",
+				"remark": "",
+				"entryDate": "",
+				"side": "",
+				"hasAssay": true,
+				"semiProductId": 0,
+				"semiProductName": "",
+				"semiWarehouseId": 0,
+				"semiWarehouseName": "",
+				"semiBoardQuantity": 0,
+				"semiPieceQuantity": 0,
+				"productId": 0,
+				"productName": "",
+				"warehouseId": 0,
+				"warehouseName": "",
+				"finishedBoardQuantity": 0,
+				"finishedPieceQuantity": 0,
+				"suggestedSemiRecords": [
+					{
+						"semiProductId": 1,
+						"semiPalletCodeId": 1,
+						"productName": "",
+						"productionDate": "2025-01-01",
+						"warehouseId": 1,
+						"fromPreparePool": false,
+						"cycleNo": 1,
+						"quantity": 20,
+						"unit": "30",
+						"useAssay": false
+					}
+				],
+				"semiRecords": [
+					{
+						"semiProductId": 1,
+						"semiPalletCodeId": 1,
+						"productName": "",
+						"productionDate": "2025-01-01",
+						"warehouseId": 1,
+						"fromPreparePool": false,
+						"cycleNo": 1,
+						"quantity": 20,
+						"unit": "30",
+						"useAssay": false
+					}
+				],
+				"canAutoStockIn": true
+			}
+		],
+		"globalRemarks": []
+	}
 }
 ```

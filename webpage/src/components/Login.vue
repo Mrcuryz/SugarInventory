@@ -192,7 +192,7 @@ const handleSubmit = async () => {
   color: #666;
   font-size: 12px;
 
-  a {
+  :is(a) {
     color: inherit;
     text-decoration: none;
 

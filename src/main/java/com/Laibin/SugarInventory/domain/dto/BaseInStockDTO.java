@@ -38,6 +38,9 @@ public class BaseInStockDTO {
     @Schema(description = "入库ID", hidden = true)
     private Integer inStockId;
 
+    @Schema(description = "托盘码ID", hidden = true)
+    private Integer palletCodeId;
+
     @Schema(description = "标记是否退货入库：0不是1是")
     private String returnInStockFlag = "0";
 

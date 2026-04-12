@@ -39,6 +39,9 @@ import router from '@/router'
 //添加响应拦截器
 instance.interceptors.response.use(
     result => {
+        if (result.config.responseType === 'blob') {
+            return result;
+        }
         //判断业务状态码
         if (result.data.code === 200) {
             return result.data;
