@@ -27,38 +27,6 @@
       </div>
     </el-card>
 
-    <el-card class="search-card">
-      <el-form :model="searchWarehouseForm" inline>
-        <el-form-item label="产品名称">
-          <el-input v-model="searchWarehouseForm.productName" placeholder="请输入产品名称" clearable style="width: 200px"/>
-        </el-form-item>
-        <el-form-item label="标准名称">
-          <el-select v-model="searchWarehouseForm.standardNames" placeholder="请选择" clearable style="width: 200px">
-            <el-option v-for="item in standards" :key="item.standardName" :label="item.label" :value="item.standardName"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="筛网名称" prop="screenMeshId">
-          <el-select v-model="searchWarehouseForm.screenMeshId" placeholder="请选择" clearable style="width: 200px">
-            <el-option v-for="item in meshList" :key="item.id" :label="item.meshName" :value="item.id"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="时间范围">
-          <el-date-picker
-              v-model="searchWarehouseForm.dateRange"
-              type="daterange"
-              range-separator="至"
-              start-placeholder="开始日期"
-              end-placeholder="结束日期"
-              style="width: 320px"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询库位</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
     <el-card class="table-card" v-loading="loadingMap">
       <div class="table-toolbar">
         <div>
