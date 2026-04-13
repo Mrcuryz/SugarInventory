@@ -466,7 +466,7 @@ const quickEntries = [
 //查询仓库信息
 let searchWarehouseForm = ref({
   productName: '',
-  standardNames: [],
+  standardNames: '',
   screenMeshId: '',
   dateRange: [],
 })
@@ -481,17 +481,17 @@ const handleSearch = async () => {
   if (searchWarehouseForm.value.productName) {
     params.productName = searchWarehouseForm.value.productName
   }
-  if (searchWarehouseForm.value.standardNames.length > 0) {
+  if (searchWarehouseForm.value.standardNames) {
     params.standardNames = searchWarehouseForm.value.standardNames
   }
   if (searchWarehouseForm.value.screenMeshId) {
     params.screenMeshId = searchWarehouseForm.value.screenMeshId
   }
   if (searchWarehouseForm.value.dateRange.length === 2) {
-    params.startTime = searchWarehouseForm.value.dateRange[0]
-    params.endTime = searchWarehouseForm.value.dateRange[1]
+    params.startDate = searchWarehouseForm.value.dateRange[0]
+    params.endDate = searchWarehouseForm.value.dateRange[1]
   }
-  if (searchWarehouseForm.value.productName === '' && searchWarehouseForm.value.standardNames.length === 0 && searchWarehouseForm.value.screenMeshId === '' && searchWarehouseForm.value.dateRange.length === 0) {
+  if (searchWarehouseForm.value.productName === '' && !searchWarehouseForm.value.standardNames && searchWarehouseForm.value.screenMeshId === '' && searchWarehouseForm.value.dateRange.length === 0) {
     ElMessage.error('请至少输入一个查询条件')
     return
   }
@@ -518,7 +518,7 @@ const handleSearch = async () => {
 const handleReset = () => {
   searchWarehouseForm.value = {
     productName: '',
-    standardNames: [],
+    standardNames: '',
     screenMeshId: '',
     dateRange: [],
   }

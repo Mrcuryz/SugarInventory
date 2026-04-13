@@ -20,6 +20,10 @@ export const getWarehouseById = (id, params) => {
     return request.post('/inventory/qualified-inventory/' + id, params)
 }
 
+export const getWarehouseInventoryPage = (id, params) => {
+    return request.post('/inventory/qualified-inventory/' + id + '/page', params)
+}
+
 //查询产品库存
 export const getProductStock = (params) => {
     return request.get('/inventory/stock', {params: params})

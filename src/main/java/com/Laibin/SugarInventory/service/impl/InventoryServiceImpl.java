@@ -68,6 +68,16 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     @Override
+    public PageResult<OutProductVO> pageInventoryDetails(Integer warehouseId, OutProductQueryDTO queryDTO) {
+        int page = queryDTO.getPage() == null || queryDTO.getPage() < 1 ? 1 : queryDTO.getPage();
+        int size = queryDTO.getSize() == null || queryDTO.getSize() < 1 ? 5 : queryDTO.getSize();
+        int offset = (page - 1) * size;
+        Long total = inventoryMapper.countInventoryByWarehouse(warehouseId, queryDTO);
+        List<OutProductVO> records = inventoryMapper.pageInventoryByWarehouse(warehouseId, queryDTO, offset, size);
+        return new PageResult<>(total, records);
+    }
+
+    @Override
     public List<VWarehouseCapacity> getWarehouses() {
         return summaryMapper.selectCapacityList();
     }

@@ -42,6 +42,10 @@ export const createTransferTasks = (params) => request.post('/pallet-codes/trans
 
 export const confirmTransferTasks = (params) => request.post('/pallet-codes/transfer/confirm', params)
 
+export const createWarehouseMapTasks = (params) => request.post('/pallet-codes/warehouse-map/tasks/create', params)
+
+export const createWarehouseMapSlotInbound = (params) => request.post('/pallet-codes/warehouse-map/slot/inbound', params)
+
 export const pagePalletFlowCycles = (code, params) => {
   return request.get(`/pallet-codes/${encodeURIComponent(code)}/flows/cycles`, {params})
 }

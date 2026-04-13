@@ -3,12 +3,18 @@ package com.Laibin.SugarInventory.domain.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 @Schema(description = "符合条件的产品VO")
 public class OutProductVO {
+    @Schema(description = "库存ID")
+    private Integer inventoryId;
+
+    @Schema(description = "产品ID")
+    private Integer productId;
+
     @Schema(description = "产品名称")
     private String productName;
 
@@ -20,6 +26,9 @@ public class OutProductVO {
 
     @Schema(description = "产品类型")
     private String productType;
+
+    @Schema(description = "产品状态")
+    private String productStatus;
 
     @Schema(description = "标准名称")
     private String standardNames;
@@ -35,4 +44,16 @@ public class OutProductVO {
 
     @Schema(description = "层数")
     private Integer layer;
+
+    @Schema(description = "库存板数")
+    private Integer quantity;
+
+    @Schema(description = "库存件数")
+    private Integer pieces;
+
+    @Schema(description = "托盘码")
+    private String palletCode;
+
+    @Schema(description = "库存创建时间")
+    private LocalDateTime createdAt;
 }

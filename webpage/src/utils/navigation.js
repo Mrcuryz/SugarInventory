@@ -34,8 +34,8 @@ export const menuList = [
         title: '半成品',
         icon: Box,
         children: [
-          {path: '/pallet-task/semi/in', title: '半成品入库任务', icon: Tickets},
-          {path: '/pallet-task/semi/out', title: '半成品出库任务', icon: Promotion}
+          {path: '/pallet-task/semi/in', title: '入库任务', icon: Tickets},
+          {path: '/pallet-task/semi/out', title: '出库任务', icon: Promotion}
         ]
       },
       {

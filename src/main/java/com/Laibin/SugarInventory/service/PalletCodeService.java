@@ -17,6 +17,8 @@ import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.WarehouseMapBatchOperationDTO;
+import com.Laibin.SugarInventory.domain.dto.WarehouseMapSlotInboundDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.PalletAssayVO;
@@ -28,6 +30,7 @@ import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
 import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
+import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -98,4 +101,8 @@ public interface PalletCodeService extends IService<PalletCode> {
     void createTransferTasks(CreateTransferTaskDTO dto, Integer operatorId);
 
     void confirmTransferTasks(ConfirmTransferBatchDTO dto, Integer operatorId);
+
+    WarehouseMapTaskCreateResultVO createWarehouseMapTasks(WarehouseMapBatchOperationDTO dto, Integer operatorId);
+
+    InVO createWarehouseMapSlotInbound(WarehouseMapSlotInboundDTO dto, Integer operatorId);
 }

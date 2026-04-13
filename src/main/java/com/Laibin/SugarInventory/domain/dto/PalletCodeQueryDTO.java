@@ -7,6 +7,7 @@ import java.time.LocalDate;
 @Data
 public class PalletCodeQueryDTO {
     private String code;
+    private String status;
     private String productName;
     private String productType;
     private String productStatus;

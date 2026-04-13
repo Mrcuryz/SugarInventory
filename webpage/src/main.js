@@ -10,6 +10,7 @@ import {createPinia} from 'pinia'
 import {createPersistedState} from 'pinia-persistedstate-plugin'
 import {createI18n} from 'vue-i18n';
 import zhCN from './api/translation/zh-CN';
+import {setupTableOverflowTitle} from '@/utils/tableOverflowTitle'
 
 const i18n = createI18n({
     locale: 'zh-CN',
@@ -27,4 +28,5 @@ app.use(pinia)
 app.use(router)
 app.use(ElementPlus, {locale});
 app.mount('#app');
+setupTableOverflowTitle()
 

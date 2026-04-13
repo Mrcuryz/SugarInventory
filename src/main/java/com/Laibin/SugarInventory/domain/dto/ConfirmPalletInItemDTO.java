@@ -23,6 +23,12 @@ public class ConfirmPalletInItemDTO {
     @Schema(description = "优先存放侧，左/右，默认左")
     private String side = "左";
 
+    @Schema(description = "指定排号；为空时按现有规则自动分配")
+    private Integer rowNumber;
+
+    @Schema(description = "指定层数；为空时按现有规则自动分配")
+    private Integer layer;
+
     @Schema(description = "本次入库数量（板/件），不传默认1")
     private Integer quantity = 1;
 

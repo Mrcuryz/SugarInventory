@@ -20,6 +20,8 @@ import com.Laibin.SugarInventory.domain.dto.CreateSemiOutTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.WarehouseMapBatchOperationDTO;
+import com.Laibin.SugarInventory.domain.dto.WarehouseMapSlotInboundDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
 import com.Laibin.SugarInventory.domain.vo.PalletCodeInfoVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodePageVO;
@@ -31,6 +33,7 @@ import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
 import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.InVO;
+import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.service.PalletCodeService;
 import com.Laibin.SugarInventory.util.QrCodeUtils;
@@ -341,6 +344,30 @@ public class PalletCodeController {
         try {
             palletCodeService.confirmTransferTasks(dto, loginUser.getUser().getId());
             return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "仓库平面图批量创建任务", description = "按库位、侧别和前N板创建出库/调拨任务")
+    @PostMapping("/warehouse-map/tasks/create")
+    public Result<WarehouseMapTaskCreateResultVO> createWarehouseMapTasks(@RequestBody @Valid WarehouseMapBatchOperationDTO dto,
+                                                                          @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            WarehouseMapTaskCreateResultVO result = palletCodeService.createWarehouseMapTasks(dto, loginUser.getUser().getId());
+            return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "仓库平面图单板入库", description = "创建入库任务并直接确认到指定库位格子")
+    @PostMapping("/warehouse-map/slot/inbound")
+    public Result<InVO> createWarehouseMapSlotInbound(@RequestBody @Valid WarehouseMapSlotInboundDTO dto,
+                                                      @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            InVO result = palletCodeService.createWarehouseMapSlotInbound(dto, loginUser.getUser().getId());
+            return Result.success(result);
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
         }

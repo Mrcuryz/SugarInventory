@@ -102,4 +102,11 @@ public class InventoryController {
                                                           @RequestBody OutProductQueryDTO queryDTO) {
         return Result.success(inventoryService.getInventoryDetails(warehouseId, queryDTO));
     }
+
+    @Operation(summary = "库位库存明细分页查询", description = "根据库位ID和条件分页查询库位中的库存明细")
+    @PostMapping("/qualified-inventory/{warehouseId}/page")
+    public Result<PageResult<OutProductVO>> pageInventoryDetails(@PathVariable Integer warehouseId,
+                                                                 @RequestBody OutProductQueryDTO queryDTO) {
+        return Result.success(inventoryService.pageInventoryDetails(warehouseId, queryDTO));
+    }
 }

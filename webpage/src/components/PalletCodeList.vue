@@ -5,6 +5,11 @@
         <el-form-item label="托盘码">
           <el-input v-model="searchForm.code" clearable placeholder="请输入托盘码" style="width: 180px"/>
         </el-form-item>
+        <el-form-item label="当前状态">
+          <el-select v-model="searchForm.status" clearable placeholder="请选择" style="width: 150px">
+            <el-option v-for="item in palletStatusOptions" :key="item.value" :label="item.label" :value="item.value"/>
+          </el-select>
+        </el-form-item>
         <el-form-item label="产品名称">
           <el-input v-model="searchForm.productName" clearable placeholder="请输入产品名称" style="width: 180px"/>
         </el-form-item>
@@ -52,7 +57,7 @@
           @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="45"/>
-        <el-table-column prop="code" label="托盘码" width="130" fixed="left"/>
+        <el-table-column prop="code" label="托盘码" width="130" fixed="left" show-overflow-tooltip/>
         <el-table-column prop="status" label="托盘状态" width="100">
           <template #default="{ row }">
             <el-tag :type="getDictType(PALLET_STATUS_MAP, row.status)">
@@ -60,16 +65,24 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="productName" label="产品名称" min-width="140"/>
-        <el-table-column prop="productType" label="产品类型" width="90"/>
-        <el-table-column prop="productStatus" label="产品状态" width="100"/>
-        <el-table-column prop="productionDate" label="生产日期" width="100"/>
-        <el-table-column prop="screenMeshName" label="筛网" width="90"/>
-        <el-table-column prop="createdAt" label="创建时间" width="170">
-          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        <el-table-column prop="productName" label="产品名称" min-width="140" show-overflow-tooltip/>
+        <el-table-column prop="productType" label="产品类型" width="90" show-overflow-tooltip/>
+        <el-table-column prop="productStatus" label="产品状态" width="100" show-overflow-tooltip/>
+        <el-table-column prop="productionDate" label="生产日期" width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="no-ellipsis-cell" :title="row.productionDate || '-'">{{ row.productionDate || '-' }}</span>
+          </template>
         </el-table-column>
-        <el-table-column prop="updatedAt" label="更新时间" width="170">
-          <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
+        <el-table-column prop="screenMeshName" label="筛网" width="100" show-overflow-tooltip/>
+        <el-table-column prop="createdAt" label="创建时间" width="170" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span :title="formatDateTime(row.createdAt)">{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="updatedAt" label="更新时间" width="170" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span :title="formatDateTime(row.updatedAt)">{{ formatDateTime(row.updatedAt) }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="410" fixed="right">
           <template #default="{ row }">
@@ -185,7 +198,7 @@
               <span>轮次</span>
               <span>产品</span>
               <span>状态</span>
-              <span>flow</span>
+              <span>操作数</span>
             </div>
             <button
                 v-for="row in cycleList"
@@ -195,7 +208,7 @@
                 type="button"
                 @click="selectCycle(row)"
             >
-              <span class="cycle-no">{{ row.cycleNo }}{{ row.isCurrentCycle ? '*' : '' }}</span>
+              <span class="cycle-no">{{ displayCycleNo(row.cycleNo) }}{{ row.isCurrentCycle ? '*' : '' }}</span>
               <span class="cycle-product" :title="row.productName || '-'">{{ row.productName || '-' }}</span>
               <span class="cycle-status">{{ row.productStatus || '-' }}</span>
               <span class="cycle-count">{{ row.flowCount ?? 0 }}</span>
@@ -216,8 +229,8 @@
         </div>
         <div class="flow-panel">
           <div class="panel-title">
-            第 {{ selectedCycle?.cycleNo ?? '-' }} 轮明细
-            <el-button type="danger" size="small" :disabled="!selectedFlowIds.length" @click="handleDeleteFlows">批量删除历史flow</el-button>
+            第 {{ displayCycleNo(selectedCycle?.cycleNo) }} 轮明细
+            <el-button type="danger" size="small" :disabled="!selectedFlowIds.length" @click="handleDeleteFlows">批量删除历史记录</el-button>
           </div>
           <el-table
               :data="flowList"
@@ -262,7 +275,8 @@
 </template>
 
 <script setup>
-import {computed, onBeforeUnmount, onMounted, ref} from 'vue'
+import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {useRoute} from 'vue-router'
 import dayjs from 'dayjs'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {getProductList} from '@/api/product'
@@ -289,8 +303,10 @@ import {
   getDictType
 } from '@/utils/palletCodeDict'
 
+const route = useRoute()
 const searchForm = ref({
   code: '',
+  status: '',
   productName: '',
   productType: '',
   productStatus: '',
@@ -305,6 +321,10 @@ const total = ref(0)
 
 const productList = ref([])
 const productOptions = computed(() => buildProductCascaderOptions(productList.value))
+const palletStatusOptions = Object.entries(PALLET_STATUS_MAP).map(([value, item]) => ({
+  value,
+  label: item.label
+}))
 const currentCode = ref('')
 
 const generateDialogVisible = ref(false)
@@ -384,6 +404,7 @@ const handleSearch = async () => {
 const handleReset = () => {
   searchForm.value = {
     code: '',
+    status: '',
     productName: '',
     productType: '',
     productStatus: '',
@@ -568,6 +589,13 @@ const handleFlowSelectionChange = (rows) => {
   selectedFlowIds.value = rows.map(row => row.id)
 }
 
+const displayCycleNo = (cycleNo) => {
+  if (cycleNo == null) {
+    return '-'
+  }
+  return Number(cycleNo) + 1
+}
+
 const canSelectFlow = (row) => {
   if (selectedCycle.value?.isCurrentCycle) {
     return false
@@ -615,8 +643,18 @@ const loadProducts = async () => {
 }
 
 onMounted(async () => {
+  if (route.query.code) {
+    searchForm.value.code = Array.isArray(route.query.code) ? route.query.code[0] : route.query.code
+  }
   await loadProducts()
   await handleSearch()
+})
+
+watch(() => route.query.code, (code) => {
+  if (!code) return
+  searchForm.value.code = Array.isArray(code) ? code[0] : code
+  currentPage.value = 1
+  handleSearch()
 })
 
 onBeforeUnmount(() => {
@@ -657,6 +695,11 @@ onBeforeUnmount(() => {
 
 .code-tag {
   margin-right: 4px;
+}
+
+.no-ellipsis-cell {
+  display: inline-block;
+  min-width: max-content;
 }
 
 .qr-wrapper {

@@ -153,6 +153,9 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     @Override
     public InVO handlerInStock(BaseInStockDTO dto, Product product, Warehouse warehouse,
                                Assay assay, Boolean isPieces, Integer piecesNum) {
+        if (dto.getRowNumber() != null || dto.getLayer() != null) {
+            return handlerSpecifiedLocationInStock(dto, product, warehouse, assay, isPieces, piecesNum);
+        }
         int remainingQuantity = dto.getQuantity();
         int insertedCount = 0;
         int conflictCount = 0;
@@ -200,6 +203,48 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         // **7. 返回入库信息**
         InVO inVO = new InVO();
         inVO.setRemainingQuantity(remainingQuantity);
+        inVO.setMessage("入库成功！");
+        return inVO;
+    }
+
+    private InVO handlerSpecifiedLocationInStock(BaseInStockDTO dto, Product product, Warehouse warehouse,
+                                                Assay assay, Boolean isPieces, Integer piecesNum) {
+        if (dto.getRowNumber() == null || dto.getLayer() == null) {
+            throw new BusinessException("指定入库位置必须同时包含层数和排号");
+        }
+        if (!Integer.valueOf(1).equals(dto.getQuantity())) {
+            throw new BusinessException("指定位置入库仅支持单板操作");
+        }
+        if (Boolean.TRUE.equals(isPieces)) {
+            throw new BusinessException("指定位置入库暂不支持散件");
+        }
+        if (dto.getRowNumber() < 1 || dto.getRowNumber() > warehouse.getMaxRows()) {
+            throw new BusinessException("目标排号超出库位范围");
+        }
+        if (dto.getLayer() < 1 || dto.getLayer() > 2) {
+            throw new BusinessException("目标层数非法");
+        }
+        if (dto.getLayer() == 2 && !Boolean.TRUE.equals(product.getCanStack())) {
+            throw new BusinessException("当前产品不支持二层堆放");
+        }
+        List<Integer> usedRows = inventoryMapper.getUsedRowListForUpdate(warehouse.getId(), dto.getSide(), dto.getLayer());
+        if (usedRows.contains(dto.getRowNumber())) {
+            throw new BusinessException("目标位置已有库存，不能入库");
+        }
+
+        InventoryLocationCandidate candidate = new InventoryLocationCandidate(dto.getSide(), dto.getRowNumber(), dto.getLayer());
+        Inventory inventory = buildInventory(dto, product, warehouse, assay, false, 0, candidate);
+        try {
+            inventoryMapper.insert(inventory);
+        } catch (DuplicateKeyException e) {
+            throw new BusinessException("目标位置已被占用，请刷新后重试");
+        }
+        warehouseMapper.updateCurCapacity(warehouse.getId(), warehouse.getCurCapacity() + 1);
+        if (Boolean.TRUE.equals(product.getCanStack()) && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2) {
+            warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
+        }
+        InVO inVO = InVO.createDefault();
+        inVO.setRemainingQuantity(0);
         inVO.setMessage("入库成功！");
         return inVO;
     }

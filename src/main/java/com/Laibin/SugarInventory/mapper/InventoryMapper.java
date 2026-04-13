@@ -85,6 +85,16 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "ORDER BY layer DESC LIMIT 1")
     Inventory getLast(Integer warehouseId);
 
+    @Select("SELECT * FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
+            "AND side = #{side} " +
+            "AND pallet_code_id IS NOT NULL " +
+            "ORDER BY layer DESC, `row_number` DESC " +
+            "LIMIT #{limit}")
+    List<Inventory> selectFrontPalletsForOperation(@Param("warehouseId") Integer warehouseId,
+                                                   @Param("side") String side,
+                                                   @Param("limit") Integer limit);
+
     // **查询库存（按先进后出）**
     @Select("SELECT * FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
@@ -105,49 +115,152 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "INNER JOIN product p ON i.product_id = p.id " +
             "INNER JOIN assay a ON i.assay_id = a.id " +
             "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
+            "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
             "WHERE 1=1 " +
-            "<if test='query.productName != null'>" +
+            "<if test='query.palletCodeList != null and query.palletCodeList.size() > 0'>" +
+            "   AND pc.code IN " +
+            "   <foreach item='palletCode' collection='query.palletCodeList' open='(' separator=',' close=')'>" +
+            "       #{palletCode}" +
+            "   </foreach>" +
+            "</if> " +
+            "<if test='query.productName != null and query.productName != \"\"'>" +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
-            "<if test='query.standardNames != null'> " +
-            "   AND JSON_CONTAINS(a.qualified_standards, '\\\"${query.standardNames}\\\"') " +
+            "<if test='query.standardNames != null and query.standardNames != \"\"'> " +
+            "   AND JSON_CONTAINS(a.qualified_standards, JSON_QUOTE(#{query.standardNames})) " +
             "</if> " +
             "<if test='query.screenMeshId != null'>" +
             "   AND sm.id = #{query.screenMeshId} " +
             "</if> " +
             "<if test='query.startDate != null'>" +
-            "   AND a.sample_date &gt;= #{query.startDate} " +
+            "   AND i.entry_date &gt;= #{query.startDate} " +
             "</if> " +
             "<if test='query.endDate != null'>" +
-            "   AND a.sample_date &lt;= #{query.endDate} " +
+            "   AND i.entry_date &lt;= #{query.endDate} " +
             "</if> " +
             "ORDER BY w.warehouse_name" +
             "</script>")
     List<OutWarehouseVO> findWarehousesByCondition(@Param("query") OutProductQueryDTO query);
 
     @Select("<script>" +
-            "SELECT p.product_name, w.warehouse_name, a.sample_date, p.product_type, " +
-            "       JSON_UNQUOTE(JSON_EXTRACT(a.qualified_standards, '$')) AS standardNames, " +
-            "       sm.mesh_name, i.side, i.row_number, i.layer " +
+            "SELECT i.id AS inventoryId, i.product_id AS productId, p.product_name AS productName, " +
+            "       w.warehouse_name AS warehouseName, i.entry_date AS sampleDate, p.product_type AS productType, " +
+            "       i.product_status AS productStatus, JSON_UNQUOTE(JSON_EXTRACT(a.qualified_standards, '$')) AS standardNames, " +
+            "       sm.mesh_name AS meshName, i.side AS side, i.row_number AS rowNumber, i.layer AS layer, " +
+            "       i.quantity AS quantity, i.pieces AS pieces, pc.code AS palletCode, i.created_at AS createdAt " +
             "FROM inventory i " +
             "INNER JOIN warehouse w ON i.warehouse_id = w.id " +
             "INNER JOIN product p ON i.product_id = p.id " +
             "INNER JOIN assay a ON i.assay_id = a.id " +
             "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
+            "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
             "WHERE i.warehouse_id = #{warehouseId} " +
-            "<if test='query.productName != null'>" +
+            "<if test='query.palletCodeList != null and query.palletCodeList.size() > 0'>" +
+            "   AND pc.code IN " +
+            "   <foreach item='palletCode' collection='query.palletCodeList' open='(' separator=',' close=')'>" +
+            "       #{palletCode}" +
+            "   </foreach>" +
+            "</if> " +
+            "<if test='query.productName != null and query.productName != \"\"'>" +
             "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
             "</if> " +
-            "<if test='query.standardNames != null'> " +
-            "   AND JSON_CONTAINS(a.qualified_standards, '\\\"${query.standardNames}\\\"') " +
+            "<if test='query.standardNames != null and query.standardNames != \"\"'> " +
+            "   AND JSON_CONTAINS(a.qualified_standards, JSON_QUOTE(#{query.standardNames})) " +
             "</if>" +
             "<if test='query.screenMeshId != null'>" +
             "   AND sm.id = #{query.screenMeshId} " +
             "</if> " +
-            "ORDER BY a.sample_date DESC, w.warehouse_name, i.side, i.`row_number` ASC " +
+            "<if test='query.startDate != null'>" +
+            "   AND i.entry_date &gt;= #{query.startDate} " +
+            "</if> " +
+            "<if test='query.endDate != null'>" +
+            "   AND i.entry_date &lt;= #{query.endDate} " +
+            "</if> " +
+            "ORDER BY i.entry_date DESC, w.warehouse_name, i.side, i.`row_number` ASC " +
             "</script>")
     List<OutProductVO> findInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,
                                                 @Param("query") OutProductQueryDTO query);
+
+    @Select("<script>" +
+            "SELECT MIN(i.id) AS inventoryId, i.product_id AS productId, p.product_name AS productName, " +
+            "       w.warehouse_name AS warehouseName, i.entry_date AS sampleDate, p.product_type AS productType, " +
+            "       i.product_status AS productStatus, " +
+            "       GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(a.qualified_standards, '$')) ORDER BY a.id SEPARATOR '、') AS standardNames, " +
+            "       GROUP_CONCAT(DISTINCT sm.mesh_name ORDER BY sm.mesh_name SEPARATOR '、') AS meshName, " +
+            "       SUM(CASE WHEN COALESCE(i.pieces, 0) > 0 THEN 0 ELSE COALESCE(i.quantity, 0) END) AS quantity, " +
+            "       SUM(COALESCE(i.pieces, 0)) AS pieces, MAX(i.created_at) AS createdAt " +
+            "FROM inventory i " +
+            "INNER JOIN warehouse w ON i.warehouse_id = w.id " +
+            "INNER JOIN product p ON i.product_id = p.id " +
+            "INNER JOIN assay a ON i.assay_id = a.id " +
+            "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
+            "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
+            "WHERE i.warehouse_id = #{warehouseId} " +
+            "<if test='query.palletCodeList != null and query.palletCodeList.size() > 0'>" +
+            "   AND pc.code IN " +
+            "   <foreach item='palletCode' collection='query.palletCodeList' open='(' separator=',' close=')'>" +
+            "       #{palletCode}" +
+            "   </foreach>" +
+            "</if> " +
+            "<if test='query.productName != null and query.productName != \"\"'>" +
+            "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
+            "</if> " +
+            "<if test='query.standardNames != null and query.standardNames != \"\"'> " +
+            "   AND JSON_CONTAINS(a.qualified_standards, JSON_QUOTE(#{query.standardNames})) " +
+            "</if>" +
+            "<if test='query.screenMeshId != null'>" +
+            "   AND sm.id = #{query.screenMeshId} " +
+            "</if> " +
+            "<if test='query.startDate != null'>" +
+            "   AND i.entry_date &gt;= #{query.startDate} " +
+            "</if> " +
+            "<if test='query.endDate != null'>" +
+            "   AND i.entry_date &lt;= #{query.endDate} " +
+            "</if> " +
+            "GROUP BY i.product_id, p.product_name, w.warehouse_name, i.entry_date, p.product_type, i.product_status " +
+            "ORDER BY i.entry_date DESC, p.product_name ASC " +
+            "LIMIT #{offset}, #{size}" +
+            "</script>")
+    List<OutProductVO> pageInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,
+                                                @Param("query") OutProductQueryDTO query,
+                                                @Param("offset") int offset,
+                                                @Param("size") int size);
+
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM (" +
+            "SELECT i.product_id, i.entry_date " +
+            "FROM inventory i " +
+            "INNER JOIN product p ON i.product_id = p.id " +
+            "INNER JOIN assay a ON i.assay_id = a.id " +
+            "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
+            "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
+            "WHERE i.warehouse_id = #{warehouseId} " +
+            "<if test='query.palletCodeList != null and query.palletCodeList.size() > 0'>" +
+            "   AND pc.code IN " +
+            "   <foreach item='palletCode' collection='query.palletCodeList' open='(' separator=',' close=')'>" +
+            "       #{palletCode}" +
+            "   </foreach>" +
+            "</if> " +
+            "<if test='query.productName != null and query.productName != \"\"'>" +
+            "   AND p.product_name LIKE CONCAT('%', #{query.productName}, '%') " +
+            "</if> " +
+            "<if test='query.standardNames != null and query.standardNames != \"\"'> " +
+            "   AND JSON_CONTAINS(a.qualified_standards, JSON_QUOTE(#{query.standardNames})) " +
+            "</if>" +
+            "<if test='query.screenMeshId != null'>" +
+            "   AND sm.id = #{query.screenMeshId} " +
+            "</if> " +
+            "<if test='query.startDate != null'>" +
+            "   AND i.entry_date &gt;= #{query.startDate} " +
+            "</if> " +
+            "<if test='query.endDate != null'>" +
+            "   AND i.entry_date &lt;= #{query.endDate} " +
+            "</if> " +
+            "GROUP BY i.product_id, i.entry_date" +
+            ") grouped_inventory" +
+            "</script>")
+    Long countInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,
+                                   @Param("query") OutProductQueryDTO query);
 
 
     @Select("select * from inventory where warehouse_id = #{warehouseId} AND entry_date = #{entryDate}  AND product_id = #{productId}  AND pieces > 0 AND pieces < #{piecesPerPallet}")

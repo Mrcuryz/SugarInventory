@@ -19,6 +19,8 @@ public interface InventoryService {
 
     List<OutProductVO> getInventoryDetails(Integer warehouseId, OutProductQueryDTO queryDTO);
 
+    PageResult<OutProductVO> pageInventoryDetails(Integer warehouseId, OutProductQueryDTO queryDTO);
+
     List<VWarehouseCapacity> getWarehouses();
 
     PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size, String status);

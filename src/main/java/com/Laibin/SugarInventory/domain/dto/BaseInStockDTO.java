@@ -32,6 +32,12 @@ public class BaseInStockDTO {
     @Schema(description = "库位左/右列，默认为左", example = "左")
     private String side = "左";  // 默认左侧
 
+    @Schema(description = "指定排号；为空时按现有规则自动分配")
+    private Integer rowNumber;
+
+    @Schema(description = "指定层数；为空时按现有规则自动分配")
+    private Integer layer;
+
     @Schema(description = "筛网规格ID", example = "2")
     private Integer screenMeshId;
 
