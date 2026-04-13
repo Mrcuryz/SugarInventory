@@ -258,6 +258,7 @@
               <div class="slot-action-row">
                 <el-button size="small" @click="showAssay(selectedSlot.record)">查看化验</el-button>
                 <el-button size="small" type="primary" @click="submitSingleOut(selectedSlot.record)">出库</el-button>
+                <el-button v-if="isSemiProductSlot(selectedSlot.record)" size="small" type="success" @click="submitSinglePrepare(selectedSlot.record)">转入备料池</el-button>
                 <el-button size="small" type="warning" @click="prepareSingleTransfer(selectedSlot.record)">调拨</el-button>
               </div>
             </template>
@@ -266,7 +267,6 @@
               <div class="slot-detail-row"><span>当前状态</span><strong>空置</strong></div>
               <div class="slot-action-row">
                 <el-button size="small" type="primary" @click="openSlotInboundDialog(selectedSlot)">入库</el-button>
-                <el-button size="small" @click="openUnsupportedInbound('退货入库', selectedSlot)">退货入库</el-button>
               </div>
             </template>
           </div>
@@ -419,7 +419,7 @@
 <script setup>
 import {computed, onMounted, ref, watch} from 'vue'
 import {ElMessage} from 'element-plus'
-import {useRouter} from 'vue-router'
+import {useRoute, useRouter} from 'vue-router'
 import {getAllWarehouseCapacity, getMaxRowNum, getWarehouseById, getWarehouseInventoryPage, getWarehouseList} from '@/api/warehouseinfo'
 import {createWarehouseMapSlotInbound, createWarehouseMapTasks, getPalletAssay} from '@/api/palletCode'
 import {getStandard} from '@/api/standard'
@@ -429,6 +429,7 @@ import {formatDateTime} from '@/utils/dateTime'
 import {buildProductCascaderOptions, productCascaderProps} from '@/utils/productCascader'
 
 const router = useRouter()
+const route = useRoute()
 const viewBoxWidth = 1200
 const viewBoxHeight = 800
 const verticalGridLines = [150, 300, 450, 600, 750, 900, 1050]
@@ -622,7 +623,11 @@ const matchedPositionCount = computed(() => matchedPositionSet.value.size)
 const targetWarehouseOptions = computed(() => capacityList.value.filter(item => item.warehouseId !== selectedLocation.value?.id))
 const batchMaxQuantity = computed(() => detailAllPositions.value.filter(item => item.side === batchForm.value.side && item.palletCode).length)
 const batchInputMax = computed(() => Math.max(batchMaxQuantity.value, 1))
-const batchDialogTitle = computed(() => batchForm.value.operationType === 'TRANSFER' ? '调拨出库' : '新增出库')
+const batchDialogTitle = computed(() => {
+  if (batchForm.value.operationType === 'TRANSFER') return '调拨出库'
+  if (batchForm.value.operationType === 'PREPARE') return '转入备料池'
+  return '新增出库'
+})
 const taskResultItems = computed(() => taskResult.value?.items || [])
 
 const buildFilterParams = () => {
@@ -985,6 +990,39 @@ const submitSingleOut = async (record) => {
     batchSubmitting.value = false
   }
 }
+const submitSinglePrepare = async (record) => {
+  if (!record?.palletCode) {
+    ElMessage.warning('当前格子缺少托盘码')
+    return
+  }
+  if (!isSemiProductSlot(record)) {
+    ElMessage.warning('仅半成品托盘支持转入备料池')
+    return
+  }
+  batchSubmitting.value = true
+  try {
+    const res = await createWarehouseMapTasks({
+      operationType: 'PREPARE',
+      warehouseId: detailDialogLocation.value.id,
+      side: record.side,
+      rowNumber: record.rowNumber,
+      layer: record.layer,
+      quantity: 1,
+      codes: [record.palletCode],
+      remark: `格子级转入备料池：${formatInventoryPosition(record)}`
+    })
+    if (res.code === 200) {
+      taskResult.value = res.data
+      taskResultVisible.value = true
+    } else {
+      ElMessage.error(res.msg || '创建转入备料池任务失败')
+    }
+  } catch (error) {
+    ElMessage.error(error?.message || '创建转入备料池任务失败')
+  } finally {
+    batchSubmitting.value = false
+  }
+}
 const openSlotInboundDialog = (slot) => {
   if (!slot || slot.record) return
   slotInboundTarget.value = {...slot}
@@ -1043,6 +1081,7 @@ const prepareSingleTransfer = (record) => {
   batchForm.value.remark = `板级调拨：${formatInventoryPosition(record)}，托盘${record.palletCode || ''}`
   batchDialogVisible.value = true
 }
+const isSemiProductSlot = (record) => record?.productStatus === '半成品'
 const openUnsupportedInbound = (actionName, slot) => {
   const position = slot ? `，目标位置：${formatSlotPosition(slot)}` : ''
   ElMessage.warning(`${actionName}需要先扫码绑定托盘和产品信息${position}，当前页面仅预留入口，暂不直接创建空位入库任务`)
@@ -1070,12 +1109,27 @@ const showAssay = async (record) => {
   }
 }
 const buildResultText = (item) => {
-  const typeName = item.taskType === 'TRANSFER' ? '调拨任务' : '出库任务'
+  const typeName = item.taskType === 'TRANSFER' ? '调拨任务' : (item.taskType === 'PREPARE' ? '转入备料池任务' : '出库任务')
   return `创建了 ${item.count} 条${item.productStatus}${typeName}`
+}
+
+const selectWarehouseFromRoute = async () => {
+  const warehouseId = Number(route.query.warehouseId)
+  if (warehouseId) {
+    const target = mapLocations.value.find(item => item.id === warehouseId)
+    if (target) {
+      await handleSelectLocation(target)
+    }
+  }
 }
 
 onMounted(async () => {
   await Promise.all([fetchCapacity(), fetchOptions()])
+  await selectWarehouseFromRoute()
+})
+
+watch(() => route.query.warehouseId, () => {
+  selectWarehouseFromRoute()
 })
 </script>
 

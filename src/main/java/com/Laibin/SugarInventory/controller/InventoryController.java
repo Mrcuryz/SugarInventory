@@ -9,6 +9,7 @@ import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
+import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
 import com.Laibin.SugarInventory.service.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -63,12 +64,27 @@ public class InventoryController {
             @RequestBody(required = false) List<Integer> ids,
             @RequestParam("page") Integer page,
             @RequestParam("size") Integer size,
-            @RequestParam(value = "status", required = false) String status) {
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "sortField", required = false) String sortField,
+            @RequestParam(value = "sortOrder", required = false) String sortOrder,
+            @RequestParam(value = "createdStart", required = false) String createdStart,
+            @RequestParam(value = "createdEnd", required = false) String createdEnd,
+            @RequestParam(value = "updatedStart", required = false) String updatedStart,
+            @RequestParam(value = "updatedEnd", required = false) String updatedEnd) {
         try {
-            return Result.success(inventoryService.queryWarehouses(warehouseName, ids, page, size, status));
+            return Result.success(inventoryService.queryWarehouses(warehouseName, ids, page, size, status,
+                    sortField, sortOrder, createdStart, createdEnd, updatedStart, updatedEnd));
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }
+    }
+
+    @PreAuthorize("hasAuthority('record:query')")
+    @Operation(summary = "库位最近操作记录", description = "查询库位最近流转操作记录")
+    @GetMapping("/warehouses/{warehouseId}/recent-operations")
+    public Result<List<WarehouseRecentOperationVO>> listWarehouseRecentOperations(@PathVariable Integer warehouseId,
+                                                                                  @RequestParam(value = "limit", required = false) Integer limit) {
+        return Result.success(inventoryService.listWarehouseRecentOperations(warehouseId, limit));
     }
 
     @PreAuthorize("hasAuthority('record:query')")

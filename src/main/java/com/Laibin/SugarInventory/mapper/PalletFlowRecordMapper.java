@@ -3,6 +3,7 @@ package com.Laibin.SugarInventory.mapper;
 import com.Laibin.SugarInventory.domain.po.PalletFlowRecord;
 import com.Laibin.SugarInventory.domain.vo.PalletFlowCyclePageVO;
 import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
+import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
@@ -110,5 +111,30 @@ public interface PalletFlowRecordMapper extends BaseMapper<PalletFlowRecord> {
             "   AND fr.cycle_no <> pc.current_cycle_no"
     })
     int deleteExpiredCleanableFlows(@Param("cutoff") LocalDateTime cutoff);
+
+    @Select({
+            "SELECT",
+            " fr.operation_time AS operationTime,",
+            " fr.operation_type AS operationType,",
+            " fr.operation_name AS operationName,",
+            " u.name AS operatorName,",
+            " pc.code AS palletCode,",
+            " p.product_name AS productName,",
+            " fw.warehouse_name AS fromWarehouseName,",
+            " tw.warehouse_name AS toWarehouseName,",
+            " fr.remark AS remark",
+            " FROM pallet_flow_record fr",
+            " LEFT JOIN user u ON u.id = fr.operator_id",
+            " LEFT JOIN pallet_code pc ON pc.id = fr.pallet_code_id",
+            " LEFT JOIN product p ON p.id = fr.product_id",
+            " LEFT JOIN warehouse fw ON fw.id = fr.from_warehouse_id",
+            " LEFT JOIN warehouse tw ON tw.id = fr.to_warehouse_id",
+            " WHERE fr.from_warehouse_id = #{warehouseId}",
+            "    OR fr.to_warehouse_id = #{warehouseId}",
+            " ORDER BY fr.operation_time DESC, fr.id DESC",
+            " LIMIT #{limit}"
+    })
+    List<WarehouseRecentOperationVO> listRecentWarehouseOperations(@Param("warehouseId") Integer warehouseId,
+                                                                   @Param("limit") Integer limit);
 }
 

@@ -54,7 +54,15 @@ export const menuList = [
   {path: '/assay', title: '化验管理', icon: PieChart},
   {path: '/assayGroup', title: '验收标准', icon: Document},
   {path: '/standard', title: '化验标准管理', icon: Finished},
-  {path: '/stock', title: '出入库管理', icon: Switch},
+  {
+    path: '/stock',
+    title: '单据中心',
+    icon: Switch,
+    children: [
+      {path: '/stock/semi', title: '半成品单据', icon: Box},
+      {path: '/stock/finish', title: '成品单据', icon: Finished}
+    ]
+  },
   {path: '/employee', title: '员工管理', icon: User}
 ]
 

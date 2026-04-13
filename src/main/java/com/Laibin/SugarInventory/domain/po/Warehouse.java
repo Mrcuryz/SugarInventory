@@ -40,6 +40,8 @@ public class Warehouse extends BaseEntity implements Serializable {
 
     private LocalDateTime createdAt;
 
+    private LocalDateTime updatedAt;
+
     @Schema(description = "最大库存量（板）")
     @TableField(value = "max_capacity")
     private Integer maxCapacity;

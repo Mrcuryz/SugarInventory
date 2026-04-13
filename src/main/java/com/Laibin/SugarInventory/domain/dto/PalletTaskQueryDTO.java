@@ -11,7 +11,7 @@ public class PalletTaskQueryDTO {
     @Schema(description = "托盘码（精确匹配）")
     private String code;
 
-    @Schema(description = "任务类型：SEMI_IN / FINISH_IN / OUT，可选")
+    @Schema(description = "任务类型：SEMI_IN / FINISH_IN / IN / OUT / TRANSFER，可选；IN 表示聚合 SEMI_IN 和 FINISH_IN")
     private String taskType;
 
     @Schema(description = "任务业务场景：DIRECT_OUT / PREPARE_CONSUMED / FINISH_OUT，可选")

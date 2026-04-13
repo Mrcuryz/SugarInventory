@@ -10,6 +10,16 @@ export const getAllWarehouseCapacity = () => {
     return request.get('/inventory/warehouses')
 }
 
+//库位台账分页查询
+export const queryWarehouseLedger = (params) => {
+    return request.get('/inventory/query', {params: params})
+}
+
+//库位最近操作记录
+export const getWarehouseRecentOperations = (warehouseId, params) => {
+    return request.get('/inventory/warehouses/' + warehouseId + '/recent-operations', {params: params})
+}
+
 //获取符合条件的仓库列表
 export const getWarehouseList = (params) => {
     return request.post('/inventory/qualified-warehouses', params)

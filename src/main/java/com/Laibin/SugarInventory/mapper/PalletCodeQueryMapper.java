@@ -44,6 +44,9 @@ public interface PalletCodeQueryMapper {
             " <if test='q.productionDateEnd != null'>",
             "   AND pc.production_date &lt;= #{q.productionDateEnd}",
             " </if>",
+            " <if test='q.inventoryOnly != null and q.inventoryOnly'>",
+            "   AND EXISTS (SELECT 1 FROM inventory i WHERE i.pallet_code_id = pc.id)",
+            " </if>",
             " ORDER BY CASE pc.status",
             "   WHEN 'PENDING' THEN 1",
             "   WHEN 'INSTOCK' THEN 2",
@@ -84,6 +87,9 @@ public interface PalletCodeQueryMapper {
             " </if>",
             " <if test='q.productionDateEnd != null'>",
             "   AND pc.production_date &lt;= #{q.productionDateEnd}",
+            " </if>",
+            " <if test='q.inventoryOnly != null and q.inventoryOnly'>",
+            "   AND EXISTS (SELECT 1 FROM inventory i WHERE i.pallet_code_id = pc.id)",
             " </if>",
             "</script>"
     })

@@ -20,7 +20,7 @@ public class WarehouseMapTaskCreateResultVO {
         @Schema(description = "产品状态：半成品/成品")
         private String productStatus;
 
-        @Schema(description = "任务类型：OUT/TRANSFER")
+        @Schema(description = "任务类型：OUT/TRANSFER/PREPARE；PREPARE 表示半成品转入备料池任务")
         private String taskType;
 
         @Schema(description = "业务场景")

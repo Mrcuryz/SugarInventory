@@ -888,12 +888,12 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (quantity <= 0) {
             throw new BusinessException("操作数量必须大于0");
         }
-        if (!"OUT".equals(operationType) && !"TRANSFER".equals(operationType)) {
-            throw new BusinessException("当前仅支持平面图创建出库和调拨任务");
+        if (!"OUT".equals(operationType) && !"TRANSFER".equals(operationType) && !"PREPARE".equals(operationType)) {
+            throw new BusinessException("当前仅支持平面图创建出库、调拨和转入备料池任务");
         }
         Warehouse sourceWarehouse = requireTargetWarehouse(dto.getWarehouseId());
         List<Inventory> inventories = hasExplicitCodes
-                ? resolveInventoriesByCodesForWarehouse(dto.getCodes(), sourceWarehouse.getId(), side)
+                ? resolveInventoriesByCodesForWarehouse(dto.getCodes(), sourceWarehouse.getId(), side, dto.getRowNumber(), dto.getLayer())
                 : inventoryMapper.selectFrontPalletsForOperation(sourceWarehouse.getId(), side, quantity);
         if (inventories.size() < quantity) {
             throw new BusinessException("当前侧可操作托盘数量不足");
@@ -919,9 +919,12 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             if ("OUT".equals(operationType)) {
                 createWarehouseMapOutTask(palletCode, operatorId, now, remark, batchNo);
                 counts.merge(palletCode.getProductStatus() + "|OUT", 1, Integer::sum);
-            } else {
+            } else if ("TRANSFER".equals(operationType)) {
                 createWarehouseMapTransferTask(palletCode, operatorId, now, remark, batchNo, targetWarehouse, targetSide);
                 counts.merge(palletCode.getProductStatus() + "|TRANSFER", 1, Integer::sum);
+            } else {
+                createWarehouseMapPrepareTask(palletCode, operatorId, now, remark, batchNo);
+                counts.merge(palletCode.getProductStatus() + "|PREPARE", 1, Integer::sum);
             }
         }
         counts.forEach((key, count) -> addWarehouseMapResultItem(result, key, count));
@@ -969,7 +972,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         return confirmSingleFinishedTaskIn(confirmDTO, operatorId);
     }
 
-    private List<Inventory> resolveInventoriesByCodesForWarehouse(List<String> rawCodes, Integer warehouseId, String side) {
+    private List<Inventory> resolveInventoriesByCodesForWarehouse(List<String> rawCodes, Integer warehouseId, String side,
+                                                                  Integer rowNumber, Integer layer) {
         List<String> codes = normalizeAndValidateUniqueCodes(rawCodes);
         List<Inventory> inventories = new ArrayList<>(codes.size());
         for (String code : codes) {
@@ -977,6 +981,12 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             Inventory inventory = requireInventoryByPallet(palletCode, false);
             if (!Objects.equals(inventory.getWarehouseId(), warehouseId) || !side.equals(inventory.getSide())) {
                 throw new BusinessException("托盘[" + code + "]不在当前库位侧别中");
+            }
+            if (rowNumber != null && !Objects.equals(inventory.getRowNumber(), rowNumber)) {
+                throw new BusinessException("托盘[" + code + "]不在当前指定排号中");
+            }
+            if (layer != null && !Objects.equals(inventory.getLayer(), layer)) {
+                throw new BusinessException("托盘[" + code + "]不在当前指定层数中");
             }
             inventories.add(inventory);
         }
@@ -1022,6 +1032,21 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         palletTaskMapper.insert(task);
     }
 
+    private void createWarehouseMapPrepareTask(PalletCode palletCode, Integer operatorId, LocalDateTime now,
+                                               String remark, String batchNo) {
+        validatePalletForOutFlow(palletCode, "半成品");
+        requireInventoryByPallet(palletCode, false);
+        int cycleNo = getCurrentCycleNo(palletCode);
+        if (findActivePreparePool(palletCode, false) != null) {
+            throw new BusinessException("当前托盘已存在激活中的备料池记录");
+        }
+        if (palletTaskMapper.countPendingOutTasks(palletCode.getId(), cycleNo) > 0) {
+            throw new BusinessException("当前托盘已存在未完成的出库任务");
+        }
+        PalletTask task = buildPendingTask(palletCode, "OUT", "PREPARE_CONSUMED", operatorId, now, remark, cycleNo, batchNo);
+        palletTaskMapper.insert(task);
+    }
+
     private PalletTask buildPendingTask(PalletCode palletCode, String taskType, String bizScene, Integer operatorId,
                                         LocalDateTime now, String remark, int cycleNo, String batchNo) {
         PalletTask task = new PalletTask();
@@ -1049,10 +1074,12 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         WarehouseMapTaskCreateResultVO.Item item = new WarehouseMapTaskCreateResultVO.Item();
         item.setProductStatus(productStatus);
         item.setTaskType(taskType);
-        item.setBizScene("OUT".equals(taskType) ? ("半成品".equals(productStatus) ? "DIRECT_OUT" : "FINISH_OUT") : null);
+        item.setBizScene("PREPARE".equals(taskType) ? "PREPARE_CONSUMED" : ("OUT".equals(taskType) ? ("半成品".equals(productStatus) ? "DIRECT_OUT" : "FINISH_OUT") : null));
         item.setCount(count);
         if ("TRANSFER".equals(taskType)) {
             item.setRoutePath("/pallet-task/transfer");
+        } else if ("PREPARE".equals(taskType)) {
+            item.setRoutePath("/pallet-task/semi/out");
         } else if ("半成品".equals(productStatus)) {
             item.setRoutePath("/pallet-task/semi/out");
         } else {
@@ -1825,6 +1852,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             task.setRemark(remark);
         }
         task.setAssayId(assayId);
+        task.setTargetWarehouseId(warehouse.getId());
+        task.setTargetSide(side);
         task.setStatus("CONFIRMED");
         task.setConfirmedBy(operatorId);
         task.setConfirmedAt(now);

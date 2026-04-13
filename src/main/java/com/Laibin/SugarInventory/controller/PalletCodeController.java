@@ -349,7 +349,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "仓库平面图批量创建任务", description = "按库位、侧别和前N板创建出库/调拨任务")
+    @Operation(summary = "仓库平面图批量创建任务", description = "按库位、侧别和前N板创建出库/调拨/转入备料池任务；传入 codes 时按指定托盘码精确创建")
     @PostMapping("/warehouse-map/tasks/create")
     public Result<WarehouseMapTaskCreateResultVO> createWarehouseMapTasks(@RequestBody @Valid WarehouseMapBatchOperationDTO dto,
                                                                           @AuthenticationPrincipal LoginUser loginUser) {

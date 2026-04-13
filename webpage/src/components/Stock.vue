@@ -1,96 +1,98 @@
-﻿<template>
-  <div class="operation-logs">
-    <el-card class="search-card" style="max-width: 1200px">
-      <el-form :model="searchForm" inline>
+<template>
+  <div class="ledger-center">
+    <div class="page-header">
+      <div>
+        <div class="page-title">{{ resolvedPageTitle }}</div>
+        <div class="page-subtitle">{{ resolvedPageDescription }}</div>
+      </div>
+    </div>
+
+    <el-card class="search-card">
+      <el-form :model="searchForm" class="ledger-search-form" label-width="80px">
         <el-form-item label="产品名称">
           <el-input v-model="searchForm.productName" clearable placeholder="请输入产品名称"/>
         </el-form-item>
-        <el-form-item label="仓库名称">
-          <el-input v-model="searchForm.warehouseName" clearable placeholder="请输入仓库名称"/>
+        <el-form-item label="仓库">
+          <el-input v-model="searchForm.warehouseName" clearable placeholder="请输入仓库"/>
         </el-form-item>
         <el-form-item label="操作人">
           <el-input v-model="searchForm.operatorName" clearable placeholder="请输入操作人"/>
         </el-form-item>
-        <br>
-        <el-form-item label="查询类型">
-          <el-select v-model="searchFormType"
-                     placeholder="请选择"
-                     clearable
-                     style="width: 200px">
-            <el-option label="入库" value="入库"></el-option>
-            <el-option label="出库" value="出库"></el-option>
-            <el-option label="半成品入库" value="半成品入库"></el-option>
+        <el-form-item label="单号">
+          <el-input v-model="searchForm.documentNo" clearable placeholder="请输入单号"/>
+        </el-form-item>
+        <el-form-item label="单据状态">
+          <el-select v-model="searchForm.status" clearable placeholder="请选择">
+            <el-option v-for="item in currentStatusOptions" :key="item.value" :label="item.label" :value="item.value"/>
           </el-select>
         </el-form-item>
         <el-form-item label="时间范围">
           <el-date-picker
               v-model="searchForm.dateRange"
               type="daterange"
+              value-format="YYYY-MM-DD"
               range-separator="至"
               start-placeholder="开始日期"
               end-placeholder="结束日期"
-              style="width: 400px"
           />
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="search-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-card class="table-card" style="max-width: 1200px">
+    <el-card class="table-card">
       <div class="table-toolbar">
-        <div class="table-toolbar-left">
-          <el-button @click="exportExcel">导出Excel</el-button>
+        <div class="table-toolbar-main">
+          <el-tabs v-model="activeTab" class="ledger-tabs" @tab-change="handleTabChange">
+            <el-tab-pane v-for="tab in ledgerTabs" :key="tab.value" :label="tab.label" :name="tab.value"/>
+          </el-tabs>
+          <div class="action-groups">
+            <el-button @click="exportLedger">导出当前台账</el-button>
+          </div>
         </div>
       </div>
-      <el-table
-          :data="resultList"
-          style="width: 95%"
-          heigth="300"
-          stripe
-          border
-          v-loading="loading"
-      >
-        <el-table-column prop="productName" label="产品名称" width="150"></el-table-column>
-        <el-table-column prop="warehouseName" label="仓库名称" width="150"></el-table-column>
-        <el-table-column prop="quantity" label="数量" width="150" sortable>
+
+      <el-table :data="ledgerRows" style="width: 100%" height="560" stripe v-loading="loading">
+        <el-table-column prop="documentNo" label="单号" min-width="150" fixed="left" show-overflow-tooltip/>
+        <el-table-column prop="documentTypeName" label="单据类型" width="120">
           <template #default="{ row }">
-            <el-tag v-if="row.unit === '0'">{{ row.quantity }}板</el-tag>
-            <el-tag v-else-if="row.unit === '1' && row.pieces">{{ row.pieces }}件</el-tag>
-            <el-tag v-else>{{ row.quantity }} 件</el-tag>
+            <el-tag :type="getDocumentTagType(row.documentType)">{{ row.documentTypeName }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="totalWeight" label="重量（kg）" width="150" sortable></el-table-column>
-        <el-table-column prop="entryDate" label="入库日期" width="150" v-if="searchFormType === '入库'"
-                         sortable></el-table-column>
-        <el-table-column prop="inDate" label="入库日期" width="150" v-if="searchFormType === '出库'"
-                         sortable></el-table-column>
-        <el-table-column prop="outDate" label="出库日期" width="150" v-if="searchFormType === '出库'"
-                         sortable></el-table-column>
-        <el-table-column prop="operationDate" label="入库日期" width="150" v-if="searchFormType === '半成品入库'"
-                         sortable></el-table-column>
-        <el-table-column prop="operator" label="操作人" width="150"></el-table-column>
-        <el-table-column prop="meshName" label="筛网名称" width="150"
-                         v-if="searchFormType !== '出库'"></el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column prop="sourcePage" label="来源页面" min-width="130" show-overflow-tooltip/>
+        <el-table-column prop="operator" label="操作人" min-width="100" show-overflow-tooltip/>
+        <el-table-column prop="createdAt" label="创建时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column prop="warehouseName" label="仓库" min-width="130" show-overflow-tooltip/>
+        <el-table-column prop="statusName" label="当前状态" width="110">
           <template #default="{ row }">
-            <el-button type="primary" size="small"
-                       @click="dialogVisible = true;operationType='查看半成品';handleEdit(row)"
-                       v-if="searchFormType === '入库'">查看半成品
-            </el-button>
-            <el-button type="danger" size="small"
-                       @click="dialogVisible = true;operationType='查看化验记录';handleEdit(row)">查看化验记录
-            </el-button>
+            <el-tag :type="getStatusTagType(row.status)">{{ row.statusName }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productName" label="产品名称" min-width="160" show-overflow-tooltip/>
+        <el-table-column prop="quantityText" label="数量" width="120" show-overflow-tooltip/>
+        <el-table-column prop="totalWeight" label="重量(kg)" width="120" show-overflow-tooltip/>
+        <el-table-column label="联动" width="280" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openDetail(row)">看单</el-button>
+            <el-button link type="primary" @click="openTaskCenter(row)">任务</el-button>
+            <el-button link type="primary" @click="openWarehouseMap(row)">平面图</el-button>
+            <el-button link type="primary" @click="openAssay(row)">化验</el-button>
+            <el-button link type="primary" @click="openProduct(row)">产品</el-button>
           </template>
         </el-table-column>
       </el-table>
+
       <div class="pagination-wrapper">
         <el-pagination
             background
             layout="total, sizes, prev, pager, next"
             :total="total"
+            :current-page="currentPage"
             :page-size="pageSize"
             @size-change="handleSizeChange"
             @current-change="handleCurrentChange"
@@ -98,383 +100,628 @@
       </div>
     </el-card>
 
-    <el-dialog
-        :title="operationType"
-        v-model="dialogVisible"
-        width="40%"
-        :before-close="handleClose"
-    >
-      <!-- 卡片容器 -->
-      <div v-if="semiProductRecords?.length && operationType === '查看半成品'" class="card-container">
-        <el-card
-            v-for="(item, index) in semiProductRecords "
-            :key="index"
-            class="record-card"
-            shadow="hover"
-        >
-          <div class="card-content">
-            <!-- 半成品名称 -->
-            <div class="info-item">
-              <span class="label">半成品名称：</span>
-              <span class="value">{{ item.productName || '-' }}</span>
-            </div>
+    <el-drawer v-model="detailVisible" title="单据详情" size="1200px" class="ledger-drawer">
+      <template v-if="currentDocument">
+        <el-descriptions class="document-head" :column="2" border>
+          <el-descriptions-item label="单号">{{ currentDocument.documentNo }}</el-descriptions-item>
+          <el-descriptions-item label="单据类型">{{ currentDocument.documentTypeName }}</el-descriptions-item>
+          <el-descriptions-item label="来源页面">{{ currentDocument.sourcePage }}</el-descriptions-item>
+          <el-descriptions-item label="操作人">{{ currentDocument.operator || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatDateTime(currentDocument.createdAt) }}</el-descriptions-item>
+          <el-descriptions-item label="仓库">{{ currentDocument.warehouseName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="当前状态">
+            <el-tag :type="getStatusTagType(currentDocument.status)">{{ currentDocument.statusName }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="关联化验">
+            <el-button v-if="currentDocument.assayId || currentDocument.productName" link type="primary" @click="openAssay(currentDocument)">查看化验</el-button>
+            <span v-else>-</span>
+          </el-descriptions-item>
+        </el-descriptions>
 
-            <!-- 数量 -->
-            <div class="info-item">
-              <span class="label">数量：</span>
-              <span class="value">{{ item.quantity ? `${item.quantity} 件` : '-' }}</span>
-            </div>
+        <div class="drawer-section-title">单明细</div>
+        <el-table :data="currentDocument.details" border>
+          <el-table-column prop="palletCode" label="托盘码" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-button v-if="row.palletCode" link type="primary" @click="openPallet(row.palletCode)">{{ row.palletCode }}</el-button>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="productName" label="产品名称" min-width="150" show-overflow-tooltip/>
+          <el-table-column prop="quantityText" label="数量" width="100"/>
+          <el-table-column prop="unitName" label="单位" width="80"/>
+          <el-table-column prop="fromLocation" label="原位置" min-width="130" show-overflow-tooltip/>
+          <el-table-column prop="toLocation" label="目标位置" min-width="130" show-overflow-tooltip/>
+          <el-table-column prop="taskId" label="关联任务ID" width="120">
+            <template #default="{ row }">{{ row.taskId || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="statusName" label="执行状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="getStatusTagType(row.status)">{{ row.statusName }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
 
-            <!-- 日期 -->
-            <div class="info-item">
-              <span class="label">日期：</span>
-              <span class="value">{{ item.productionDate || '未填写日期' }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label" v-if="item.useAssay === true" style="color: #f56c6c;">已套用该半成品的化验数据</span>
-            </div>
-          </div>
-        </el-card>
-      </div>
-      <div v-if="operationType === '查看化验记录'" class="card-container">
-        <el-card
-            v-for="(item, index) in resultList"
-            :key="index"
-            class="record-card"
-            shadow="hover"
-        >
-          <div class="card-content">
-            <el-row :gutter="20" v-if="item.id === currentRow.id">
-              <el-col :span="20">
-                <div class="info-item">
-                  <label>采样日期：</label>
-                  <span>{{ item.sampleDate }}</span>
-                </div>
-                <div class="info-item">
-                  <label>色值：</label>
-                  <span>{{ item.colorValue }}</span>
-                </div>
-                <div class="info-item">
-                  <label>还原糖：</label>
-                  <span>{{ item.reducingSugar }}</span>
-                </div>
-                <div class="info-item">
-                  <label>干重：</label>
-                  <span>{{ item.dryWeight }}</span>
-                </div>
-                <div class="info-item">
-                  <label>电导灰分：</label>
-                  <span>{{ item.conductivityAsh }}</span>
-                </div>
-                <div class="info-item">
-                  <label>蔗糖：</label>
-                  <span>{{ item.sucrose }}</span>
-                </div>
-                <div class="info-item">
-                  <label>不溶物：</label>
-                  <span>{{ item.insolubleImpurity }}</span>
-                </div>
-                <div class="info-item">
-                  <label>pH值：</label>
-                  <span>{{ item.phValue }}</span>
-                </div>
-              </el-col>
-            </el-row>
-
-            <!-- 底部状态栏 -->
-            <div class="status-bar">
-              <el-tag
-                  :span="12"
-                  :type="item.isQualified === '合格' ? 'success' : 'danger'"
-                  size="medium"
-              >
-                {{ item.isQualified }}
-              </el-tag>
-              <div class="meta-info">
-                <span>检测人：{{ item.testerName }}</span>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </div>
-      <div v-if="!semiProductRecords?.length && operationType === '查看半成品'" class="empty-container">
-        <el-empty description="暂无半成品记录" :image-size="100"/>
-      </div>
-      <div v-if="!resultList.length" class="empty-container">
-        <el-empty description="暂无数据" :image-size="100"/>
-      </div>
-    </el-dialog>
+        <div class="drawer-actions">
+          <el-button @click="openWarehouseMap(currentDocument)">仓库平面图</el-button>
+          <el-button @click="openTaskCenter(currentDocument)">关联任务</el-button>
+          <el-button @click="openProduct(currentDocument)">产品详情</el-button>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted, reactive, computed} from 'vue'
-import {getMesh, updateMesh} from '@/api/mesh'
-import {ElMessage, ElMessageBox} from 'element-plus'
-import {addInStock, getInStock, getOutStock, getSemiProductList} from "@/api/stock";
-import {getProductList} from "@/api/product";
-import {getSemiProduct, getStProduct} from "@/api/assay";
-import {Delete} from "@element-plus/icons-vue";
-import dayjs from "dayjs";
-import * as XLSX from 'xlsx';
+import {computed, onMounted, ref, watch} from 'vue'
+import {ElMessage} from 'element-plus'
+import {useRouter} from 'vue-router'
+import * as XLSX from 'xlsx'
+import {pagePalletTasks} from '@/api/palletCode'
+import {formatDateTime} from '@/utils/dateTime'
 
-const exportExcel = async () => {
-  if (!searchFormType.value) {
-    ElMessage.warning('请先选择查询类型')
-    return
+const props = defineProps({
+  productStatusFilter: {
+    type: String,
+    default: ''
+  },
+  pageTitle: {
+    type: String,
+    default: '单据中心'
+  },
+  pageDescription: {
+    type: String,
+    default: '集中查询入库单、出库单和调拨单，用于查单、看单、追溯和导出。'
   }
+})
 
-  // 构建完整参数（包含分页）
+const router = useRouter()
+
+const baseLedgerTabs = [
+  {value: 'IN', label: '入库单', documentNoPrefix: 'IN', documentTypeName: '入库单'},
+  {value: 'OUT', label: '出库单', documentNoPrefix: 'OUT', documentTypeName: '出库单'},
+  {value: 'TRANSFER', label: '调拨单', documentNoPrefix: 'TR', documentTypeName: '调拨单'}
+]
+const prepareLedgerTab = {value: 'PREPARE', label: '转入备料单', documentNoPrefix: 'PREP', documentTypeName: '转入备料单'}
+
+const taskStatusOptions = [
+  {label: '待处理', value: 'PENDING'},
+  {label: '已确认', value: 'CONFIRMED'},
+  {label: '已取消', value: 'CANCELED'}
+]
+
+const activeTab = ref('IN')
+const searchForm = ref(defaultSearchForm())
+const ledgerRows = ref([])
+const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+const detailVisible = ref(false)
+const currentDocument = ref(null)
+
+const resolvedPageTitle = computed(() => props.pageTitle)
+const resolvedPageDescription = computed(() => props.pageDescription)
+const effectiveProductStatus = computed(() => props.productStatusFilter || '')
+const ledgerTabs = computed(() => effectiveProductStatus.value === '半成品' ? [...baseLedgerTabs, prepareLedgerTab] : baseLedgerTabs)
+const currentTabConfig = computed(() => ledgerTabs.value.find(tab => tab.value === activeTab.value) || ledgerTabs.value[0])
+const currentStatusOptions = computed(() => taskStatusOptions)
+
+watch(effectiveProductStatus, () => {
+  if (!ledgerTabs.value.some(tab => tab.value === activeTab.value)) {
+    activeTab.value = ledgerTabs.value[0]?.value || 'IN'
+  }
+  currentPage.value = 1
+  searchForm.value.status = ''
+  handleSearch()
+})
+
+function defaultSearchForm() {
+  return {
+    productName: '',
+    warehouseName: '',
+    operatorName: '',
+    documentNo: '',
+    status: '',
+    dateRange: []
+  }
+}
+
+function buildTransferQuery() {
   const params = {
-    productName: searchForm.value.productName,
-    warehouseName: searchForm.value.warehouseName,
-    operatorName: searchForm.value.operatorName,
-    startDate: searchForm.value.dateRange[0]
-        ? dayjs(searchForm.value.dateRange[0]).format('YYYY-MM-DD')
-        : '',
-    endDate: searchForm.value.dateRange[1]
-        ? dayjs(searchForm.value.dateRange[1]).format('YYYY-MM-DD')
-        : '',
-    page: 1,
-    size: total.value // 获取全部数据
+    taskType: 'TRANSFER',
+    pageNum: currentPage.value,
+    pageSize: pageSize.value
   }
+  if (searchForm.value.productName) params.productName = searchForm.value.productName
+  if (searchForm.value.warehouseName) params.targetWarehouseName = searchForm.value.warehouseName
+  if (searchForm.value.status) params.status = searchForm.value.status
+  if (effectiveProductStatus.value) params.productStatus = effectiveProductStatus.value
+  if (searchForm.value.dateRange?.length === 2) {
+    params.productionDateStart = searchForm.value.dateRange[0]
+    params.productionDateEnd = searchForm.value.dateRange[1]
+  }
+  return params
+}
 
+function buildInboundQuery() {
+  const params = {
+    taskType: 'IN',
+    pageNum: currentPage.value,
+    pageSize: pageSize.value
+  }
+  if (searchForm.value.productName) params.productName = searchForm.value.productName
+  if (searchForm.value.warehouseName) params.targetWarehouseName = searchForm.value.warehouseName
+  if (searchForm.value.status) params.status = searchForm.value.status
+  if (effectiveProductStatus.value) params.productStatus = effectiveProductStatus.value
+  if (searchForm.value.dateRange?.length === 2) {
+    params.productionDateStart = searchForm.value.dateRange[0]
+    params.productionDateEnd = searchForm.value.dateRange[1]
+  }
+  return params
+}
+
+function buildOutTaskQuery() {
+  const params = {
+    taskType: 'OUT',
+    pageNum: currentPage.value,
+    pageSize: pageSize.value
+  }
+  if (searchForm.value.productName) params.productName = searchForm.value.productName
+  if (searchForm.value.warehouseName) params.targetWarehouseName = searchForm.value.warehouseName
+  if (searchForm.value.status) params.status = searchForm.value.status
+  if (effectiveProductStatus.value) params.productStatus = effectiveProductStatus.value
+  if (effectiveProductStatus.value === '半成品') params.bizScene = 'DIRECT_OUT'
+  if (effectiveProductStatus.value === '成品') params.bizScene = 'FINISH_OUT'
+  if (!effectiveProductStatus.value) params.bizScene = 'FINISH_OUT'
+  if (searchForm.value.dateRange?.length === 2) {
+    params.productionDateStart = searchForm.value.dateRange[0]
+    params.productionDateEnd = searchForm.value.dateRange[1]
+  }
+  return params
+}
+
+function buildPrepareTaskQuery() {
+  const params = {
+    taskType: 'OUT',
+    bizScene: 'PREPARE_CONSUMED',
+    productStatus: '半成品',
+    pageNum: currentPage.value,
+    pageSize: pageSize.value
+  }
+  if (searchForm.value.productName) params.productName = searchForm.value.productName
+  if (searchForm.value.warehouseName) params.targetWarehouseName = searchForm.value.warehouseName
+  if (searchForm.value.status) params.status = searchForm.value.status
+  if (searchForm.value.dateRange?.length === 2) {
+    params.productionDateStart = searchForm.value.dateRange[0]
+    params.productionDateEnd = searchForm.value.dateRange[1]
+  }
+  return params
+}
+
+async function handleSearch() {
+  loading.value = true
   try {
     let res
-    switch (searchFormType.value) {
-      case '入库':
-        res = await getInStock(params)
-        break
-      case '出库':
-        res = await getOutStock(params)
-        break
-      case '半成品入库':
-        res = await getSemiProductList(params)
-        break
+    if (activeTab.value === 'IN') {
+      res = await pagePalletTasks(buildInboundQuery())
+      const rows = normalizeRows(res.data?.records || [], activeTab.value)
+      ledgerRows.value = applyClientFilters(rows)
+      total.value = hasClientOnlyFilters() ? ledgerRows.value.length : (res.data?.total || 0)
+    } else if (activeTab.value === 'OUT') {
+      res = await pagePalletTasks(buildOutTaskQuery())
+      const rows = normalizeRows(res.data?.records || [], activeTab.value)
+      ledgerRows.value = applyClientFilters(rows)
+      total.value = hasClientOnlyFilters() ? ledgerRows.value.length : (res.data?.total || 0)
+    } else if (activeTab.value === 'PREPARE') {
+      res = await pagePalletTasks(buildPrepareTaskQuery())
+      const rows = normalizeRows(res.data?.records || [], activeTab.value)
+      ledgerRows.value = applyClientFilters(rows)
+      total.value = hasClientOnlyFilters() ? ledgerRows.value.length : (res.data?.total || 0)
+    } else {
+      res = await pagePalletTasks(buildTransferQuery())
+      const rows = normalizeRows(res.data?.records || [], activeTab.value)
+      ledgerRows.value = applyClientFilters(rows)
+      total.value = hasClientOnlyFilters() ? ledgerRows.value.length : (res.data?.total || 0)
     }
-
-    if (res.code !== 200) {
-      ElMessage.error('导出失败：' + res.msg)
-      return
-    }
-
-    // 数据处理
-    const processData = (items) => {
-      return items.map(item => {
-        const baseData = {
-          '产品名称': item.productName,
-          '仓库名称': item.warehouseName,
-          '数量（件）': item.quantity,
-          '重量（kg）': item.totalWeight,
-          '操作人': item.operator,
-          '检测人': item.testerName,
-          '是否合格': item.isQualified,
-          '采样日期': item.sampleDate,
-          '色值': item.colorValue,
-          '还原糖': item.reducingSugar,
-          '干重': item.dryWeight,
-          '电导灰分': item.conductivityAsh,
-          '蔗糖': item.sucrose,
-          '不溶物': item.insolubleImpurity,
-          'pH值': item.phValue
-        }
-
-        // 添加类型特定字段
-        switch (searchFormType.value) {
-          case '入库':
-            baseData['入库日期'] = item.entryDate
-            baseData['筛网名称'] = item.meshName
-            baseData['半成品记录'] = JSON.stringify(item.semiProductRecords)
-            break
-          case '出库':
-            baseData['入库日期'] = item.inDate
-            baseData['出库日期'] = item.outDate
-            break
-          case '半成品入库':
-            baseData['操作日期'] = item.operationDate
-            break
-        }
-
-        return baseData
-      })
-    }
-
-    // 创建Excel
-    const ws = XLSX.utils.json_to_sheet(processData(res.data.records))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '数据')
-
-    // 生成文件名
-    const filename = `${searchFormType.value}记录_${dayjs().format('YYYYMMDDHHmmss')}.xlsx`
-    XLSX.writeFile(wb, filename)
-
-    ElMessage.success('导出成功')
   } catch (error) {
-    ElMessage.error('导出失败：' + error.message)
+    ElMessage.error(error?.message || '查询单据失败')
+  } finally {
+    loading.value = false
   }
 }
-// 搜索表单
 
-const searchFormType = ref('')
-const searchForm = ref({
-  productName: '',
-  warehouseName: '',
-  operatorName: '',
-  dateRange: []
-})
-// 列表
-const resultList = ref([])
-// 分页参数
-const pageSize = ref(10)
-const currentPage = ref(1)
-const total = ref(0)
-// 加载状态
-const loading = ref(false)
+function normalizeRows(rows, type) {
+  if (type === 'IN') {
+    return rows.map(normalizeInboundTask)
+  }
+  if (type === 'OUT') {
+    return rows.map(normalizeOutTask)
+  }
+  if (type === 'PREPARE') {
+    return rows.map(normalizePrepareTask)
+  }
+  return rows.map(normalizeTransferTask)
+}
 
-// 分页处理
-const handleSizeChange = (size) => {
-  pageSize.value = size
+function normalizeInboundTask(row) {
+  const documentNo = createDocumentNo('IN', row, row.operationBatchNo || row.taskId || row.createdAt || row.code)
+  const status = row.taskStatus || 'PENDING'
+  const detail = {
+    palletCode: row.code,
+    productName: row.productName,
+    quantity: 1,
+    quantityText: '1板',
+    unitName: '板',
+    fromLocation: '无',
+    toLocation: row.targetWarehouseName || '已确认入库位置',
+    taskId: row.taskId,
+    status,
+    statusName: getTaskStatusName(status)
+  }
+  return {
+    raw: row,
+    documentNo,
+    documentType: 'IN',
+    documentTypeName: '入库单',
+    sourcePage: inferSourcePage(row, 'IN'),
+    operator: row.confirmedBy || row.createdBy,
+    createdAt: row.confirmedAt || row.createdAt,
+    warehouseName: row.targetWarehouseName || '',
+    warehouseId: row.targetWarehouseId,
+    status,
+    statusName: getTaskStatusName(status),
+    productName: row.productName,
+    quantityText: '1板',
+    totalWeight: '',
+    assayId: row.assayId,
+    taskRoute: row.taskType === 'FINISH_IN' ? '/pallet-task/finish/in' : '/pallet-task/semi/in',
+    details: [detail]
+  }
+}
+
+function normalizeOutTask(row) {
+  const documentNo = createDocumentNo('OUT', row, row.operationBatchNo || row.taskId || row.createdAt || row.code)
+  const status = row.taskStatus || 'PENDING'
+  const detail = {
+    palletCode: row.code,
+    productName: row.productName,
+    quantity: 1,
+    quantityText: '1板',
+    unitName: '板',
+    fromLocation: row.targetWarehouseName || '出库前库存位置',
+    toLocation: '无',
+    taskId: row.taskId,
+    status,
+    statusName: getTaskStatusName(status)
+  }
+  return {
+    raw: row,
+    documentNo,
+    documentType: 'OUT',
+    documentTypeName: '出库单',
+    sourcePage: inferSourcePage(row, 'OUT'),
+    operator: row.confirmedBy || row.createdBy,
+    createdAt: row.confirmedAt || row.createdAt,
+    warehouseName: row.targetWarehouseName || '',
+    warehouseId: row.targetWarehouseId,
+    status,
+    statusName: getTaskStatusName(status),
+    productName: row.productName,
+    quantityText: '1板',
+    totalWeight: '',
+    assayId: row.assayId,
+    taskRoute: row.productStatus === '半成品' ? '/pallet-task/semi/out' : '/pallet-task/finish/out',
+    details: [detail]
+  }
+}
+
+function normalizePrepareTask(row) {
+  const documentNo = createDocumentNo('PREP', row, row.operationBatchNo || row.taskId || row.createdAt || row.code)
+  const status = row.taskStatus || 'PENDING'
+  const detail = {
+    palletCode: row.code,
+    productName: row.productName,
+    quantity: 1,
+    quantityText: '1板',
+    unitName: '板',
+    fromLocation: row.targetWarehouseName || '原库存位置',
+    toLocation: '备料池',
+    taskId: row.taskId,
+    status,
+    statusName: getTaskStatusName(status)
+  }
+  return {
+    raw: row,
+    documentNo,
+    documentType: 'PREPARE',
+    documentTypeName: '转入备料单',
+    sourcePage: inferSourcePage(row, 'PREPARE'),
+    operator: row.confirmedBy || row.createdBy,
+    createdAt: row.confirmedAt || row.createdAt,
+    warehouseName: row.targetWarehouseName || '',
+    warehouseId: row.targetWarehouseId,
+    status,
+    statusName: getTaskStatusName(status),
+    productName: row.productName,
+    quantityText: '1板',
+    totalWeight: '',
+    assayId: row.assayId,
+    taskRoute: '/pallet-task/semi/out',
+    details: [detail]
+  }
+}
+
+function normalizeTransferTask(row) {
+  const documentNo = createDocumentNo('TR', row, row.taskId || row.createdAt || row.code)
+  const status = row.taskStatus || 'PENDING'
+  const detail = {
+    palletCode: row.code,
+    productName: row.productName,
+    quantity: 1,
+    quantityText: '1板',
+    unitName: '板',
+    fromLocation: '当前库存位置',
+    toLocation: formatLocation(row.targetWarehouseName, row.targetSide),
+    taskId: row.taskId,
+    status,
+    statusName: getTaskStatusName(status)
+  }
+  return {
+    raw: row,
+    documentNo,
+    documentType: 'TRANSFER',
+    documentTypeName: '调拨单',
+    sourcePage: '任务中心',
+    operator: row.confirmedBy || row.createdBy,
+    createdAt: row.confirmedAt || row.createdAt,
+    warehouseName: row.targetWarehouseName,
+    warehouseId: row.targetWarehouseId,
+    status,
+    statusName: getTaskStatusName(status),
+    productName: row.productName,
+    quantityText: '1板',
+    totalWeight: '',
+    assayId: row.assayId,
+    taskRoute: '/pallet-task/transfer',
+    details: [detail]
+  }
+}
+
+function applyClientFilters(rows) {
+  return rows.filter(row => {
+    if (searchForm.value.documentNo && !row.documentNo.includes(searchForm.value.documentNo)) return false
+    if (searchForm.value.status && row.status !== searchForm.value.status) return false
+    if (searchForm.value.operatorName && !String(row.operator || '').includes(searchForm.value.operatorName)) return false
+    if (searchForm.value.warehouseName && !String(row.warehouseName || '').includes(searchForm.value.warehouseName)) return false
+    return true
+  })
+}
+
+function hasClientOnlyFilters() {
+  return Boolean(
+      searchForm.value.documentNo
+      || searchForm.value.operatorName
+      || searchForm.value.warehouseName
+  )
+}
+
+function inferSourcePage(row, type) {
+  const text = `${row?.sourcePage || ''}${row?.remark || ''}${row?.operationSource || ''}`
+  if (text.includes('仓库平面图')) return '仓库平面图'
+  if (row?.operationBatchNo && String(row.operationBatchNo).startsWith('WM')) return '仓库平面图'
+  if (text.includes('自动入库')) return '自动入库'
+  if (type === 'IN') return '任务中心'
+  if (type === 'OUT' || type === 'PREPARE') return '任务中心'
+  return '任务中心'
+}
+
+function createDocumentNo(prefix, row, id) {
+  if (id) return `${prefix}-${String(id).replace(/\s+/g, '').replace(/[:/]/g, '')}`
+  const seed = [row?.productName, row?.warehouseName, row?.targetWarehouseName, row?.entryDate, row?.outDate]
+      .filter(Boolean)
+      .join('-')
+      .replace(/\s+/g, '')
+  return `${prefix}-${seed || 'UNTRACKED'}`
+}
+
+function formatLocation(warehouseName, side) {
+  return [warehouseName, side].filter(Boolean).join(' / ') || '无'
+}
+
+function getTaskStatusName(status) {
+  const map = {
+    PENDING: '待处理',
+    CONFIRMED: '已确认',
+    CANCELED: '已取消',
+    COMPLETED: '已完成'
+  }
+  return map[status] || status || '-'
+}
+
+function getStatusTagType(status) {
+  if (status === 'CONFIRMED' || status === 'COMPLETED') return 'success'
+  if (status === 'PENDING') return 'warning'
+  if (status === 'CANCELED') return 'info'
+  return 'info'
+}
+
+function getDocumentTagType(type) {
+  if (type === 'IN') return 'success'
+  if (type === 'OUT') return 'warning'
+  if (type === 'TRANSFER') return 'primary'
+  if (type === 'PREPARE') return 'primary'
+  return 'info'
+}
+
+function handleTabChange() {
+  currentPage.value = 1
+  searchForm.value.status = ''
   handleSearch()
 }
-const handleCurrentChange = (page) => {
+
+function handleReset() {
+  searchForm.value = defaultSearchForm()
+  currentPage.value = 1
+  handleSearch()
+}
+
+function handleSizeChange(size) {
+  pageSize.value = size
+  currentPage.value = 1
+  handleSearch()
+}
+
+function handleCurrentChange(page) {
   currentPage.value = page
   handleSearch()
 }
-// 处理搜索
-const handleSearch = async () => {
-  let params = {
-    page: currentPage.value,
-    size: pageSize.value,
-  }
-  if (searchForm.value.productName !== '') {
-    params.productName = searchForm.value.productName
-  }
-  if (searchForm.value.warehouseName !== '') {
-    params.warehouseName = searchForm.value.warehouseName
-  }
-  if (searchForm.value.operatorName !== '') {
-    params.operatorName = searchForm.value.operatorName
-  }
-  if (searchForm.value.dateRange.length !== 0) {
-    params.startDate = dayjs(searchForm.value.dateRange[0]).format('YYYY-MM-DD')
-    params.endDate = dayjs(searchForm.value.dateRange[1]).format('YYYY-MM-DD')
-  }
-  loading.value = true
-  if (searchFormType.value === '入库') {
-    let res = await getInStock(params)
-    if (res.code === 200) {
-      total.value = res.data.total
-      resultList.value = res.data.records
-      resultList.value.forEach(item => {
-        item.semiProductRecords = JSON.parse(item.semiProductRecords)
-      })
-      console.log(resultList.value)
-    } else {
-      ElMessage.error(res.msg)
-    }
-  } else if (searchFormType.value === '出库') {
-    let res = await getOutStock(params)
-    if (res.code === 200) {
-      total.value = res.data.total
-      resultList.value = res.data.records
-    } else {
-      ElMessage.error(res.msg)
-    }
-  } else if (searchFormType.value === '半成品入库') {
-    let res = await getSemiProductList(params)
-    console.log(res)
-    if (res.code === 200) {
-      total.value = res.data.total
-      resultList.value = res.data.records
-    } else {
-      ElMessage.error(res.msg)
-    }
-  }
-  loading.value = false
-}
-// 处理重置
-const handleReset = () => {
-  searchForm.value = {}
-  handleSearch()
-}
-const semiProductRecords = ref([])
 
-const dialogVisible = ref(false)
-const handleClose = () => {
-  dialogVisible.value = false
-  visible.value = false
+function openDetail(row) {
+  currentDocument.value = row
+  detailVisible.value = true
 }
-const operationType = ref('')
-const submitForm = ref({
-  productId: '',
-  warehouseName: '',
-  quantity: '',
-  side: '',
-  screenMeshId: '',
-  semiRecords: []
-})
-const currentRow = ref('')
-const visible = ref(false)
-const handleEdit = (row) => {
-  semiProductRecords.value = row.semiProductRecords
-  dialogVisible.value = true
-  currentRow.value = row
-}
-const productList = ref([])
-const getProduct = async () => {
-  let res = await getProductList()
-  productList.value = res.data
-}
-const semiProductList = ref([])
-const SemiProduct = async () => {
-  let res = await getSemiProduct()
-  semiProductList.value = res.data
-}
-const StProductList = ref([])
-const StProduct = async () => {
-  let res = await getStProduct()
-  StProductList.value = res.data
-}
-const meshList = ref([])
-const getMeshList = async () => {
-  let res = await getMesh()
-  if (res.code === 200) {
-    meshList.value = res.data
-  } else {
-    ElMessage.error(res.msg)
+
+function openPallet(code) {
+  if (!code) {
+    ElMessage.info('当前明细没有托盘码')
+    return
   }
+  router.push({path: '/pallet-code/list', query: {code}})
 }
+
+function openTaskCenter(row) {
+  const path = row.taskRoute || getTaskRoute(row)
+  router.push(path)
+}
+
+function getTaskRoute(row) {
+  if (row.documentType === 'TRANSFER') return '/pallet-task/transfer'
+  if (row.documentType === 'PREPARE') return '/pallet-task/semi/out'
+  if (row.documentType === 'OUT') return '/pallet-task/finish/out'
+  return '/pallet-task/overview'
+}
+
+function openWarehouseMap(row) {
+  const warehouseId = row.warehouseId || row.raw?.warehouseId || row.raw?.targetWarehouseId
+  router.push({path: '/warehouse-map', query: warehouseId ? {warehouseId} : {}})
+}
+
+function openAssay(row) {
+  router.push({
+    path: '/assay',
+    query: {
+      productName: row.productName || '',
+      assayId: row.assayId || ''
+    }
+  })
+}
+
+function openProduct(row) {
+  router.push({
+    path: '/product',
+    query: {name: row.productName || ''}
+  })
+}
+
+function exportLedger() {
+  if (!ledgerRows.value.length) {
+    ElMessage.warning('当前没有可导出的单据')
+    return
+  }
+  const data = ledgerRows.value.map(row => ({
+    单号: row.documentNo,
+    单据类型: row.documentTypeName,
+    来源页面: row.sourcePage,
+    操作人: row.operator,
+    创建时间: formatDateTime(row.createdAt),
+    仓库: row.warehouseName,
+    当前状态: row.statusName,
+    产品名称: row.productName,
+    数量: row.quantityText,
+    重量kg: row.totalWeight
+  }))
+  const ws = XLSX.utils.json_to_sheet(data)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, currentTabConfig.value.label)
+  XLSX.writeFile(wb, `${currentTabConfig.value.label}_${Date.now()}.xlsx`)
+  ElMessage.success('导出成功')
+}
+
 onMounted(() => {
   handleSearch()
-  getProduct()
-  SemiProduct()
-  StProduct()
-  getMeshList()
 })
 </script>
 
 <style scoped>
-.operation-logs {
+.ledger-center {
   padding: 20px;
 }
 
-.search-card {
-  margin-bottom: 20px;
-  background: var(--app-panel);
-}
-
+.search-card,
 .table-card {
+  max-width: 1500px;
+  margin-bottom: 18px;
   background: var(--app-panel);
 }
 
-.el-form--inline .el-form-item {
-  margin-right: 30px;
+.ledger-search-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px 18px;
+  align-items: center;
+}
+
+.ledger-search-form :deep(.el-form-item) {
+  margin: 0;
+}
+
+.ledger-search-form :deep(.el-input),
+.ledger-search-form :deep(.el-select),
+.ledger-search-form :deep(.el-date-editor) {
+  width: 100%;
+}
+
+.search-actions {
+  justify-content: flex-end;
+}
+
+.table-toolbar-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ledger-tabs {
+  flex: 1;
+}
+
+.ledger-tip {
+  margin-bottom: 14px;
 }
 
 .pagination-wrapper {
-  margin-top: 20px;
+  margin-top: 18px;
   display: flex;
   justify-content: flex-end;
+}
+
+.document-head {
+  margin-bottom: 18px;
+}
+
+.drawer-section-title {
+  margin: 18px 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 :deep(.el-table) {
@@ -490,5 +737,9 @@ onMounted(() => {
 
 :deep(.el-table__body tr:hover > td) {
   background-color: var(--app-hover) !important;
+}
+
+:deep(.ledger-drawer .el-drawer__body) {
+  padding: 18px 22px;
 }
 </style>

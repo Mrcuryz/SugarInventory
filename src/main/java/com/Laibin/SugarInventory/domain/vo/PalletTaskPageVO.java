@@ -32,5 +32,6 @@ public class PalletTaskPageVO {
     private LocalDateTime createdAt;
     private String confirmedBy;
     private LocalDateTime confirmedAt;
+    private String remark;
+    private String operationBatchNo;
 }
-

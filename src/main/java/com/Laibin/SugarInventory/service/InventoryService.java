@@ -8,6 +8,7 @@ import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
+import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
 
 import java.util.List;
 
@@ -23,7 +24,10 @@ public interface InventoryService {
 
     List<VWarehouseCapacity> getWarehouses();
 
-    PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size, String status);
+    PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size,
+                                                   String status, String sortField, String sortOrder,
+                                                   String createdStart, String createdEnd,
+                                                   String updatedStart, String updatedEnd);
 
     PageResult<VWarehouseCapacity> batchQueryWarehouses(OutStockBatchQueryDTO queryDTO);
 
@@ -33,4 +37,6 @@ public interface InventoryService {
      * @param productStatus 产品状态：成品/半成品
      */
     List<VInventorySummary> getProductStock(String productStatus, String productName);
+
+    List<WarehouseRecentOperationVO> listWarehouseRecentOperations(Integer warehouseId, Integer limit);
 }

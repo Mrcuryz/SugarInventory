@@ -11,7 +11,7 @@ import java.util.List;
 @Schema(description = "仓库平面图批量创建任务请求")
 public class WarehouseMapBatchOperationDTO {
     @NotBlank
-    @Schema(description = "操作类型：OUT/TRANSFER")
+    @Schema(description = "操作类型：OUT/TRANSFER/PREPARE；PREPARE 表示半成品转入备料池任务")
     private String operationType;
 
     @NotNull
@@ -28,6 +28,12 @@ public class WarehouseMapBatchOperationDTO {
 
     @Schema(description = "指定托盘码列表；传入时优先按托盘码精确创建任务")
     private List<String> codes;
+
+    @Schema(description = "指定格子排号；传入 codes 时可用于校验托盘是否仍在点击的格子中")
+    private Integer rowNumber;
+
+    @Schema(description = "指定格子层数；传入 codes 时可用于校验托盘是否仍在点击的格子中")
+    private Integer layer;
 
     @Schema(description = "调拨目标库位名称")
     private String targetWarehouseName;

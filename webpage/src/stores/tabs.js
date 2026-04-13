@@ -29,6 +29,8 @@ export const KEEP_ALIVE_TAB_NAMES = [
   'AssayGroup',
   'Standard',
   'Stock',
+  'SemiLedgerCenter',
+  'FinishLedgerCenter',
   'OperationLogs'
 ]
 

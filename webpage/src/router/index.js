@@ -18,7 +18,7 @@ const routes = [
             },
             {path: 'product', name: 'Product', meta: {title: '产品管理', keepAlive: true}, component: () => import('@/components/Product.vue')},
             {path: 'productStock', name: 'ProductStock', meta: {title: '产品库存', keepAlive: true}, component: () => import('@/components/ProductStock.vue')},
-            {path: 'warehouse', name: 'Warehouse', meta: {title: '库位管理', keepAlive: true}, component: () => import('@/components/Warehouse.vue')},
+            {path: 'warehouse', name: 'Warehouse', meta: {title: '库位管理', keepAlive: true}, component: () => import('@/components/WareHouse.vue')},
             {path: 'warehouse-map', name: 'WarehouseMap', meta: {title: '仓库平面图', keepAlive: true}, component: () => import('@/components/WarehouseMap.vue')},
             {path: 'pallet-code/list', name: 'PalletCodeList', meta: {title: '托盘码管理', keepAlive: true}, component: () => import('@/components/PalletCodeList.vue')},
             {path: 'pallet-code/task-center', redirect: '/pallet-task/overview'},
@@ -32,7 +32,9 @@ const routes = [
             {path: 'assay', name: 'Assay', meta: {title: '化验管理', keepAlive: true}, component: () => import('@/components/Assay.vue')},
             {path: 'assayGroup', name: 'AssayGroup', meta: {title: '验收标准', keepAlive: true}, component: () => import('@/components/AssayGroup.vue')},
             {path: 'standard', name: 'Standard', meta: {title: '质量标准管理', keepAlive: true}, component: () => import('@/components/Standard.vue')},
-            {path: 'stock', name: 'Stock', meta: {title: '出入库管理', keepAlive: true}, component: () => import('@/components/Stock.vue')},
+            {path: 'stock', redirect: '/stock/semi'},
+            {path: 'stock/semi', name: 'SemiLedgerCenter', meta: {title: '半成品单据', keepAlive: true}, component: () => import('@/components/Stock.vue'), props: {productStatusFilter: '半成品', pageTitle: '半成品单据', pageDescription: '仅展示半成品相关的入库、出库、转入备料和调拨台账。'}},
+            {path: 'stock/finish', name: 'FinishLedgerCenter', meta: {title: '成品单据', keepAlive: true}, component: () => import('@/components/Stock.vue'), props: {productStatusFilter: '成品', pageTitle: '成品单据', pageDescription: '仅展示成品相关的入库、出库和调拨台账。'}},
             {path: 'employee', name: 'Employee', meta: {title: '员工管理'}, component: () => import('@/components/Employee.vue')},
         ]
     }

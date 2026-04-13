@@ -9,8 +9,10 @@ import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
+import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
 import com.Laibin.SugarInventory.mapper.InventoryMapper;
 import com.Laibin.SugarInventory.mapper.InventorySummaryMapper;
+import com.Laibin.SugarInventory.mapper.PalletFlowRecordMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.service.InventoryService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,9 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Autowired
     private InventoryMapper inventoryMapper;
+
+    @Autowired
+    private PalletFlowRecordMapper palletFlowRecordMapper;
 
     @Override
     public PageResult<VInventorySummary> getInventorySummary(InventoryQueryDTO query) {
@@ -83,12 +88,17 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     @Override
-    public PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size, String status) {
+    public PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size,
+                                                          String status, String sortField, String sortOrder,
+                                                          String createdStart, String createdEnd,
+                                                          String updatedStart, String updatedEnd) {
         int offset = (page - 1) * size;
 
         List<VWarehouseCapacity> records =
-                summaryMapper.selectCapacityListByStatus(warehouseName, warehouseIds, status, offset, size);
-        Long total = summaryMapper.countCapacityByStatus(warehouseName, status, warehouseIds);
+                summaryMapper.selectCapacityListByStatus(warehouseName, warehouseIds, status, sortField, sortOrder,
+                        createdStart, createdEnd, updatedStart, updatedEnd, offset, size);
+        Long total = summaryMapper.countCapacityByStatus(warehouseName, status, warehouseIds,
+                createdStart, createdEnd, updatedStart, updatedEnd);
 
         return new PageResult<>(total, records);
     }
@@ -106,14 +116,27 @@ public class InventoryServiceImpl implements InventoryService {
                         null,
                         queryDTO.getIds(),
                         null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
                         offset,
                         queryDTO.getSize());
-        Long total = summaryMapper.countCapacityByStatus(null, null, queryDTO.getIds());
+        Long total = summaryMapper.countCapacityByStatus(null, null, queryDTO.getIds(),
+                null, null, null, null);
         return new PageResult<>(total, records);
     }
 
     @Override
     public List<VInventorySummary> getProductStock(String productStatus, String productName) {
         return summaryMapper.selectProductTotalStock(productStatus, productName);
+    }
+
+    @Override
+    public List<WarehouseRecentOperationVO> listWarehouseRecentOperations(Integer warehouseId, Integer limit) {
+        int effectiveLimit = limit == null || limit < 1 ? 10 : Math.min(limit, 50);
+        return palletFlowRecordMapper.listRecentWarehouseOperations(warehouseId, effectiveLimit);
     }
 }

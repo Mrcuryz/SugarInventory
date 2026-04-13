@@ -13,6 +13,7 @@ public class PalletCodeQueryDTO {
     private String productStatus;
     private LocalDate productionDateStart;
     private LocalDate productionDateEnd;
+    private Boolean inventoryOnly;
     private Long pageNum;
     private Long pageSize;
 }

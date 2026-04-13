@@ -531,6 +531,7 @@ CREATE TABLE `warehouse`  (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '仓库ID',
   `status` enum('正常','空置','满仓','维护','临期预警') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '空置' COMMENT '仓库状态',
   `created_at` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近修改时间',
   `max_capacity` int NOT NULL DEFAULT 20 COMMENT '最大容量',
   `cur_capacity` int NOT NULL DEFAULT 0 COMMENT '当前存量',
   `max_rows` int NOT NULL DEFAULT 10 COMMENT '最大存放排数',

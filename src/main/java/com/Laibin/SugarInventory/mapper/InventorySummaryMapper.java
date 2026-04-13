@@ -65,15 +65,20 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
                 w.id AS warehouse_id,
                 w.warehouse_name,
                 w.max_capacity,
-                COALESCE(vc.cur_capacity, 0) AS cur_capacity,
-                ROUND(COALESCE(vc.cur_capacity, 0) / w.max_capacity * 100, 2) AS capacity_percentage,
+                w.cur_capacity AS cur_capacity,
+                ROUND(CASE WHEN w.max_capacity > 0 THEN w.cur_capacity / w.max_capacity * 100 ELSE 0 END, 2) AS capacity_percentage,
                 w.status,
-                w.created_at
+                w.max_rows,
+                w.created_at,
+                w.updated_at,
+                COALESCE(vc.current_pallet_count, 0) AS current_pallet_count,
+                COALESCE(vc.current_product_count, 0) AS current_product_count
             FROM warehouse w
             LEFT JOIN (
                 SELECT 
                     warehouse_id, 
-                    SUM(quantity) AS cur_capacity 
+                    COUNT(DISTINCT pallet_code_id) AS current_pallet_count,
+                    COUNT(DISTINCT product_id) AS current_product_count
                 FROM inventory 
                 GROUP BY warehouse_id
             ) vc ON w.id = vc.warehouse_id
@@ -84,45 +89,99 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
 
     // 根据库位状态或库存id列表批量查询库位容量信息
     @Select("<script>" +
-            "SELECT * FROM v_warehouse_capacity " +
+            "SELECT " +
+            " w.id AS warehouse_id, " +
+            " w.warehouse_name AS warehouse_name, " +
+            " w.status AS status, " +
+            " w.cur_capacity AS cur_capacity, " +
+            " w.max_capacity AS max_capacity, " +
+            " ROUND(CASE WHEN w.max_capacity > 0 THEN w.cur_capacity / w.max_capacity * 100 ELSE 0 END, 2) AS capacity_percentage, " +
+            " MIN(i.entry_date) AS first_entry_date, " +
+            " w.max_rows AS max_rows, " +
+            " w.created_at AS created_at, " +
+            " w.updated_at AS updated_at, " +
+            " COUNT(DISTINCT i.pallet_code_id) AS current_pallet_count, " +
+            " COUNT(DISTINCT i.product_id) AS current_product_count " +
+            " FROM warehouse w " +
+            " LEFT JOIN inventory i ON i.warehouse_id = w.id " +
             "<where>" +
             "   1=1 " +
             "   <if test='warehouseName != null and warehouseName != \"\"'> " +
-            "       AND warehouse_name LIKE concat('%', #{warehouseName}, '%') " +
+            "       AND w.warehouse_name LIKE concat('%', #{warehouseName}, '%') " +
             "   </if> " +
             "   <if test='status != null and status != \"\"'> " +
-            "       AND status = #{status} " +
+            "       AND w.status = #{status} " +
+            "   </if> " +
+            "   <if test='createdStart != null and createdStart != \"\"'> " +
+            "       AND w.created_at &gt;= #{createdStart} " +
+            "   </if> " +
+            "   <if test='createdEnd != null and createdEnd != \"\"'> " +
+            "       AND w.created_at &lt;= #{createdEnd} " +
+            "   </if> " +
+            "   <if test='updatedStart != null and updatedStart != \"\"'> " +
+            "       AND COALESCE(w.updated_at, w.created_at) &gt;= #{updatedStart} " +
+            "   </if> " +
+            "   <if test='updatedEnd != null and updatedEnd != \"\"'> " +
+            "       AND COALESCE(w.updated_at, w.created_at) &lt;= #{updatedEnd} " +
             "   </if> " +
             "   <if test='warehouseIds != null and warehouseIds.size() > 0'> " +
-            "       AND warehouse_id IN " +
+            "       AND w.id IN " +
             "       <foreach collection='warehouseIds' item='id' open='(' separator=',' close=')'> " +
             "           #{id} " +
             "       </foreach> " +
             "   </if> " +
             "</where>" +
-            "ORDER BY capacity_percentage DESC " +
+            " GROUP BY w.id, w.warehouse_name, w.status, w.cur_capacity, w.max_capacity, w.max_rows, w.created_at, w.updated_at " +
+            "<choose>" +
+            "   <when test='sortField == \"namePinyin\"'> ORDER BY CONVERT(w.warehouse_name USING gbk) </when>" +
+            "   <when test='sortField == \"createdAt\"'> ORDER BY w.created_at </when>" +
+            "   <when test='sortField == \"updatedAt\"'> ORDER BY COALESCE(w.updated_at, w.created_at) </when>" +
+            "   <otherwise> ORDER BY w.id </otherwise>" +
+            "</choose>" +
+            "<choose>" +
+            "   <when test='sortOrder == \"desc\" or sortOrder == \"DESC\"'> DESC </when>" +
+            "   <otherwise> ASC </otherwise>" +
+            "</choose>" +
             "LIMIT #{offset}, #{size}" +
             "</script>")
     List<VWarehouseCapacity> selectCapacityListByStatus(@Param("warehouseName") String warehouseName,
                                                         @Param("warehouseIds") List<Integer> warehouseIds,
                                                         @Param("status") String status,
+                                                        @Param("sortField") String sortField,
+                                                        @Param("sortOrder") String sortOrder,
+                                                        @Param("createdStart") String createdStart,
+                                                        @Param("createdEnd") String createdEnd,
+                                                        @Param("updatedStart") String updatedStart,
+                                                        @Param("updatedEnd") String updatedEnd,
                                                         @Param("offset") int offset,
                                                         @Param("size") int size);
 
 
     // 根据库位状态和库存id列表批量查询库位容量数量
     @Select("<script>" +
-            "SELECT COUNT(*) FROM v_warehouse_capacity " +
+            "SELECT COUNT(*) FROM warehouse w " +
             "<where>" +
             "   1=1 " +
             "   <if test='warehouseName != null and warehouseName != \"\"'> " +
-            "       AND warehouse_name LIKE concat('%', #{warehouseName}, '%') " +
+            "       AND w.warehouse_name LIKE concat('%', #{warehouseName}, '%') " +
             "   </if> " +
             "<if test='status!= null and status != \"\"'> " +
-            "   AND status = #{status} " +
+            "   AND w.status = #{status} " +
             "</if >" +
+            "   <if test='createdStart != null and createdStart != \"\"'> " +
+            "       AND w.created_at &gt;= #{createdStart} " +
+            "   </if> " +
+            "   <if test='createdEnd != null and createdEnd != \"\"'> " +
+            "       AND w.created_at &lt;= #{createdEnd} " +
+            "   </if> " +
+            "   <if test='updatedStart != null and updatedStart != \"\"'> " +
+            "       AND COALESCE(w.updated_at, w.created_at) &gt;= #{updatedStart} " +
+            "   </if> " +
+            "   <if test='updatedEnd != null and updatedEnd != \"\"'> " +
+            "       AND COALESCE(w.updated_at, w.created_at) &lt;= #{updatedEnd} " +
+            "   </if> " +
             "   <if test='warehouseIds != null and warehouseIds.size() > 0'> " +
-            "       AND warehouse_id IN " +
+            "       AND w.id IN " +
             "       <foreach collection='warehouseIds' item='id' open='(' separator=',' close=')'> " +
             "           #{id} " +
             "       </foreach> " +
@@ -131,5 +190,9 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             "</script>")
     Long countCapacityByStatus(@Param("warehouseName") String warehouseName,
                                @Param("status") String status,
-                               @Param("warehouseIds") List<Integer> warehouseIds);
+                               @Param("warehouseIds") List<Integer> warehouseIds,
+                               @Param("createdStart") String createdStart,
+                               @Param("createdEnd") String createdEnd,
+                               @Param("updatedStart") String updatedStart,
+                               @Param("updatedEnd") String updatedEnd);
 }

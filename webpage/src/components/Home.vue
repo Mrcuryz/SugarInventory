@@ -76,7 +76,6 @@
       <div class="location-actions">
         <el-button type="primary" @click="visible = true;returnInStockFlag='0';operationTypeLabel = '新增入库';operationType='新增入库';disableBtn=false">新增入库</el-button>
         <el-button @click="visible = true;operationTypeLabel='新增出库'; operationType='新增出库';warehouseProductList=selectedLocationInfo">新增出库</el-button>
-        <el-button v-if="selectedLocation.id < 1000" @click="visible = true;returnInStockFlag= '1';operationTypeLabel='退货入库'; operationType='新增入库';disableBtn=false">退货入库</el-button>
         <el-button v-if="selectedLocation.id < 1000" @click="visible = true;operationTypeLabel='调拨出库';operationType='新增出库';warehouseProductList=selectedLocationInfo">调拨出库</el-button>
       </div>
       <el-empty v-if="!selectedLocationInfo.length" description="暂无产品明细"/>

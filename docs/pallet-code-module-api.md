@@ -122,6 +122,7 @@
   "productStatus": "成品",
   "productionDateStart": "2026-04-01",
   "productionDateEnd": "2026-04-08",
+  "inventoryOnly": false,
   "pageNum": 1,
   "pageSize": 10
 }
@@ -137,6 +138,7 @@
 | productStatus | String | 否 | 半成品/成品 |
 | productionDateStart | LocalDate | 否 | 生产日期起 |
 | productionDateEnd | LocalDate | 否 | 生产日期止 |
+| inventoryOnly | Boolean | 否 | 是否仅返回存在当前库存记录的托盘；产品库存页托盘库存视图使用 `true` |
 | pageNum | Long | 否 | 页码，默认 1 |
 | pageSize | Long | 否 | 页大小，默认 10 |
 
@@ -384,6 +386,32 @@
 
 ---
 
+### 3.2.7 仓库平面图创建任务
+- **URL**：`POST /api/pallet-codes/warehouse-map/tasks/create`
+- **功能**：按仓库平面图的库位、侧别和前 N 板创建任务；传入 `codes` 时按指定托盘码精确创建任务。
+
+请求体关键字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| operationType | String | 是 | `OUT` / `TRANSFER` / `PREPARE`；`PREPARE` 表示半成品转入备料池任务 |
+| warehouseId | Integer | 是 | 来源库位 ID |
+| side | String | 是 | 来源侧：左 / 右 |
+| quantity | Integer | 是 | 前 N 板；传入 `codes` 时按 `codes.size()` 为准 |
+| codes | String[] | 否 | 指定托盘码列表；用于格子级单板操作 |
+| rowNumber | Integer | 否 | 指定格子排号；传入 `codes` 时用于校验托盘仍在点击格子 |
+| layer | Integer | 否 | 指定格子层数；传入 `codes` 时用于校验托盘仍在点击格子 |
+| targetWarehouseName | String | 调拨时必填 | 调拨目标库位名称 |
+| targetSide | String | 调拨时必填 | 调拨目标侧：左 / 右 |
+| remark | String | 否 | 备注 |
+
+说明：
+- `PREPARE` 只支持半成品托盘，后端会创建 `taskType=OUT, bizScene=PREPARE_CONSUMED` 的待处理任务。
+- 传入 `codes + rowNumber + layer` 时，后端会校验托盘仍在当前仓库、侧、排、层，避免格子点击后位置变化导致误建任务。
+- 返回 `WarehouseMapTaskCreateResultVO`，前端可按 `routePath` 提示“去处理”。
+
+---
+
 ## 3.3 追溯查询
 
 ### 3.3.1 查询托盘化验数据
@@ -458,6 +486,19 @@
 - **清理范围**：`operation_time < now - 180 days` 且 `pallet_flow_record.cycle_no <> pallet_code.current_cycle_no` 的流转记录。
 - **保护规则**：当前轮次不删，180 天内不删。
 - **实现方式**：批量 SQL 删除，执行前打印可清理数量。
+
+---
+
+### 3.3.7 库位台账与最近操作
+- **URL**：`GET /api/inventory/query`
+- **功能**：库位台账分页查询；前端传 `sortField/sortOrder`，后端执行排序。
+- **常用参数**：`warehouseName, status, page, size, sortField, sortOrder, createdStart, createdEnd, updatedStart, updatedEnd`
+- **排序字段**：`namePinyin` 按 `warehouse_name` 拼音排序；`createdAt` 按创建时间；`updatedAt` 按最近修改时间。
+- **响应字段补充**：`maxRows, currentPalletCount, currentProductCount, createdAt, updatedAt`
+
+- **URL**：`GET /api/inventory/warehouses/{warehouseId}/recent-operations?limit=10`
+- **功能**：查询指定库位最近流转操作记录，默认最近 10 条。
+- **响应字段**：`operationTime, operationType, operationName, operatorName, palletCode, productName, fromWarehouseName, toWarehouseName, remark`
 
 ---
 
