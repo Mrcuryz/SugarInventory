@@ -5,11 +5,11 @@ import MenuVue from '../components/Menu.vue'
 
 //定义路由关系
 const routes = [
-    {path: '/login', name: 'Login', meta: {hiddenTab: true}, component: () => import('@/components/Login.vue')},
+    {path: '/login', name: 'Login', meta: {hiddenTab: true}, component: () => import('@/components/LoginModern.vue')},
     {
         path: '/', component: MenuVue, redirect: '/home', children: [
             {path: 'home', name: 'Home', meta: {title: '首页', keepAlive: true}, component: () => import('@/components/Home.vue')},
-            {path: 'autoInbound', name: 'AutoInbound', meta: {title: '自动入库', keepAlive: true}, component: () => import('@/components/AutoInbound.vue')},
+//            {path: 'autoInbound', name: 'AutoInbound', meta: {title: '自动入库', keepAlive: true}, component: () => import('@/components/AutoInbound.vue')},
             {
                 path: 'operationlogs',
                 name: 'OperationLogs',
@@ -17,7 +17,7 @@ const routes = [
                 component: () => import('@/components/OperationLogs.vue')
             },
             {path: 'product', name: 'Product', meta: {title: '产品管理', keepAlive: true}, component: () => import('@/components/Product.vue')},
-            {path: 'productStock', name: 'ProductStock', meta: {title: '产品库存', keepAlive: true}, component: () => import('@/components/ProductStock.vue')},
+            {path: 'productStock', name: 'ProductStock', meta: {title: '库存汇总', keepAlive: true}, component: () => import('@/components/ProductStock.vue')},
             {path: 'warehouse', name: 'Warehouse', meta: {title: '库位管理', keepAlive: true}, component: () => import('@/components/WareHouse.vue')},
             {path: 'warehouse-map', name: 'WarehouseMap', meta: {title: '仓库平面图', keepAlive: true}, component: () => import('@/components/WarehouseMap.vue')},
             {path: 'pallet-code/list', name: 'PalletCodeList', meta: {title: '托盘码管理', keepAlive: true}, component: () => import('@/components/PalletCodeList.vue')},

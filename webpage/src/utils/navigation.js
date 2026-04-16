@@ -17,10 +17,10 @@ import {
 
 export const menuList = [
   {path: '/home', title: '首页', icon: House},
-  {path: '/autoInbound', title: '自动入库', icon: Document},
+//  {path: '/autoInbound', title: '自动入库', icon: Document},
   {path: '/operationlogs', title: '操作日志', icon: Document},
   {path: '/product', title: '产品管理', icon: Histogram},
-  {path: '/productStock', title: '产品库存', icon: ShoppingCart},
+  {path: '/productStock', title: '库存汇总', icon: ShoppingCart},
   {path: '/warehouse', title: '库位管理', icon: Box},
   {path: '/warehouse-map', title: '仓库平面图', icon: Location},
   {path: '/pallet-code/list', title: '托盘码管理', icon: Tickets},

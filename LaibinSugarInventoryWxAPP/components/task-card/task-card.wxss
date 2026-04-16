@@ -1,0 +1,111 @@
+.task-card {
+  margin-bottom: 18rpx;
+  padding: 24rpx;
+  border: 1rpx solid #e3e9f2;
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  overflow: hidden;
+}
+
+.selected {
+  border-color: #246bfe;
+  box-shadow: 0 0 0 2rpx rgba(36, 107, 254, 0.08), 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+}
+
+.is-success {
+  border-color: #d9efdf;
+}
+
+.is-error {
+  border-color: #f5d7d7;
+  background: #fffdfd;
+}
+
+.card-main {
+  display: flex;
+  gap: 18rpx;
+}
+
+.check {
+  flex: 0 0 auto;
+  width: 38rpx;
+  height: 38rpx;
+  margin-top: 6rpx;
+  border: 2rpx solid #a8b3c4;
+  border-radius: 8rpx;
+  box-sizing: border-box;
+}
+
+.checked {
+  border-color: #246bfe;
+  background: #246bfe;
+}
+
+.task-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.top-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.code {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.product {
+  margin-top: 14rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #2c3648;
+}
+
+.meta,
+.message {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: #647089;
+}
+
+.message {
+  color: #ba1a1a;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.action {
+  min-width: 0;
+  height: 60rpx;
+  line-height: 60rpx;
+  margin: 0;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.action::after {
+  border: 0;
+}
+
+.primary {
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.plain {
+  color: #246bfe;
+  background: #eaf1ff;
+}

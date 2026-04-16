@@ -47,7 +47,7 @@ Page({
 
                 setTimeout(() => {
                   wx.showToast({ title: "绑定成功！", icon: "success" });
-                  wx.switchTab({ url: "/pages/home/home" });
+                  wx.switchTab({ url: "/pages/workbench/index/index" });
                 }, 1000);
               } else {
                 wx.showToast({ title: res.data.msg || "绑定失败", icon: "none" });

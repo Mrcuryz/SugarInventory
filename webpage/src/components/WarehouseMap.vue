@@ -620,7 +620,10 @@ const occupiedPositionSet = computed(() => buildPositionSet(detailAllPositions.v
 const matchedPositionSet = computed(() => buildPositionSet(detailMatchedPositions.value))
 const occupiedPositionCount = computed(() => occupiedPositionSet.value.size)
 const matchedPositionCount = computed(() => matchedPositionSet.value.size)
-const targetWarehouseOptions = computed(() => capacityList.value.filter(item => item.warehouseId !== selectedLocation.value?.id))
+const targetWarehouseOptions = computed(() => capacityList.value
+    .filter(item => item.warehouseId !== selectedLocation.value?.id)
+    .slice()
+    .sort((left, right) => Number(left.warehouseId) - Number(right.warehouseId)))
 const batchMaxQuantity = computed(() => detailAllPositions.value.filter(item => item.side === batchForm.value.side && item.palletCode).length)
 const batchInputMax = computed(() => Math.max(batchMaxQuantity.value, 1))
 const batchDialogTitle = computed(() => {

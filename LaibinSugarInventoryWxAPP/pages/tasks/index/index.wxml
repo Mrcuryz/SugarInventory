@@ -1,0 +1,84 @@
+<page-shell safeBottom="{{true}}">
+  <page-header title="任务中心" subtitle="处理扫码创建的待办任务" />
+
+  <view class="filter-card">
+    <view class="filter-label">任务状态</view>
+    <view class="tabs">
+      <view wx:for="{{statusTabs}}" wx:key="key" class="tab {{status === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onStatusTap">{{item.label}}</view>
+    </view>
+
+    <view class="filter-label sub">任务类型</view>
+    <view class="type-tabs">
+      <view wx:for="{{typeTabs}}" wx:key="key" class="type-tab {{taskType === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onTypeTap">{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="summary-card">
+    <view>
+      <view class="summary-title">当前任务列表</view>
+      <view class="summary-desc">按状态筛选后，可直接单条处理，也可在底部批量确认或取消。</view>
+    </view>
+    <view class="summary-meta">
+      <text>共 {{total}} 条</text>
+      <text wx:if="{{selectedCodes.length}}">已选 {{selectedCodes.length}} 条</text>
+    </view>
+  </view>
+
+  <view wx:if="{{tasks.length}}">
+    <task-card
+      wx:for="{{tasks}}"
+      wx:key="taskId"
+      task="{{item}}"
+      selectable="{{status === 'PENDING'}}"
+      selected="{{item.selected}}"
+      showActions="{{status === 'PENDING'}}"
+      bind:selectTask="onSelectTask"
+      bind:tapTask="onTapTask"
+      bind:confirmTask="onConfirmTask"
+      bind:cancelTask="onCancelTask"
+    />
+  </view>
+  <empty-state wx:else title="暂无任务" description="切换状态或从扫码页创建任务后再查看。" />
+
+  <bottom-action-bar actions="{{bottomActions}}" bind:action="onBottomAction" />
+
+  <view wx:if="{{confirmVisible}}" class="modal-layer">
+    <view class="modal-mask" bindtap="closeConfirm"></view>
+    <view class="modal-card">
+      <view class="modal-title">确认入库</view>
+      <view class="modal-code">已选 {{selectedCodes.length}} 个托盘</view>
+      <view class="field">
+        <text class="label">入库库位</text>
+        <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />
+      </view>
+      <view class="field">
+        <text class="label">入库日期</text>
+        <picker mode="date" value="{{confirmForm.entryDate}}" data-field="entryDate" bindchange="onConfirmInput">
+          <view class="picker">{{confirmForm.entryDate}}</view>
+        </picker>
+      </view>
+      <view class="field two">
+        <view>
+          <text class="label">优先侧</text>
+          <picker mode="selector" range="{{['左', '右']}}" bindchange="onSideChange">
+            <view class="picker">{{confirmForm.side}}</view>
+          </picker>
+        </view>
+        <view>
+          <text class="label">单位</text>
+          <picker mode="selector" range="{{['板', '件']}}" bindchange="onUnitChange">
+            <view class="picker">{{confirmForm.unit === '1' ? '件' : '板'}}</view>
+          </picker>
+        </view>
+      </view>
+      <view class="field">
+        <text class="label">数量</text>
+        <input class="input {{confirmForm.unit === '0' ? 'disabled-input' : ''}}" type="number" value="{{confirmForm.quantity}}" data-field="quantity" bindinput="onConfirmInput" disabled="{{confirmForm.unit === '0'}}" />
+      </view>
+      <view class="modal-actions">
+        <button class="plain" bindtap="closeConfirm">取消</button>
+        <button class="primary" bindtap="submitConfirmIn">确认入库</button>
+      </view>
+    </view>
+  </view>
+</page-shell>

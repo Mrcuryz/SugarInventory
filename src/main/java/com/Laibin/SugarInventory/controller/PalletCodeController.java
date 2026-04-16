@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.GeneratePalletCodeDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.PalletQrExportDTO;
 import com.Laibin.SugarInventory.domain.dto.BindPalletTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.BindTaskSemiItemsDTO;
 import com.Laibin.SugarInventory.domain.dto.CancelPalletBatchDTO;
@@ -36,7 +37,6 @@ import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.service.PalletCodeService;
-import com.Laibin.SugarInventory.util.QrCodeUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -51,9 +51,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletResponse;
-import javax.imageio.ImageIO;
 import java.io.IOException;
-import java.awt.image.BufferedImage;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -185,11 +185,40 @@ public class PalletCodeController {
     @Operation(summary = "托盘码二维码", description = "生成托盘码对应的二维码图片(PNG)")
     @GetMapping("/{code}/qrcode")
     public void generateQrCode(@PathVariable("code") String code, HttpServletResponse response) throws IOException {
-        // 校验托盘码合法性和存在性
-        palletCodeService.parseAndFind(code);
-        BufferedImage image = QrCodeUtils.generateQrCode(code, 256, 256);
+        byte[] png = palletCodeService.generateQrCodePng(code);
         response.setContentType("image/png");
-        ImageIO.write(image, "PNG", response.getOutputStream());
+        response.getOutputStream().write(png);
+    }
+
+    @Operation(summary = "下载托盘二维码 PNG", description = "下载白底黑码高清 PNG")
+    @GetMapping("/{code}/qrcode.png")
+    public void downloadQrCodePng(@PathVariable("code") String code, HttpServletResponse response) throws IOException {
+        byte[] png = palletCodeService.generateQrCodePng(code);
+        writeDownload(response, "image/png", safeFileName(code) + ".png", png);
+    }
+
+    @Operation(summary = "下载托盘二维码 SVG", description = "下载托盘二维码 SVG，作为高级排版选项")
+    @GetMapping("/{code}/qrcode.svg")
+    public void downloadQrCodeSvg(@PathVariable("code") String code, HttpServletResponse response) throws IOException {
+        String svg = palletCodeService.generateQrCodeSvg(code);
+        writeDownload(response, "image/svg+xml;charset=UTF-8", safeFileName(code) + ".svg", svg.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Operation(summary = "下载托盘二维码标签 PDF", description = "下载单个托盘码的 A4 打印版 PDF 标签")
+    @GetMapping("/{code}/qrcode-label.pdf")
+    public void downloadQrLabelPdf(@PathVariable("code") String code, HttpServletResponse response) throws IOException {
+        PalletQrExportDTO dto = new PalletQrExportDTO();
+        dto.setCodes(List.of(code));
+        byte[] pdf = palletCodeService.generateQrLabelPdf(dto);
+        writeDownload(response, "application/pdf", safeFileName(code) + ".pdf", pdf);
+    }
+
+    @Operation(summary = "批量导出托盘二维码标签 PDF", description = "按 A4 标签版批量导出托盘二维码 PDF")
+    @PostMapping("/qrcode-labels/pdf")
+    public void batchDownloadQrLabelPdf(@RequestBody @Valid PalletQrExportDTO dto,
+                                        HttpServletResponse response) throws IOException {
+        byte[] pdf = palletCodeService.generateQrLabelPdf(dto);
+        writeDownload(response, "application/pdf", "pallet-labels-batch-" + LocalDate.now() + ".pdf", pdf);
     }
 
     @Operation(summary = "托盘化验数据", description = "根据托盘码查询化验数据")
@@ -371,5 +400,16 @@ public class PalletCodeController {
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
         }
+    }
+
+    private void writeDownload(HttpServletResponse response, String contentType, String filename, byte[] bytes) throws IOException {
+        response.setContentType(contentType);
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        response.setHeader("Content-Length", String.valueOf(bytes.length));
+        response.getOutputStream().write(bytes);
+    }
+
+    private String safeFileName(String code) {
+        return code == null ? "pallet-qrcode" : code.trim().toUpperCase().replaceAll("[^A-Z0-9_-]", "_");
     }
 }

@@ -1,0 +1,53 @@
+.sheet-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 32, 51, 0.44);
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 24rpx 28rpx calc(24rpx + env(safe-area-inset-bottom));
+  border-radius: 8rpx 8rpx 0 0;
+  background: #ffffff;
+}
+
+.sheet-title {
+  margin-bottom: 18rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #172033;
+}
+
+.sheet-action,
+.sheet-cancel {
+  height: 78rpx;
+  line-height: 78rpx;
+  margin: 0 0 14rpx;
+  border-radius: 8rpx;
+  font-size: 27rpx;
+}
+
+.sheet-action::after,
+.sheet-cancel::after {
+  border: 0;
+}
+
+.sheet-action {
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.sheet-cancel {
+  color: #526072;
+  background: #eef2f6;
+}
+

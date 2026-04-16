@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "查询中心",
+  "usingComponents": {
+    "page-shell": "/components/page-shell/page-shell",
+    "page-header": "/components/page-header/page-header",
+    "empty-state": "/components/empty-state/empty-state"
+  }
+}
+

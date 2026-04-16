@@ -21,6 +21,7 @@ import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskItemDTO;
 import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.InStockRequestDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.PalletQrExportDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.SemiRecordDTO;
 import com.Laibin.SugarInventory.domain.dto.TaskSemiItemDTO;
@@ -68,6 +69,8 @@ import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.PalletCodeService;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
 import com.Laibin.SugarInventory.util.PalletCodeGenerator;
+import com.Laibin.SugarInventory.util.PalletQrLabelPdfRenderer;
+import com.Laibin.SugarInventory.util.QrCodeUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.slf4j.Logger;
@@ -78,6 +81,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -88,6 +93,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.imageio.ImageIO;
 
 /**
  * <p>
@@ -241,6 +247,37 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         }
 
         return vo;
+    }
+
+    @Override
+    public byte[] generateQrCodePng(String code) {
+        PalletCode palletCode = parseAndFind(code);
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            ImageIO.write(QrCodeUtils.generateQrCode(palletCode.getCode(), 512, 512), "PNG", output);
+            return output.toByteArray();
+        } catch (IOException e) {
+            throw new BusinessException("生成二维码 PNG 失败");
+        }
+    }
+
+    @Override
+    public String generateQrCodeSvg(String code) {
+        PalletCode palletCode = parseAndFind(code);
+        return QrCodeUtils.generateQrCodeSvg(palletCode.getCode(), 512, 512);
+    }
+
+    @Override
+    public byte[] generateQrLabelPdf(PalletQrExportDTO dto) {
+        List<String> codes = normalizeAndValidateUniqueCodes(dto.getCodes());
+        List<String> existingCodes = new ArrayList<>(codes.size());
+        for (String code : codes) {
+            existingCodes.add(parseAndFind(code).getCode());
+        }
+        try {
+            return PalletQrLabelPdfRenderer.renderA4Labels(existingCodes);
+        } catch (IOException e) {
+            throw new BusinessException("生成二维码标签 PDF 失败");
+        }
     }
 
     // 查询托盘当前库存位置：需要库存表存在 pallet_code_id

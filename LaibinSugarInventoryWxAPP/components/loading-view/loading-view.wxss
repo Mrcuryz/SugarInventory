@@ -1,0 +1,7 @@
+.loading-view {
+  padding: 48rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: #647089;
+}
+

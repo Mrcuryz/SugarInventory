@@ -31,15 +31,31 @@
           border
           v-loading="loading"
       >
-        <el-table-column prop="meshName" label="筛网名称" width="200"/>
-        <el-table-column prop="description" label="描述" width="352"/>
+        <el-table-column prop="meshName" label="筛网名称" width="180"/>
+        <el-table-column prop="description" label="描述" min-width="220"/>
+        <el-table-column label="关联产品" min-width="300" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div v-if="getRelatedProducts(row.id).length" class="related-products">
+              <el-tag
+                  v-for="product in getRelatedProducts(row.id)"
+                  :key="product.id"
+                  size="small"
+                  type="primary"
+              >
+                {{ product.productName }}
+              </el-tag>
+            </div>
+            <el-text v-else type="info">未关联</el-text>
+          </template>
+        </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="200" sortable/>
         <el-table-column prop="updatedAt" label="更新时间" width="200" sortable/>
-        <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="250" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small"
                        @click="dialogVisible = true;operationType='修改筛网';handleEdit(row)">编辑
             </el-button>
+            <el-button type="success" size="small" @click="openAssociateDialog(row)">新增关联产品</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -65,12 +81,54 @@
         <el-button @click="dialogVisible = false">取消</el-button>
       </div>
     </el-dialog>
+
+    <el-dialog
+        v-model="associateDialogVisible"
+        :title="`新增关联产品 - ${associateMesh?.meshName || ''}`"
+        width="520px"
+        destroy-on-close
+    >
+      <el-form label-width="96px">
+        <el-form-item label="当前筛网">
+          <el-input :model-value="associateMesh?.meshName || ''" disabled/>
+        </el-form-item>
+        <el-form-item label="关联产品">
+          <el-select
+              v-model="associateProductIds"
+              multiple
+              filterable
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="请选择需要绑定到该筛网的产品"
+              style="width: 100%"
+          >
+            <el-option
+                v-for="product in associateProductOptions"
+                :key="product.id"
+                :label="product.label"
+                :value="product.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="associateDialogVisible = false">取消</el-button>
+        <el-button
+            type="primary"
+            :loading="associateSubmitting"
+            @click="handleAssociateProducts"
+        >
+          确定绑定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue'
+import {computed, ref, onMounted} from 'vue'
 import {addMesh, deleteMesh, getMesh, updateMesh} from '@/api/mesh'
+import {changeProduct, getProductList} from '@/api/product'
 import {ElMessage, ElMessageBox} from 'element-plus'
 // 搜索表单
 const searchForm = ref({
@@ -78,6 +136,7 @@ const searchForm = ref({
 })
 // 筛网列表
 const resultList = ref([])
+const productList = ref([])
 
 // 加载状态
 const loading = ref(false)
@@ -89,20 +148,23 @@ const handleSearch = async () => {
     params.meshName = searchForm.value.meshName
   }
   loading.value = true
-  let res = await getMesh(params)
-  if (res.code === 200) {
-    resultList.value = res.data
-    resultList.value.forEach(item => {
-      if (item.createdAt) {
-        item.createdAt = item.createdAt.replace('T', ' ').replace('Z', ' ')
-      }
-      if (item.updatedAt) {
-        item.updatedAt = item.updatedAt.replace('T', ' ').replace('Z', ' ')
-      }
-    })
+  try {
+    let res = await getMesh(params)
+    if (res.code === 200) {
+      resultList.value = res.data
+      resultList.value.forEach(item => {
+        if (item.createdAt) {
+          item.createdAt = item.createdAt.replace('T', ' ').replace('Z', ' ')
+        }
+        if (item.updatedAt) {
+          item.updatedAt = item.updatedAt.replace('T', ' ').replace('Z', ' ')
+        }
+      })
+    } else {
+      ElMessage.error(res.msg)
+    }
+  } finally {
     loading.value = false
-  } else {
-    ElMessage.error(res.msg)
   }
 }
 // 处理重置
@@ -131,6 +193,69 @@ const submitForm = ref({
   meshName: '',
   description: ''
 })
+
+const loadProducts = async () => {
+  const res = await getProductList()
+  if (res.code === 200) {
+    productList.value = res.data || []
+  } else {
+    ElMessage.error(res.msg || '获取产品列表失败')
+  }
+}
+
+const getRelatedProducts = (meshId) => {
+  return productList.value.filter(product => product.screenMeshId === meshId)
+}
+
+const associateDialogVisible = ref(false)
+const associateMesh = ref(null)
+const associateProductIds = ref([])
+const associateSubmitting = ref(false)
+
+const associateProductOptions = computed(() => {
+  const currentMeshId = associateMesh.value?.id
+  return productList.value
+      .filter(product => product.screenMeshId !== currentMeshId)
+      .map(product => ({
+        ...product,
+        label: `${product.productName}（${product.status || '未知状态'}${product.screenMeshId ? '，已绑定其他筛网' : '，未绑定筛网'}）`
+      }))
+})
+
+const openAssociateDialog = (row) => {
+  associateMesh.value = row
+  associateProductIds.value = []
+  associateDialogVisible.value = true
+}
+
+const handleAssociateProducts = async () => {
+  if (!associateMesh.value?.id) {
+    ElMessage.error('请先选择筛网')
+    return
+  }
+  if (associateProductIds.value.length === 0) {
+    ElMessage.error('请至少选择一个产品')
+    return
+  }
+  associateSubmitting.value = true
+  try {
+    const results = await Promise.all(associateProductIds.value.map(productId => changeProduct({
+      productId,
+      screenMeshId: associateMesh.value.id
+    })))
+    const failed = results.find(res => res.code !== 200)
+    if (failed) {
+      throw new Error(failed.msg || '关联产品失败')
+    }
+    ElMessage.success('关联产品成功')
+    associateDialogVisible.value = false
+    await loadProducts()
+  } catch (error) {
+    ElMessage.error(error?.message || '关联产品失败')
+  } finally {
+    associateSubmitting.value = false
+  }
+}
 
 // 新增筛网
 const handleNew = async () => {
@@ -216,8 +341,11 @@ const handleUpdate = async () => {
   }
 }
 
-onMounted(() => {
-  handleSearch()
+onMounted(async () => {
+  await Promise.all([
+    handleSearch(),
+    loadProducts()
+  ])
 })
 </script>
 
@@ -258,5 +386,11 @@ onMounted(() => {
 
 :deep(.el-table__body tr:hover > td) {
   background-color: var(--app-hover) !important;
+}
+
+.related-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>

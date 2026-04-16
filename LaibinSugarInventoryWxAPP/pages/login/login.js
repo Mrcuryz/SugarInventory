@@ -30,7 +30,7 @@ Page({
                   setTimeout(() => {
                     wx.showToast({ title: "登录成功！", icon: "success" });
                   }, 1000);
-                  wx.switchTab({ url: "/pages/home/home" });
+                  wx.switchTab({ url: "/pages/workbench/index/index" });
                 }
               } else if (res.data.code === 500 && res.data.msg === "用户不存在") {
                 wx.showModal({
@@ -38,7 +38,7 @@ Page({
                   content: "是否授权使用手机号验证？",
                   success: (res) => {
                     if (res.confirm) {
-                      wx.navigateTo({ url: "/pages/bind-phone/bind-phone" });
+                      wx.navigateTo({ url: "/pages/auth/bind-phone/index" });
                     }
                   }
                 });

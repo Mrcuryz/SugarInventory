@@ -1,10 +1,42 @@
 /**app.wxss**/
-.container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 200rpx 0;
+page {
+  min-height: 100%;
+  background: #f6f8fb;
+  color: #172033;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+view,
+text,
+input,
+textarea,
+button {
   box-sizing: border-box;
-} 
+}
+
+button {
+  letter-spacing: 0;
+}
+
+.container {
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.surface-card {
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+}
+
+.section-title {
+  margin: 32rpx 0 18rpx;
+  font-size: 32rpx;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #172033;
+}
+
+.muted {
+  color: #647089;
+}

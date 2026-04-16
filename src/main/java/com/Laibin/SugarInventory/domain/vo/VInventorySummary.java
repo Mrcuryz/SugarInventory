@@ -37,4 +37,8 @@ public class VInventorySummary {
     @TableField(exist = false)
     @Schema(description = "库存信息")
     private String stockInfo;
+
+    @TableField(exist = false)
+    @Schema(description = "涉及库位数")
+    private Integer warehouseCount;
 }

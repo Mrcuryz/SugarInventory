@@ -1,0 +1,9 @@
+<view wx:if="{{visible}}" class="sheet-layer">
+  <view class="mask" bindtap="onClose"></view>
+  <view class="sheet">
+    <view class="sheet-title">{{title || '选择操作'}}</view>
+    <button wx:for="{{actions}}" wx:key="key" class="sheet-action" data-index="{{index}}" bindtap="onAction">{{item.label}}</button>
+    <button class="sheet-cancel" bindtap="onClose">取消</button>
+  </view>
+</view>
+

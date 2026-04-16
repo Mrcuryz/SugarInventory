@@ -1,0 +1,90 @@
+.pallet-card {
+  padding: 28rpx;
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+}
+
+.head-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.eyebrow {
+  font-size: 22rpx;
+  color: #647089;
+}
+
+.code {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 40rpx;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #172033;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10rpx;
+}
+
+.product {
+  margin-top: 18rpx;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #2c3648;
+}
+
+.product-meta {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #647089;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.hero-item {
+  padding: 18rpx;
+  border-radius: 8rpx;
+  background: #f7f9fc;
+}
+
+.hero-item.wide {
+  grid-column: 1 / -1;
+}
+
+.label,
+.value,
+.hint {
+  display: block;
+}
+
+.label {
+  font-size: 23rpx;
+  color: #7a869a;
+}
+
+.value {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  line-height: 1.45;
+  font-weight: 700;
+  color: #172033;
+}
+
+.hint {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.45;
+  color: #647089;
+}

@@ -1,0 +1,187 @@
+<page-shell safeBottom="{{true}}">
+  <page-header title="托盘详情" subtitle="单码全链路查询" showBack="{{true}}" actionText="刷新" bind:action="refresh" />
+
+  <view wx:if="{{loading}}" class="light-card loading-card">正在加载托盘信息...</view>
+
+  <block wx:else>
+    <pallet-summary-card pallet="{{pallet}}" summary="{{summary}}" />
+
+    <view class="detail-tabs">
+      <view
+        wx:for="{{tabs}}"
+        wx:key="key"
+        class="detail-tab {{activeTab === item.key ? 'active' : ''}}"
+        data-key="{{item.key}}"
+        bindtap="onTabTap"
+      >{{item.label}}</view>
+    </view>
+
+    <block wx:if="{{activeTab === 'base'}}">
+      <view class="section-title">基础档案</view>
+      <view class="grid-card">
+        <view wx:for="{{baseFields}}" wx:key="label" class="meta-item">
+          <text class="meta-label">{{item.label}}</text>
+          <text class="meta-value">{{item.value}}</text>
+        </view>
+      </view>
+
+      <view class="section-title">当前位置</view>
+      <view wx:if="{{inventory}}" class="light-card location-card">
+        <view class="card-head">
+          <view class="card-title">当前库位</view>
+          <status-tag label="{{inventory.unit ? '件托' : '板托'}}" type="info" />
+        </view>
+        <view class="location-main">{{summary.locationText}}</view>
+        <view class="location-sub">
+          入库时间 {{inventory.inStockTimeText || '-'}}
+        </view>
+        <view class="location-grid">
+          <view class="location-item">
+            <text class="meta-label">侧位</text>
+            <text class="meta-value">{{inventory.side || '-'}}</text>
+          </view>
+          <view class="location-item">
+            <text class="meta-label">排号</text>
+            <text class="meta-value">{{inventory.rowNumber != null ? inventory.rowNumber : '-'}}</text>
+          </view>
+          <view class="location-item">
+            <text class="meta-label">层号</text>
+            <text class="meta-value">{{inventory.layer != null ? inventory.layer : '-'}}</text>
+          </view>
+          <view class="location-item">
+            <text class="meta-label">数量</text>
+            <text class="meta-value">{{inventory.quantity != null ? inventory.quantity : '-'}} {{inventory.unit ? '件' : '板'}}</text>
+          </view>
+        </view>
+      </view>
+      <view wx:else class="light-card empty-card">
+        <view class="card-title">当前无库位信息</view>
+        <view class="card-desc">可能处于未入库、已出库或作废状态。</view>
+      </view>
+
+      <view class="section-title">当前任务</view>
+      <view wx:if="{{pendingTasks.length}}">
+        <task-card
+          wx:for="{{pendingTasks}}"
+          wx:key="taskId"
+          task="{{item}}"
+          showActions="{{true}}"
+          bind:tapTask="onTapTask"
+          bind:confirmTask="onConfirmTask"
+          bind:cancelTask="onCancelTask"
+        />
+      </view>
+      <view wx:else class="light-card empty-card">
+        <view class="card-title">当前无待处理任务</view>
+        <view class="card-desc">该托盘目前没有需要立即处理的现场任务。</view>
+      </view>
+    </block>
+
+    <block wx:if="{{activeTab === 'assay'}}">
+      <view wx:if="{{assay}}" class="assay-card">
+        <view class="card-head">
+          <view class="card-title">化验结论</view>
+          <status-tag label="{{assayResult.label}}" type="{{assayResult.type}}" />
+        </view>
+        <view class="assay-meta-grid">
+          <view class="assay-meta-item">
+            <text class="meta-label">采样日期</text>
+            <text class="meta-value">{{assay.sampleDate || '-'}}</text>
+          </view>
+          <view class="assay-meta-item">
+            <text class="meta-label">化验员</text>
+            <text class="meta-value">{{assay.testerName || '-'}}</text>
+          </view>
+          <view class="assay-meta-item">
+            <text class="meta-label">产品</text>
+            <text class="meta-value">{{assay.productName || pallet.productName || '-'}}</text>
+          </view>
+          <view class="assay-meta-item">
+            <text class="meta-label">录入时间</text>
+            <text class="meta-value">{{assay.createdAtText || '-'}}</text>
+          </view>
+        </view>
+        <view wx:if="{{assay.qualifiedStandards}}" class="standard-pill">命中标准：{{assay.qualifiedStandards}}</view>
+      </view>
+      <view wx:if="{{assay}}" class="metric-list">
+        <view wx:for="{{assayMetrics}}" wx:key="key" class="metric-row">
+          <view>
+            <view class="metric-name">{{item.label}}</view>
+            <view class="metric-range">{{assay.qualifiedStandards || '当前仅展示实测结果'}}</view>
+          </view>
+          <view class="metric-value">{{item.valueText}}</view>
+        </view>
+      </view>
+      <view wx:else class="light-card empty-card">
+        <view class="card-title">暂无化验数据</view>
+        <view class="card-desc">系统没有找到该托盘当前轮次关联的化验记录。</view>
+      </view>
+    </block>
+
+    <block wx:if="{{activeTab === 'flow'}}">
+      <view wx:if="{{flows.length}}" class="timeline-card">
+        <view wx:for="{{flows}}" wx:key="id" class="flow-item">
+          <view class="flow-rail">
+            <view class="dot {{item.operationTypeTag}}"></view>
+            <view wx:if="{{!item.isLast}}" class="line"></view>
+          </view>
+          <view class="flow-card">
+            <view class="flow-head">
+              <text class="flow-title">{{item.operationLabel}}</text>
+              <status-tag label="{{item.operationLabel}}" type="{{item.operationTypeTag}}" />
+            </view>
+            <view class="flow-meta">{{item.operationTimeText}} · {{item.operatorName || '系统'}}</view>
+            <view class="flow-location">{{item.locationText}}</view>
+            <view wx:if="{{item.remarkText}}" class="flow-remark">备注：{{item.remarkText}}</view>
+          </view>
+        </view>
+      </view>
+      <view wx:else class="light-card empty-card">
+        <view class="card-title">暂无流转记录</view>
+        <view class="card-desc">该托盘当前没有可展示的生命周期事件。</view>
+      </view>
+    </block>
+  </block>
+
+  <bottom-action-bar actions="{{actions}}" bind:action="onAction" />
+
+  <view wx:if="{{confirmVisible}}" class="modal-layer">
+    <view class="modal-mask" bindtap="closeConfirm"></view>
+    <view class="modal-card">
+      <view class="modal-title">处理待入库任务</view>
+      <view class="modal-code">共 {{confirmTargetCount}} 个待处理托盘</view>
+      <view class="field">
+        <text class="label">入库库位</text>
+        <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />
+      </view>
+      <view class="field">
+        <text class="label">入库日期</text>
+        <picker mode="date" value="{{confirmForm.entryDate}}" data-field="entryDate" bindchange="onConfirmInput">
+          <view class="picker">{{confirmForm.entryDate}}</view>
+        </picker>
+      </view>
+      <view class="field two">
+        <view>
+          <text class="label">优先侧</text>
+          <picker mode="selector" range="{{['左', '右']}}" bindchange="onSideChange">
+            <view class="picker">{{confirmForm.side}}</view>
+          </picker>
+        </view>
+        <view>
+          <text class="label">单位</text>
+          <picker mode="selector" range="{{['板', '件']}}" bindchange="onUnitChange">
+            <view class="picker">{{confirmForm.unit === '1' ? '件' : '板'}}</view>
+          </picker>
+        </view>
+      </view>
+      <view class="field">
+        <text class="label">数量</text>
+        <input class="input {{confirmForm.unit === '0' ? 'disabled-input' : ''}}" type="number" value="{{confirmForm.quantity}}" data-field="quantity" bindinput="onConfirmInput" disabled="{{confirmForm.unit === '0'}}" />
+      </view>
+      <view class="modal-actions">
+        <button class="plain" bindtap="closeConfirm">取消</button>
+        <button class="primary" bindtap="submitConfirmIn">确认入库</button>
+      </view>
+    </view>
+  </view>
+</page-shell>

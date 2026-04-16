@@ -1,0 +1,24 @@
+<view class="task-card {{selected ? 'selected' : ''}} {{task.status ? 'is-' + task.status : ''}}" bindtap="onTap">
+  <view class="card-main">
+    <view wx:if="{{selectable}}" class="check {{selected ? 'checked' : ''}}" catchtap="onSelect"></view>
+    <view class="task-content">
+      <view class="top-line">
+        <text class="code">{{task.code || '-'}}</text>
+        <status-tag label="{{task.taskStatusLabel || task.statusLabel || task.taskStatus || task.status || '-'}}" type="{{task.taskStatusTagType || task.statusTagType || 'info'}}" />
+      </view>
+      <view class="product">{{task.productName || task.pallet.productName || '未关联产品'}}</view>
+      <view class="meta">
+        <text>{{task.taskTypeLabel || task.taskType || task.modeLabel || '-'}}</text>
+        <text wx:if="{{task.targetWarehouseName}}"> · {{task.targetWarehouseName}}</text>
+        <text wx:if="{{task.createdAtText}}"> · {{task.createdAtText}}</text>
+      </view>
+      <view wx:if="{{task.message}}" class="message">{{task.message}}</view>
+    </view>
+  </view>
+  <view wx:if="{{showActions}}" class="actions" catchtap="noop">
+    <button wx:if="{{task.canConfirm !== false}}" class="action primary" catchtap="onConfirm">确认</button>
+    <button wx:if="{{task.canCancel !== false}}" class="action plain" catchtap="onCancel">取消</button>
+    <button wx:if="{{task.canRetry}}" class="action plain" catchtap="onRetry">重试</button>
+    <button wx:if="{{task.canRemove}}" class="action plain" catchtap="onRemove">移除</button>
+  </view>
+</view>

@@ -184,7 +184,7 @@
 
 ### 3.1.3 获取托盘二维码图片
 - **URL**：`GET /api/pallet-codes/{code}/qrcode`
-- **功能**：生成托盘码二维码 PNG（用于预览/打印）。
+- **功能**：生成托盘码二维码 PNG（用于页面预览）。
 - **路径参数**：
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -199,7 +199,38 @@
 
 ---
 
-### 3.1.4 批量作废托盘码
+### 3.1.4 下载/导出托盘二维码标签
+
+#### 单个下载
+
+| 格式 | URL | 说明 |
+|---|---|---|
+| PDF | `GET /api/pallet-codes/{code}/qrcode-label.pdf` | 默认打印版，A4 页面内排 80mm × 60mm 标签 |
+| PNG | `GET /api/pallet-codes/{code}/qrcode.png` | 高清白底黑码图片 |
+| SVG | `GET /api/pallet-codes/{code}/qrcode.svg` | 高级排版用矢量格式 |
+
+- **标签内容**：二维码 + 托盘码文本。
+- **文件命名**：`{code}.pdf`、`{code}.png`、`{code}.svg`。
+
+#### 批量导出 PDF
+
+- **URL**：`POST /api/pallet-codes/qrcode-labels/pdf`
+- **功能**：批量导出托盘二维码打印版 PDF。
+- **排版**：A4 页面，默认 80mm × 60mm 标签，2 列 × 4 行，每页最多 8 个标签。
+- **请求体**：
+
+```json
+{
+  "codes": ["BT0008T5", "BT0A3ZK"]
+}
+```
+
+- **响应**：`application/pdf` 文件流。
+- **文件命名**：`pallet-labels-batch-yyyy-MM-dd.pdf`。
+
+---
+
+### 3.1.5 批量作废托盘码
 - **URL**：`POST /api/pallet-codes/invalid`
 - **功能**：将空闲托盘置为 `INVALID`。
 - **请求体**：

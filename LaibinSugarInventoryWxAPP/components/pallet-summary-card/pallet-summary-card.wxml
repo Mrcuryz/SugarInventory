@@ -1,0 +1,30 @@
+<view class="pallet-card">
+  <view class="head-row">
+    <view>
+      <view class="eyebrow">托盘码</view>
+      <text class="code">{{pallet.code || '-'}}</text>
+    </view>
+    <view class="tag-list">
+      <status-tag label="{{pallet.statusLabel || pallet.status || '-'}}" type="{{pallet.statusTagType || 'info'}}" />
+      <status-tag label="{{pallet.productStatus || '未绑定'}}" type="info" />
+    </view>
+  </view>
+  <view class="product">{{pallet.productName || '未绑定产品'}}</view>
+  <view class="product-meta">{{pallet.productType || '产品类型未记录'}}{{pallet.productionDate ? ' · ' + pallet.productionDate : ''}}</view>
+
+  <view class="hero-grid">
+    <view class="hero-item wide">
+      <text class="label">当前位置</text>
+      <text class="value">{{summary.locationText || '当前无库位信息'}}</text>
+      <text class="hint">{{summary.locationHint || '待补充位置说明'}}</text>
+    </view>
+    <view class="hero-item">
+      <text class="label">当前任务</text>
+      <text class="value">{{summary.taskText || '暂无任务'}}</text>
+    </view>
+    <view class="hero-item">
+      <text class="label">建议操作</text>
+      <text class="value">{{summary.actionText || '查看详情'}}</text>
+    </view>
+  </view>
+</view>

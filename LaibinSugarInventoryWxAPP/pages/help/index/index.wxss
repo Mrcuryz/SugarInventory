@@ -1,0 +1,65 @@
+.rules-card,
+.toc-card,
+.section-card {
+  padding: 28rpx;
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+}
+
+.rules-title,
+.toc-title,
+.section-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.rules-item,
+.toc-list,
+.section-body {
+  margin-top: 16rpx;
+}
+
+.rules-item,
+.toc-item,
+.section-item {
+  display: block;
+  padding: 10rpx 0;
+  font-size: 25rpx;
+  line-height: 1.55;
+  color: #526072;
+}
+
+.section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.section-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-summary {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: #647089;
+}
+
+.section-arrow {
+  font-size: 24rpx;
+  color: #246bfe;
+  font-weight: 700;
+}

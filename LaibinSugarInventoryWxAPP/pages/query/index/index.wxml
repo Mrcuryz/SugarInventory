@@ -1,0 +1,56 @@
+<page-shell>
+  <page-header title="查询中心" subtitle="托盘查询优先，其他查询能力逐步补齐" />
+
+  <view class="hero-card">
+    <view class="hero-top">
+      <view>
+        <view class="hero-title">托盘查询</view>
+        <view class="hero-desc">支持手动输入托盘码，也支持直接扫码进入详情。</view>
+      </view>
+      <view class="hero-badges">
+        <text class="hero-badge">手输</text>
+        <text class="hero-badge">扫码</text>
+        <text class="hero-badge">详情</text>
+      </view>
+    </view>
+    <input class="query-input" placeholder="请输入托盘码" value="{{code}}" bindinput="onInput" />
+    <view class="hero-actions">
+      <button class="scan-btn" bindtap="onScan">扫码查询</button>
+      <button class="search-btn" loading="{{querying}}" disabled="{{querying}}" bindtap="submitQuery">查看详情</button>
+    </view>
+    <view class="hero-subactions">
+      <text class="hero-link" bindtap="clearCode">清空输入</text>
+      <text class="hero-tip">常用场景：单码查询、问题复核、现场补查</text>
+    </view>
+  </view>
+
+  <view wx:if="{{queryState === 'idle'}}" class="hint-card">
+    <view class="hint-title">使用提示</view>
+    <view wx:for="{{quickTips}}" wx:key="*this" class="hint-item">{{index + 1}}. {{item}}</view>
+  </view>
+
+  <view wx:if="{{queryState === 'loading'}}" class="state-card">
+    <view class="state-title">正在核对托盘信息</view>
+    <view class="state-desc">会先校验托盘码是否有效，再进入详情页。</view>
+  </view>
+
+  <view wx:if="{{queryState === 'empty'}}" class="state-wrap">
+    <empty-state title="未找到对应托盘" description="请核对托盘码是否正确，或重新扫码一次。" />
+  </view>
+
+  <view wx:if="{{queryState === 'error'}}" class="state-wrap">
+    <empty-state title="查询未完成" description="网络不稳定或接口未返回结果，请稍后重试。" />
+  </view>
+
+  <view class="section-title">其他查询</view>
+  <view class="module-list">
+    <view wx:for="{{modules}}" wx:key="key" class="module-card" data-title="{{item.title}}" bindtap="showComingSoon">
+      <view class="module-head">
+        <view class="module-title">{{item.title}}</view>
+        <view class="module-tag">第二阶段</view>
+      </view>
+      <view class="module-desc">{{item.desc}}</view>
+      <view class="module-link">查看说明</view>
+    </view>
+  </view>
+</page-shell>

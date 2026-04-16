@@ -1,0 +1,151 @@
+.hero-card,
+.module-card,
+.hint-card,
+.state-card {
+  padding: 28rpx;
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+}
+
+.hero-top,
+.module-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.hero-title,
+.module-title,
+.hint-title,
+.state-title {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.hero-desc,
+.module-desc,
+.state-desc {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.5;
+  color: #647089;
+}
+
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10rpx;
+}
+
+.hero-badge,
+.module-tag {
+  padding: 8rpx 14rpx;
+  border-radius: 8rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.hero-badge {
+  color: #246bfe;
+  background: #eaf1ff;
+}
+
+.module-tag {
+  color: #966600;
+  background: #fff5d8;
+}
+
+.query-input {
+  width: 100%;
+  height: 82rpx;
+  margin-top: 24rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d8e0ec;
+  border-radius: 8rpx;
+  background: #fbfcfe;
+  font-size: 28rpx;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.hero-subactions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+
+.hero-link {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #246bfe;
+}
+
+.hero-tip {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 23rpx;
+  color: #647089;
+}
+
+.scan-btn,
+.search-btn {
+  flex: 1;
+  height: 78rpx;
+  line-height: 78rpx;
+  margin: 0;
+  border-radius: 8rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.scan-btn::after,
+.search-btn::after {
+  border: 0;
+}
+
+.scan-btn {
+  color: #246bfe;
+  background: #eaf1ff;
+}
+
+.search-btn {
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.module-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.hint-card,
+.state-card,
+.state-wrap {
+  margin-top: 22rpx;
+}
+
+.hint-item {
+  margin-top: 14rpx;
+  font-size: 25rpx;
+  line-height: 1.5;
+  color: #526072;
+}
+
+.module-link {
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #246bfe;
+}

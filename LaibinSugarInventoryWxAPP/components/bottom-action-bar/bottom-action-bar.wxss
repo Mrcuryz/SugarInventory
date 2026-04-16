@@ -1,0 +1,51 @@
+.bottom-action-bar {
+  display: flex;
+  gap: 16rpx;
+  padding: 18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));
+  border-top: 1rpx solid #e3e9f2;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.fixed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+}
+
+.action {
+  flex: 1;
+  height: 78rpx;
+  line-height: 78rpx;
+  margin: 0;
+  border-radius: 8rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.action::after {
+  border: 0;
+}
+
+.primary {
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.plain {
+  color: #246bfe;
+  background: #eaf1ff;
+}
+
+.danger {
+  color: #ffffff;
+  background: #d92d20;
+}
+
+.disabled {
+  color: #a8b3c4;
+  background: #eef2f6;
+}
+

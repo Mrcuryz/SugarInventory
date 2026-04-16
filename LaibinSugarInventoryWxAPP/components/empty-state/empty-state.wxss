@@ -1,0 +1,41 @@
+.empty-state {
+  padding: 56rpx 32rpx;
+  text-align: center;
+  color: #647089;
+}
+
+.empty-mark {
+  width: 96rpx;
+  height: 96rpx;
+  margin: 0 auto 22rpx;
+  border-radius: 8rpx;
+  background: linear-gradient(135deg, #eaf1ff, #eef8f2);
+}
+
+.empty-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #172033;
+}
+
+.empty-desc {
+  margin-top: 10rpx;
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+
+.empty-action {
+  margin-top: 24rpx;
+  width: 240rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.empty-action::after {
+  border: 0;
+}
+

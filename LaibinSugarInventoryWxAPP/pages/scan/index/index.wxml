@@ -1,0 +1,179 @@
+<page-shell safeBottom="{{true}}">
+  <page-header title="扫码作业" subtitle="{{currentModeInfo.desc}}" />
+
+  <view class="mode-shell">
+    <view class="mode-label">作业模式</view>
+    <view class="mode-tabs">
+      <view
+        wx:for="{{modes}}"
+        wx:key="key"
+        class="mode-tab {{currentMode === item.key ? 'active' : ''}}"
+        data-mode="{{item.key}}"
+        bindtap="onModeTap"
+      >{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="scan-panel">
+    <view class="scan-head">
+      <view>
+        <view class="scan-title">连续扫码</view>
+        <view class="scan-subtitle">当前模式：{{currentModeInfo.label}}</view>
+      </view>
+      <view class="scan-badges">
+        <text class="scan-badge">自动入池</text>
+        <text class="scan-badge">批量处理</text>
+      </view>
+    </view>
+    <button class="scan-btn" loading="{{scanning}}" disabled="{{scanning}}" bindtap="onScan">
+      {{scanning ? '扫码中' : '开始扫码'}}
+    </button>
+    <view class="scan-count">继续扫码会自动加入本次作业任务池</view>
+    <view wx:if="{{lastFeedback}}" class="feedback {{lastFeedback.type}}">{{lastFeedback.text}}</view>
+  </view>
+
+  <view class="summary-card">
+    <view class="summary-head">
+      <view class="summary-title">本次作业上下文</view>
+      <view class="summary-mode">{{currentModeInfo.label}}</view>
+    </view>
+    <view class="summary-grid">
+      <view class="summary-item">
+        <text class="summary-number">{{sessionSummary.total}}</text>
+        <text class="summary-label">已扫描</text>
+      </view>
+      <view class="summary-item">
+        <text class="summary-number success">{{sessionSummary.success}}</text>
+        <text class="summary-label">成功</text>
+      </view>
+      <view class="summary-item">
+        <text class="summary-number warning">{{sessionSummary.duplicate}}</text>
+        <text class="summary-label">重复</text>
+      </view>
+      <view class="summary-item">
+        <text class="summary-number danger">{{sessionSummary.error}}</text>
+        <text class="summary-label">失败</text>
+      </view>
+    </view>
+    <view class="summary-note">{{currentModeInfo.desc}}</view>
+  </view>
+
+  <view class="section-title">本次任务池</view>
+  <scroll-view wx:if="{{pool.length}}" class="pool-scroll" scroll-y="{{true}}" scroll-into-view="{{activePoolItemId}}">
+    <view wx:for="{{pool}}" wx:key="id" id="pool-item-{{item.id}}" class="pool-item">
+      <task-card
+        task="{{item}}"
+        showActions="{{true}}"
+        bind:removeTask="removePoolItem"
+        bind:retryTask="onRetryTask"
+      />
+    </view>
+  </scroll-view>
+  <empty-state wx:else title="还没有扫码任务" description="选择作业模式后，连续扫码会把任务加入这里。" actionText="开始扫码" bind:action="onScan" />
+
+  <bottom-action-bar actions="{{bottomActions}}" bind:action="onBottomAction" />
+
+  <view wx:if="{{bindVisible}}" class="modal-layer">
+    <view class="modal-mask" bindtap="closeBind"></view>
+    <view class="modal-card">
+      <view class="modal-title">创建入库任务</view>
+      <view class="modal-code">{{pendingPallet.code}}</view>
+      <view class="field">
+        <text class="label">产品状态</text>
+        <picker mode="selector" range="{{['半成品', '成品']}}" bindchange="onBindProductStatusChange">
+          <view class="picker {{!bindForm.productStatus ? 'placeholder' : ''}}">{{bindForm.productStatus || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="label">产品</text>
+        <picker mode="selector" range="{{productNames}}" value="{{bindForm.productIndex < 0 ? 0 : bindForm.productIndex}}" bindchange="onProductChange" disabled="{{!bindForm.productStatus || !productNames.length}}">
+          <view class="picker {{bindForm.productIndex < 0 ? 'placeholder' : ''}}">{{bindForm.productIndex >= 0 ? productNames[bindForm.productIndex] : '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="label">生产日期</text>
+        <picker mode="date" value="{{bindForm.productionDate}}" data-field="productionDate" bindchange="onBindInput">
+          <view class="picker">{{bindForm.productionDate}}</view>
+        </picker>
+      </view>
+      <view class="field two">
+        <view>
+          <text class="label">数量</text>
+          <input class="input {{bindForm.unit === '0' ? 'disabled-input' : ''}}" type="number" value="{{bindForm.quantity}}" data-field="quantity" bindinput="onBindInput" disabled="{{bindForm.unit === '0'}}" />
+        </view>
+        <view>
+          <text class="label">单位</text>
+          <picker mode="selector" range="{{['板', '件']}}" data-target="bindForm" bindchange="onUnitChange">
+            <view class="picker">{{bindForm.unit === '1' ? '件' : '板'}}</view>
+          </picker>
+        </view>
+      </view>
+      <view class="modal-actions">
+        <button class="plain" bindtap="closeBind">取消</button>
+        <button class="primary" bindtap="submitBind">创建任务</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{transferVisible}}" class="modal-layer">
+    <view class="modal-mask" bindtap="closeTransfer"></view>
+    <view class="modal-card">
+      <view class="modal-title">创建调拨任务</view>
+      <view class="modal-code">{{transferForm.code}}</view>
+      <view class="field">
+        <text class="label">目标库位</text>
+        <input class="input" placeholder="请输入目标库位名称" value="{{transferForm.targetWarehouseName}}" data-field="targetWarehouseName" bindinput="onTransferInput" />
+      </view>
+      <view class="field">
+        <text class="label">目标侧</text>
+        <picker mode="selector" range="{{['左', '右']}}" data-target="transferForm" bindchange="onSideChange">
+          <view class="picker">{{transferForm.targetSide}}</view>
+        </picker>
+      </view>
+      <view class="modal-actions">
+        <button class="plain" bindtap="closeTransfer">取消</button>
+        <button class="primary" bindtap="submitTransfer">创建任务</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{confirmVisible}}" class="modal-layer">
+    <view class="modal-mask" bindtap="closeConfirm"></view>
+    <view class="modal-card">
+      <view class="modal-title">批量确认入库</view>
+      <view class="modal-code">共 {{pool.length}} 个托盘</view>
+      <view class="field">
+        <text class="label">入库库位</text>
+        <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />
+      </view>
+      <view class="field">
+        <text class="label">入库日期</text>
+        <picker mode="date" value="{{confirmForm.entryDate}}" data-field="entryDate" bindchange="onConfirmInput">
+          <view class="picker">{{confirmForm.entryDate}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="label">优先侧</text>
+        <picker mode="selector" range="{{['左', '右']}}" data-target="confirmForm" bindchange="onSideChange">
+          <view class="picker">{{confirmForm.side}}</view>
+        </picker>
+      </view>
+      <view class="field two">
+        <view>
+          <text class="label">数量</text>
+          <input class="input {{confirmForm.unit === '0' ? 'disabled-input' : ''}}" type="number" value="{{confirmForm.quantity}}" data-field="quantity" bindinput="onConfirmInput" disabled="{{confirmForm.unit === '0'}}" />
+        </view>
+        <view>
+          <text class="label">单位</text>
+          <picker mode="selector" range="{{['板', '件']}}" data-target="confirmForm" bindchange="onUnitChange">
+            <view class="picker">{{confirmForm.unit === '1' ? '件' : '板'}}</view>
+          </picker>
+        </view>
+      </view>
+      <view class="modal-actions">
+        <button class="plain" bindtap="closeConfirm">取消</button>
+        <button class="primary" bindtap="submitConfirmIn">确认入库</button>
+      </view>
+    </view>
+  </view>
+</page-shell>

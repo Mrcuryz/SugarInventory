@@ -52,7 +52,7 @@ Page({
 
                 setTimeout(() => {
                   wx.showToast({ title: "绑定成功！", icon: "success" });
-                  wx.switchTab({ url: "/pages/home/home" });
+                  wx.switchTab({ url: "/pages/workbench/index/index" });
                 }, 1000);
               } else {
                 wx.showToast({ title: res.data.msg || "绑定失败", icon: "none" });
@@ -61,7 +61,7 @@ Page({
                   content: "是否通过工号绑定？",
                   success: (res) => {
                     if (res.confirm) {
-                      wx.navigateTo({ url: "/pages/bind-manual/bind-manual" });
+                      wx.navigateTo({ url: "/pages/auth/bind-manual/index" });
                     }
                   }
                 });
@@ -81,7 +81,7 @@ Page({
         content: "您需要授权才能使用此功能。通过工号完成验证？",
         success: (res) => {
           if (res.confirm) {
-            wx.navigateTo({ url: "/pages/bind-manual/bind-manual" });
+            wx.navigateTo({ url: "/pages/auth/bind-manual/index" });
           }
         }
       });

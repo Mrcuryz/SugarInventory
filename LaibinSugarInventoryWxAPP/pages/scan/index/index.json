@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "扫码",
+  "usingComponents": {
+    "page-shell": "/components/page-shell/page-shell",
+    "page-header": "/components/page-header/page-header",
+    "task-card": "/components/task-card/task-card",
+    "empty-state": "/components/empty-state/empty-state",
+    "bottom-action-bar": "/components/bottom-action-bar/bottom-action-bar"
+  }
+}
+

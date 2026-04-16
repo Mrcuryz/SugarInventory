@@ -1,0 +1,32 @@
+<page-shell>
+  <view class="login-page">
+    <view class="brand">
+      <image class="logo" src="/assets/logo.png" mode="aspectFit"></image>
+      <view class="brand-copy">
+        <view class="eyebrow">现场作业端</view>
+        <view class="title">冰糖仓储</view>
+        <view class="subtitle">扫码作业、任务处理、托盘追溯</view>
+      </view>
+    </view>
+
+    <view class="panel">
+      <view class="panel-title">员工登录</view>
+      <view class="panel-desc">使用微信身份进入系统。首次使用需要完成员工身份绑定。</view>
+      <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">
+        {{loading ? '登录中' : '一键微信登录'}}
+      </button>
+      <view class="bind-row">
+        <button class="link-btn" bindtap="goBindPhone">手机号绑定</button>
+        <button class="link-btn" bindtap="goBindManual">工号绑定</button>
+      </view>
+    </view>
+
+    <view class="guide">
+      <view class="guide-title">首次使用</view>
+      <view class="guide-item">1. 员工信息需要先由管理员导入系统。</view>
+      <view class="guide-item">2. 可用微信手机号完成绑定。</view>
+      <view class="guide-item">3. 手机号不一致时，可使用工号和姓名校验绑定。</view>
+    </view>
+  </view>
+</page-shell>
+

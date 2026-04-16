@@ -1,0 +1,12 @@
+<page-shell>
+  <page-header title="手机号绑定" subtitle="授权微信手机号，与员工名册中的手机号进行匹配。" showBack="{{true}}" />
+  <view class="bind-card">
+    <view class="title">推荐方式</view>
+    <view class="desc">手机号一致时可快速完成绑定，后续即可一键登录。</view>
+    <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" loading="{{loading}}" disabled="{{loading}}">
+      授权手机号并绑定
+    </button>
+    <button class="plain-btn" bindtap="goManual">手机号不一致，使用工号绑定</button>
+  </view>
+</page-shell>
+

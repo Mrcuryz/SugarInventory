@@ -1,0 +1,45 @@
+.bind-card {
+  padding: 32rpx;
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+}
+
+.title {
+  font-size: 34rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.desc {
+  margin-top: 14rpx;
+  font-size: 26rpx;
+  line-height: 1.55;
+  color: #647089;
+}
+
+.primary-btn,
+.plain-btn {
+  height: 80rpx;
+  line-height: 80rpx;
+  margin: 28rpx 0 0;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.primary-btn::after,
+.plain-btn::after {
+  border: 0;
+}
+
+.primary-btn {
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.plain-btn {
+  color: #246bfe;
+  background: #eaf1ff;
+}
+

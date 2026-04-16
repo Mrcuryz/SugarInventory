@@ -1,0 +1,5 @@
+<page-shell>
+  <page-header title="任务详情" subtitle="任务详情将在下一阶段补充更完整的信息结构。" showBack="{{true}}" />
+  <empty-state title="详情能力预留" description="当前阶段任务处理集中在任务中心和托盘详情页。" />
+</page-shell>
+

@@ -46,6 +46,15 @@
         <div class="table-toolbar-left">
           <el-button type="primary" @click="openGenerateDialog">生成托盘码</el-button>
           <el-button type="danger" :disabled="!selectedRows.length" @click="handleBatchInvalid">批量作废</el-button>
+          <el-button
+              type="primary"
+              plain
+              :loading="batchPdfLoading"
+              :disabled="!selectedRows.length || batchPdfLoading"
+              @click="handleBatchDownloadPdf()"
+          >
+            批量导出标签 PDF
+          </el-button>
         </div>
       </div>
       <el-table
@@ -84,10 +93,22 @@
             <span :title="formatDateTime(row.updatedAt)">{{ formatDateTime(row.updatedAt) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="410" fixed="right">
+        <el-table-column label="操作" width="520" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'FREE'" type="success" size="small" @click="openBindDialog(row)">绑定</el-button>
             <el-button type="primary" size="small" @click="openQrDialog(row)">二维码</el-button>
+            <el-dropdown trigger="click" @command="format => handleQrDownload(row.code, format)">
+              <el-button type="primary" plain size="small" :loading="qrDownloadLoading">
+                下载打印版
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="pdf">下载标签 PDF</el-dropdown-item>
+                  <el-dropdown-item command="png">下载 PNG</el-dropdown-item>
+                  <el-dropdown-item command="svg">下载 SVG</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <el-button type="info" size="small" @click="openAssayDialog(row)">化验</el-button>
             <el-button type="info" size="small" @click="openInventoryDialog(row)">位置</el-button>
             <el-button type="primary" size="small" @click="openFlowDrawer(row)">流转</el-button>
@@ -116,6 +137,16 @@
       </el-form>
       <div v-if="generatedCodes.length" class="code-result">
         <el-tag v-for="code in generatedCodes" :key="code" class="code-tag">{{ code }}</el-tag>
+        <el-button
+            type="primary"
+            plain
+            size="small"
+            :loading="generatedPdfLoading"
+            :disabled="generatedPdfLoading"
+            @click="handleBatchDownloadPdf(generatedCodes, true)"
+        >
+          导出本次生成标签 PDF
+        </el-button>
       </div>
       <template #footer>
         <el-button @click="closeGenerateDialog">关闭</el-button>
@@ -157,6 +188,13 @@
       <div class="qr-wrapper">
         <div class="qr-code">{{ currentCode }}</div>
         <el-image v-if="qrImageUrl" :src="qrImageUrl" fit="contain" class="qr-image"/>
+        <div class="qr-download-actions">
+          <el-button type="primary" :loading="qrDownloadLoading" @click="handleQrDownload(currentCode, 'pdf')">
+            下载标签 PDF
+          </el-button>
+          <el-button :loading="qrDownloadLoading" @click="handleQrDownload(currentCode, 'png')">下载 PNG</el-button>
+          <el-button :loading="qrDownloadLoading" @click="handleQrDownload(currentCode, 'svg')">下载 SVG</el-button>
+        </div>
       </div>
     </el-dialog>
 
@@ -283,8 +321,12 @@ import {getProductList} from '@/api/product'
 import {formatDateTime} from '@/utils/dateTime'
 import {buildProductCascaderOptions, productCascaderProps} from '@/utils/productCascader'
 import {
+  batchDownloadPalletQrLabelPdf,
   bindPalletTask,
   deletePalletFlows,
+  downloadPalletQrLabelPdf,
+  downloadPalletQrPng,
+  downloadPalletQrSvg,
   generatePalletCodes,
   getPalletAssay,
   getPalletInventory,
@@ -315,6 +357,9 @@ const searchForm = ref({
 const resultList = ref([])
 const selectedRows = ref([])
 const loading = ref(false)
+const qrDownloadLoading = ref(false)
+const batchPdfLoading = ref(false)
+const generatedPdfLoading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
@@ -495,6 +540,72 @@ const revokeQrImage = () => {
   if (qrImageUrl.value) {
     URL.revokeObjectURL(qrImageUrl.value)
     qrImageUrl.value = ''
+  }
+}
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+const handleQrDownload = async (code, format) => {
+  if (!code) {
+    ElMessage.warning('托盘码不能为空')
+    return
+  }
+  qrDownloadLoading.value = true
+  try {
+    const safeCode = String(code).trim().toUpperCase()
+    let response
+    let filename
+    if (format === 'png') {
+      response = await downloadPalletQrPng(safeCode)
+      filename = `${safeCode}.png`
+    } else if (format === 'svg') {
+      response = await downloadPalletQrSvg(safeCode)
+      filename = `${safeCode}.svg`
+    } else {
+      response = await downloadPalletQrLabelPdf(safeCode)
+      filename = `${safeCode}.pdf`
+    }
+    downloadBlob(response.data, filename)
+    ElMessage.success('下载已开始')
+  } catch (error) {
+    ElMessage.error('二维码下载失败')
+  } finally {
+    qrDownloadLoading.value = false
+  }
+}
+
+const handleBatchDownloadPdf = async (codes = selectedRows.value.map(row => row.code), fromGenerated = false) => {
+  const exportCodes = Array.from(new Set((codes || []).filter(Boolean).map(code => String(code).trim().toUpperCase())))
+  if (!exportCodes.length) {
+    ElMessage.warning('请选择托盘码')
+    return
+  }
+  if (fromGenerated) {
+    generatedPdfLoading.value = true
+  } else {
+    batchPdfLoading.value = true
+  }
+  try {
+    const response = await batchDownloadPalletQrLabelPdf(exportCodes)
+    downloadBlob(response.data, `pallet-labels-batch-${dayjs().format('YYYY-MM-DD')}.pdf`)
+    ElMessage.success(`已导出 ${exportCodes.length} 个托盘标签`)
+  } catch (error) {
+    ElMessage.error('批量导出标签 PDF 失败')
+  } finally {
+    if (fromGenerated) {
+      generatedPdfLoading.value = false
+    } else {
+      batchPdfLoading.value = false
+    }
   }
 }
 
@@ -714,6 +825,14 @@ onBeforeUnmount(() => {
 .qr-image {
   width: 256px;
   height: 256px;
+}
+
+.qr-download-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
 }
 
 .flow-drawer {

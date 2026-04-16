@@ -1,0 +1,12 @@
+.page-shell {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 28rpx 40rpx;
+  background: #f6f8fb;
+  color: #172033;
+}
+
+.safe-bottom {
+  padding-bottom: 156rpx;
+}
+

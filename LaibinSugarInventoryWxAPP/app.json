@@ -1,5 +1,16 @@
 {
   "pages": [
+    "pages/auth/login/index",
+    "pages/workbench/index/index",
+    "pages/tasks/index/index",
+    "pages/scan/index/index",
+    "pages/query/index/index",
+    "pages/profile/index/index",
+    "pages/help/index/index",
+    "pages/auth/bind-phone/index",
+    "pages/auth/bind-manual/index",
+    "pages/pallet/detail/index",
+    "pages/tasks/detail/index",
     "pages/login/login",
     "pages/home/home",
     "pages/bind-phone/bind-phone",
@@ -25,20 +36,38 @@
   "tabBar": {
     "list": [
       {
-        "pagePath": "pages/home/home",
-        "text": "首页",
-        "iconPath": "assets/icons/home.png",
-        "selectedIconPath": "assets/icons/home-active.png"
+        "pagePath": "pages/workbench/index/index",
+        "text": "工作台",
+        "iconPath": "assets/icons-v2/tab-workbench.png",
+        "selectedIconPath": "assets/icons-v2/tab-workbench-active.png"
       },
       {
-        "pagePath": "pages/manual/manual",
-        "text": "使用手册",
-        "iconPath": "assets/icons/manual.png",
-        "selectedIconPath": "assets/icons/manual-active.png"
+        "pagePath": "pages/tasks/index/index",
+        "text": "任务",
+        "iconPath": "assets/icons-v2/tab-task.png",
+        "selectedIconPath": "assets/icons-v2/tab-task-active.png"
+      },
+      {
+        "pagePath": "pages/scan/index/index",
+        "text": "扫码",
+        "iconPath": "assets/icons-v2/tab-scan.png",
+        "selectedIconPath": "assets/icons-v2/tab-scan-active.png"
+      },
+      {
+        "pagePath": "pages/query/index/index",
+        "text": "查询",
+        "iconPath": "assets/icons-v2/tab-query.png",
+        "selectedIconPath": "assets/icons-v2/tab-query-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index/index",
+        "text": "我的",
+        "iconPath": "assets/icons-v2/tab-profile.png",
+        "selectedIconPath": "assets/icons-v2/tab-profile-active.png"
       }
     ],
     "color": "#999999",
-    "selectedColor": "#0055FF",
+    "selectedColor": "#246BFE",
     "backgroundColor": "#ffffff",
     "borderStyle": "black"
   },
@@ -47,7 +76,7 @@
   },
   "permission": {
     "scope.phoneNumber": {
-      "desc": "用于获取您的手机号码"
+      "desc": "用于完成员工身份绑定"
     }
   },
   "lazyCodeLoading": "requiredComponents"

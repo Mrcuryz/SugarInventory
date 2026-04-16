@@ -1,0 +1,10 @@
+<view class="bottom-action-bar {{fixed ? 'fixed' : ''}}">
+  <button
+    wx:for="{{actions}}"
+    wx:key="key"
+    class="action {{item.type || 'primary'}} {{item.disabled ? 'disabled' : ''}}"
+    data-index="{{index}}"
+    bindtap="onAction"
+  >{{item.label}}</button>
+</view>
+

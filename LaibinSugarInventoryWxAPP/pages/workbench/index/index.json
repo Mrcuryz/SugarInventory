@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "工作台",
+  "usingComponents": {
+    "page-shell": "/components/page-shell/page-shell",
+    "page-header": "/components/page-header/page-header",
+    "task-card": "/components/task-card/task-card",
+    "empty-state": "/components/empty-state/empty-state"
+  }
+}
+

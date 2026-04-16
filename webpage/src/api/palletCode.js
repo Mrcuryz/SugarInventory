@@ -8,6 +8,22 @@ export const getPalletQrCode = (code) => {
   return request.get(`/pallet-codes/${encodeURIComponent(code)}/qrcode`, {responseType: 'blob'})
 }
 
+export const downloadPalletQrPng = (code) => {
+  return request.get(`/pallet-codes/${encodeURIComponent(code)}/qrcode.png`, {responseType: 'blob'})
+}
+
+export const downloadPalletQrSvg = (code) => {
+  return request.get(`/pallet-codes/${encodeURIComponent(code)}/qrcode.svg`, {responseType: 'blob'})
+}
+
+export const downloadPalletQrLabelPdf = (code) => {
+  return request.get(`/pallet-codes/${encodeURIComponent(code)}/qrcode-label.pdf`, {responseType: 'blob'})
+}
+
+export const batchDownloadPalletQrLabelPdf = (codes) => {
+  return request.post('/pallet-codes/qrcode-labels/pdf', {codes}, {responseType: 'blob'})
+}
+
 export const invalidatePalletCodes = (params) => request.post('/pallet-codes/invalid', params)
 
 export const parsePalletCode = (code) => request.get('/pallet-codes/parse', {params: {code}})

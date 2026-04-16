@@ -1,0 +1,13 @@
+{
+  "navigationBarTitleText": "托盘详情",
+  "usingComponents": {
+    "page-shell": "/components/page-shell/page-shell",
+    "page-header": "/components/page-header/page-header",
+    "pallet-summary-card": "/components/pallet-summary-card/pallet-summary-card",
+    "task-card": "/components/task-card/task-card",
+    "empty-state": "/components/empty-state/empty-state",
+    "bottom-action-bar": "/components/bottom-action-bar/bottom-action-bar",
+    "status-tag": "/components/status-tag/status-tag"
+  }
+}
+

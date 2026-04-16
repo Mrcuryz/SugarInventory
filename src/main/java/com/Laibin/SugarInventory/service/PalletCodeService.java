@@ -16,6 +16,7 @@ import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.PalletQrExportDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapBatchOperationDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapSlotInboundDTO;
@@ -51,6 +52,12 @@ public interface PalletCodeService extends IService<PalletCode> {
     PalletCode parseAndFind(String rawCode);
 
     PalletCodeInfoVO parseAndGetInfo(String rawCode);
+
+    byte[] generateQrCodePng(String code);
+
+    String generateQrCodeSvg(String code);
+
+    byte[] generateQrLabelPdf(PalletQrExportDTO dto);
 
     PageResult<PalletCodePageVO> pagePalletCodes(PalletCodeQueryDTO queryDTO);
 

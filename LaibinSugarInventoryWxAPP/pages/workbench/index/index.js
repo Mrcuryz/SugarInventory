@@ -1,0 +1,92 @@
+import { getProfile } from '../../../api/auth';
+import { getTaskList } from '../../../api/task';
+import { enrichTask } from '../../../utils/dict';
+import { requireLogin } from '../../../utils/auth';
+import { getRecentScans } from '../../../utils/storage';
+
+function formatRecentTime(value) {
+  return String(value || '').replace('T', ' ').slice(0, 16);
+}
+
+Page({
+  data: {
+    userInfo: {},
+    currentDate: '',
+    pendingCount: 0,
+    recentTasks: [],
+    recentScans: [],
+    tips: [
+      '现场作业优先从扫码进入，减少手工搜索。',
+      '同一批连续扫码会自动拦截重复托盘码。',
+      '任务创建后请及时在任务池或任务中心确认。'
+    ],
+    actions: [
+      { key: 'in', title: '连续扫码入库', desc: '绑定托盘并创建入库任务', mode: 'in', icon: '/assets/icons-v2/action-in.png' },
+      { key: 'out', title: '连续扫码出库', desc: '按托盘创建出库任务', mode: 'out', icon: '/assets/icons-v2/action-out.png' },
+      { key: 'prepare', title: '转入备料池', desc: '批量扫码半成品托盘进入备料任务', mode: 'prepare', icon: '/assets/icons-v2/action-prepare.png' },
+      { key: 'query', title: '单码查询', desc: '在查询中心手输或扫码查看托盘详情', route: 'query', icon: '/assets/icons-v2/action-query.png' }
+    ]
+  },
+
+  onShow() {
+    if (!requireLogin()) return;
+    this.setCurrentDate();
+    this.loadProfile();
+    this.loadTasks();
+    this.setData({
+      recentScans: getRecentScans(3).map(item => ({
+        ...item,
+        scannedAtText: formatRecentTime(item.scannedAt)
+      }))
+    });
+  },
+
+  setCurrentDate() {
+    const date = new Date();
+    const text = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+    this.setData({ currentDate: text });
+  },
+
+  async loadProfile() {
+    try {
+      const userInfo = await getProfile();
+      this.setData({ userInfo: userInfo || {} });
+    } catch (e) {
+      this.setData({ userInfo: {} });
+    }
+  },
+
+  async loadTasks() {
+    try {
+      const res = await getTaskList({ status: 'PENDING', pageNum: 1, pageSize: 3 });
+      const records = (res && res.records || []).map(enrichTask);
+      this.setData({
+        recentTasks: records,
+        pendingCount: res && res.total || records.length
+      });
+    } catch (e) {
+      this.setData({ recentTasks: [], pendingCount: 0 });
+    }
+  },
+
+  goScan(e) {
+    const mode = e.currentTarget.dataset.mode;
+    const route = e.currentTarget.dataset.route;
+    if (route === 'query') {
+      wx.switchTab({ url: '/pages/query/index/index' });
+      return;
+    }
+    wx.setStorageSync('preferredScanMode', mode);
+    wx.switchTab({ url: '/pages/scan/index/index' });
+  },
+
+  goTasks() {
+    wx.switchTab({ url: '/pages/tasks/index/index' });
+  },
+
+  goPallet(e) {
+    const code = e.currentTarget.dataset.code;
+    if (!code) return;
+    wx.navigateTo({ url: `/pages/pallet/detail/index?code=${encodeURIComponent(code)}` });
+  }
+});

@@ -52,6 +52,7 @@
           <div class="section-subtitle">{{ activeTabDescription }}</div>
         </div>
         <div class="table-toolbar-right">
+          <el-button @click="handleExport">导出当前表格</el-button>
           <el-button @click="router.push('/warehouse-map')">仓库平面图</el-button>
           <el-button @click="router.push('/pallet-code/list')">托盘码管理</el-button>
         </div>
@@ -78,7 +79,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="totalQuantity" label="总板数" width="110"/>
-        <el-table-column prop="totalPieces" label="总件数" width="110"/>
+        <el-table-column prop="totalPieces" label="件数" width="110"/>
         <el-table-column prop="totalWeight" label="总重量" width="120">
           <template #default="{ row }">{{ formatNumber(row.totalWeight) }}</template>
         </el-table-column>
@@ -252,6 +253,7 @@
 import {computed, onMounted, ref} from 'vue'
 import {useRouter} from 'vue-router'
 import {ElMessage} from 'element-plus'
+import * as XLSX from 'xlsx'
 import {
   getPalletAssay,
   getPalletInventory,
@@ -406,6 +408,7 @@ const loadProductSummary = async () => {
           totalPieces: 0,
           totalWeight: 0,
           warehouseIds: new Set(),
+          warehouseCount: 0,
           palletCount: 0
         })
       }
@@ -414,11 +417,12 @@ const loadProductSummary = async () => {
       target.totalPieces += Number(row.totalPieces || 0)
       target.totalWeight += Number(row.totalWeight || 0)
       if (row.warehouseId) target.warehouseIds.add(row.warehouseId)
+      target.warehouseCount = Math.max(target.warehouseCount, Number(row.warehouseCount || 0))
     })
     productRows.value = Array.from(grouped.values()).map(row => ({
       ...row,
       palletCount: palletCountMap.get(row.productId || row.productName) || estimatePalletCount(row),
-      warehouseCount: row.warehouseIds.size
+      warehouseCount: row.warehouseIds.size || row.warehouseCount || 0
     }))
     productTotal.value = productRows.value.length
   } finally {
@@ -526,6 +530,54 @@ const formatInventoryLocation = (info) => {
       .filter(Boolean)
       .join(' ')
   return `${info.warehouseName || '-'}${position ? ` ${position}` : ''}`
+}
+
+const handleExport = () => {
+  const rows = buildExportRows()
+  if (!rows.length) {
+    ElMessage.warning('当前表格暂无可导出数据')
+    return
+  }
+  const worksheet = XLSX.utils.json_to_sheet(rows)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, activeTabTitle.value)
+  const dateText = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(workbook, `${activeTabTitle.value}_${dateText}.xlsx`)
+}
+
+const buildExportRows = () => {
+  if (activeTab.value === 'product') {
+    return productRows.value.map(row => ({
+      产品名称: row.productName || '',
+      产品类型: row.productType || '',
+      产品状态: row.productStatus || '',
+      总板数: row.totalQuantity || 0,
+      件数: row.totalPieces || 0,
+      总重量: formatNumber(row.totalWeight),
+      涉及托盘数: row.palletCount || 0,
+      涉及库位数: row.warehouseCount || 0
+    }))
+  }
+  if (activeTab.value === 'pallet') {
+    return palletRows.value.map(row => ({
+      托盘码: row.code || '',
+      产品名称: row.productName || '',
+      产品状态: row.productStatus || '',
+      生产日期: row.productionDate || '',
+      所在库位: formatInventoryLocation(row.inventoryInfo),
+      筛网: row.screenMeshName || '',
+      化验状态: row.assayId ? '已关联' : '未关联',
+      最近更新时间: formatDateTime(row.updatedAt || row.createdAt)
+    }))
+  }
+  return prepareRows.value.map(row => ({
+    半成品产品名称: row.productName || '',
+    托盘码: row.code || '',
+    生产日期: row.productionDate || '',
+    当前状态: getDictLabel(TASK_STATUS_MAP, row.taskStatus),
+    所属备料池状态: getPreparePoolStatus(row),
+    最近更新时间: formatDateTime(row.confirmedAt || row.createdAt)
+  }))
 }
 
 const switchToPallet = (row) => {

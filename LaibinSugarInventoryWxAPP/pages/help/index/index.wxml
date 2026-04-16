@@ -1,0 +1,30 @@
+<page-shell>
+  <page-header title="帮助中心" subtitle="常用流程与现场问题处理" showBack="{{true}}" />
+
+  <view class="rules-card">
+    <view class="rules-title">现场提示</view>
+    <view wx:for="{{quickRules}}" wx:key="*this" class="rules-item">{{index + 1}}. {{item}}</view>
+  </view>
+
+  <view class="toc-card">
+    <view class="toc-title">目录</view>
+    <view class="toc-list">
+      <text wx:for="{{sections}}" wx:key="key" class="toc-item">{{index + 1}}. {{item.title}}</text>
+    </view>
+  </view>
+
+  <view class="section-list">
+    <view wx:for="{{sections}}" wx:key="key" class="section-card">
+      <view class="section-head" data-key="{{item.key}}" bindtap="toggleSection">
+        <view class="section-copy">
+          <text class="section-title">{{item.title}}</text>
+          <text class="section-summary">{{item.summary}}</text>
+        </view>
+        <text class="section-arrow">{{item.open ? '收起' : '展开'}}</text>
+      </view>
+      <view wx:if="{{item.open}}" class="section-body">
+        <view wx:for="{{item.items}}" wx:key="*this" class="section-item">{{index + 1}}. {{item}}</view>
+      </view>
+    </view>
+  </view>
+</page-shell>

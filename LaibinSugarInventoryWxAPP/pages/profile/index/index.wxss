@@ -1,0 +1,122 @@
+.account-card,
+.menu-card,
+.logout-card {
+  padding: 28rpx;
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+}
+
+.account-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.name {
+  font-size: 38rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.account-desc {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  color: #647089;
+}
+
+.account-tag {
+  padding: 8rpx 14rpx;
+  border-radius: 8rpx;
+  background: #e9f8ef;
+  color: #107c41;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.meta-card {
+  padding: 20rpx;
+  border-radius: 8rpx;
+  background: #f7f9fc;
+}
+
+.meta-label {
+  font-size: 22rpx;
+  color: #647089;
+}
+
+.meta-value {
+  margin-top: 10rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+  color: #172033;
+  word-break: break-all;
+}
+
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.menu-title,
+.logout-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.menu-icon {
+  width: 38rpx;
+  height: 38rpx;
+}
+
+.menu-desc,
+.logout-desc {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #647089;
+}
+
+.logout-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.logout-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.logout-btn {
+  width: 180rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  margin: 0;
+  border-radius: 8rpx;
+  color: #d92d20;
+  background: #fff1f1;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.logout-btn::after {
+  border: 0;
+}
