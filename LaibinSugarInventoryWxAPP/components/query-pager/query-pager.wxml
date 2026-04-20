@@ -1,0 +1,11 @@
+<view class="pager">
+  <view class="pager-info">
+    <text>共 {{total}} 条</text>
+    <text class="pager-range">{{rangeText}}</text>
+  </view>
+  <view class="pager-actions">
+    <button class="pager-btn {{!hasPrev || loading ? 'disabled' : ''}}" disabled="{{!hasPrev || loading}}" bindtap="prevPage">上一页</button>
+    <view class="pager-page">{{page}} / {{totalPages}}</view>
+    <button class="pager-btn {{!hasNext || loading ? 'disabled' : ''}}" disabled="{{!hasNext || loading}}" bindtap="nextPage">下一页</button>
+  </view>
+</view>

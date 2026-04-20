@@ -7,7 +7,7 @@ function buildAccountMeta(userInfo = {}) {
     { label: '角色', value: userInfo.roleCode || '未分配' },
     { label: '手机号', value: userInfo.phone || '未绑定' },
     { label: '绑定方式', value: userInfo.phone ? '手机号绑定' : '工号绑定' },
-    { label: '当前版本', value: 'Phase 1.1' }
+    { label: '当前版本', value: 'P1 查询版' }
   ];
 }
 
@@ -16,9 +16,9 @@ Page({
     userInfo: {},
     accountMeta: buildAccountMeta(),
     menus: [
-      { key: 'help', title: '帮助中心', desc: '查看登录、扫码、任务处理说明。', icon: '/assets/icons-v2/menu-help.png' },
-      { key: 'contact', title: '联系管理员', desc: '员工信息异常、权限问题可联系管理员。', icon: '/assets/icons-v2/menu-contact.png' },
-      { key: 'version', title: '版本信息', desc: '第一阶段试用版 Phase 1.1', icon: '/assets/icons-v2/menu-version.png' }
+      { key: 'help', title: '帮助中心', desc: '查看登录、扫码、任务处理说明。', icon: '/assets/icons-line/icon-help.svg' },
+      { key: 'contact', title: '联系管理员', desc: '员工信息异常、权限问题可联系管理员。', icon: '/assets/icons-line/icon-contact.svg' },
+      { key: 'version', title: '版本信息', desc: 'P1 查询版：托盘、库存、化验和作业记录查询。', icon: '/assets/icons-line/icon-version.svg' }
     ]
   },
 
@@ -53,7 +53,7 @@ Page({
       return;
     }
     if (key === 'version') {
-      showToast('当前为第一阶段试用版');
+      showToast('当前为 P1 查询版');
     }
   },
 

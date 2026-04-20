@@ -1,7 +1,9 @@
 export const PALLET_STATUS = {
   FREE: { label: '空闲', type: 'success' },
+  PENDING_IN: { label: '待入库', type: 'warning' },
   PENDING: { label: '待处理', type: 'warning' },
   INSTOCK: { label: '在库', type: 'primary' },
+  CONSUMED: { label: '已消耗', type: 'info' },
   INVALID: { label: '作废', type: 'danger' }
 };
 
@@ -63,6 +65,24 @@ export function formatTaskType(task) {
 export function formatDateTime(value) {
   if (!value) return '-';
   return String(value).replace('T', ' ').slice(0, 16);
+}
+
+export function formatAssayStandard(value, emptyText = '无匹配标准') {
+  if (!value) return '本次未关联标准';
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch (error) {
+      parsed = value;
+    }
+  }
+  if (Array.isArray(parsed)) {
+    const items = parsed.filter(item => item && item !== '无');
+    return items.length ? items.join('、') : emptyText;
+  }
+  if (String(parsed) === '无' || String(parsed) === '[]') return emptyText;
+  return String(parsed);
 }
 
 export function enrichTask(task) {

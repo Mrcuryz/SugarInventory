@@ -10,7 +10,7 @@
     </view>
   </view>
   <view class="product">{{pallet.productName || '未绑定产品'}}</view>
-  <view class="product-meta">{{pallet.productType || '产品类型未记录'}}{{pallet.productionDate ? ' · ' + pallet.productionDate : ''}}</view>
+  <view class="product-meta">{{pallet.productionDate ? '生产日期 ' + pallet.productionDate : '暂无生产日期'}}</view>
 
   <view class="hero-grid">
     <view class="hero-item wide">

@@ -1,0 +1,108 @@
+.filter-card,
+.mesh-card {
+  padding: 26rpx;
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.filter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-bottom: 26rpx;
+}
+
+.filter-input {
+  height: 76rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d8e0ec;
+  border-radius: 18rpx;
+  background: #fbfcfe;
+  font-size: 26rpx;
+  color: #172033;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 14rpx;
+}
+
+.mini-btn {
+  flex: 1;
+  height: 74rpx;
+  line-height: 74rpx;
+  font-size: 26rpx;
+}
+
+.mesh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.mesh-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.mesh-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 18rpx;
+  background: #eaf1ff;
+}
+
+.mesh-icon image {
+  width: 30rpx;
+  height: 30rpx;
+}
+
+.mesh-title {
+  font-size: 32rpx;
+  font-weight: 850;
+  color: #172033;
+}
+
+.mesh-desc {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: #647089;
+}
+
+.related-title {
+  margin-top: 22rpx;
+  font-size: 24rpx;
+  font-weight: 800;
+  color: #526072;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 14rpx;
+}
+
+.product-tag {
+  max-width: 100%;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: #f0f6ff;
+  color: #246bfe;
+  font-size: 22rpx;
+}
+
+.empty-related,
+.more-text {
+  margin-top: 12rpx;
+  font-size: 23rpx;
+  color: #8a96a8;
+}

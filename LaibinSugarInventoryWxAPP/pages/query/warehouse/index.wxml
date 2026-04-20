@@ -1,0 +1,47 @@
+<page-shell>
+  <page-header title="库位查询" subtitle="查看库位状态、容量和占用情况，并可指定库位连续扫码入库" showBack="{{true}}" />
+
+  <view class="filter-card">
+    <input class="filter-input" placeholder="输入库位名称" value="{{warehouseName}}" bindinput="onNameInput" />
+    <picker class="filter-picker" range="{{statusOptions}}" value="{{statusIndex}}" bindchange="onStatusChange">
+      <view>{{statusOptions[statusIndex]}}</view>
+    </picker>
+    <view class="switch-line">
+      <text>只看有空位</text>
+      <switch checked="{{onlyHasSpace}}" bindchange="onOnlyHasSpaceChange" color="#246bfe" />
+    </view>
+    <view class="filter-actions">
+      <button class="secondary-btn mini-btn" bindtap="resetSearch">重置</button>
+      <button class="primary-btn mini-btn" loading="{{loading}}" bindtap="search">查询库位</button>
+    </view>
+  </view>
+
+  <empty-state wx:if="{{error}}" icon="/assets/icons-line/icon-location.svg" title="库位查询失败" description="请检查权限或稍后重试。" />
+  <empty-state wx:elif="{{!loading && !warehouses.length}}" icon="/assets/icons-line/icon-location.svg" title="暂无库位" description="没有匹配当前条件的库位。" />
+
+  <view class="warehouse-list">
+    <view wx:for="{{warehouses}}" wx:key="warehouseId" class="warehouse-card">
+      <view class="card-head">
+        <view class="warehouse-title">{{item.warehouseName}}</view>
+        <status-tag label="{{item.status}}" type="{{item.statusType}}" />
+      </view>
+      <view class="capacity-row">
+        <text>容量 {{item.currentText}}</text>
+        <text>{{item.percent}}%</text>
+      </view>
+      <view class="progress-bar">
+        <view class="progress-inner {{item.statusType}}" style="{{item.progressStyle}}"></view>
+      </view>
+      <view class="warehouse-meta">
+        <text>{{item.palletText}}</text>
+        <text>{{item.productText}}</text>
+        <text>最大行数 {{item.maxRows || '-'}}</text>
+      </view>
+      <view class="card-actions">
+        <button class="card-link" data-index="{{index}}" bindtap="specifyInbound">指定入库</button>
+      </view>
+    </view>
+  </view>
+
+  <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
+</page-shell>

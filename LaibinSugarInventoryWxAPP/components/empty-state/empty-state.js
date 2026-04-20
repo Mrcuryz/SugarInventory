@@ -5,7 +5,8 @@ Component({
       value: '暂无数据'
     },
     description: String,
-    actionText: String
+    actionText: String,
+    icon: String
   },
   methods: {
     onAction() {

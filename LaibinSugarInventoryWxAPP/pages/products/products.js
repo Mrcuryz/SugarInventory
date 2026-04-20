@@ -91,6 +91,8 @@ Page({
     });
   },
 
+  noop() {},
+
   onInputChange(e) {
     const field = e.currentTarget.dataset.field;
     this.setData({

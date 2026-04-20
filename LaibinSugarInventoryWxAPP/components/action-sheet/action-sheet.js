@@ -13,6 +13,8 @@ Component({
     },
     onAction(e) {
       this.triggerEvent('action', { action: this.data.actions[e.currentTarget.dataset.index] });
+    },
+    noop() {
     }
   }
 });

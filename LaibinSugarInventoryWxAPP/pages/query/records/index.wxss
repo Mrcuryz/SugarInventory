@@ -1,0 +1,151 @@
+.filter-card,
+.record-card {
+  padding: 26rpx;
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.filter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.filter-input,
+.filter-picker,
+.date-picker {
+  height: 76rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d8e0ec;
+  border-radius: 18rpx;
+  background: #fbfcfe;
+  font-size: 26rpx;
+  color: #172033;
+}
+
+.filter-picker,
+.date-picker {
+  display: flex;
+  align-items: center;
+  font-weight: 750;
+}
+
+.date-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+}
+
+.placeholder {
+  color: #9aa6b7;
+  font-weight: 500;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 14rpx;
+}
+
+.mini-btn {
+  flex: 1;
+  height: 74rpx;
+  line-height: 74rpx;
+  font-size: 26rpx;
+}
+
+.summary-line {
+  margin: 28rpx 0 16rpx;
+  font-size: 24rpx;
+  color: #647089;
+}
+
+.record-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 26rpx;
+}
+
+.record-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.group-date {
+  padding-left: 8rpx;
+  font-size: 27rpx;
+  font-weight: 850;
+  color: #172033;
+}
+
+.record-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+}
+
+.record-icon {
+  flex-shrink: 0;
+  width: 58rpx;
+  height: 58rpx;
+  border-radius: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eaf1ff;
+}
+
+.record-icon image {
+  width: 30rpx;
+  height: 30rpx;
+}
+
+.record-icon.success {
+  background: #e9f8ef;
+}
+
+.record-icon.danger {
+  background: #fff1f1;
+}
+
+.record-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.record-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14rpx;
+}
+
+.record-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 29rpx;
+  font-weight: 850;
+  color: #172033;
+}
+
+.record-time,
+.record-operator {
+  margin-top: 10rpx;
+  font-size: 23rpx;
+  color: #7a869a;
+}
+
+.record-summary {
+  margin-top: 14rpx;
+  padding: 16rpx;
+  border-radius: 16rpx;
+  background: #f6f9fe;
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: #526072;
+}

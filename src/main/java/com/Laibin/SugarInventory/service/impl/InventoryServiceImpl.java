@@ -91,14 +91,14 @@ public class InventoryServiceImpl implements InventoryService {
     public PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size,
                                                           String status, String sortField, String sortOrder,
                                                           String createdStart, String createdEnd,
-                                                          String updatedStart, String updatedEnd) {
+                                                          String updatedStart, String updatedEnd, Boolean hasSpace) {
         int offset = (page - 1) * size;
 
         List<VWarehouseCapacity> records =
                 summaryMapper.selectCapacityListByStatus(warehouseName, warehouseIds, status, sortField, sortOrder,
-                        createdStart, createdEnd, updatedStart, updatedEnd, offset, size);
+                        createdStart, createdEnd, updatedStart, updatedEnd, hasSpace, offset, size);
         Long total = summaryMapper.countCapacityByStatus(warehouseName, status, warehouseIds,
-                createdStart, createdEnd, updatedStart, updatedEnd);
+                createdStart, createdEnd, updatedStart, updatedEnd, hasSpace);
 
         return new PageResult<>(total, records);
     }
@@ -122,16 +122,27 @@ public class InventoryServiceImpl implements InventoryService {
                         null,
                         null,
                         null,
+                        null,
                         offset,
                         queryDTO.getSize());
         Long total = summaryMapper.countCapacityByStatus(null, null, queryDTO.getIds(),
-                null, null, null, null);
+                null, null, null, null, null);
         return new PageResult<>(total, records);
     }
 
     @Override
     public List<VInventorySummary> getProductStock(String productStatus, String productName) {
         return summaryMapper.selectProductTotalStock(productStatus, productName);
+    }
+
+    @Override
+    public PageResult<VInventorySummary> pageProductStock(String productStatus, String productName, Integer page, Integer size) {
+        int effectivePage = page == null || page < 1 ? 1 : page;
+        int effectiveSize = size == null || size < 1 ? 10 : size;
+        int offset = (effectivePage - 1) * effectiveSize;
+        List<VInventorySummary> records = summaryMapper.selectProductTotalStockPage(productStatus, productName, offset, effectiveSize);
+        Long total = summaryMapper.countProductTotalStock(productStatus, productName);
+        return new PageResult<>(total, records);
     }
 
     @Override

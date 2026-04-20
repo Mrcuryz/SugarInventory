@@ -1,13 +1,14 @@
+<page-meta page-style="{{bindVisible || transferVisible || confirmVisible ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <page-shell safeBottom="{{true}}">
   <page-header title="扫码作业" subtitle="{{currentModeInfo.desc}}" />
 
   <view class="mode-shell">
     <view class="mode-label">作业模式</view>
-    <view class="mode-tabs">
+    <view class="mode-tabs segmented">
       <view
         wx:for="{{modes}}"
         wx:key="key"
-        class="mode-tab {{currentMode === item.key ? 'active' : ''}}"
+        class="mode-tab segmented-item {{currentMode === item.key ? 'active' : ''}}"
         data-mode="{{item.key}}"
         bindtap="onModeTap"
       >{{item.label}}</view>
@@ -25,6 +26,16 @@
         <text class="scan-badge">批量处理</text>
       </view>
     </view>
+    <view wx:if="{{currentMode === 'in'}}" class="inbound-target">
+      <view>
+        <view class="target-label">当前指定库位</view>
+        <view class="target-value">{{confirmForm.warehouseName ? confirmForm.warehouseName + ' · ' + confirmForm.side + '侧' : '未指定，确认入库时再填写'}}</view>
+      </view>
+      <view class="target-actions">
+        <text bindtap="openWarehouseQuery">更改</text>
+        <text wx:if="{{confirmForm.warehouseName}}" bindtap="clearInboundTarget">清空</text>
+      </view>
+    </view>
     <button class="scan-btn" loading="{{scanning}}" disabled="{{scanning}}" bindtap="onScan">
       {{scanning ? '扫码中' : '开始扫码'}}
     </button>
@@ -34,7 +45,7 @@
 
   <view class="summary-card">
     <view class="summary-head">
-      <view class="summary-title">本次作业上下文</view>
+      <view class="summary-title">本次作业统计</view>
       <view class="summary-mode">{{currentModeInfo.label}}</view>
     </view>
     <view class="summary-grid">
@@ -59,7 +70,7 @@
   </view>
 
   <view class="section-title">本次任务池</view>
-  <scroll-view wx:if="{{pool.length}}" class="pool-scroll" scroll-y="{{true}}" scroll-into-view="{{activePoolItemId}}">
+  <scroll-view wx:if="{{pool.length}}" class="pool-scroll" scroll-y="{{!(bindVisible || transferVisible || confirmVisible)}}" scroll-into-view="{{activePoolItemId}}">
     <view wx:for="{{pool}}" wx:key="id" id="pool-item-{{item.id}}" class="pool-item">
       <task-card
         task="{{item}}"
@@ -69,13 +80,13 @@
       />
     </view>
   </scroll-view>
-  <empty-state wx:else title="还没有扫码任务" description="选择作业模式后，连续扫码会把任务加入这里。" actionText="开始扫码" bind:action="onScan" />
+  <empty-state wx:else icon="/assets/icons-line/icon-search.svg" title="还没有扫码任务" description="选择作业模式后，连续扫码会把任务加入这里。" actionText="开始扫码" bind:action="onScan" />
 
   <bottom-action-bar actions="{{bottomActions}}" bind:action="onBottomAction" />
 
-  <view wx:if="{{bindVisible}}" class="modal-layer">
-    <view class="modal-mask" bindtap="closeBind"></view>
-    <view class="modal-card">
+  <view wx:if="{{bindVisible}}" class="modal-layer" catchtouchmove="noop">
+    <view class="modal-mask" bindtap="closeBind" catchtouchmove="noop"></view>
+    <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">创建入库任务</view>
       <view class="modal-code">{{pendingPallet.code}}</view>
       <view class="field">
@@ -115,9 +126,9 @@
     </view>
   </view>
 
-  <view wx:if="{{transferVisible}}" class="modal-layer">
-    <view class="modal-mask" bindtap="closeTransfer"></view>
-    <view class="modal-card">
+  <view wx:if="{{transferVisible}}" class="modal-layer" catchtouchmove="noop">
+    <view class="modal-mask" bindtap="closeTransfer" catchtouchmove="noop"></view>
+    <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">创建调拨任务</view>
       <view class="modal-code">{{transferForm.code}}</view>
       <view class="field">
@@ -137,9 +148,9 @@
     </view>
   </view>
 
-  <view wx:if="{{confirmVisible}}" class="modal-layer">
-    <view class="modal-mask" bindtap="closeConfirm"></view>
-    <view class="modal-card">
+  <view wx:if="{{confirmVisible}}" class="modal-layer" catchtouchmove="noop">
+    <view class="modal-mask" bindtap="closeConfirm" catchtouchmove="noop"></view>
+    <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">批量确认入库</view>
       <view class="modal-code">共 {{pool.length}} 个托盘</view>
       <view class="field">

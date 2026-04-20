@@ -27,7 +27,7 @@ public interface InventoryService {
     PageResult<VWarehouseCapacity> queryWarehouses(String warehouseName, List<Integer> warehouseIds, Integer page, Integer size,
                                                    String status, String sortField, String sortOrder,
                                                    String createdStart, String createdEnd,
-                                                   String updatedStart, String updatedEnd);
+                                                   String updatedStart, String updatedEnd, Boolean hasSpace);
 
     PageResult<VWarehouseCapacity> batchQueryWarehouses(OutStockBatchQueryDTO queryDTO);
 
@@ -37,6 +37,8 @@ public interface InventoryService {
      * @param productStatus 产品状态：成品/半成品
      */
     List<VInventorySummary> getProductStock(String productStatus, String productName);
+
+    PageResult<VInventorySummary> pageProductStock(String productStatus, String productName, Integer page, Integer size);
 
     List<WarehouseRecentOperationVO> listWarehouseRecentOperations(Integer warehouseId, Integer limit);
 }

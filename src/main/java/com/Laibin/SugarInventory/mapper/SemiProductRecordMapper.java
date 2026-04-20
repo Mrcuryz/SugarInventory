@@ -86,7 +86,7 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
             "    ) ranked " +
             "    WHERE rn = 1 " +
             ") a ON s.product_id = a.product_id AND s.operation_date = a.sample_date " +
-            "JOIN user u ON a.tested_by = u.id " +
+            "LEFT JOIN user u ON a.tested_by = u.id " +
             "WHERE 1=1 " +
             "<if test='dto.productName != null and dto.productName != \"\"'>" +
             "   AND p.product_name LIKE CONCAT('%', #{dto.productName}, '%') " +
@@ -118,7 +118,7 @@ public interface SemiProductRecordMapper extends BaseMapper<SemiProductRecord> {
             "FROM semi_product_record s " +
             "JOIN product p ON s.product_id = p.id " +
             "JOIN warehouse w ON s.warehouse_id = w.id " +
-            "JOIN assay as a ON s.assay_id = a.id " +
+            "LEFT JOIN assay as a ON s.assay_id = a.id " +
             "WHERE 1=1 " +
             "<if test='dto.productName != null and dto.productName != \"\"'>" +
             "   AND p.product_name LIKE CONCAT('%', #{dto.productName}, '%') " +

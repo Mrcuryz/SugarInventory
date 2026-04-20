@@ -1,6 +1,17 @@
-const BASE_URL = "https://ccgl.site";
+const BASE_URL = "http://localhost:8080";
 // const BASE_URL = "http://localhost:8080";
 // const BASE_URL = "https://cscgood.mynatapp.cc";
+
+function sanitizeData(data = {}) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  return Object.keys(data).reduce((result, key) => {
+    const value = data[key];
+    if (value !== undefined && value !== null && value !== '') {
+      result[key] = value;
+    }
+    return result;
+  }, {});
+}
 
 function request(url, method, data = {}) {
   return new Promise((resolve, reject) => {
@@ -8,7 +19,7 @@ function request(url, method, data = {}) {
     wx.request({
       url: BASE_URL + url,
       method: method,
-      data: data,
+      data: method === 'GET' ? sanitizeData(data) : data,
       header: {
         "Authorization": token ? "Bearer " + token : "",
         "Content-Type": "application/json"

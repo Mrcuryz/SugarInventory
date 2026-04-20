@@ -1,0 +1,48 @@
+<page-shell>
+  <page-header title="化验查询" subtitle="独立查询化验记录，查看结论、指标和标准匹配" showBack="{{true}}" />
+
+  <view class="filter-card">
+    <input class="filter-input" placeholder="产品名称" value="{{productName}}" data-field="productName" bindinput="onInput" />
+    <input class="filter-input" placeholder="化验员" value="{{testerName}}" data-field="testerName" bindinput="onInput" />
+    <view class="filter-row">
+      <picker class="filter-picker" mode="date" value="{{startDate}}" data-field="startDate" bindchange="onDateChange">
+        <view>{{startDate || '开始日期'}}</view>
+      </picker>
+      <picker class="filter-picker" mode="date" value="{{endDate}}" data-field="endDate" bindchange="onDateChange">
+        <view>{{endDate || '结束日期'}}</view>
+      </picker>
+      <picker class="filter-picker small" range="{{qualifiedOptions}}" value="{{qualifiedIndex}}" bindchange="onQualifiedChange">
+        <view>{{qualifiedOptions[qualifiedIndex]}}</view>
+      </picker>
+    </view>
+    <view class="filter-actions">
+      <button class="secondary-btn mini-btn" bindtap="resetSearch">重置</button>
+      <button class="primary-btn mini-btn" loading="{{loading}}" bindtap="search">查询化验</button>
+    </view>
+  </view>
+
+  <view class="summary-line">共 {{total}} 条化验记录</view>
+
+  <empty-state wx:if="{{error}}" icon="/assets/icons-line/flow-assay.svg" title="化验查询失败" description="请稍后重试，或检查账号权限。" />
+  <empty-state wx:elif="{{!loading && !records.length}}" icon="/assets/icons-line/flow-assay.svg" title="暂无化验记录" description="没有匹配当前筛选条件的化验数据。" />
+
+  <view class="assay-list">
+    <view wx:for="{{records}}" wx:key="id" class="assay-card" data-index="{{index}}" bindtap="openDetail">
+      <view class="card-head">
+        <view class="product-title">{{item.productName || '未命名产品'}}</view>
+        <status-tag label="{{item.qualifiedLabel}}" type="{{item.qualifiedType}}" />
+      </view>
+      <view class="assay-meta">
+        <text>抽样 {{item.sampleDateText}}</text>
+        <text>版本 v{{item.version || 1}}</text>
+      </view>
+      <view class="assay-line">
+        <image src="/assets/icons-line/icon-user.svg" mode="aspectFit"></image>
+        <text>{{item.testerName || '未记录化验员'}} · {{item.createdAtText}}</text>
+      </view>
+      <view class="standard-text">{{item.standardText}}</view>
+      <view class="card-link">查看详情</view>
+    </view>
+  </view>
+  <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
+</page-shell>

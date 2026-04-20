@@ -31,7 +31,7 @@
       <div class="table-toolbar">
         <div>
           <div class="section-title">库位占用概览</div>
-          <div class="section-subtitle">按库位状态和容量查看当前仓储概况，点击库位可查看产品明细。</div>
+          <div class="section-subtitle">按库位状态和容量查看当前仓储概况，点击库位进入仓库平面图定位。</div>
         </div>
       </div>
       <div class="status-overview">
@@ -56,7 +56,7 @@
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="handleSelectLocation(buildLocationFromWarehouse(row))">查看</el-button>
+            <el-button size="small" type="primary" @click="goWarehouseMap(row)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -430,7 +430,7 @@ import {useRouter} from 'vue-router'
 import {throttle} from 'lodash-es'
 import {
   getWarehouseInfo,
-  getAllWarehouseCapacity,
+  queryWarehouseLedger,
   getWarehouseList,
   getWarehouseById,
   getMaxRowNum
@@ -1614,26 +1614,23 @@ const getWarehouseStatusKey = (status) => {
 }
 const getWarehouseStatusTag = (status) => statusTagMap[getWarehouseStatusKey(status)] || 'info'
 const normalizePercent = (value) => {
-  const number = Number(value)
+  const number = Number(value || 0)
   if (Number.isNaN(number)) return 0
-  if (number <= 1) return Math.round(number * 100)
-  return Math.min(Math.round(number), 100)
+  return Math.max(0, Math.min(100, Math.round(number)))
 }
-const buildLocationFromWarehouse = (row) => {
-  const matched = locations.value.find(location => location.id === row.warehouseId) || {}
-  return {
-    ...matched,
-    id: row.warehouseId,
-    warehouseId: row.warehouseId,
-    warehouseName: row.warehouseName,
-    status: matched.status || getWarehouseStatusKey(row.status)
-  }
+
+const goWarehouseMap = (row) => {
+  router.push({
+    path: '/warehouse-map',
+    query: {warehouseId: row.warehouseId}
+  })
 }
+
 const getAll = async () => {
-  let result = await getAllWarehouseCapacity();
+  const result = await queryWarehouseLedger({page: 1, size: 500})
 
   if (result.code === 200) {
-    CapacityList.value = result.data
+    CapacityList.value = result.data?.records || []
     CapacityList.value.forEach(item => {
       //查找locations中id为item.warehouseId的对象，并更新其capacityPercentage和status属性
       const index = locations.value.findIndex(location => location.id === item.warehouseId)

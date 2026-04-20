@@ -72,6 +72,8 @@ Page({
     this.setData({ showModal: false });
   },
 
+  noop() {},
+
   editWarehouse(e) {
     const id = e.currentTarget.dataset.id;
     const warehouse = this.data.warehouses.find(item => item.id === id);

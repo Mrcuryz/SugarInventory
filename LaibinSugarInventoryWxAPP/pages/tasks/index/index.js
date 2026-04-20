@@ -287,5 +287,8 @@ Page({
 
   closeConfirm() {
     this.setData({ confirmVisible: false });
+  },
+
+  noop() {
   }
 });

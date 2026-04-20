@@ -59,9 +59,6 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
             throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
         Assay assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
-        if (assay == null) {
-            throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
-        }
         if(product.getScreenMeshId() == null){
             throw new BusinessException(ErrorCode.SCREEN_MESH_NOT_FOUND);
         }
@@ -90,7 +87,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         semiProductRecord.setScreenMeshId(product.getScreenMeshId());
         semiProductRecord.setOperator(operator);
         semiProductRecord.setOperationDate(dto.getEntryDate());
-        semiProductRecord.setAssayId(assay.getId());
+        semiProductRecord.setAssayId(assay == null ? null : assay.getId());
         semiProductRecord.setTotalWeight(totalWeight);
         semiProductRecord.setCreatedAt(LocalDateTime.now());
         // 散件凑一板
@@ -338,7 +335,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         inventory.setQuantity(1);
         inventory.setScreenMeshId(product.getScreenMeshId());
         inventory.setEntryDate(dto.getEntryDate());
-        inventory.setAssayId(assay.getId());
+        inventory.setAssayId(assay == null ? null : assay.getId());
         inventory.setProductStatus(product.getStatus());
         inventory.setCreatedAt(LocalDateTime.now());
         inventory.setInStockId(dto.getInStockId());
@@ -381,7 +378,6 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         if (warehouse == null) throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
 
         Assay assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
-        if (assay == null) throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
 
         // 计算总重量
         BigDecimal totalWeight;
@@ -411,7 +407,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         record.setScreenMeshId(product.getScreenMeshId());
         record.setOperator(operator);
         record.setOperationDate(dto.getEntryDate());
-        record.setAssayId(assay.getId());
+        record.setAssayId(assay == null ? null : assay.getId());
         record.setTotalWeight(totalWeight);
         record.setCreatedAt(LocalDateTime.now());
         record.setUnit(dto.getUnit());

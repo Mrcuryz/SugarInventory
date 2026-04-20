@@ -1,8 +1,9 @@
 .mode-shell {
-  padding: 20rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  padding: 22rpx;
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.06);
 }
 
 .mode-label {
@@ -14,18 +15,14 @@
 .mode-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12rpx;
   margin-top: 14rpx;
-  padding: 8rpx;
-  border-radius: 8rpx;
-  background: #edf2f7;
 }
 
 .mode-tab {
   height: 66rpx;
   line-height: 66rpx;
   text-align: center;
-  border-radius: 8rpx;
+  border-radius: 16rpx;
   font-size: 25rpx;
   font-weight: 700;
   color: #526072;
@@ -35,14 +32,18 @@
 .mode-tab.active {
   color: #246bfe;
   background: #ffffff;
+  box-shadow: 0 8rpx 18rpx rgba(23, 32, 51, 0.08);
 }
 
 .scan-panel {
   margin-top: 20rpx;
-  padding: 32rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  padding: 34rpx;
+  border: 1rpx solid rgba(36, 107, 254, 0.14);
+  border-radius: 30rpx;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(36, 107, 254, 0.16), transparent 34%),
+    linear-gradient(135deg, #ffffff 0%, #f5f9ff 100%);
+  box-shadow: 0 20rpx 52rpx rgba(23, 32, 51, 0.09);
   text-align: center;
 }
 
@@ -75,11 +76,47 @@
 
 .scan-badge {
   padding: 8rpx 14rpx;
-  border-radius: 8rpx;
+  border-radius: 999rpx;
   font-size: 22rpx;
   font-weight: 700;
   color: #246bfe;
   background: #eaf1ff;
+}
+
+.inbound-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-top: 24rpx;
+  padding: 20rpx;
+  border: 1rpx solid rgba(36, 107, 254, 0.16);
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: left;
+}
+
+.target-label {
+  font-size: 22rpx;
+  color: #7a869a;
+}
+
+.target-value {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.target-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  font-size: 24rpx;
+  font-weight: 800;
+  color: #246bfe;
+  text-align: right;
 }
 
 .scan-btn {
@@ -87,10 +124,10 @@
   height: 128rpx;
   line-height: 128rpx;
   margin-top: 24rpx;
-  border-radius: 8rpx;
+  border-radius: 26rpx;
   color: #ffffff;
-  background: #246bfe;
-  box-shadow: 0 16rpx 32rpx rgba(36, 107, 254, 0.24);
+  background: linear-gradient(135deg, #246bfe 0%, #165dff 100%);
+  box-shadow: 0 22rpx 44rpx rgba(36, 107, 254, 0.3);
   font-size: 38rpx;
   font-weight: 800;
 }
@@ -110,9 +147,10 @@
 .summary-card {
   margin-top: 20rpx;
   padding: 28rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.06);
 }
 
 .summary-head {
@@ -129,7 +167,7 @@
 
 .summary-mode {
   padding: 8rpx 14rpx;
-  border-radius: 8rpx;
+  border-radius: 999rpx;
   background: #eaf1ff;
   color: #246bfe;
   font-size: 23rpx;
@@ -152,7 +190,7 @@
 
 .summary-item {
   padding: 16rpx 10rpx;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
   text-align: center;
   background: #f7f9fc;
 }
@@ -189,7 +227,7 @@
 .feedback {
   margin-top: 18rpx;
   padding: 16rpx;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
   font-size: 25rpx;
 }
 
@@ -227,7 +265,7 @@
 .modal-mask {
   position: absolute;
   inset: 0;
-  background: rgba(23, 32, 51, 0.46);
+  background: rgba(16, 24, 40, 0.48);
 }
 
 .modal-card {
@@ -237,9 +275,10 @@
   bottom: calc(28rpx + env(safe-area-inset-bottom));
   max-height: 84vh;
   overflow: auto;
-  padding: 30rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
+  padding: 32rpx;
+  border-radius: 28rpx 28rpx 24rpx 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 -20rpx 50rpx rgba(23, 32, 51, 0.16);
 }
 
 .modal-title {
@@ -277,7 +316,7 @@
   line-height: 78rpx;
   padding: 0 20rpx;
   border: 1rpx solid #d8e0ec;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
   background: #fbfcfe;
   font-size: 27rpx;
   color: #172033;
@@ -304,14 +343,15 @@
   height: 78rpx;
   line-height: 78rpx;
   margin: 0;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
   font-size: 27rpx;
   font-weight: 700;
 }
 
 .primary {
   color: #ffffff;
-  background: #246bfe;
+  background: linear-gradient(135deg, #246bfe, #165dff);
+  box-shadow: 0 14rpx 28rpx rgba(36, 107, 254, 0.2);
 }
 
 .plain {

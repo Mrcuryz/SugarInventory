@@ -43,6 +43,8 @@ Page({
     this.setData({ showModal: false });
   },
 
+  noop() {},
+
   showAddScreenMeshModal() {
     this.setData({ showModal: true, editMode: false, currentScreenMesh: { meshName: "", description: "" } });
   },

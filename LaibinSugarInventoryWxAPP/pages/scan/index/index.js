@@ -1,5 +1,5 @@
 import { getProductsByStatus } from '../../../api/product';
-import { parseCode } from '../../../api/pallet';
+import { getPalletFlowCycles, getPalletFlowDetails, getPalletInventory, parseCode } from '../../../api/pallet';
 import {
   bindPalletTask,
   cancelTasks,
@@ -48,6 +48,15 @@ function emptySummary() {
     error: 0,
     duplicate: 0
   };
+}
+
+function isScanCancel(error) {
+  const message = error && (error.errMsg || error.message || error.msg) || '';
+  return String(message).toLowerCase().includes('cancel');
+}
+
+function getErrorMessage(error, fallback = '扫码失败') {
+  return error && (error.msg || error.message || error.errMsg) || fallback;
 }
 
 Page({
@@ -103,6 +112,7 @@ Page({
 
   onShow() {
     if (!requireLogin()) return;
+    this.resetDateDefaults();
     const preferred = wx.getStorageSync('preferredScanMode');
     if (preferred) {
       wx.removeStorageSync('preferredScanMode');
@@ -159,48 +169,117 @@ Page({
     this.setMode(e.currentTarget.dataset.mode);
   },
 
-  createFeedback(type, text, shouldCount = true) {
+  updateSummary(delta = {}) {
     const sessionSummary = { ...this.data.sessionSummary };
-    if (shouldCount) {
-      sessionSummary.total += 1;
-      if (type === 'success') sessionSummary.success += 1;
-      if (type === 'danger') sessionSummary.error += 1;
-      if (type === 'warning') sessionSummary.duplicate += 1;
-    }
+    Object.keys(delta).forEach(key => {
+      sessionSummary[key] = Math.max(0, (sessionSummary[key] || 0) + delta[key]);
+    });
+    this.setData({ sessionSummary });
+  },
+
+  createFeedback(type, text) {
     this.setData({
-      lastFeedback: { type, text },
-      sessionSummary
+      lastFeedback: { type, text }
     });
   },
 
   markSessionError(text) {
     this.setData({
-      lastFeedback: { type: 'danger', text },
-      sessionSummary: {
-        ...this.data.sessionSummary,
-        error: this.data.sessionSummary.error + 1
-      }
+      lastFeedback: { type: 'danger', text }
     });
+    this.updateSummary({ error: 1 });
+  },
+
+  async validatePalletForMode(pallet) {
+    const mode = this.data.currentMode;
+    const code = pallet.code;
+    const tasksRes = await getTaskList({ code, status: 'PENDING', pageNum: 1, pageSize: 1 });
+    const hasPending = Boolean(tasksRes && tasksRes.records && tasksRes.records.length);
+    if (hasPending) {
+      return { valid: false, message: '该码已有待处理任务' };
+    }
+
+    if (pallet.status === 'INVALID') {
+      return { valid: false, message: '该码已作废，不能继续操作' };
+    }
+
+    if (mode === 'in') {
+      if (pallet.status === 'FREE') return { valid: true };
+      if (pallet.status === 'INSTOCK') return { valid: false, message: '该码已入库' };
+      return { valid: false, message: '该码当前不可用于入库' };
+    }
+
+    if (pallet.status !== 'INSTOCK') {
+      return { valid: false, message: '该码当前不在库，不能执行该操作' };
+    }
+
+    try {
+      await getPalletInventory(code);
+    } catch (error) {
+      return { valid: false, message: '该码当前没有普通库位信息，不能执行该操作' };
+    }
+
+    const activePrepare = pallet.productStatus === '半成品'
+      ? await this.isActivePreparePallet(code)
+      : false;
+    if (activePrepare) {
+      return { valid: false, message: mode === 'prepare' ? '该码已转入备料池' : '该码已转入备料池，不属于普通可操作库存' };
+    }
+
+    if (mode === 'prepare') {
+      if (pallet.productStatus !== '半成品') {
+        return { valid: false, message: '该码不是可转入备料池的半成品' };
+      }
+      return { valid: true };
+    }
+
+    if (mode === 'out' || mode === 'transfer') {
+      return { valid: true };
+    }
+
+    return { valid: false, message: '当前模式不支持该托盘' };
+  },
+
+  async isActivePreparePallet(code) {
+    try {
+      const cycles = await getPalletFlowCycles(code, { pageNum: 1, pageSize: 1 });
+      const cycle = cycles && cycles.records && cycles.records[0];
+      if (!cycle) return false;
+      const flows = await getPalletFlowDetails(code, cycle.cycleNo);
+      const hasPrepare = (flows || []).some(item => item.operationType === 'PREPARE_CONSUMED');
+      const hasConsumed = (flows || []).some(item => item.operationType === 'CONSUMED');
+      return hasPrepare && !hasConsumed;
+    } catch (error) {
+      return false;
+    }
   },
 
   async onScan() {
     if (this.data.scanning) return;
     this.setData({ scanning: true });
     let currentCode = '';
-    let currentPallet = null;
     try {
       const code = await scanCode();
       currentCode = code;
+      this.updateSummary({ total: 1 });
       if (this.data.pool.some(item => item.code === code)) {
+        this.updateSummary({ duplicate: 1 });
         this.createFeedback('warning', `${code} 已在本次作业中，无需重复扫码`);
         showToast('本次作业已扫描该托盘');
         vibrate();
         return;
       }
 
-      pushRecentScan({ code, mode: this.data.currentMode, modeLabel: this.data.currentModeInfo.label });
       const pallet = enrichPallet(await parseCode(code));
-      currentPallet = pallet;
+      const validation = await this.validatePalletForMode(pallet);
+      if (!validation.valid) {
+        this.updateSummary({ error: 1 });
+        this.createFeedback('danger', validation.message);
+        showToast(validation.message);
+        return;
+      }
+
+      pushRecentScan({ code, mode: this.data.currentMode, modeLabel: this.data.currentModeInfo.label });
 
       if (this.data.currentMode === 'in') {
         this.openBindModal(pallet);
@@ -231,18 +310,10 @@ Page({
       await this.createOutTask(code, pallet);
       vibrate();
     } catch (error) {
-      const message = error && (error.msg || error.message || error.errMsg) || '扫码失败';
+      if (isScanCancel(error)) return;
+      const message = getErrorMessage(error);
+      this.updateSummary({ error: 1 });
       this.createFeedback('danger', message);
-      if (currentCode && (this.data.currentMode === 'out' || this.data.currentMode === 'prepare')) {
-        this.addFailureToPool({
-          code: currentCode,
-          pallet: currentPallet,
-          message,
-          canRetry: true,
-          retryMode: this.data.currentMode,
-          taskTypeLabel: this.data.currentMode === 'prepare' ? '转入备料池' : '出库任务'
-        });
-      }
       showError(error, '扫码失败');
     } finally {
       this.setData({ scanning: false });
@@ -355,6 +426,7 @@ Page({
     item.actionMode = task.actionMode || this.data.currentMode;
     const result = addPoolItem(this.data.pool, item);
     if (result.duplicated) {
+      this.updateSummary({ duplicate: 1 });
       this.createFeedback('warning', `${task.code} 已在本次作业中`);
       showToast('本次作业已扫描该托盘');
       return;
@@ -363,8 +435,8 @@ Page({
       pool: result.pool,
       activePoolItemId: `pool-item-${item.id}`
     });
-    const shouldCount = !(task.actionMode === 'in' || task.actionMode === 'transfer');
-    this.createFeedback('success', `${task.code} ${task.message}`, shouldCount);
+    this.updateSummary({ success: 1 });
+    this.createFeedback('success', `${task.code} ${task.message}`);
     this.refreshActions();
     showToast(task.message, 'success');
   },
@@ -600,17 +672,6 @@ Page({
     } catch (error) {
       this.markSessionError((error && (error.msg || error.message)) || '调拨任务创建失败');
       showError(error, '创建调拨任务失败');
-      this.addFailureToPool({
-        code,
-        pallet: this.data.pendingPallet,
-        message: (error && (error.msg || error.message)) || '调拨任务创建失败',
-        canRetry: true,
-        retryMode: 'transfer',
-        taskTypeLabel: '调拨任务',
-        targetWarehouseName,
-        targetSide,
-        remark
-      });
     }
   },
 
@@ -720,5 +781,23 @@ Page({
 
   closeConfirm() {
     this.setData({ confirmVisible: false });
+  },
+
+  openWarehouseQuery() {
+    wx.navigateTo({ url: '/pages/query/warehouse/index' });
+  },
+
+  clearInboundTarget() {
+    const defaults = { ...getScanDefaults() };
+    delete defaults.warehouseName;
+    delete defaults.side;
+    setScanDefaults(defaults);
+    this.setData({
+      'confirmForm.warehouseName': '',
+      'confirmForm.side': '\u5de6'
+    });
+    showToast('\u5df2\u6e05\u7a7a\u6307\u5b9a\u5e93\u4f4d');
+  },
+  noop() {
   }
 });

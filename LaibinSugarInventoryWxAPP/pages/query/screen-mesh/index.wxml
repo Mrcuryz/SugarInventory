@@ -1,0 +1,36 @@
+<page-shell>
+  <page-header title="筛网查询" subtitle="查看筛网描述与关联产品，辅助现场核对产品信息" showBack="{{true}}" />
+
+  <view class="filter-card">
+    <input class="filter-input" placeholder="输入筛网名称" value="{{meshName}}" bindinput="onMeshNameInput" />
+    <view class="filter-actions">
+      <button class="secondary-btn mini-btn" bindtap="resetSearch">重置</button>
+      <button class="primary-btn mini-btn" loading="{{loading}}" bindtap="search">查询筛网</button>
+    </view>
+  </view>
+
+  <empty-state wx:if="{{error}}" icon="/assets/icons-line/icon-version.svg" title="筛网查询失败" description="请稍后重试，或检查当前账号权限。" />
+  <empty-state wx:elif="{{!loading && !meshes.length}}" icon="/assets/icons-line/icon-search.svg" title="暂无筛网" description="没有匹配当前条件的筛网。" />
+
+  <view class="mesh-list">
+    <view wx:for="{{meshes}}" wx:key="id" class="mesh-card">
+      <view class="mesh-head">
+        <view class="mesh-icon">
+          <image src="/assets/icons-line/icon-version.svg" mode="aspectFit"></image>
+        </view>
+        <view>
+          <view class="mesh-title">{{item.meshName}}</view>
+          <view class="mesh-desc">{{item.descriptionText}}</view>
+        </view>
+      </view>
+      <view class="related-title">关联产品 {{item.relatedCount}} 个</view>
+      <view wx:if="{{item.relatedProducts.length}}" class="tag-list">
+        <text wx:for="{{item.relatedProducts}}" wx:key="*this" class="product-tag">{{item}}</text>
+      </view>
+      <view wx:else class="empty-related">暂无关联产品</view>
+      <view wx:if="{{item.relatedMoreText}}" class="more-text">{{item.relatedMoreText}}</view>
+    </view>
+  </view>
+
+  <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
+</page-shell>

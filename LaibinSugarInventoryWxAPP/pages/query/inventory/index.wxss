@@ -1,0 +1,188 @@
+.filter-card,
+.stock-card,
+.pallet-card,
+.state-card {
+  padding: 26rpx;
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.filter-card {
+  margin-bottom: 28rpx;
+}
+
+.filter-row {
+  display: flex;
+  gap: 14rpx;
+}
+
+.filter-input,
+.filter-picker {
+  height: 76rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d8e0ec;
+  border-radius: 18rpx;
+  background: #fbfcfe;
+  font-size: 26rpx;
+  color: #172033;
+}
+
+.filter-input {
+  flex: 1;
+}
+
+.filter-picker {
+  width: 180rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 14rpx;
+  margin-top: 18rpx;
+}
+
+.mini-btn {
+  flex: 1;
+  height: 74rpx;
+  line-height: 74rpx;
+  font-size: 26rpx;
+}
+
+.result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.section-title {
+  margin: 6rpx 0 4rpx;
+}
+
+.compact {
+  margin: 0;
+}
+
+.card-head,
+.stock-meta,
+.card-actions,
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.product-title,
+.pallet-code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 31rpx;
+  font-weight: 850;
+  color: #172033;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14rpx;
+  margin-top: 22rpx;
+}
+
+.metric-item {
+  padding: 18rpx 12rpx;
+  border-radius: 18rpx;
+  background: #f6f9fe;
+}
+
+.metric-value {
+  font-size: 28rpx;
+  font-weight: 850;
+  color: #246bfe;
+}
+
+.metric-label {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #7a869a;
+}
+
+.stock-meta {
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  color: #647089;
+}
+
+.card-actions {
+  justify-content: flex-start;
+  margin-top: 20rpx;
+}
+
+.card-link {
+  margin: 0;
+  padding: 0 22rpx;
+  height: 58rpx;
+  line-height: 58rpx;
+  border-radius: 14rpx;
+  background: #eaf1ff;
+  color: #246bfe;
+  font-size: 24rpx;
+  font-weight: 750;
+}
+
+.card-link::after,
+.back-list-btn::after {
+  border: 0;
+}
+
+.detail-subtitle {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #647089;
+}
+
+.back-list-btn {
+  flex-shrink: 0;
+  height: 60rpx;
+  line-height: 60rpx;
+  padding: 0 20rpx;
+  font-size: 24rpx;
+}
+
+.pallet-main {
+  margin-top: 14rpx;
+  font-size: 27rpx;
+  font-weight: 750;
+  color: #172033;
+}
+
+.info-line {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: #526072;
+}
+
+.info-line image {
+  width: 26rpx;
+  height: 26rpx;
+}
+
+.weak {
+  color: #7a869a;
+}
+
+.state-card {
+  font-size: 26rpx;
+  color: #647089;
+}

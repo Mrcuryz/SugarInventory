@@ -1,8 +1,11 @@
 .pallet-card {
-  padding: 28rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  padding: 30rpx;
+  border: 1rpx solid rgba(36, 107, 254, 0.12);
+  border-radius: 28rpx;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(36, 107, 254, 0.12), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 18rpx 46rpx rgba(23, 32, 51, 0.08);
 }
 
 .head-row {
@@ -24,6 +27,7 @@
   line-height: 1.2;
   font-weight: 800;
   color: #172033;
+  letter-spacing: 0.8rpx;
 }
 
 .tag-list {
@@ -55,8 +59,9 @@
 
 .hero-item {
   padding: 18rpx;
-  border-radius: 8rpx;
-  background: #f7f9fc;
+  border: 1rpx solid #e7edf5;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .hero-item.wide {

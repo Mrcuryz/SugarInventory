@@ -45,6 +45,21 @@ public class InventoryController {
         return Result.success(inventoryService.getProductStock(productStatus, productName));
     }
 
+    @Operation(summary = "产品库存分页", description = "产品库存汇总分页查询")
+    @GetMapping("/stock/page")
+    public Result<PageResult<VInventorySummary>> pageProductStock(@RequestParam(required = false) String productStatus,
+                                                                  @RequestParam(required = false) String productName,
+                                                                  @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+                                                                  @RequestParam(value = "size", required = false, defaultValue = "10") Integer size) {
+        if (productName != null) {
+            productName = productName.trim();
+        }
+        if ("鍏ㄩ儴".equals(productStatus) || "全部".equals(productStatus)) {
+            productStatus = null;
+        }
+        return Result.success(inventoryService.pageProductStock(productStatus, productName, page, size));
+    }
+
     @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @GetMapping("/warehouses")
@@ -70,10 +85,11 @@ public class InventoryController {
             @RequestParam(value = "createdStart", required = false) String createdStart,
             @RequestParam(value = "createdEnd", required = false) String createdEnd,
             @RequestParam(value = "updatedStart", required = false) String updatedStart,
-            @RequestParam(value = "updatedEnd", required = false) String updatedEnd) {
+            @RequestParam(value = "updatedEnd", required = false) String updatedEnd,
+            @RequestParam(value = "hasSpace", required = false) Boolean hasSpace) {
         try {
             return Result.success(inventoryService.queryWarehouses(warehouseName, ids, page, size, status,
-                    sortField, sortOrder, createdStart, createdEnd, updatedStart, updatedEnd));
+                    sortField, sortOrder, createdStart, createdEnd, updatedStart, updatedEnd, hasSpace));
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }

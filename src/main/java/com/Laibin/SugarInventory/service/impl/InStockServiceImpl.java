@@ -165,10 +165,6 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             assay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
         }
 
-        if (assay == null) {
-            throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
-        }
-
         InStock inStock = new InStock();
         // 3. 解析前端传来的半成品 JSON，并查询数据库
         if (!semiRecords.isEmpty()) {
@@ -217,7 +213,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         inStock.setQuantity(quantity);
         inStock.setCreatedBy(operatorId);
         inStock.setEntryDate(dto.getEntryDate());
-        inStock.setAssayId(assay.getId());
+        inStock.setAssayId(assay == null ? null : assay.getId());
         inStock.setScreenMeshId(product.getScreenMeshId());
         inStock.setTotalWeight(totalWeight);
         inStock.setCreatedAt(LocalDateTime.now());

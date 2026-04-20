@@ -1,4 +1,5 @@
 import request from "../../utils/request";
+import { formatAssayStandard } from "../../utils/dict";
 
 Page({
   data: {
@@ -158,7 +159,12 @@ getProductAssayData(e) {
     console.log(res)
     this.setData({
       showAssayModal: true,
-      productAssayInfo: res.records[0] || {}
+      productAssayInfo: res.records && res.records[0]
+        ? {
+          ...res.records[0],
+          qualifiedStandardsText: formatAssayStandard(res.records[0].qualifiedStandards)
+        }
+        : {}
     });
   })
 },

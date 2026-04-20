@@ -37,17 +37,19 @@
         <el-table-column prop="id" label="ID" width="80" align="center"/>
         <el-table-column prop="standardName" label="验收标准名称" min-width="200">
         </el-table-column>
-        <el-table-column label="关联产品" min-width="300" show-overflow-tooltip>
+        <el-table-column label="关联产品" min-width="300" class-name="related-products-column">
           <template #default="{ row }">
-            <el-tag
-                v-for="(product, idx) in row.relatedProductList"
-                :key="idx"
-                size="small"
-                type="primary"
-                style="margin-right: 6px; margin-bottom: 6px"
-            >
-              {{ product.productName }}
-            </el-tag>
+            <div class="related-products-wrap">
+              <el-tag
+                  v-for="(product, idx) in row.relatedProductList"
+                  :key="idx"
+                  size="small"
+                  type="primary"
+                  class="related-product-tag"
+              >
+                {{ product.productName }}
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="180" align="center"/>
@@ -487,3 +489,30 @@ onMounted(() => {
   handleSearch()
 })
 </script>
+
+<style scoped>
+:deep(.related-products-column .cell) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: initial;
+}
+
+.related-products-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  line-height: 1.6;
+}
+
+.related-product-tag {
+  max-width: 100%;
+  height: auto;
+  min-height: 24px;
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.4;
+  padding: 3px 8px;
+}
+</style>

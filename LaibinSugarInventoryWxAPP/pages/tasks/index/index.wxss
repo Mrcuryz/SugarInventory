@@ -1,9 +1,10 @@
 .filter-card,
 .summary-card {
-  padding: 24rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  padding: 26rpx;
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
 }
 
 .filter-label {
@@ -19,11 +20,7 @@
 .tabs,
 .type-tabs {
   display: flex;
-  gap: 12rpx;
   margin-top: 14rpx;
-  padding: 8rpx;
-  border-radius: 8rpx;
-  background: #edf2f7;
 }
 
 .tab,
@@ -32,7 +29,7 @@
   height: 64rpx;
   line-height: 64rpx;
   text-align: center;
-  border-radius: 8rpx;
+  border-radius: 16rpx;
   color: #526072;
   background: transparent;
   font-size: 25rpx;
@@ -49,6 +46,7 @@
 .type-tab.active {
   color: #246bfe;
   background: #ffffff;
+  box-shadow: 0 8rpx 18rpx rgba(23, 32, 51, 0.08);
 }
 
 .summary-card {
@@ -63,6 +61,28 @@
   font-size: 28rpx;
   font-weight: 800;
   color: #172033;
+}
+
+.summary-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.summary-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 16rpx;
+  background: #eaf1ff;
+}
+
+.summary-icon-img {
+  width: 28rpx;
+  height: 28rpx;
 }
 
 .summary-desc {
@@ -89,7 +109,7 @@
 .modal-mask {
   position: absolute;
   inset: 0;
-  background: rgba(23, 32, 51, 0.46);
+  background: rgba(16, 24, 40, 0.48);
 }
 
 .modal-card {
@@ -97,9 +117,10 @@
   left: 28rpx;
   right: 28rpx;
   bottom: calc(28rpx + env(safe-area-inset-bottom));
-  padding: 30rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
+  padding: 32rpx;
+  border-radius: 28rpx 28rpx 24rpx 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 -20rpx 50rpx rgba(23, 32, 51, 0.16);
 }
 
 .modal-title {
@@ -137,7 +158,7 @@
   line-height: 78rpx;
   padding: 0 20rpx;
   border: 1rpx solid #d8e0ec;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
   background: #fbfcfe;
   font-size: 27rpx;
   color: #172033;
@@ -172,7 +193,8 @@
 
 .primary {
   color: #ffffff;
-  background: #246bfe;
+  background: linear-gradient(135deg, #246bfe, #165dff);
+  box-shadow: 0 14rpx 28rpx rgba(36, 107, 254, 0.2);
 }
 
 .plain {

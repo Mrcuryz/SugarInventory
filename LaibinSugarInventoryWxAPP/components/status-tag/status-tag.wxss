@@ -2,35 +2,41 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 38rpx;
-  padding: 0 14rpx;
-  border-radius: 8rpx;
+  min-height: 42rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
   font-size: 22rpx;
-  font-weight: 600;
+  font-weight: 750;
+  border: 1rpx solid transparent;
 }
 
 .primary {
   color: #246bfe;
   background: #eaf1ff;
+  border-color: #d9e6ff;
 }
 
 .success {
   color: #107c41;
   background: #e9f8ef;
+  border-color: #cfebd9;
 }
 
 .warning {
-  color: #966600;
-  background: #fff5d8;
+  color: #a65f00;
+  background: #fff4df;
+  border-color: #ffe2ad;
 }
 
 .danger {
-  color: #ba1a1a;
-  background: #ffe8e8;
+  color: #d92d20;
+  background: #fff1f1;
+  border-color: #ffd9d9;
 }
 
 .info {
   color: #526072;
-  background: #eef2f6;
+  background: #f1f4f8;
+  border-color: #e1e7ef;
 }
 

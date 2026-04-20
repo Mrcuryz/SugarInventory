@@ -2,9 +2,17 @@
 .menu-card,
 .logout-card {
   padding: 28rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.account-card {
+  border-color: rgba(36, 107, 254, 0.14);
+  background:
+    radial-gradient(circle at 94% 8%, rgba(36, 107, 254, 0.12), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
 }
 
 .account-head {
@@ -28,9 +36,9 @@
 
 .account-tag {
   padding: 8rpx 14rpx;
-  border-radius: 8rpx;
-  background: #e9f8ef;
-  color: #107c41;
+  border-radius: 999rpx;
+  background: #eef8f2;
+  color: #2f7d55;
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -44,8 +52,9 @@
 
 .meta-card {
   padding: 20rpx;
-  border-radius: 8rpx;
-  background: #f7f9fc;
+  border: 1rpx solid #e7edf5;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .meta-label {
@@ -110,7 +119,7 @@
   height: 72rpx;
   line-height: 72rpx;
   margin: 0;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
   color: #d92d20;
   background: #fff1f1;
   font-size: 26rpx;

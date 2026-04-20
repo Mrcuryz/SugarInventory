@@ -1,3 +1,4 @@
+<page-meta page-style="{{pageLocked ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <view class="page-root {{pageLocked ? 'lock' : ''}}" style="top: {{pageLocked ? lockedTop : 0}}">
 
   <view class="container">
@@ -100,14 +101,14 @@
   </view>
 
   <!-- 库存详情弹窗 -->
-  <view wx:if="{{showDetailModal}}" class="modal show">
+  <view wx:if="{{showDetailModal}}" class="modal show" catchtouchmove="preventTouchMove">
     <view class="modal-mask" bindtap="hideDetail" catchtouchmove="preventTouchMove"></view>
-    <view class="modal-content">
+    <view class="modal-content" catchtouchmove="preventTouchMove">
       <view class="modal-header">
         <text class="modal-title">{{ isOutboundDetail ? '出库产品详情' : '库存详情' }}</text>
         <view class="modal-close" bindtap="hideDetail">×</view>
       </view>
-      <scroll-view scroll-y class="modal-body">
+      <scroll-view scroll-y="{{showDetailModal}}" class="modal-body">
         <view class="detail-list">
           <!-- 库存详情 -->
           <block wx:if="{{!isOutboundDetail}}">
@@ -176,9 +177,9 @@
 
 
   <!-- 化验数据 -->
-  <view class="modal labData-data {{showAssayModal ? 'show' : ''}}">
-    <view class="modal-mask" bindtap="hideAssayDetail"></view>
-    <view class="modal-content">
+  <view class="modal labData-data {{showAssayModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+    <view class="modal-mask" bindtap="hideAssayDetail" catchtouchmove="preventTouchMove"></view>
+    <view class="modal-content" catchtouchmove="preventTouchMove">
       <view class="modal-header">
         <text class="modal-title">化验信息</text>
         <view class="modal-close" bindtap="hideAssayDetail">×</view>
@@ -193,7 +194,7 @@
         <view><text class="bold">电导灰分：</text>{{productAssayInfo.conductivityAsh != null ? productAssayInfo.conductivityAsh + 'g/100g' : '暂无数据'}}</view>
         <view><text class="bold">蔗糖分：</text>{{productAssayInfo.sucrose != null ? productAssayInfo.sucrose + 'g/100g' : '暂无数据'}}</view>
         <view><text class="bold">不溶于水杂质：</text>{{productAssayInfo.insolubleImpurity != null ? productAssayInfo.insolubleImpurity + 'mg/kg' : '暂无数据'}}</view>
-        <view><text class="bold">符合标准：</text>{{productAssayInfo.qualifiedStandards || '暂无数据'}}</view>
+        <view><text class="bold">符合标准：</text>{{productAssayInfo.qualifiedStandardsText || '暂无数据'}}</view>
         <view><text class="bold">检验：</text>{{productAssayInfo.isQualified || '暂无数据'}}</view>
         <view><text class="bold">操作员：</text>{{productAssayInfo.testerName || '暂无数据'}}</view>
       </view>
@@ -201,9 +202,9 @@
   </view>
 
   <!-- 出库操作弹窗 -->
-  <view wx:if="{{showOutboundModal}}" class="modal show">
+  <view wx:if="{{showOutboundModal}}" class="modal show" catchtouchmove="preventTouchMove">
     <view class="modal-mask" bindtap="hideOutbound" catchtouchmove="preventTouchMove"></view>
-    <view class="modal-content">
+    <view class="modal-content" catchtouchmove="preventTouchMove">
       <view class="modal-header">
         <text class="modal-title">出库操作</text>
         <view class="modal-close" bindtap="hideOutbound">×</view>
@@ -272,9 +273,9 @@
   </view>
 
   <!-- 调拨出库操作弹窗 -->
-  <view wx:if="{{showTransferOutboundModal}}" class="modal show">
+  <view wx:if="{{showTransferOutboundModal}}" class="modal show" catchtouchmove="preventTouchMove">
     <view class="modal-mask" bindtap="hideOutbound" catchtouchmove="preventTouchMove"></view>
-    <view class="modal-content">
+    <view class="modal-content" catchtouchmove="preventTouchMove">
       <view class="modal-header">
         <text class="modal-title">调拨操作</text>
         <view class="modal-close" bindtap="hideOutbound">×</view>

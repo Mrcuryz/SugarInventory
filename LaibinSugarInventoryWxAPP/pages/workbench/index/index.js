@@ -16,15 +16,15 @@ Page({
     recentTasks: [],
     recentScans: [],
     tips: [
-      '现场作业优先从扫码进入，减少手工搜索。',
       '同一批连续扫码会自动拦截重复托盘码。',
       '任务创建后请及时在任务池或任务中心确认。'
     ],
     actions: [
-      { key: 'in', title: '连续扫码入库', desc: '绑定托盘并创建入库任务', mode: 'in', icon: '/assets/icons-v2/action-in.png' },
-      { key: 'out', title: '连续扫码出库', desc: '按托盘创建出库任务', mode: 'out', icon: '/assets/icons-v2/action-out.png' },
-      { key: 'prepare', title: '转入备料池', desc: '批量扫码半成品托盘进入备料任务', mode: 'prepare', icon: '/assets/icons-v2/action-prepare.png' },
-      { key: 'query', title: '单码查询', desc: '在查询中心手输或扫码查看托盘详情', route: 'query', icon: '/assets/icons-v2/action-query.png' }
+      { key: 'in', title: '扫码入库', desc: '绑定托盘并创建入库任务', mode: 'in', icon: '/assets/icons-v2/action-in.png', primary: true },
+      { key: 'out', title: '扫码出库', desc: '按托盘创建出库任务', mode: 'out', icon: '/assets/icons-v2/action-out.png' },
+      { key: 'prepare', title: '转入备料池', desc: '半成品托盘进入备料任务', mode: 'prepare', icon: '/assets/icons-v2/action-prepare.png' },
+      { key: 'transfer', title: '扫码调拨', desc: '指定目标库位创建调拨任务', mode: 'transfer', icon: '/assets/icons-v2/action-out.png' },
+      { key: 'query', title: '单码查询', desc: '手输或扫码查看托盘详情', route: 'query', icon: '/assets/icons-v2/action-query.png' }
     ]
   },
 

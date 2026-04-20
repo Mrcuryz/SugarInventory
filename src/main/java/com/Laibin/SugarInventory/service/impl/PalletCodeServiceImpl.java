@@ -27,6 +27,7 @@ import com.Laibin.SugarInventory.domain.dto.SemiRecordDTO;
 import com.Laibin.SugarInventory.domain.dto.TaskSemiItemDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapBatchOperationDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapSlotInboundDTO;
+import com.Laibin.SugarInventory.domain.bo.AssayResolveResult;
 import com.Laibin.SugarInventory.domain.po.Assay;
 import com.Laibin.SugarInventory.domain.po.Inventory;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
@@ -65,6 +66,7 @@ import com.Laibin.SugarInventory.mapper.SemiPreparePoolMapper;
 import com.Laibin.SugarInventory.mapper.UserMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.InStockService;
+import com.Laibin.SugarInventory.service.AssayResolveService;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.PalletCodeService;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
@@ -144,6 +146,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     private InStockService inStockService;
     @Autowired
     private SemiProductRecordService semiProductRecordService;
+    @Autowired
+    private AssayResolveService assayResolveService;
 
     // 批量生成托盘码：先插入占位记录拿自增ID，再生成编码回写
     @Override
@@ -212,20 +216,23 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         vo.setId(palletCode.getId());
         vo.setCode(palletCode.getCode());
         vo.setStatus(palletCode.getStatus());
-        vo.setProductStatus(palletCode.getProductStatus());
-        vo.setProductionDate(palletCode.getProductionDate());
-        vo.setAssayId(palletCode.getAssayId());
         vo.setCreatedAt(palletCode.getCreatedAt());
         vo.setUpdatedAt(palletCode.getUpdatedAt());
 
-        if (palletCode.getProductId() != null) {
+        if (!"FREE".equalsIgnoreCase(palletCode.getStatus())) {
+            vo.setProductStatus(palletCode.getProductStatus());
+            vo.setProductionDate(palletCode.getProductionDate());
+            vo.setAssayId(palletCode.getAssayId());
+        }
+
+        if (!"FREE".equalsIgnoreCase(palletCode.getStatus()) && palletCode.getProductId() != null) {
             Product product = productMapper.selectById(palletCode.getProductId());
             if (product != null) {
                 vo.setProductName(product.getProductName());
             }
         }
 
-        if (palletCode.getScreenMeshId() != null) {
+        if (!"FREE".equalsIgnoreCase(palletCode.getStatus()) && palletCode.getScreenMeshId() != null) {
             ScreenMesh screenMesh = screenMeshMapper.selectById(palletCode.getScreenMeshId());
             if (screenMesh != null) {
                 vo.setScreenMeshName(screenMesh.getMeshName());
@@ -341,50 +348,24 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         return palletCode == null || palletCode.getCurrentCycleNo() == null ? 0 : palletCode.getCurrentCycleNo();
     }
 
-    private boolean matchesCurrentPalletAssay(PalletCode palletCode, Assay assay) {
-        return palletCode != null
-                && assay != null
-                && Objects.equals(assay.getProductId(), palletCode.getProductId())
-                && Objects.equals(assay.getSampleDate(), palletCode.getProductionDate());
-    }
-
-    private Assay selectCurrentPalletAssay(Integer assayId, PalletCode palletCode) {
-        if (assayId == null) {
-            return null;
-        }
-        Assay assay = assayMapper.selectById(assayId);
-        return matchesCurrentPalletAssay(palletCode, assay) ? assay : null;
-    }
-
     /**
      * 获取托盘当前轮次关联的化验ID：仅接受当前绑定产品+生产日期匹配的化验，避免复用上一轮残留 assayId。
      */
     private Integer resolveAssayIdWithFallback(PalletCode palletCode) {
-        if (palletCode.getProductId() == null || palletCode.getProductionDate() == null) {
-            return null;
-        }
-        if (selectCurrentPalletAssay(palletCode.getAssayId(), palletCode) != null) {
-            return palletCode.getAssayId();
-        } else if (palletCode.getAssayId() != null) {
-            palletCode.setAssayId(null);
-            this.updateById(palletCode);
-        }
         PalletTask latestWithAssay = palletTaskMapper.selectLatestWithAssay(
                 palletCode.getId(),
                 getCurrentCycleNo(palletCode)
         );
-        if (latestWithAssay != null && selectCurrentPalletAssay(latestWithAssay.getAssayId(), palletCode) != null) {
-            palletCode.setAssayId(latestWithAssay.getAssayId());
-            this.updateById(palletCode);
-            return latestWithAssay.getAssayId();
-        }
-        Assay assay = assayMapper.selectByProductIdAndDate(palletCode.getProductId(), palletCode.getProductionDate());
-        if (assay == null) {
-            return null;
-        }
-        palletCode.setAssayId(assay.getId());
-        this.updateById(palletCode);
-        return assay.getId();
+        Inventory inventory = lambdaQueryInventoryByPalletId(palletCode.getId());
+        AssayResolveResult result = assayResolveService.resolveForPallet(
+                palletCode,
+                latestWithAssay,
+                inventory,
+                null,
+                null,
+                true
+        );
+        return result.hasAssay() ? result.getAssay().getId() : null;
     }
 
     /**
@@ -405,6 +386,35 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             latest.setAssayId(assayId);
             palletFlowRecordMapper.updateById(latest);
         }
+    }
+
+    private void insertAssayFlowIfAbsent(PalletCode palletCode, PalletTask task, Integer assayId,
+                                         Integer operatorId, String operationName, String remark) {
+        if (palletCode == null || assayId == null) {
+            return;
+        }
+        Integer cycleNo = getCurrentCycleNo(palletCode);
+        Long existing = palletFlowRecordMapper.selectCount(new LambdaQueryWrapper<PalletFlowRecord>()
+                .eq(PalletFlowRecord::getPalletCodeId, palletCode.getId())
+                .eq(PalletFlowRecord::getCycleNo, cycleNo)
+                .eq(PalletFlowRecord::getOperationType, "ASSAY")
+                .eq(PalletFlowRecord::getAssayId, assayId));
+        if (existing != null && existing > 0) {
+            return;
+        }
+        PalletFlowRecord flow = new PalletFlowRecord();
+        flow.setPalletCodeId(palletCode.getId());
+        flow.setTaskId(task == null ? null : task.getId());
+        flow.setOperationType("ASSAY");
+        flow.setOperationName(operationName);
+        flow.setOperationTime(LocalDateTime.now());
+        flow.setOperatorId(operatorId);
+        flow.setProductId(palletCode.getProductId());
+        flow.setProductStatus(palletCode.getProductStatus());
+        flow.setAssayId(assayId);
+        flow.setCycleNo(cycleNo);
+        flow.setRemark(appendTraceRemark(remark, task == null ? null : "任务ID=" + task.getId()));
+        palletFlowRecordMapper.insert(flow);
     }
 
     // 绑定托盘并生成入库任务：校验托盘/产品，防重复任务，落表 pallet_task + 更新 pallet_code + 写入流转记录
@@ -593,6 +603,14 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             task.setAssayId(selectedAssayId);
             palletTaskMapper.updateById(task);
             updateLatestFlowAssay(finishedPallet.getId(), selectedAssayId, finishedPallet.getCurrentCycleNo());
+            insertAssayFlowIfAbsent(
+                    finishedPallet,
+                    task,
+                    selectedAssayId,
+                    operatorId,
+                    "关联化验",
+                    "成品任务套用半成品化验"
+            );
         }
         return voList;
     }
@@ -1931,21 +1949,16 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     }
 
     private Integer ensureAssayId(PalletCode palletCode, PalletTask task, LocalDate entryDate) {
-        Integer assayId = resolveAssayIdWithFallback(palletCode);
-        // 兜底：按产品+入库日期查询化验并回填托盘/任务
-        if (assayId == null && palletCode.getProductId() != null && entryDate != null) {
-            Assay assay = assayMapper.selectByProductIdAndDate(palletCode.getProductId(), entryDate);
-            if (assay != null) {
-                assayId = assay.getId();
-                palletCode.setAssayId(assayId);
-                this.updateById(palletCode);
-            }
-        }
-        if (assayId != null && task != null && !Objects.equals(task.getAssayId(), assayId)) {
-            task.setAssayId(assayId);
-            palletTaskMapper.updateById(task);
-        }
-        return assayId;
+        Inventory inventory = lambdaQueryInventoryByPalletId(palletCode.getId());
+        AssayResolveResult result = assayResolveService.resolveForPallet(
+                palletCode,
+                task,
+                inventory,
+                entryDate,
+                null,
+                true
+        );
+        return result.hasAssay() ? result.getAssay().getId() : null;
     }
 
     private String normalizeSide(String side) {
@@ -2068,15 +2081,26 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     // 通过托盘码关联化验；若缺失则按产品ID+生产日期补查最新版本，再回写托盘
     public PalletAssayVO getAssayByCode(String code) {
         PalletCode palletCode = parseAndFind(code);
-        Integer assayId = resolveAssayIdWithFallback(palletCode);
-        if (assayId == null) {
-            throw new BusinessException("找不到化验数据");
-        }
-        Assay assay = assayMapper.selectById(assayId);
-        if (assay == null) {
-            throw new BusinessException("找不到化验数据");
-        }
+        PalletTask latestWithAssay = palletTaskMapper.selectLatestWithAssay(
+                palletCode.getId(),
+                getCurrentCycleNo(palletCode)
+        );
+        Inventory inventory = lambdaQueryInventoryByPalletId(palletCode.getId());
+        AssayResolveResult resolveResult = assayResolveService.resolveForPallet(
+                palletCode,
+                latestWithAssay,
+                inventory,
+                null,
+                null,
+                true
+        );
+        Assay assay = resolveResult.getAssay();
         PalletAssayVO vo = new PalletAssayVO();
+        fillAssayResolveMeta(vo, resolveResult);
+        if (assay == null) {
+            return vo;
+        }
+        vo.setId(assay.getId());
         vo.setSampleDate(assay.getSampleDate());
         vo.setColorValue(assay.getColorValue());
         vo.setReducingSugar(assay.getReducingSugar());
@@ -2101,6 +2125,15 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             }
         }
         return vo;
+    }
+
+    private void fillAssayResolveMeta(PalletAssayVO vo, AssayResolveResult result) {
+        vo.setResolveSource(result.getSource());
+        vo.setResolveStatus(result.getStatus());
+        vo.setResolveMessage(result.getMessage());
+        vo.setAutoBound(result.isAutoBound());
+        vo.setMultipleCandidates(result.isMultipleCandidates());
+        vo.setCandidateCount(result.getCandidateCount());
     }
 
     @Override

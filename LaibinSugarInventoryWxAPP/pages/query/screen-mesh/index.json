@@ -1,0 +1,9 @@
+{
+    "navigationBarTitleText":  "绛涚綉鏌ヨ",
+    "usingComponents":  {
+                            "page-shell":  "../../../components/page-shell/page-shell",
+                            "page-header":  "../../../components/page-header/page-header",
+                            "empty-state":  "../../../components/empty-state/empty-state",
+                            "query-pager":  "../../../components/query-pager/query-pager"
+                        }
+}

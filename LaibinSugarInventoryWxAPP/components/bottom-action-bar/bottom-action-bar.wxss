@@ -3,7 +3,8 @@
   gap: 16rpx;
   padding: 18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));
   border-top: 1rpx solid #e3e9f2;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -12rpx 34rpx rgba(23, 32, 51, 0.08);
   box-sizing: border-box;
 }
 
@@ -17,12 +18,12 @@
 
 .action {
   flex: 1;
-  height: 78rpx;
-  line-height: 78rpx;
+  height: 82rpx;
+  line-height: 82rpx;
   margin: 0;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
   font-size: 27rpx;
-  font-weight: 700;
+  font-weight: 750;
 }
 
 .action::after {
@@ -31,7 +32,8 @@
 
 .primary {
   color: #ffffff;
-  background: #246bfe;
+  background: linear-gradient(135deg, #246bfe, #165dff);
+  box-shadow: 0 14rpx 28rpx rgba(36, 107, 254, 0.2);
 }
 
 .plain {
@@ -40,8 +42,8 @@
 }
 
 .danger {
-  color: #ffffff;
-  background: #d92d20;
+  color: #d92d20;
+  background: #fff1f1;
 }
 
 .disabled {

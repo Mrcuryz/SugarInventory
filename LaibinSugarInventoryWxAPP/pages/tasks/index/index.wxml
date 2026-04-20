@@ -1,22 +1,28 @@
+<page-meta page-style="{{confirmVisible ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <page-shell safeBottom="{{true}}">
   <page-header title="任务中心" subtitle="处理扫码创建的待办任务" />
 
   <view class="filter-card">
     <view class="filter-label">任务状态</view>
-    <view class="tabs">
-      <view wx:for="{{statusTabs}}" wx:key="key" class="tab {{status === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onStatusTap">{{item.label}}</view>
+    <view class="tabs segmented">
+      <view wx:for="{{statusTabs}}" wx:key="key" class="tab segmented-item {{status === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onStatusTap">{{item.label}}</view>
     </view>
 
     <view class="filter-label sub">任务类型</view>
-    <view class="type-tabs">
-      <view wx:for="{{typeTabs}}" wx:key="key" class="type-tab {{taskType === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onTypeTap">{{item.label}}</view>
+    <view class="type-tabs segmented">
+      <view wx:for="{{typeTabs}}" wx:key="key" class="type-tab segmented-item {{taskType === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onTypeTap">{{item.label}}</view>
     </view>
   </view>
 
   <view class="summary-card">
     <view>
-      <view class="summary-title">当前任务列表</view>
-      <view class="summary-desc">按状态筛选后，可直接单条处理，也可在底部批量确认或取消。</view>
+      <view class="summary-title-row">
+        <view class="summary-icon">
+          <image class="summary-icon-img" src="/assets/icons-line/icon-task.svg" mode="aspectFit"></image>
+        </view>
+        <view class="summary-title">当前任务列表</view>
+      </view>
+      <view class="summary-desc">按状态筛选后处理现场任务，底部操作栏用于批量确认或取消。</view>
     </view>
     <view class="summary-meta">
       <text>共 {{total}} 条</text>
@@ -38,13 +44,13 @@
       bind:cancelTask="onCancelTask"
     />
   </view>
-  <empty-state wx:else title="暂无任务" description="切换状态或从扫码页创建任务后再查看。" />
+  <empty-state wx:else icon="/assets/icons-line/icon-task.svg" title="暂无符合条件的任务" description="切换筛选条件，或回到扫码页创建新的现场任务。" />
 
   <bottom-action-bar actions="{{bottomActions}}" bind:action="onBottomAction" />
 
-  <view wx:if="{{confirmVisible}}" class="modal-layer">
-    <view class="modal-mask" bindtap="closeConfirm"></view>
-    <view class="modal-card">
+  <view wx:if="{{confirmVisible}}" class="modal-layer" catchtouchmove="noop">
+    <view class="modal-mask" bindtap="closeConfirm" catchtouchmove="noop"></view>
+    <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">确认入库</view>
       <view class="modal-code">已选 {{selectedCodes.length}} 个托盘</view>
       <view class="field">

@@ -1,10 +1,10 @@
 .task-card {
   margin-bottom: 18rpx;
-  padding: 24rpx;
+  padding: 26rpx;
   border: 1rpx solid #e3e9f2;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
   overflow: hidden;
 }
 
@@ -33,13 +33,14 @@
   height: 38rpx;
   margin-top: 6rpx;
   border: 2rpx solid #a8b3c4;
-  border-radius: 8rpx;
+  border-radius: 12rpx;
   box-sizing: border-box;
 }
 
 .checked {
   border-color: #246bfe;
   background: #246bfe;
+  box-shadow: inset 0 0 0 8rpx #ffffff, 0 0 0 4rpx rgba(36, 107, 254, 0.12);
 }
 
 .task-content {
@@ -55,15 +56,16 @@
 }
 
 .code {
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 800;
   color: #172033;
+  letter-spacing: 0.5rpx;
 }
 
 .product {
   margin-top: 14rpx;
   font-size: 28rpx;
-  font-weight: 700;
+  font-weight: 750;
   color: #2c3648;
 }
 
@@ -83,15 +85,17 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12rpx;
-  margin-top: 18rpx;
+  margin-top: 20rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid #edf1f6;
 }
 
 .action {
   min-width: 0;
-  height: 60rpx;
-  line-height: 60rpx;
+  height: 66rpx;
+  line-height: 66rpx;
   margin: 0;
-  border-radius: 8rpx;
+  border-radius: 16rpx;
   font-size: 24rpx;
   font-weight: 700;
 }
@@ -102,7 +106,7 @@
 
 .primary {
   color: #ffffff;
-  background: #246bfe;
+  background: linear-gradient(135deg, #246bfe, #165dff);
 }
 
 .plain {

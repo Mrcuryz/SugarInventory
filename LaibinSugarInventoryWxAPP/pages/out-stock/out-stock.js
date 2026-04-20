@@ -1,5 +1,6 @@
 import request from "../../utils/request";
 import dayjs from 'dayjs';
+import { formatAssayStandard } from "../../utils/dict";
 
 Page({
   data: {
@@ -76,7 +77,8 @@ Page({
           phValue: item.phValue,
           testerName: item.testerName,
           isQualified: item.isQualified,
-          qualifiedStandards: item.qualifiedStandards ? JSON.parse(item.qualifiedStandards) : []
+          qualifiedStandards: item.qualifiedStandards ? JSON.parse(item.qualifiedStandards) : [],
+          qualifiedStandardsText: formatAssayStandard(item.qualifiedStandards)
         }] : [], // 没有assayId则为空数组
         showLabData: false
       }));

@@ -2,9 +2,17 @@
 .toc-card,
 .section-card {
   padding: 28rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.rules-card {
+  border-color: rgba(36, 107, 254, 0.14);
+  background:
+    radial-gradient(circle at 92% 10%, rgba(36, 107, 254, 0.1), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
 }
 
 .rules-title,
@@ -62,4 +70,7 @@
   font-size: 24rpx;
   color: #246bfe;
   font-weight: 700;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: #eaf1ff;
 }

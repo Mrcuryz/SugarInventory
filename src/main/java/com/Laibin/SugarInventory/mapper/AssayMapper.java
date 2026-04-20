@@ -25,6 +25,12 @@ public interface AssayMapper extends BaseMapper<Assay> {
     Assay selectByProductIdAndDate(@Param("productId") Integer productId,
                                    @Param("date") LocalDate date);
 
+    @Select("SELECT * FROM assay " +
+            "WHERE product_id = #{productId} AND sample_date = #{date} " +
+            "ORDER BY version DESC, created_at DESC, id DESC")
+    List<Assay> selectCandidatesByProductIdAndDate(@Param("productId") Integer productId,
+                                                   @Param("date") LocalDate date);
+
     @Select("SELECT COUNT(*) FROM assay " +
             "WHERE product_id = #{productId} " +
             "AND sample_date = #{date}")

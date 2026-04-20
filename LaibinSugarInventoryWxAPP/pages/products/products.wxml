@@ -1,3 +1,4 @@
+<page-meta page-style="{{showModal ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <view class="container">
   <!-- 搜索框 -->
   <view class="search-bar">
@@ -59,9 +60,9 @@
   </view>
 
   <!-- 新增产品弹窗 -->
-  <view class="modal {{showModal ? 'show' : ''}}">
-    <view class="modal-mask" bindtap="hideModal" catchtouchmove="true"></view>
-    <view class="modal-content">
+  <view class="modal {{showModal ? 'show' : ''}}" catchtouchmove="noop">
+    <view class="modal-mask" bindtap="hideModal" catchtouchmove="noop"></view>
+    <view class="modal-content" catchtouchmove="noop">
       <view class="modal-header">
         <text class="modal-title">新增产品</text>
         <view class="modal-close" bindtap="hideModal">×</view>

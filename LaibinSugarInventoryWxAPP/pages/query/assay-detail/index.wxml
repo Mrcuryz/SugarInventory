@@ -1,0 +1,57 @@
+<page-shell>
+  <page-header title="化验详情" subtitle="查看系统返回结论、实测指标和标准匹配说明" showBack="{{true}}" />
+
+  <empty-state wx:if="{{!assay}}" icon="/assets/icons-line/flow-assay.svg" title="暂无化验详情" description="请从化验查询列表进入详情页。" />
+
+  <block wx:else>
+    <view class="summary-card conclusion-card">
+      <view class="summary-head">
+        <view>
+          <view class="product-title">{{assay.productName || '未命名产品'}}</view>
+          <view class="summary-subtitle">采样日期 {{assay.sampleDateText}} · 版本 v{{assay.version || 1}}</view>
+        </view>
+        <status-tag label="{{assay.isQualified}}" type="{{qualifiedType}}" />
+      </view>
+      <view class="info-grid">
+        <view class="info-item">
+          <view class="info-label">化验员</view>
+          <view class="info-value">{{assay.testerName || '未记录'}}</view>
+        </view>
+        <view class="info-item">
+          <view class="info-label">录入时间</view>
+          <view class="info-value">{{assay.createdAtText}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="judge-card">
+      <view class="judge-icon">
+        <image src="/assets/icons-line/flow-assay.svg" mode="aspectFit"></image>
+      </view>
+      <view class="judge-body">
+        <view class="judge-title">{{judgeSummary.title}}</view>
+        <view class="judge-desc">{{judgeSummary.desc}}</view>
+      </view>
+    </view>
+
+    <view class="section-title">标准判定摘要</view>
+    <view class="standard-card">
+      <view class="standard-title">采用标准</view>
+      <view class="standard-text">{{standardText}}</view>
+    </view>
+
+    <view class="section-title">指标对比</view>
+    <view class="metric-list">
+      <view wx:for="{{metrics}}" wx:key="key" class="metric-card">
+        <view class="metric-main">
+          <view class="metric-label">{{item.label}}</view>
+          <view wx:if="{{item.standardRangeText}}" class="metric-range">标准范围：{{item.standardRangeText}}</view>
+        </view>
+        <view class="metric-side">
+          <view class="metric-value">{{item.valueText}}</view>
+          <status-tag wx:if="{{item.statusText}}" label="{{item.statusText}}" type="{{item.statusType}}" />
+        </view>
+      </view>
+    </view>
+  </block>
+</page-shell>

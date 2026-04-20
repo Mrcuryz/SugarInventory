@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class PalletAssayVO {
+    private Integer id;
     private String productName;
     private LocalDate sampleDate;
     private BigDecimal colorValue;
@@ -21,5 +22,11 @@ public class PalletAssayVO {
     private String isQualified;
     private String qualifiedStandards;
     private LocalDateTime createdAt;
+    private String resolveSource;
+    private String resolveStatus;
+    private String resolveMessage;
+    private Boolean autoBound;
+    private Boolean multipleCandidates;
+    private Integer candidateCount;
 }
 

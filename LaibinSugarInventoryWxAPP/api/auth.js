@@ -1,6 +1,6 @@
 import request from '../utils/request';
 
-const BASE_URL = 'https://ccgl.site';
+const BASE_URL = 'http://localhost:8080';
 
 function postPublic(url, data) {
   return new Promise((resolve, reject) => {

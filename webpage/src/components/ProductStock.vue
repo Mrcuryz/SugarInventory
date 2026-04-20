@@ -673,7 +673,8 @@ const selectCycle = async (row) => {
 
 const displayCycleNo = (cycleNo) => {
   if (cycleNo == null) return '-'
-  return Number(cycleNo) + 1
+  const value = Number(cycleNo)
+  return value <= 0 ? 1 : value
 }
 
 onMounted(async () => {

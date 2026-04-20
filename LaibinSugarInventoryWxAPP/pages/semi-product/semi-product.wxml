@@ -1,3 +1,4 @@
+<page-meta page-style="{{showModal ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <view class="container">
   <!-- 搜索栏 -->
   <view class="search-bar">
@@ -67,7 +68,7 @@
               <view><text class="bold">电导灰分：</text>{{item.conductivityAsh != null ? item.conductivityAsh + 'g/100g' : '暂无数据'}}</view>
               <view><text class="bold">蔗糖分：</text>{{item.sucrose != null ? item.sucrose + 'g/100g' : '暂无数据'}}</view>
               <view><text class="bold">不溶于水杂质：</text>{{item.insolubleImpurity != null ? item.insolubleImpurity + 'mg/kg' : '暂无数据'}}</view>
-              <view><text class="bold">符合标准：</text>{{item.qualifiedStandards || '暂无数据'}}</view>
+              <view><text class="bold">符合标准：</text>{{item.qualifiedStandardsText}}</view>
               <view><text class="bold">检验：</text>{{item.isQualified || '暂无数据'}}</view>
               <view><text class="bold">化验员：</text>{{item.testerName || '暂无数据'}}</view>
             </view>
@@ -100,10 +101,10 @@
   </view>
 
   <!-- 背景遮罩层 -->
-  <view wx:if="{{showModal}}" class="modal-overlay" bindtap="hideModal"></view>
+  <view wx:if="{{showModal}}" class="modal-overlay" bindtap="hideModal" catchtouchmove="noop"></view>
 
   <!-- 弹出表单 -->
-  <view wx:if="{{showModal}}" class="modal">
+  <view wx:if="{{showModal}}" class="modal" catchtouchmove="noop">
     <view class="modal-header">
       <text class="title">半成品入库</text>
       <image src="/assets/icons/close.png" class="close-icon" bindtap="hideModal"></image>

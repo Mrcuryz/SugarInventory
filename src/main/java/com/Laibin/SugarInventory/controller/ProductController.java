@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.annotation.LogOperation;
+import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.Product;
@@ -58,6 +59,26 @@ public class ProductController {
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }
+    }
+
+    @Operation(summary = "分页查询产品信息", description = "根据产品名称、类型、状态分页查询")
+    @GetMapping("/product/page")
+    public Result<PageResult<Product>> pageProductsByCondition(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "10") Integer size
+    ) {
+        List<Product> list = productService.getProductsByCondition(name, type, status);
+        if (list == null) {
+            list = List.of();
+        }
+        int effectivePage = page == null || page < 1 ? 1 : page;
+        int effectiveSize = size == null || size < 1 ? 10 : size;
+        int fromIndex = Math.min((effectivePage - 1) * effectiveSize, list.size());
+        int toIndex = Math.min(fromIndex + effectiveSize, list.size());
+        return Result.success(new PageResult<>((long) list.size(), list.subList(fromIndex, toIndex)));
     }
 
     /**

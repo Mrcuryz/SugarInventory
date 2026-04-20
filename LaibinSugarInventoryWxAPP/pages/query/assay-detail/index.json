@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "化验详情",
+  "usingComponents": {
+    "page-shell": "../../../components/page-shell/page-shell",
+    "page-header": "../../../components/page-header/page-header",
+    "status-tag": "../../../components/status-tag/status-tag",
+    "empty-state": "../../../components/empty-state/empty-state"
+  }
+}

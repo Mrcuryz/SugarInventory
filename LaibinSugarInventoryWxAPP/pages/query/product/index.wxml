@@ -1,0 +1,53 @@
+<page-shell>
+  <page-header title="产品查询" subtitle="查看产品基础信息、包装参数和筛网关联" showBack="{{true}}" />
+
+  <view class="filter-card">
+    <input class="filter-input" placeholder="输入产品名称" value="{{productName}}" bindinput="onProductNameInput" />
+    <picker class="filter-picker" range="{{statusOptions}}" value="{{statusIndex}}" bindchange="onStatusChange">
+      <view>{{statusOptions[statusIndex]}}</view>
+    </picker>
+    <view class="filter-actions">
+      <button class="secondary-btn mini-btn" bindtap="resetSearch">重置</button>
+      <button class="primary-btn mini-btn" loading="{{loading}}" bindtap="search">查询产品</button>
+    </view>
+  </view>
+
+  <empty-state wx:if="{{error}}" icon="/assets/icons-line/icon-notice.svg" title="产品查询失败" description="请稍后重试，或检查当前账号权限。" />
+  <empty-state wx:elif="{{!loading && !products.length}}" icon="/assets/icons-line/icon-search.svg" title="暂无产品" description="没有匹配当前条件的产品。" />
+
+  <view class="product-list">
+    <view wx:for="{{products}}" wx:key="id" class="product-card">
+      <view class="card-head">
+        <view>
+          <view class="product-title">{{item.productName}}</view>
+          <view class="product-type">{{item.productTypeText}}</view>
+        </view>
+        <status-tag label="{{item.statusLabel}}" type="{{item.statusType}}" />
+      </view>
+      <view class="param-grid">
+        <view class="param-item">
+          <text class="param-label">包装</text>
+          <text class="param-value">{{item.packagingText}}</text>
+        </view>
+        <view class="param-item">
+          <text class="param-label">单件重量</text>
+          <text class="param-value">{{item.weightText}}</text>
+        </view>
+        <view class="param-item">
+          <text class="param-label">每板件数</text>
+          <text class="param-value">{{item.piecesText}}</text>
+        </view>
+        <view class="param-item">
+          <text class="param-label">堆叠</text>
+          <text class="param-value">{{item.stackText}}</text>
+        </view>
+      </view>
+      <view class="mesh-line">
+        <image src="/assets/icons-line/icon-version.svg" mode="aspectFit"></image>
+        <text>筛网：{{item.screenMeshName}}</text>
+      </view>
+    </view>
+  </view>
+
+  <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
+</page-shell>

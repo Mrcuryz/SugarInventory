@@ -1,0 +1,140 @@
+.filter-card,
+.warehouse-card {
+  padding: 26rpx;
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.filter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-bottom: 26rpx;
+}
+
+.filter-input,
+.filter-picker {
+  height: 76rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d8e0ec;
+  border-radius: 18rpx;
+  background: #fbfcfe;
+  font-size: 26rpx;
+  color: #172033;
+}
+
+.filter-picker,
+.switch-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 750;
+}
+
+.switch-line {
+  padding: 0 6rpx;
+  font-size: 26rpx;
+  color: #526072;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 14rpx;
+}
+
+.mini-btn {
+  flex: 1;
+  height: 74rpx;
+  line-height: 74rpx;
+  font-size: 26rpx;
+}
+
+.warehouse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.card-head,
+.capacity-row,
+.warehouse-meta,
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.warehouse-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 32rpx;
+  font-weight: 850;
+  color: #172033;
+}
+
+.capacity-row {
+  margin-top: 22rpx;
+  font-size: 24rpx;
+  color: #647089;
+}
+
+.progress-bar {
+  height: 16rpx;
+  margin-top: 12rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #edf2f8;
+}
+
+.progress-inner {
+  height: 100%;
+  border-radius: 999rpx;
+  background: #246bfe;
+}
+
+.progress-inner.success {
+  background: #22a06b;
+}
+
+.progress-inner.warning {
+  background: #f59f00;
+}
+
+.progress-inner.danger {
+  background: #e5484d;
+}
+
+.warehouse-meta {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 18rpx;
+  font-size: 23rpx;
+  color: #7a869a;
+}
+
+.card-actions {
+  justify-content: flex-start;
+  margin-top: 20rpx;
+}
+
+.card-link {
+  margin: 0;
+  padding: 0 24rpx;
+  height: 60rpx;
+  line-height: 60rpx;
+  border-radius: 14rpx;
+  background: #eaf1ff;
+  color: #246bfe;
+  font-size: 24rpx;
+  font-weight: 750;
+}
+
+.card-link::after {
+  border: 0;
+}

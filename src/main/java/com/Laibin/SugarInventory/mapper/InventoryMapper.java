@@ -113,7 +113,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "FROM inventory i " +
             "INNER JOIN warehouse w ON i.warehouse_id = w.id " +
             "INNER JOIN product p ON i.product_id = p.id " +
-            "INNER JOIN assay a ON i.assay_id = a.id " +
+            "LEFT JOIN assay a ON i.assay_id = a.id " +
             "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
             "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
             "WHERE 1=1 " +
@@ -151,7 +151,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "FROM inventory i " +
             "INNER JOIN warehouse w ON i.warehouse_id = w.id " +
             "INNER JOIN product p ON i.product_id = p.id " +
-            "INNER JOIN assay a ON i.assay_id = a.id " +
+            "LEFT JOIN assay a ON i.assay_id = a.id " +
             "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
             "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
             "WHERE i.warehouse_id = #{warehouseId} " +
@@ -192,7 +192,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "FROM inventory i " +
             "INNER JOIN warehouse w ON i.warehouse_id = w.id " +
             "INNER JOIN product p ON i.product_id = p.id " +
-            "INNER JOIN assay a ON i.assay_id = a.id " +
+            "LEFT JOIN assay a ON i.assay_id = a.id " +
             "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
             "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
             "WHERE i.warehouse_id = #{warehouseId} " +
@@ -231,7 +231,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "SELECT i.product_id, i.entry_date " +
             "FROM inventory i " +
             "INNER JOIN product p ON i.product_id = p.id " +
-            "INNER JOIN assay a ON i.assay_id = a.id " +
+            "LEFT JOIN assay a ON i.assay_id = a.id " +
             "LEFT JOIN screen_mesh sm ON i.screen_mesh_id = sm.id " +
             "LEFT JOIN pallet_code pc ON i.pallet_code_id = pc.id " +
             "WHERE i.warehouse_id = #{warehouseId} " +
@@ -271,5 +271,12 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
 
     @Update("update inventory set pieces = #{pieces} where id = #{id}")
     void updatePieces(@Param("id") Integer id, @Param("pieces") Integer pieces);
+
+    @Update("UPDATE inventory SET assay_id = #{assayId} WHERE id = #{id}")
+    int updateAssayById(@Param("id") Integer id, @Param("assayId") Integer assayId);
+
+    @Update("UPDATE inventory SET assay_id = #{assayId} WHERE pallet_code_id = #{palletCodeId}")
+    int updateAssayByPalletCodeId(@Param("palletCodeId") Integer palletCodeId,
+                                  @Param("assayId") Integer assayId);
 
 }

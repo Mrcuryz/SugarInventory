@@ -1,0 +1,50 @@
+<page-shell>
+  <page-header title="作业记录" subtitle="按时间、对象和类型追溯现场业务动作" showBack="{{true}}" />
+
+  <view class="filter-card">
+    <input class="filter-input" placeholder="操作人" value="{{operator}}" data-field="operator" bindinput="onInput" />
+    <picker class="filter-picker" range="{{objectOptions}}" value="{{objectIndex}}" bindchange="onObjectChange">
+      <view>{{objectOptions[objectIndex]}}</view>
+    </picker>
+    <picker class="filter-picker" range="{{typeOptions}}" value="{{typeIndex}}" bindchange="onTypeChange">
+      <view>{{typeOptions[typeIndex]}}</view>
+    </picker>
+    <view class="date-row">
+      <picker mode="date" value="{{startDate}}" data-field="startDate" bindchange="onDateChange">
+        <view class="date-picker {{!startDate ? 'placeholder' : ''}}">{{startDate || '开始日期'}}</view>
+      </picker>
+      <picker mode="date" value="{{endDate}}" data-field="endDate" bindchange="onDateChange">
+        <view class="date-picker {{!endDate ? 'placeholder' : ''}}">{{endDate || '结束日期'}}</view>
+      </picker>
+    </view>
+    <view class="filter-actions">
+      <button class="secondary-btn mini-btn" bindtap="resetSearch">重置</button>
+      <button class="primary-btn mini-btn" loading="{{loading}}" bindtap="search">查询记录</button>
+    </view>
+  </view>
+
+  <view class="summary-line">共 {{total}} 条记录</view>
+  <empty-state wx:if="{{error}}" icon="/assets/icons-line/icon-task.svg" title="作业记录查询失败" description="请检查权限或稍后重试。" />
+  <empty-state wx:elif="{{!loading && !records.length}}" icon="/assets/icons-line/icon-task.svg" title="暂无作业记录" description="没有匹配当前筛选条件的操作记录。" />
+
+  <view class="record-groups">
+    <view wx:for="{{groups}}" wx:key="date" class="record-group">
+      <view class="group-date">{{item.date}}</view>
+      <view wx:for="{{item.records}}" wx:for-item="record" wx:key="id" class="record-card">
+        <view class="record-icon {{record.operationTypeTag}}">
+          <image src="{{record.icon}}" mode="aspectFit"></image>
+        </view>
+        <view class="record-body">
+          <view class="record-head">
+            <view class="record-title">{{record.operationName}}</view>
+            <status-tag label="{{record.operationTypeLabel}}" type="{{record.operationTypeTag}}" />
+          </view>
+          <view class="record-time">{{record.operationTimeText}}</view>
+          <view class="record-operator">操作人：{{record.operatorText}}</view>
+          <view class="record-summary">{{record.summary}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+  <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
+</page-shell>

@@ -7,7 +7,7 @@
         <view class="name">{{userInfo.name || userInfo.username || '未识别账号'}}</view>
         <view class="account-desc">当前账号已接入现场扫码、任务处理与托盘查询能力。</view>
       </view>
-      <view class="account-tag">已登录</view>
+      <view class="account-tag">在线</view>
     </view>
     <view class="meta-grid">
       <view wx:for="{{accountMeta}}" wx:key="label" class="meta-card">

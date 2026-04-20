@@ -21,6 +21,9 @@ public class VInventorySummary {
     private Integer productId;
     @Schema(description = "产品名称")
     private String productName;
+    @TableField(exist = false)
+    @Schema(description = "产品状态")
+    private String productStatus;
     @Schema(description = "入库日期")
     private LocalDate entryDate;
     @Schema(description = "产品库存总板数")

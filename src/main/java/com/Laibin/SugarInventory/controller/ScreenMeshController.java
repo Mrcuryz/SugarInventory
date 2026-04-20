@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.annotation.LogOperation;
+import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.ScreenMeshCreateDTO;
 import com.Laibin.SugarInventory.domain.dto.ScreenMeshUpdateDTO;
@@ -39,6 +40,23 @@ public class ScreenMeshController {
             e.printStackTrace();
             return Result.error(e.getMessage());
         }
+    }
+
+    @Operation(summary = "鍒嗛〉鏌ヨ绛涚綉鍒楄〃", description = "鏍规嵁绛涚綉鍚嶇О鍒嗛〉鏌ヨ绛涚綉")
+    @GetMapping("/page")
+    public Result<PageResult<ScreenMesh>> pageScreenMeshes(
+            @RequestParam(required = false) String meshName,
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "10") Integer size) {
+        List<ScreenMesh> list = screenMeshService.findScreenMeshes(meshName);
+        if (list == null) {
+            list = List.of();
+        }
+        int effectivePage = page == null || page < 1 ? 1 : page;
+        int effectiveSize = size == null || size < 1 ? 10 : size;
+        int fromIndex = Math.min((effectivePage - 1) * effectiveSize, list.size());
+        int toIndex = Math.min(fromIndex + effectiveSize, list.size());
+        return Result.success(new PageResult<>((long) list.size(), list.subList(fromIndex, toIndex)));
     }
 
     @Operation(summary = "查询所有筛网", description = "返回所有筛网信息")

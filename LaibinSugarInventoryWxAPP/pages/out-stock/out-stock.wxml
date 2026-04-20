@@ -66,7 +66,7 @@
               <view><text class="bold">电导灰分：</text>{{item.conductivityAsh != null ? item.conductivityAsh + 'g/100g' : '暂无数据'}}</view>
               <view><text class="bold">蔗糖分：</text>{{item.sucrose != null ? item.sucrose + 'g/100g' : '暂无数据'}}</view>
               <view><text class="bold">不溶于水杂质：</text>{{item.insolubleImpurity != null ? item.insolubleImpurity + 'mg/kg' : '暂无数据'}}</view>
-              <view><text class="bold">符合标准：</text>{{item.qualifiedStandards || '暂无数据'}}</view>
+              <view><text class="bold">符合标准：</text>{{item.qualifiedStandardsText}}</view>
               <view><text class="bold">检验：</text>{{item.isQualified || '暂无数据'}}</view>
               <view><text class="bold">化验员：</text>{{item.testerName || '暂无数据'}}</view>
             </view>

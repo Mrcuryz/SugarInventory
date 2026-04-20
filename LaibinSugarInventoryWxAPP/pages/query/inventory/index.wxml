@@ -1,0 +1,84 @@
+<page-shell>
+  <page-header title="库存查询" subtitle="按产品维度查看库存摘要，并继续追到托盘明细" showBack="{{true}}" />
+
+  <view class="filter-card">
+    <view class="filter-row">
+      <input class="filter-input" placeholder="输入产品名称" value="{{productName}}" bindinput="onProductNameInput" />
+      <picker class="filter-picker" range="{{statusOptions}}" value="{{statusIndex}}" bindchange="onStatusChange">
+        <view>{{statusOptions[statusIndex]}}</view>
+      </picker>
+    </view>
+    <view class="filter-actions">
+      <button class="secondary-btn mini-btn" bindtap="resetSearch">重置</button>
+      <button class="primary-btn mini-btn" loading="{{loading}}" bindtap="search">查询库存</button>
+    </view>
+  </view>
+
+  <view wx:if="{{!detailMode}}" class="result-section">
+    <view class="section-title">产品汇总库存</view>
+    <view wx:if="{{loading}}" class="state-card">正在查询库存...</view>
+    <empty-state wx:elif="{{error}}" icon="/assets/icons-line/icon-search.svg" title="库存查询失败" description="请稍后重试，或检查网络状态。" />
+    <empty-state wx:elif="{{!stockList.length}}" icon="/assets/icons-line/icon-location.svg" title="暂无库存" description="没有匹配当前筛选条件的库存记录。" />
+
+    <view wx:for="{{stockList}}" wx:key="productId" class="stock-card">
+      <view class="card-head">
+        <view class="product-title">{{item.productName}}</view>
+        <status-tag label="{{item.productStatus}}" type="{{item.productStatus === '成品' ? 'primary' : 'success'}}" />
+      </view>
+      <view class="metric-grid">
+        <view class="metric-item">
+          <view class="metric-value">{{item.totalQuantityText}}</view>
+          <view class="metric-label">总板数</view>
+        </view>
+        <view class="metric-item">
+          <view class="metric-value">{{item.totalPiecesText}}</view>
+          <view class="metric-label">总件数</view>
+        </view>
+        <view class="metric-item">
+          <view class="metric-value">{{item.totalWeightText}}</view>
+          <view class="metric-label">总重量</view>
+        </view>
+      </view>
+      <view class="stock-meta">
+        <text>涉及 {{item.warehouseCountText}}</text>
+        <text>{{item.stockInfoText}}</text>
+      </view>
+      <view class="card-actions">
+        <button class="card-link" data-index="{{index}}" bindtap="openPallets">查看托盘</button>
+        <button class="card-link" data-index="{{index}}" bindtap="openAssay">查看化验</button>
+      </view>
+    </view>
+    <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
+  </view>
+
+  <view wx:else class="result-section">
+    <view class="detail-title-row">
+      <view>
+        <view class="section-title compact">托盘明细</view>
+        <view class="detail-subtitle">{{currentStock.productName}} · {{currentStock.productStatus}}</view>
+      </view>
+      <button class="secondary-btn back-list-btn" bindtap="backToSummary">返回汇总</button>
+    </view>
+    <view wx:if="{{palletLoading}}" class="state-card">正在加载托盘...</view>
+    <empty-state wx:elif="{{!palletList.length}}" icon="/assets/icons-line/icon-search.svg" title="暂无托盘明细" description="当前库存项没有可展示的在库托盘。" />
+    <view wx:for="{{palletList}}" wx:key="code" class="pallet-card">
+      <view class="card-head">
+        <view class="pallet-code">{{item.code}}</view>
+        <status-tag label="{{item.statusLabel}}" type="{{item.statusType}}" />
+      </view>
+      <view class="pallet-main">{{item.productName}}</view>
+      <view class="info-line">
+        <image src="/assets/icons-line/icon-location.svg" mode="aspectFit"></image>
+        <text>{{item.locationText}}</text>
+      </view>
+      <view class="info-line weak">
+        <image src="/assets/icons-line/flow-assay.svg" mode="aspectFit"></image>
+        <text>{{item.assayText}} · 生产日期 {{item.productionDate || '-'}}</text>
+      </view>
+      <view class="card-actions">
+        <button class="card-link" data-code="{{item.code}}" bindtap="openPalletDetail">托盘详情</button>
+      </view>
+    </view>
+    <query-pager wx:if="{{palletTotal > 0}}" page="{{palletPage}}" size="{{palletSize}}" total="{{palletTotal}}" loading="{{palletLoading}}" bind:change="onPalletPageChange" />
+  </view>
+</page-shell>

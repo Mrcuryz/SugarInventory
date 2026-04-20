@@ -1,5 +1,6 @@
 import request from "../../utils/request";
 import dayjs from 'dayjs';
+import { formatAssayStandard } from "../../utils/dict";
 
 Page({
   data: {
@@ -79,7 +80,8 @@ Page({
         ...item,
         sampleDate: dayjs(item.sampleDate).format('YYYY-MM-DD'),
         createdAt: dayjs(item.createdAt).format('YYYY-MM-DD HH:mm'),
-        qualifiedStandards: item.qualifiedStandards ? JSON.parse(item.qualifiedStandards) : []
+        qualifiedStandards: item.qualifiedStandards ? JSON.parse(item.qualifiedStandards) : [],
+        qualifiedStandardsText: formatAssayStandard(item.qualifiedStandards)
       }));
 
       const groupedData = processedData.reduce((acc, cur) => {
@@ -291,6 +293,8 @@ onSelectTypeChange(e) {
   hideModal() {
     this.setData({ showModal: false });
   },
+
+  noop() {},
 
   async initProductPicker() {
     try {

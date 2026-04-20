@@ -1,0 +1,107 @@
+.filter-card,
+.product-card {
+  padding: 26rpx;
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.filter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-bottom: 26rpx;
+}
+
+.filter-input,
+.filter-picker {
+  height: 76rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d8e0ec;
+  border-radius: 18rpx;
+  background: #fbfcfe;
+  font-size: 26rpx;
+  color: #172033;
+}
+
+.filter-picker {
+  display: flex;
+  align-items: center;
+  font-weight: 750;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 14rpx;
+}
+
+.mini-btn {
+  flex: 1;
+  height: 74rpx;
+  line-height: 74rpx;
+  font-size: 26rpx;
+}
+
+.product-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.product-title {
+  font-size: 32rpx;
+  font-weight: 850;
+  color: #172033;
+}
+
+.product-type {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #647089;
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+  margin-top: 22rpx;
+}
+
+.param-item {
+  padding: 18rpx;
+  border-radius: 18rpx;
+  background: #f6f9fe;
+}
+
+.param-label,
+.mesh-line {
+  font-size: 23rpx;
+  color: #7a869a;
+}
+
+.param-value {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 27rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.mesh-line {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 18rpx;
+}
+
+.mesh-line image {
+  width: 26rpx;
+  height: 26rpx;
+}

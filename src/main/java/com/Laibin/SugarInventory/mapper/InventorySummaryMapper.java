@@ -32,21 +32,72 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             "SELECT " +
             " a.product_id AS productId, " +
             " a.product_name, " +
+            " b.`status` AS product_status, " +
             " SUM(a.total_quantity) totalQuantity," +
             " SUM(a.total_pieces) totalPieces," +
-            " CONCAT(ROUND(SUM(a.total_quantity) + SUM(a.total_pieces) / b.pieces_per_pallet), '板', ROUND(SUM(a.total_pieces ) % b.pieces_per_pallet), '件') AS stockInfo," +
+            " CONCAT(FLOOR(SUM(a.total_quantity) + SUM(a.total_pieces) / NULLIF(b.pieces_per_pallet, 0)), '板', MOD(SUM(a.total_pieces), NULLIF(b.pieces_per_pallet, 0)), '件') AS stockInfo," +
             " SUM(a.total_pieces * b.weight_per_piece + a.total_quantity * b.pieces_per_pallet * b.weight_per_piece)  AS totalWeight, " +
             " COUNT(DISTINCT a.warehouse_id) AS warehouseCount " +
             " FROM" +
             " v_warehouse_inventory_summary a" +
             " LEFT JOIN product b ON a.product_id = b.id" +
-            " WHERE b.`status` = #{productStatus} " +
+            " WHERE 1=1 " +
+            " <if test='productStatus != null and productStatus != \"\"'> " +
+            "   AND b.`status` = #{productStatus} " +
+            " </if>" +
+            " <if test='productName != null and productName != \"\"'> " +
+            "   AND a.product_name LIKE concat('%', #{productName}, '%') " +
+            " </if>" +
+            " GROUP BY a.product_id, a.product_name, b.`status`, b.pieces_per_pallet " +
+            "</script>")
+    List<VInventorySummary> selectProductTotalStock(@Param("productStatus") String productStatus, @Param("productName") String productName);
+
+    @Select("<script>" +
+            "SELECT " +
+            " a.product_id AS productId, " +
+            " a.product_name, " +
+            " b.`status` AS product_status, " +
+            " SUM(a.total_quantity) totalQuantity," +
+            " SUM(a.total_pieces) totalPieces," +
+            " CONCAT(FLOOR(SUM(a.total_quantity) + SUM(a.total_pieces) / NULLIF(b.pieces_per_pallet, 0)), '板', MOD(SUM(a.total_pieces), NULLIF(b.pieces_per_pallet, 0)), '件') AS stockInfo," +
+            " SUM(a.total_pieces * b.weight_per_piece + a.total_quantity * b.pieces_per_pallet * b.weight_per_piece)  AS totalWeight, " +
+            " COUNT(DISTINCT a.warehouse_id) AS warehouseCount " +
+            " FROM" +
+            " v_warehouse_inventory_summary a" +
+            " LEFT JOIN product b ON a.product_id = b.id" +
+            " WHERE 1=1 " +
+            " <if test='productStatus != null and productStatus != \"\"'> " +
+            "   AND b.`status` = #{productStatus} " +
+            " </if>" +
+            " <if test='productName != null and productName != \"\"'> " +
+            "   AND a.product_name LIKE concat('%', #{productName}, '%') " +
+            " </if>" +
+            " GROUP BY a.product_id, a.product_name, b.`status`, b.pieces_per_pallet " +
+            " ORDER BY a.product_name " +
+            " LIMIT #{offset}, #{size}" +
+            "</script>")
+    List<VInventorySummary> selectProductTotalStockPage(@Param("productStatus") String productStatus,
+                                                        @Param("productName") String productName,
+                                                        @Param("offset") int offset,
+                                                        @Param("size") int size);
+
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM (" +
+            " SELECT a.product_id " +
+            " FROM v_warehouse_inventory_summary a " +
+            " LEFT JOIN product b ON a.product_id = b.id " +
+            " WHERE 1=1 " +
+            " <if test='productStatus != null and productStatus != \"\"'> " +
+            "   AND b.`status` = #{productStatus} " +
+            " </if>" +
             " <if test='productName != null and productName != \"\"'> " +
             "   AND a.product_name LIKE concat('%', #{productName}, '%') " +
             " </if>" +
             " GROUP BY a.product_id " +
+            ") t" +
             "</script>")
-    List<VInventorySummary> selectProductTotalStock(@Param("productStatus") String productStatus, @Param("productName") String productName);
+    Long countProductTotalStock(@Param("productStatus") String productStatus,
+                                @Param("productName") String productName);
 
     @Select("SELECT * FROM v_warehouse_inventory_summary " +
             "ORDER BY entry_date " +
@@ -132,6 +183,9 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             "           #{id} " +
             "       </foreach> " +
             "   </if> " +
+            "   <if test='hasSpace != null and hasSpace'> " +
+            "       AND w.cur_capacity &lt; w.max_capacity " +
+            "   </if> " +
             "</where>" +
             " GROUP BY w.id, w.warehouse_name, w.status, w.cur_capacity, w.max_capacity, w.max_rows, w.created_at, w.updated_at " +
             "<choose>" +
@@ -155,6 +209,7 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
                                                         @Param("createdEnd") String createdEnd,
                                                         @Param("updatedStart") String updatedStart,
                                                         @Param("updatedEnd") String updatedEnd,
+                                                        @Param("hasSpace") Boolean hasSpace,
                                                         @Param("offset") int offset,
                                                         @Param("size") int size);
 
@@ -188,6 +243,9 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             "           #{id} " +
             "       </foreach> " +
             "   </if> " +
+            "   <if test='hasSpace != null and hasSpace'> " +
+            "       AND w.cur_capacity &lt; w.max_capacity " +
+            "   </if> " +
             "</where>" +
             "</script>")
     Long countCapacityByStatus(@Param("warehouseName") String warehouseName,
@@ -196,5 +254,6 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
                                @Param("createdStart") String createdStart,
                                @Param("createdEnd") String createdEnd,
                                @Param("updatedStart") String updatedStart,
-                               @Param("updatedEnd") String updatedEnd);
+                               @Param("updatedEnd") String updatedEnd,
+                               @Param("hasSpace") Boolean hasSpace);
 }

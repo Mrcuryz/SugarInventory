@@ -1,5 +1,5 @@
 import request from "../../utils/request";
-const BASE_URL = "https://ccgl.site";
+const BASE_URL = "http://localhost:8080";
 // const BASE_URL = "http://localhost:8080";
 // const BASE_URL = "http://cscgood.mynatapp.cc";
 

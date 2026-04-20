@@ -1,3 +1,4 @@
+<page-meta page-style="{{confirmVisible ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <page-shell safeBottom="{{true}}">
   <page-header title="托盘详情" subtitle="单码全链路查询" showBack="{{true}}" actionText="刷新" bind:action="refresh" />
 
@@ -6,11 +7,11 @@
   <block wx:else>
     <pallet-summary-card pallet="{{pallet}}" summary="{{summary}}" />
 
-    <view class="detail-tabs">
+    <view class="detail-tabs segmented">
       <view
         wx:for="{{tabs}}"
         wx:key="key"
-        class="detail-tab {{activeTab === item.key ? 'active' : ''}}"
+        class="detail-tab segmented-item {{activeTab === item.key ? 'active' : ''}}"
         data-key="{{item.key}}"
         bindtap="onTabTap"
       >{{item.label}}</view>
@@ -56,11 +57,15 @@
       </view>
       <view wx:else class="light-card empty-card">
         <view class="card-title">当前无库位信息</view>
-        <view class="card-desc">可能处于未入库、已出库或作废状态。</view>
+        <view class="card-desc">{{summary.locationHint}}</view>
       </view>
 
       <view class="section-title">当前任务</view>
-      <view wx:if="{{pendingTasks.length}}">
+      <view wx:if="{{readonlyStageNotice}}" class="light-card empty-card">
+        <view class="card-title">{{pallet.statusLabel}}</view>
+        <view class="card-desc">{{readonlyStageNotice}}</view>
+      </view>
+      <view wx:elif="{{pendingTasks.length}}">
         <task-card
           wx:for="{{pendingTasks}}"
           wx:key="taskId"
@@ -101,13 +106,13 @@
             <text class="meta-value">{{assay.createdAtText || '-'}}</text>
           </view>
         </view>
-        <view wx:if="{{assay.qualifiedStandards}}" class="standard-pill">命中标准：{{assay.qualifiedStandards}}</view>
+        <view class="standard-pill">参考标准：{{assay.standardText}}</view>
       </view>
       <view wx:if="{{assay}}" class="metric-list">
         <view wx:for="{{assayMetrics}}" wx:key="key" class="metric-row">
           <view>
             <view class="metric-name">{{item.label}}</view>
-            <view class="metric-range">{{assay.qualifiedStandards || '当前仅展示实测结果'}}</view>
+            <view class="metric-range">{{item.standardText}}</view>
           </view>
           <view class="metric-value">{{item.valueText}}</view>
         </view>
@@ -119,20 +124,66 @@
     </block>
 
     <block wx:if="{{activeTab === 'flow'}}">
-      <view wx:if="{{flows.length}}" class="timeline-card">
-        <view wx:for="{{flows}}" wx:key="id" class="flow-item">
-          <view class="flow-rail">
-            <view class="dot {{item.operationTypeTag}}"></view>
-            <view wx:if="{{!item.isLast}}" class="line"></view>
-          </view>
-          <view class="flow-card">
-            <view class="flow-head">
-              <text class="flow-title">{{item.operationLabel}}</text>
-              <status-tag label="{{item.operationLabel}}" type="{{item.operationTypeTag}}" />
+      <view wx:if="{{flowGroups.length}}" class="timeline-card">
+        <view wx:for="{{flowGroups}}" wx:key="date" wx:for-item="group" class="flow-date-group">
+          <view class="flow-date">{{group.date}}</view>
+          <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item" class="flow-item">
+            <view class="flow-rail">
+              <view class="flow-icon {{item.operationTypeTag}}">
+                <image class="flow-icon-img" src="{{item.iconSrc}}" mode="aspectFit"></image>
+              </view>
+              <view wx:if="{{!item.isLast}}" class="line"></view>
             </view>
-            <view class="flow-meta">{{item.operationTimeText}} · {{item.operatorName || '系统'}}</view>
-            <view class="flow-location">{{item.locationText}}</view>
-            <view wx:if="{{item.remarkText}}" class="flow-remark">备注：{{item.remarkText}}</view>
+            <view class="flow-card">
+              <view class="flow-head">
+                <text class="flow-title">{{item.operationLabel}}</text>
+                <text class="flow-time">{{item.operationTimeText}}</text>
+              </view>
+              <view class="flow-meta">
+                <image class="flow-mini-icon" src="/assets/icons-line/icon-user.svg" mode="aspectFit"></image>
+                <text>{{item.operatorName || '系统'}}</text>
+              </view>
+              <view wx:if="{{item.hasLocation}}" class="flow-location">
+                <view wx:if="{{item.locationMode === 'route'}}" class="location-route">
+                  <view class="location-node">
+                    <view class="location-node-head">
+                      <image class="location-node-icon" src="/assets/icons-line/icon-location.svg" mode="aspectFit"></image>
+                      <text class="location-label">{{item.locationRoutes[0].action}}</text>
+                    </view>
+                    <view class="location-text">{{item.locationRoutes[0].text}}</view>
+                  </view>
+                  <view class="location-arrow">
+                    <image class="location-arrow-icon" src="/assets/icons-line/flow-arrow.svg" mode="aspectFit"></image>
+                  </view>
+                  <view class="location-node">
+                    <view class="location-node-head">
+                      <image class="location-node-icon" src="/assets/icons-line/icon-location.svg" mode="aspectFit"></image>
+                      <text class="location-label">{{item.locationRoutes[1].action}}</text>
+                    </view>
+                    <view class="location-text">{{item.locationRoutes[1].text}}</view>
+                  </view>
+                </view>
+                <block wx:else>
+                  <view wx:for="{{item.locationRoutes}}" wx:key="key" wx:for-item="route" class="location-single">
+                    <view class="location-node-head location-single-head">
+                      <image class="location-node-icon" src="/assets/icons-line/icon-location.svg" mode="aspectFit"></image>
+                      <text class="location-action {{item.operationTypeTag}}">{{route.action}}</text>
+                    </view>
+                    <view class="location-copy">
+                      <view class="location-text">{{route.text}}</view>
+                      <view wx:if="{{route.suffix}}" class="location-suffix">{{route.suffix}}</view>
+                    </view>
+                  </view>
+                </block>
+              </view>
+              <view wx:if="{{item.flowExtras.length}}" class="flow-extra">
+                <text wx:for="{{item.flowExtras}}" wx:key="*this" class="flow-extra-item">{{item}}</text>
+              </view>
+              <view wx:if="{{item.remarkText}}" class="flow-remark">
+                <image class="flow-mini-icon remark-icon" src="/assets/icons-line/icon-remark.svg" mode="aspectFit"></image>
+                <text>{{item.remarkText}}</text>
+              </view>
+            </view>
           </view>
         </view>
       </view>
@@ -145,9 +196,9 @@
 
   <bottom-action-bar actions="{{actions}}" bind:action="onAction" />
 
-  <view wx:if="{{confirmVisible}}" class="modal-layer">
-    <view class="modal-mask" bindtap="closeConfirm"></view>
-    <view class="modal-card">
+  <view wx:if="{{confirmVisible}}" class="modal-layer" catchtouchmove="noop">
+    <view class="modal-mask" bindtap="closeConfirm" catchtouchmove="noop"></view>
+    <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">处理待入库任务</view>
       <view class="modal-code">共 {{confirmTargetCount}} 个待处理托盘</view>
       <view class="field">

@@ -1,8 +1,10 @@
 .page-shell {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 28rpx 28rpx 40rpx;
-  background: #f6f8fb;
+  padding: 30rpx 28rpx 44rpx;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(36, 107, 254, 0.1), transparent 34%),
+    linear-gradient(180deg, #f7faff 0%, #f4f7fb 48%, #f6f8fb 100%);
   color: #172033;
 }
 
