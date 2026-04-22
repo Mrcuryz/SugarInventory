@@ -66,4 +66,7 @@ public class Product extends BaseEntity implements Serializable {
 
     @TableField("updated_at")
     private LocalDateTime updatedAt;
+
+    @TableField(exist = false)
+    private String defaultStandardName;
 }

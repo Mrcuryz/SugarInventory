@@ -21,6 +21,8 @@
         <el-form-item label="单号">
           <el-input v-model="searchForm.documentNo" clearable placeholder="请输入单号"/>
         </el-form-item>
+      </el-form>
+      <el-form :model="searchForm" class="ledger-search-form" label-width="80px">
         <el-form-item label="单据状态">
           <el-select v-model="searchForm.status" clearable placeholder="请选择">
             <el-option v-for="item in currentStatusOptions" :key="item.value" :label="item.label" :value="item.value"/>
@@ -80,7 +82,6 @@
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">看单</el-button>
             <el-button link type="primary" @click="openTaskCenter(row)">任务</el-button>
-            <el-button link type="primary" @click="openWarehouseMap(row)">平面图</el-button>
             <el-button link type="primary" @click="openAssay(row)">化验</el-button>
             <el-button link type="primary" @click="openProduct(row)">产品</el-button>
           </template>
@@ -142,7 +143,6 @@
         </el-table>
 
         <div class="drawer-actions">
-          <el-button @click="openWarehouseMap(currentDocument)">仓库平面图</el-button>
           <el-button @click="openTaskCenter(currentDocument)">关联任务</el-button>
           <el-button @click="openProduct(currentDocument)">产品详情</el-button>
         </div>
@@ -350,7 +350,7 @@ function normalizeInboundTask(row) {
     palletCode: row.code,
     productName: row.productName,
     quantity: 1,
-    quantityText: '1板',
+    quantityText: '1',
     unitName: '板',
     fromLocation: '无',
     toLocation: row.targetWarehouseName || '已确认入库位置',
@@ -669,6 +669,7 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px 18px;
   align-items: center;
+  margin-bottom: 15px;
 }
 
 .ledger-search-form :deep(.el-form-item) {

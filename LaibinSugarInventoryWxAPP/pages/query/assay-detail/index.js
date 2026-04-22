@@ -1,97 +1,135 @@
+import { getAssayDetail } from '../../../api/query';
 import { requireLogin } from '../../../utils/auth';
-import { formatAssayStandard, formatDateTime } from '../../../utils/dict';
+import {
+  formatDateTime,
+  formatMetricRange,
+  getAssayJudgeMeta,
+  getAssayPrimaryStandard
+} from '../../../utils/dict';
+import { showError } from '../../../utils/toast';
 
-const METRICS = [
-  { key: 'colorValue', label: '色值', unit: '' },
-  { key: 'reducingSugar', label: '还原糖', unit: '%' },
-  { key: 'dryWeight', label: '干燥失重', unit: '%' },
-  { key: 'conductivityAsh', label: '电导灰分', unit: '%' },
-  { key: 'sucrose', label: '蔗糖分', unit: '%' },
-  { key: 'insolubleImpurity', label: '不溶于水杂质', unit: '' },
-  { key: 'phValue', label: 'pH', unit: '' }
-];
+const ACTUAL_FIELD_MAP = {
+  color_value: 'colorValue',
+  reducing_sugar: 'reducingSugar',
+  dry_weight_loss: 'dryWeight',
+  dry_weight: 'dryWeight',
+  conductivity_ash: 'conductivityAsh',
+  sucrose: 'sucrose',
+  insoluble_impurity: 'insolubleImpurity',
+  ph: 'phValue',
+  ph_value: 'phValue'
+};
 
-function valueText(value, unit) {
-  if (value === null || value === undefined || value === '') return '未记录';
+function formatValue(value, unit) {
+  if (value === null || value === undefined || value === '') return '未录入';
   return `${value}${unit || ''}`;
 }
 
-function normalizeConclusion(value) {
-  return value || '无标准';
+function buildFailedMetricMap(failedMetrics = []) {
+  return failedMetrics.reduce((result, item) => {
+    result[item.metricCode] = item;
+    return result;
+  }, {});
 }
 
-function conclusionType(value) {
-  if (value === '合格') return 'success';
-  if (value === '不合格') return 'danger';
-  return 'info';
+function buildMetrics(assay) {
+  const snapshotItems = assay.standardSnapshot?.items?.length
+    ? assay.standardSnapshot.items
+    : [
+      { metricCode: 'color_value', metricName: '色值', unit: 'IU', compareType: 'lte' },
+      { metricCode: 'reducing_sugar', metricName: '还原糖分', unit: 'g/100g', compareType: 'range' },
+      { metricCode: 'dry_weight', metricName: '干燥失重', unit: 'g/100g', compareType: 'lte' },
+      { metricCode: 'conductivity_ash', metricName: '电导灰分', unit: 'g/100g', compareType: 'lte' },
+      { metricCode: 'sucrose', metricName: '蔗糖分', unit: 'g/100g', compareType: 'gte' },
+      { metricCode: 'insoluble_impurity', metricName: '不溶于水杂质', unit: 'mg/kg', compareType: 'lte' },
+      { metricCode: 'ph', metricName: 'pH', unit: '', compareType: 'range' }
+    ];
+  const failedMap = buildFailedMetricMap(assay.failedMetrics || []);
+  return snapshotItems.map((item) => {
+    const field = ACTUAL_FIELD_MAP[item.metricCode];
+    const actualValue = field ? assay[field] : null;
+    const failedItem = failedMap[item.metricCode];
+    return {
+      key: item.metricCode,
+      label: item.metricName,
+      actualText: formatValue(actualValue, item.unit),
+      standardRangeText: formatMetricRange(item),
+      statusText: failedItem ? '未达标' : '达标',
+      statusType: failedItem ? 'danger' : 'success',
+      reason: failedItem ? failedItem.reason : ''
+    };
+  });
 }
 
-function buildJudgeSummary(assay, standardText) {
-  const conclusion = normalizeConclusion(assay.isQualified);
-  const hasStandard = standardText && !standardText.includes('未关联') && !standardText.includes('无匹配');
-  if (!hasStandard) {
+function buildMatchedStandards(assay) {
+  return assay.matchedStandards || [];
+}
+
+function buildStandardNotice(assay) {
+  if (assay.judgeResult === 'NO_STANDARD') {
     return {
-      title: '当前产品没有关联标准',
-      desc: '本次化验只能展示实测指标，无法生成标准区间对比。'
+      title: '当前产品未配置化验标准',
+      desc: '本页仅展示实测数据。要得到合格判定，需要先在 Web 端维护产品与标准关系。'
     };
   }
-  if (conclusion === '不合格') {
+  if (assay.judgeResult === 'MULTIPLE_CANDIDATES') {
     return {
-      title: '系统返回结论为不合格',
-      desc: `满足标准：${standardText}。请结合管理端标准配置查看具体不达标项。`
-    };
-  }
-  if (conclusion === '合格') {
-    return {
-      title: '系统返回结论为合格',
-      desc: `满足标准：${standardText}。`
+      title: '存在多个候选标准',
+      desc: '系统未唯一确定采用标准，以下结果用于辅助排查，请以标准配置为准。'
     };
   }
   return {
-    title: '系统未给出明确合格结论',
-    desc: '请核对产品是否已维护验收标准，或在管理端查看标准配置。'
+    title: '本次判定基于记录生成时的标准快照',
+    desc: '后续标准配置调整不会回写历史化验结果，本页优先展示当时采用的标准。'
+  };
+}
+
+function normalizeAssay(assay) {
+  const judge = getAssayJudgeMeta(assay.judgeResult, assay.isQualified || '未出结论');
+  return {
+    ...assay,
+    createdAtText: formatDateTime(assay.createdAt),
+    sampleDateText: assay.sampleDate || '-',
+    judgeLabel: judge.label,
+    judgeType: judge.type,
+    appliedStandardText: getAssayPrimaryStandard(assay, '当前未采用标准'),
+    matchedStandardsText: buildMatchedStandards(assay).join('、') || '无',
+    metrics: buildMetrics(assay),
+    standardNotice: buildStandardNotice(assay)
   };
 }
 
 Page({
   data: {
-    assay: null,
-    metrics: [],
-    qualifiedType: 'info',
-    standardText: '本次未关联标准',
-    judgeSummary: null
+    id: '',
+    loading: true,
+    assay: null
   },
 
-  onLoad() {
+  onLoad(options = {}) {
     requireLogin();
-    const assay = wx.getStorageSync('p1AssayDetail');
-    if (!assay) {
-      this.setData({ assay: null });
-      return;
-    }
-    const conclusion = normalizeConclusion(assay.isQualified);
-    const standardText = formatAssayStandard(assay.qualifiedStandards, '无匹配标准');
-    this.setData({
-      assay: {
-        ...assay,
-        createdAtText: formatDateTime(assay.createdAt),
-        sampleDateText: assay.sampleDate || '-',
-        isQualified: conclusion
-      },
-      qualifiedType: conclusionType(conclusion),
-      standardText,
-      judgeSummary: buildJudgeSummary({ ...assay, isQualified: conclusion }, standardText),
-      metrics: METRICS.map(metric => ({
-        ...metric,
-        valueText: valueText(assay[metric.key], metric.unit),
-        standardRangeText: '',
-        statusText: '',
-        statusType: 'info'
-      }))
-    });
+    this.setData({ id: options.id || '' });
+    this.loadDetail();
   },
 
   onShow() {
     requireLogin();
+  },
+
+  async loadDetail() {
+    if (!this.data.id) {
+      this.setData({ loading: false, assay: null });
+      return;
+    }
+    this.setData({ loading: true });
+    try {
+      const res = await getAssayDetail(this.data.id);
+      this.setData({ assay: normalizeAssay(res) });
+    } catch (error) {
+      this.setData({ assay: null });
+      showError(error, '化验详情加载失败');
+    } finally {
+      this.setData({ loading: false });
+    }
   }
 });

@@ -31,5 +31,7 @@ public class Role extends BaseEntity implements Serializable {
     private String roleName;
     private String roleCode;
     private String description;
+    private String status;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

@@ -7,7 +7,7 @@ export function normalizeScanCode(raw) {
     const code = url.searchParams.get('code') || url.searchParams.get('palletCode');
     if (code) return code.trim().toUpperCase();
   } catch (e) {
-    // Raw pallet code is expected in most warehouse scans.
+    // Raw QR code is expected in most warehouse scans.
   }
 
   const match = value.match(/[A-Za-z0-9]{6,32}/);
@@ -15,8 +15,8 @@ export function normalizeScanCode(raw) {
 }
 
 export function validatePalletCode(code) {
-  if (!code) return '托盘码不能为空';
-  if (!/^[A-Z0-9]{6,32}$/.test(code)) return '托盘码格式不正确';
+  if (!code) return '二维码不能为空';
+  if (!/^[A-Z0-9]{6,32}$/.test(code)) return '二维码格式不正确';
   return '';
 }
 
@@ -38,4 +38,3 @@ export function scanCode() {
     });
   });
 }
-

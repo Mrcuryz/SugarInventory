@@ -26,6 +26,10 @@ export function queryAssays(params = {}) {
   return request('/api/assay/query', 'POST', compactParams(params));
 }
 
+export function getAssayDetail(id) {
+  return request(`/api/assay/${id}`, 'GET');
+}
+
 export function queryOperationLogs(params = {}) {
   return request('/api/logs/query', 'POST', compactParams(params));
 }

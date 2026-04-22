@@ -1,18 +1,29 @@
 import request from '@/utils/request.js'
 
-//查询标准列表
 export const getStandard = (params) => {
-    return request.get('/quality-standards/list', {params: params})
+  return request.get('/quality-standards/list', { params })
 }
-//新增标准
+
+export const getStandardPage = (params) => {
+  return request.get('/quality-standards/list/page', { params })
+}
+
+export const getStandardDetail = (id) => {
+  return request.get('/quality-standards/' + id)
+}
+
 export const addStandard = (params) => {
-    return request.post('/quality-standards/add', params)
+  return request.post('/quality-standards/add', params)
 }
-//删除标准
+
 export const deleteStandard = (id) => {
-    return request.delete('/quality-standards/delete/' + id)
+  return request.delete('/quality-standards/delete/' + id)
 }
-//修改标准
+
+export const forceDeleteStandard = (id) => {
+  return request.delete('/quality-standards/delete/' + id + '/force')
+}
+
 export const updateStandard = (id, params) => {
-    return request.put('/quality-standards/update/' + id, params)
+  return request.put('/quality-standards/update/' + id, params)
 }

@@ -29,7 +29,7 @@
     <view wx:if="{{currentMode === 'in'}}" class="inbound-target">
       <view>
         <view class="target-label">当前指定库位</view>
-        <view class="target-value">{{confirmForm.warehouseName ? confirmForm.warehouseName + ' · ' + confirmForm.side + '侧' : '未指定，确认入库时再填写'}}</view>
+        <view class="target-value">{{confirmForm.warehouseName ? confirmForm.warehouseName + ' · ' + confirmForm.side + '侧' : '未指定，将在确认入库时填写'}}</view>
       </view>
       <view class="target-actions">
         <text bindtap="openWarehouseQuery">更改</text>
@@ -152,7 +152,7 @@
     <view class="modal-mask" bindtap="closeConfirm" catchtouchmove="noop"></view>
     <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">批量确认入库</view>
-      <view class="modal-code">共 {{pool.length}} 个托盘</view>
+      <view class="modal-code">共 {{pool.length}} 个二维码</view>
       <view class="field">
         <text class="label">入库库位</text>
         <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />

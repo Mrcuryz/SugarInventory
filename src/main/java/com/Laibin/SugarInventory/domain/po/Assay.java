@@ -69,6 +69,30 @@ public class Assay extends BaseEntity implements Serializable {
     @TableField("qualified_standards")
     private String qualifiedStandards;
 
+    @TableField("applied_standard_id")
+    private Integer appliedStandardId;
+
+    @TableField("applied_standard_name")
+    private String appliedStandardName;
+
+    @TableField("applied_standard_version")
+    private Integer appliedStandardVersion;
+
+    @TableField("judge_result")
+    private String judgeResult;
+
+    @TableField("failed_metric_count")
+    private Integer failedMetricCount;
+
+    @TableField("failed_metrics_json")
+    private String failedMetricsJson;
+
+    @TableField("standard_snapshot_json")
+    private String standardSnapshotJson;
+
+    @TableField("judge_message")
+    private String judgeMessage;
+
     @TableField(value = "is_qualified")
     private String isQualified;
 

@@ -1,5 +1,11 @@
 package com.Laibin.SugarInventory.util;
 
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -35,8 +41,13 @@ public final class PalletQrLabelPdfRenderer {
     private static final float START_Y = (PAGE_HEIGHT - (ROWS * LABEL_HEIGHT) - ((ROWS - 1) * GAP_Y)) / 2f;
     private static final float QR_SIZE = 120f;
     private static final int QR_IMAGE_SIZE = 512;
+    private static final int LABEL_IMAGE_WIDTH = 900;
+    private static final int LABEL_IMAGE_HEIGHT = 675;
 
     private PalletQrLabelPdfRenderer() {
+    }
+
+    public record LabelPayload(String code, String title) {
     }
 
     public static byte[] renderA4Labels(List<String> codes) throws IOException {
@@ -62,6 +73,32 @@ public final class PalletQrLabelPdfRenderer {
         }
         document.putObject(2, "<< /Type /Pages /Kids [ " + kids + "] /Count " + pageIds.size() + " >>");
         document.putObject(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+
+        return document.write();
+    }
+
+    public static byte[] renderA4LabelsWithTitle(List<LabelPayload> labels) throws IOException {
+        if (labels == null || labels.isEmpty()) {
+            throw new IllegalArgumentException("二维码标签列表不能为空");
+        }
+
+        PdfDocument document = new PdfDocument();
+        List<Integer> pageIds = new ArrayList<>();
+
+        int index = 0;
+        while (index < labels.size()) {
+            int end = Math.min(index + LABELS_PER_PAGE, labels.size());
+            List<LabelPayload> pageLabels = labels.subList(index, end);
+            pageIds.add(renderPageWithTitle(document, pageLabels));
+            index = end;
+        }
+
+        document.putObject(1, "<< /Type /Catalog /Pages 2 0 R >>");
+        StringBuilder kids = new StringBuilder();
+        for (Integer pageId : pageIds) {
+            kids.append(pageId).append(" 0 R ");
+        }
+        document.putObject(2, "<< /Type /Pages /Kids [ " + kids + "] /Count " + pageIds.size() + " >>");
 
         return document.write();
     }
@@ -102,6 +139,92 @@ public final class PalletQrLabelPdfRenderer {
                         + "/Contents " + contentObjectId + " 0 R >>"
         );
         return pageObjectId;
+    }
+
+    private static int renderPageWithTitle(PdfDocument document, List<LabelPayload> labels) throws IOException {
+        int pageObjectId = document.nextObjectId();
+        int contentObjectId = document.nextObjectId();
+
+        List<ImageRef> images = new ArrayList<>();
+        StringBuilder content = new StringBuilder();
+        for (int i = 0; i < labels.size(); i++) {
+            LabelPayload label = labels.get(i);
+            int imageObjectId = document.nextObjectId();
+            BufferedImage labelImage = createLabelImage(label.code(), label.title());
+            document.putObject(imageObjectId, buildImageObject(labelImage));
+            images.add(new ImageRef(imageObjectId, "/Im" + imageObjectId));
+
+            int row = i / COLUMNS;
+            int column = i % COLUMNS;
+            float x = START_X + column * (LABEL_WIDTH + GAP_X);
+            float y = PAGE_HEIGHT - START_Y - LABEL_HEIGHT - row * (LABEL_HEIGHT + GAP_Y);
+            appendImageLabelContent(content, images.get(images.size() - 1).name(), x, y);
+        }
+
+        byte[] contentBytes = content.toString().getBytes(StandardCharsets.ISO_8859_1);
+        document.putObject(contentObjectId, streamObject(
+                "<< /Length " + contentBytes.length + " >>",
+                contentBytes
+        ));
+
+        StringBuilder xObject = new StringBuilder();
+        for (ImageRef image : images) {
+            xObject.append(image.name()).append(' ').append(image.objectId()).append(" 0 R ");
+        }
+        document.putObject(pageObjectId,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + format(PAGE_WIDTH) + ' ' + format(PAGE_HEIGHT) + "] "
+                        + "/Resources << /XObject << " + xObject + ">> >> "
+                        + "/Contents " + contentObjectId + " 0 R >>"
+        );
+        return pageObjectId;
+    }
+
+    private static BufferedImage createLabelImage(String code, String title) {
+        BufferedImage canvas = new BufferedImage(LABEL_IMAGE_WIDTH, LABEL_IMAGE_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = canvas.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            graphics.setColor(Color.WHITE);
+            graphics.fillRect(0, 0, LABEL_IMAGE_WIDTH, LABEL_IMAGE_HEIGHT);
+
+            graphics.setColor(new Color(214, 221, 235));
+            graphics.setStroke(new BasicStroke(4f));
+            graphics.drawRect(2, 2, LABEL_IMAGE_WIDTH - 4, LABEL_IMAGE_HEIGHT - 4);
+
+            Font titleFont = pickFont(Font.BOLD, 42);
+            Font codeFont = new Font("SansSerif", Font.BOLD, 34);
+            drawCenteredText(graphics, title == null || title.isBlank() ? "-" : title.trim(), titleFont, 70);
+
+            BufferedImage qrImage = QrCodeUtils.generateQrCode(code, 420, 420);
+            int qrX = (LABEL_IMAGE_WIDTH - qrImage.getWidth()) / 2;
+            int qrY = 120;
+            graphics.drawImage(qrImage, qrX, qrY, null);
+
+            drawCenteredText(graphics, code, codeFont, LABEL_IMAGE_HEIGHT - 58);
+        } finally {
+            graphics.dispose();
+        }
+        return canvas;
+    }
+
+    private static void drawCenteredText(Graphics2D graphics, String text, Font font, int baselineY) {
+        graphics.setFont(font);
+        FontMetrics metrics = graphics.getFontMetrics(font);
+        int x = Math.max((LABEL_IMAGE_WIDTH - metrics.stringWidth(text)) / 2, 24);
+        graphics.setColor(new Color(20, 30, 48));
+        graphics.drawString(text, x, baselineY);
+    }
+
+    private static Font pickFont(int style, int size) {
+        String[] candidates = {"Microsoft YaHei", "SimHei", "SimSun", "SansSerif"};
+        for (String candidate : candidates) {
+            Font font = new Font(candidate, style, size);
+            if (font.canDisplayUpTo("固定产品二维码") == -1) {
+                return font;
+            }
+        }
+        return new Font("SansSerif", style, size);
     }
 
     private static byte[] buildImageObject(BufferedImage image) throws IOException {
@@ -146,6 +269,14 @@ public final class PalletQrLabelPdfRenderer {
         content.append("BT /F1 15 Tf 0.08 0.12 0.18 rg ")
                 .append(format(codeX)).append(' ').append(format(codeY))
                 .append(" Td (").append(escapePdfText(code)).append(") Tj ET\n");
+    }
+
+    private static void appendImageLabelContent(StringBuilder content, String imageName, float x, float y) {
+        content.append("q\n");
+        content.append(format(LABEL_WIDTH)).append(" 0 0 ").append(format(LABEL_HEIGHT)).append(' ')
+                .append(format(x)).append(' ').append(format(y)).append(" cm ")
+                .append(imageName).append(" Do\n");
+        content.append("Q\n");
     }
 
     private static byte[] streamObject(String dictionary, byte[] stream) throws IOException {

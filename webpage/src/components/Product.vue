@@ -1,43 +1,18 @@
 ﻿<template>
   <div class="operation-logs">
-    <el-card class="search-card" style="max-width: 1200px">
+    <el-card class="search-card">
       <el-form :model="searchForm" inline>
         <el-form-item label="产品名称">
-          <el-input
-              v-model="searchForm.name"
-              placeholder="请输入产品名称"
-              clearable
-              style="width: 150px"
-          />
+          <el-input v-model="searchForm.name" clearable placeholder="请输入产品名称" style="width: 180px" />
         </el-form-item>
         <el-form-item label="产品类型">
-          <el-select
-              v-model="searchForm.type"
-              placeholder="请选择"
-              clearable
-              style="width: 200px"
-          >
-            <el-option
-                v-for="item in productTypes"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-            />
+          <el-select v-model="searchForm.type" clearable placeholder="全部产品类型" style="width: 180px">
+            <el-option v-for="item in productTypes" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="产品状态">
-          <el-select
-              v-model="searchForm.status"
-              placeholder="请选择"
-              clearable
-              style="width: 200px"
-          >
-            <el-option
-                v-for="item in productStatus"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-            />
+          <el-select v-model="searchForm.status" clearable placeholder="全部产品状态" style="width: 180px">
+            <el-option v-for="item in productStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -47,280 +22,205 @@
       </el-form>
     </el-card>
 
-    <el-card class="table-card" style="max-width: 1200px">
+    <el-card class="table-card">
       <div class="table-toolbar">
+        <div>
+          <div class="section-title">产品管理</div>
+          <div class="section-subtitle">维护产品基础资料，并为产品配置正式化验标准关系。</div>
+        </div>
         <div class="table-toolbar-left">
-          <el-button type="primary" @click="dialogVisible = true;operationType='新增产品'">新增</el-button>
-          <el-button @click="exportExcel">导出Excel</el-button>
+          <el-button type="primary" @click="openCreate">新增产品</el-button>
+          <el-button @click="exportExcel">导出 Excel</el-button>
         </div>
       </div>
-      <el-table
-          :data="productList"
-          style="width: 95%"
-          heigth="300"
-          stripe
-          border
-          v-loading="loading"
-      >
-        <el-table-column prop="productName" label="产品名称" width="200">
+
+      <el-table :data="productList" stripe border v-loading="loading">
+        <el-table-column prop="productName" label="产品名称" min-width="180" />
+        <el-table-column prop="productType" label="产品类型" width="120">
           <template #default="{ row }">
-            <span>{{ row.productName }}</span>
+            <el-tag>{{ row.productType || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="productType" label="产品类型" width="100">
+        <el-table-column prop="status" label="产品状态" width="120">
           <template #default="{ row }">
-            <el-tag>{{ row.productType }}</el-tag>
+            <el-tag :type="row.status === '成品' ? 'success' : 'warning'">{{ row.status || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="产品状态" width="100">
+        <el-table-column label="默认标准" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.defaultStandardName || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="packagingMethod" label="包装方式" width="130" />
+        <el-table-column prop="weightPerPiece" label="每件重量(kg)" width="130" />
+        <el-table-column prop="piecesPerPallet" label="每板件数" width="110" />
+        <el-table-column label="筛网" min-width="140">
+          <template #default="{ row }">{{ meshMap[row.screenMeshId] || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="可堆叠" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === '成品' ? 'success' : row.status === '半成品' ? 'warning' : 'info'">
-              {{ row.status }}
-            </el-tag>
+            <el-tag :type="row.canStack ? 'success' : 'info'">{{ row.canStack ? '可堆叠' : '不可堆叠' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="packagingMethod" label="打包方式" width="90"/>
-        <el-table-column prop="weightPerPiece" label="每件重量（kg）" min-width="110"/>
-        <el-table-column prop="piecesPerPallet" label="每板件数" width="auto"/>
-        <el-table-column label="筛网名称" width="140">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            {{ meshMap[row.screenMeshId] || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="canStack" label="是否可堆叠" width="auto">
-          <template #default="{ row }">
-            <el-tag :type="row.canStack ? 'success' : 'info'">{{ row.canStack ? '是' : '否' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150">
-          <template #default="{ row }">
-            <el-button type="primary" size="small"
-                       @click="dialogVisible = true;operationType='修改产品';editProduct(row)">编辑
-            </el-button>
-            <el-button type="danger" size="small" @click="deleteProduct(row)">删除</el-button>
+            <el-button type="primary" link @click="openRelationDrawer(row)">标准关联</el-button>
+            <el-button type="primary" link @click="editProduct(row)">编辑</el-button>
+            <el-button type="danger" link @click="deleteProduct(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog
-        :title=operationType
-        v-model="dialogVisible"
-        width="40%"
-        :before-close="handleClose"
-    >
-      <el-form :model="productForm" :rules="rule" label-width="auto">
-        <el-form-item label="产品名称" prop="productName" required>
-          <el-input v-model="productForm.productName" clearable/>
-        </el-form-item>
-        <el-form-item label="产品类型" prop="productType" required>
-          <el-select v-model="productForm.productType" placeholder="请选择">
-            <el-option
-                v-for="item in productTypes"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="产品状态" prop="status" required>
-          <el-select v-model="productForm.status" placeholder="请选择">
-            <el-option
-                v-for="item in productStatus"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="打包方式" prop="packagingMethod">
-          <el-input v-model="productForm.packagingMethod" clearable/>
-        </el-form-item>
-        <el-form-item label="每件重量（kg）" prop="weightPerPiece" required>
-          <el-input v-model="productForm.weightPerPiece" clearable/>
-        </el-form-item>
-        <el-form-item label="每板件数" prop="piecesPerPallet" required>
-          <el-input v-model="productForm.piecesPerPallet" clearable/>
-        </el-form-item>
-        <el-form-item label="筛网名称" prop="screenMeshId">
-          <el-select
-              v-model="productForm.screenMeshId"
-              placeholder="选择默认筛网"
-              clearable
-              style="width: 200px"
-          >
-            <el-option
-                v-for="item in meshList"
-                :key="item.id"
-                :label="item.meshName"
-                :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="是否可堆叠" prop="canStack">
-          <el-switch v-model="productForm.canStack" active-color="#13ce66"/>
-        </el-form-item>
+    <el-dialog v-model="dialogVisible" :title="operationType" width="680px" destroy-on-close>
+      <el-form :model="productForm" label-width="110px">
+        <div class="form-grid">
+          <el-form-item label="产品名称" required>
+            <el-input v-model="productForm.productName" clearable />
+          </el-form-item>
+          <el-form-item label="产品类型" required>
+            <el-select v-model="productForm.productType">
+              <el-option v-for="item in productTypes" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="产品状态" required>
+            <el-select v-model="productForm.status">
+              <el-option v-for="item in productStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="包装方式">
+            <el-input v-model="productForm.packagingMethod" clearable />
+          </el-form-item>
+          <el-form-item label="每件重量" required>
+            <el-input v-model="productForm.weightPerPiece" clearable />
+          </el-form-item>
+          <el-form-item label="每板件数" required>
+            <el-input v-model="productForm.piecesPerPallet" clearable />
+          </el-form-item>
+          <el-form-item label="筛网" required>
+            <el-select v-model="productForm.screenMeshId" clearable placeholder="请选择筛网">
+              <el-option v-for="item in meshList" :key="item.id" :label="item.meshName" :value="item.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="可堆叠">
+            <el-switch v-model="productForm.canStack" />
+          </el-form-item>
+        </div>
       </el-form>
-      <div slot="footer" class="dialog-footer">
-        <!--        符合规则的情况下才可以点击确定按钮 -->
-        <el-button type="primary" @click="operationType === '新增产品' ? newProduct() : updateProduct()">确定
-        </el-button>
+      <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-      </div>
+        <el-button type="primary" @click="operationType === '新增产品' ? newProduct() : updateProduct()">保存</el-button>
+      </template>
     </el-dialog>
+
+    <el-drawer v-model="relationDrawerVisible" size="760px" destroy-on-close>
+      <template #header>
+        <div>
+          <div class="section-title">产品标准关联</div>
+          <div class="section-subtitle">{{ activeProduct?.productName || '-' }} / {{ activeProduct?.productType || '-' }}</div>
+        </div>
+      </template>
+
+      <div class="relation-panel" v-loading="relationLoading">
+        <div class="relation-summary" v-if="activeProduct">
+          <div class="summary-item"><span>产品状态</span><strong>{{ activeProduct.status || '-' }}</strong></div>
+          <div class="summary-item"><span>默认筛网</span><strong>{{ meshMap[activeProduct.screenMeshId] || '-' }}</strong></div>
+          <div class="summary-item"><span>当前关联数</span><strong>{{ relationList.length }}</strong></div>
+        </div>
+
+        <el-card class="relation-form-card">
+          <div class="form-card-head">
+            <div>
+              <div class="section-title">新增关联</div>
+              <div class="section-subtitle">给当前产品绑定可用标准，并设置默认标准与优先级。</div>
+            </div>
+            <el-button type="primary" @click="submitRelation">绑定标准</el-button>
+          </div>
+          <div class="relation-form-grid">
+            <el-select v-model="relationForm.qualityStandardId" filterable placeholder="选择化验标准">
+              <el-option
+                v-for="item in standardOptions"
+                :key="item.id"
+                :label="formatStandardOption(item)"
+                :value="item.id"
+              />
+            </el-select>
+            <el-input-number v-model="relationForm.priority" :min="1" :controls="false" placeholder="优先级" />
+            <el-select v-model="relationForm.enabled" placeholder="状态">
+              <el-option :value="true" label="启用" />
+              <el-option :value="false" label="停用" />
+            </el-select>
+            <el-switch v-model="relationForm.isDefault" active-text="设为默认" />
+          </div>
+          <el-input v-model="relationForm.remark" placeholder="备注，例如：现场默认执行标准" />
+        </el-card>
+
+        <el-table :data="relationList" border>
+          <el-table-column label="默认" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.isDefault" type="success">默认</el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="standardName" label="标准名称" min-width="160" />
+          <el-table-column prop="standardCode" label="标准编号" min-width="120" />
+          <el-table-column prop="standardVersion" label="标准版本" width="90" />
+          <el-table-column prop="priority" label="优先级" width="90" />
+          <el-table-column label="状态" width="120">
+            <template #default="{ row }">
+              <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link @click="setDefaultRelation(row)" :disabled="row.isDefault">设为默认</el-button>
+              <el-button type="danger" link @click="removeRelation(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue'
-import {getProductList, addProduct, removeProduct, changeProduct} from '@/api/product'
-import {ElMessage, ElMessageBox} from 'element-plus'
-import {getMesh} from '@/api/mesh'
-// 在已有导入基础上添加XLSX
-import * as XLSX from 'xlsx';
-import {useI18n} from "vue-i18n";
+import { onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import * as XLSX from 'xlsx'
+import { addProduct, changeProduct, getProductList, removeProduct } from '@/api/product'
+import { getMesh } from '@/api/mesh'
+import { getStandard } from '@/api/standard'
+import {
+  bindProductStandardRelation,
+  deleteProductStandardRelation,
+  listProductStandardRelations,
+  setDefaultProductStandardRelation
+} from '@/api/productQualityStandard'
 
-// 添加导出方法
-const exportExcel = async () => {
-  try {
-    loading.value = true;
-    // 使用当前搜索条件获取所有数据
-    let params = {}
-    if (searchForm.value.name) {
-      params.name = searchForm.value.name
-    }
-    if (searchForm.value.type) {
-      params.type = searchForm.value.type
-    }
-    if (searchForm.value.status) {
-      params.status = searchForm.value.status
-    }
-    let res = await getProductList(params)
-    console.log(res)
-    if (res.code === 200) {
-      // 处理数据格式
-      const excelData = res.data.map(product => ({
-        '产品名称': product.productName,
-        '产品类型': product.productType,
-        '产品状态': productStatus.find(item => item.value === product.status)?.label || product.status,
-        '打包方式': product.packagingMethod,
-        '每件重量（kg）': product.weightPerPiece,
-        '每板件数': product.piecesPerPallet,
-        '筛网名称': meshMap.value[product.screenMeshId] || '',
-        '是否可堆叠': product.canStack ? '是' : '否'
-      }));
-      // 创建工作表
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '产品列表');
-
-      // 生成文件名
-      const filename = `产品列表_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-      // 保存文件
-      XLSX.writeFile(workbook, filename);
-      ElMessage.success('导出成功');
-    }
-  } catch (error) {
-    ElMessage.error(`导出失败: ${error.message}`);
-  } finally {
-    loading.value = false;
-  }
-};
-// 搜索表单
-const searchForm = ref({
-  name: '',
-  type: '',
-  status: ''
-})
-// 产品列表
+const searchForm = ref({ name: '', type: '', status: '' })
 const productList = ref([])
-// 产品类型选项
 const productTypes = [
-  {value: '白冰糖', label: '白冰糖'},
-  {value: '黄冰糖', label: '黄冰糖'}
+  { value: '白冰糖', label: '白冰糖' },
+  { value: '黄冰糖', label: '黄冰糖' }
 ]
-// 产品状态选项
-const productStatus = [
-  {value: '半成品', label: '半成品'},
-  {value: '成品', label: '成品'}
+const productStatusOptions = [
+  { value: '半成品', label: '半成品' },
+  { value: '成品', label: '成品' }
 ]
 const meshList = ref([])
 const meshMap = ref({})
-// 加载筛网列表
-const loadMeshList = async () => {
-  const res = await getMesh()
-  if (res.code === 200) {
-    meshList.value = res.data || []
-    const map = {}
-    meshList.value.forEach(item => {
-      if (item && item.id != null) {
-        map[item.id] = item.meshName
-      }
-    })
-    meshMap.value = map
-  } else {
-    ElMessage.error(res.msg || '获取筛网列表失败')
-  }
-}
-// 加载状态
 const loading = ref(false)
-// 处理搜索
-const handleSearch = async () => {
-  let params = {}
-  if (searchForm.value.name) {
-    params.name = searchForm.value.name
-  }
-  if (searchForm.value.type) {
-    params.type = searchForm.value.type
-  }
-  if (searchForm.value.status) {
-    params.status = searchForm.value.status
-  }
-  loading.value = true
-  let res = await getProductList(params)
-  if (res.code === 200) {
-    productList.value = res.data
-    loading.value = false
-  } else {
-    ElMessage.error(res.msg)
-  }
-}
-// 处理重置
-const handleReset = () => {
-  searchForm.value = {
-    name: '',
-    type: '',
-    status: ''
-  }
-  handleSearch()
-}
-
-const rule = {
-  productName: [
-    {required: true, message: '请输入产品名称', trigger: 'blur'}
-  ],
-  productType: [
-    {required: true, message: '请选择产品类型', trigger: 'blur'}
-  ],
-  status: [
-    {required: true, message: '请选择产品状态', trigger: 'blur'}
-  ],
-  weightPerPiece: [
-    {required: true, message: '请输入每件重量', trigger: 'blur'},
-    {type: 'string', message: '重量必须为数字', trigger: 'blur', pattern: /^-?\d+(\.\d+)?$/}
-  ],
-  piecesPerPallet: [
-    {required: true, message: '请输入每板件数', trigger: 'blur'},
-    {type: 'string', message: '板数必须为数字', trigger: 'blur', pattern: /^-?\d+(\.\d+)?$/}
-  ],
-  screenMeshId: [
-    {required: true, message: '请选择筛网', trigger: 'change'}
-  ]
-}
 const dialogVisible = ref(false)
-const handleClose = () => {
-  productForm.value = {
+const operationType = ref('新增产品')
+const productForm = ref(createProductForm())
+const relationDrawerVisible = ref(false)
+const relationLoading = ref(false)
+const activeProduct = ref(null)
+const relationList = ref([])
+const standardOptions = ref([])
+const relationForm = ref(createRelationForm())
+
+function createProductForm() {
+  return {
     productName: '',
     productType: '',
     status: '',
@@ -330,97 +230,64 @@ const handleClose = () => {
     screenMeshId: null,
     canStack: false
   }
-  dialogVisible.value = false
 }
-const operationType = ref('')
-const productForm = ref({
-  productName: '',
-  productType: '',
-  status: '',
-  packagingMethod: '',
-  weightPerPiece: '',
-  piecesPerPallet: '',
-  screenMeshId: null,
-  canStack: false
-})
-// 新增产品
-const newProduct = async () => {
-  // 校验表单
-  if (productForm.value.productName === '') {
-    ElMessage.error('请输入产品名称')
-    return
+
+function createRelationForm() {
+  return {
+    qualityStandardId: undefined,
+    priority: 1,
+    enabled: true,
+    isDefault: false,
+    remark: ''
   }
-  if (productForm.value.productType === '') {
-    ElMessage.error('请选择产品类型')
-    return
-  }
-  if (productForm.value.status === '') {
-    ElMessage.error('请选择产品状态')
-    return
-  }
-  if (productForm.value.weightPerPiece === '') {
-    ElMessage.error('请输入每件重量')
-    return
-  }
-  if (productForm.value.piecesPerPallet === '') {
-    ElMessage.error('请输入每板件数')
-    return
-  }
-  let res = await addProduct(productForm.value)
+}
+
+function formatStandardOption(item) {
+  const parts = [item.standardName, `v${item.version || 1}`]
+  if (item.standardLevel) parts.push(item.standardLevel)
+  return parts.join(' / ')
+}
+
+async function loadMeshList() {
+  const res = await getMesh()
   if (res.code === 200) {
-    ElMessage.success('新增成功')
-    await handleSearch()
-    dialogVisible.value = false
-    productForm.value = {
-      productName: '',
-      productType: '',
-      status: '',
-      packagingMethod: '',
-      weightPerPiece: '',
-      piecesPerPallet: '',
-      screenMeshId: null,
-      canStack: false
-    }
-  } else {
-    ElMessage.error(res.msg)
+    meshList.value = res.data || []
+    meshMap.value = meshList.value.reduce((result, item) => {
+      result[item.id] = item.meshName
+      return result
+    }, {})
   }
 }
 
-// 删除产品
-const deleteProduct = async (row) => {
-  await ElMessageBox.confirm(
-      '你确认要删除这条信息吗?',
-      '温馨提示',
-      {
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-  )
-      .then(async () => {
-        //调用接口
-        let res = await removeProduct(row.id)
-        if (res.code === 200) {
-          ElMessage({
-            type: 'success',
-            message: '删除成功',
-          })
-          await handleSearch()
-        } else {
-          ElMessage.error(res.msg)
-        }
-      })
-      .catch(() => {
-        ElMessage({
-          type: 'info',
-          message: '用户取消了删除',
-        })
-      })
+async function handleSearch() {
+  loading.value = true
+  try {
+    const res = await getProductList({
+      name: searchForm.value.name || undefined,
+      type: searchForm.value.type || undefined,
+      status: searchForm.value.status || undefined
+    })
+    if (res.code === 200) {
+      productList.value = res.data || []
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
-// 编辑产品
-const editProduct = (row) => {
-  operationType.value = '修改产品'
+function handleReset() {
+  searchForm.value = { name: '', type: '', status: '' }
+  handleSearch()
+}
+
+function openCreate() {
+  operationType.value = '新增产品'
+  productForm.value = createProductForm()
+  dialogVisible.value = true
+}
+
+function editProduct(row) {
+  operationType.value = '编辑产品'
   productForm.value = {
     productId: row.id,
     productName: row.productName,
@@ -430,49 +297,149 @@ const editProduct = (row) => {
     weightPerPiece: row.weightPerPiece,
     piecesPerPallet: row.piecesPerPallet,
     screenMeshId: row.screenMeshId ?? null,
-    canStack: row.canStack
+    canStack: !!row.canStack
   }
   dialogVisible.value = true
 }
-const updateProduct = async () => {
-  // 校验表单
-  if (productForm.value.productName === '') {
-    ElMessage.error('请输入产品名称')
-    return
+
+function validateProductForm() {
+  if (!productForm.value.productName || !productForm.value.productType || !productForm.value.status) {
+    ElMessage.warning('请完整填写产品基础信息')
+    return false
   }
-  if (productForm.value.productType === '') {
-    ElMessage.error('请选择产品类型')
-    return
-  }
-  if (productForm.value.status === '') {
-    ElMessage.error('请选择产品状态')
-    return
-  }
-  if (productForm.value.weightPerPiece === '') {
-    ElMessage.error('请输入每件重量')
-    return
-  }
-  if (productForm.value.piecesPerPallet === '') {
-    ElMessage.error('请输入每板件数')
-    return
-  }
-  let res = await changeProduct(productForm.value)
+  return true
+}
+
+async function newProduct() {
+  if (!validateProductForm()) return
+  const res = await addProduct(productForm.value)
   if (res.code === 200) {
-    ElMessage.success('修改成功')
-    await handleSearch()
+    ElMessage.success('产品已新增')
     dialogVisible.value = false
-    productForm.value = {
-      productName: '',
-      productType: '',
-      status: '',
-      packagingMethod: '',
-      weightPerPiece: '',
-      piecesPerPallet: '',
-      canStack: false
-    }
-  } else {
-    ElMessage.error(res.msg)
+    productForm.value = createProductForm()
+    await handleSearch()
   }
+}
+
+async function updateProduct() {
+  if (!validateProductForm()) return
+  const res = await changeProduct(productForm.value)
+  if (res.code === 200) {
+    ElMessage.success('产品已更新')
+    dialogVisible.value = false
+    productForm.value = createProductForm()
+    await handleSearch()
+  }
+}
+
+async function deleteProduct(row) {
+  await ElMessageBox.confirm(`确认删除产品“${row.productName}”吗？`, '删除产品', {
+    confirmButtonText: '确认',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  const res = await removeProduct(row.id)
+  if (res.code === 200) {
+    ElMessage.success('产品已删除')
+    await handleSearch()
+  }
+}
+
+async function exportExcel() {
+  const res = await getProductList({
+    name: searchForm.value.name || undefined,
+    type: searchForm.value.type || undefined,
+    status: searchForm.value.status || undefined
+  })
+  if (res.code !== 200) return
+  const rows = (res.data || []).map(item => ({
+    产品名称: item.productName,
+    产品类型: item.productType,
+    产品状态: item.status,
+    默认标准: item.defaultStandardName || '',
+    包装方式: item.packagingMethod,
+    每件重量kg: item.weightPerPiece,
+    每板件数: item.piecesPerPallet,
+    筛网: meshMap.value[item.screenMeshId] || '',
+    可堆叠: item.canStack ? '是' : '否'
+  }))
+  const worksheet = XLSX.utils.json_to_sheet(rows)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, '产品列表')
+  XLSX.writeFile(workbook, `产品列表_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  ElMessage.success('导出成功')
+}
+
+async function openRelationDrawer(row) {
+  activeProduct.value = row
+  relationDrawerVisible.value = true
+  relationForm.value = createRelationForm()
+  await Promise.all([loadRelationList(row.id), loadStandardOptions(row.productType)])
+}
+
+async function loadRelationList(productId) {
+  relationLoading.value = true
+  try {
+    const res = await listProductStandardRelations(productId)
+    relationList.value = res.data || []
+  } finally {
+    relationLoading.value = false
+  }
+}
+
+async function loadStandardOptions(productType) {
+  let res = await getStandard({
+    productType: productType || undefined,
+    status: 'ENABLED'
+  })
+  standardOptions.value = res.data || []
+  if (standardOptions.value.length) {
+    return
+  }
+
+  res = await getStandard({ status: 'ENABLED' })
+  standardOptions.value = res.data || []
+  if (standardOptions.value.length) {
+    return
+  }
+
+  res = await getStandard({})
+  standardOptions.value = res.data || []
+}
+
+async function submitRelation() {
+  if (!activeProduct.value || !relationForm.value.qualityStandardId) {
+    ElMessage.warning('请选择要绑定的标准')
+    return
+  }
+  await bindProductStandardRelation({
+    productId: activeProduct.value.id,
+    qualityStandardId: relationForm.value.qualityStandardId,
+    priority: relationForm.value.priority,
+    enabled: relationForm.value.enabled,
+    isDefault: relationForm.value.isDefault,
+    remark: relationForm.value.remark || undefined
+  })
+  ElMessage.success('标准关联已保存')
+  relationForm.value = createRelationForm()
+  await loadRelationList(activeProduct.value.id)
+}
+
+async function setDefaultRelation(row) {
+  await setDefaultProductStandardRelation(row.id)
+  ElMessage.success('默认标准已更新')
+  await loadRelationList(activeProduct.value.id)
+}
+
+async function removeRelation(row) {
+  await ElMessageBox.confirm(`确认删除标准“${row.standardName}”的关联关系吗？`, '删除关联', {
+    confirmButtonText: '确认',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  await deleteProductStandardRelation(row.id)
+  ElMessage.success('关联已删除')
+  await loadRelationList(activeProduct.value.id)
 }
 
 onMounted(async () => {
@@ -486,23 +453,91 @@ onMounted(async () => {
   padding: 20px;
 }
 
+.search-card,
+.table-card,
+.relation-form-card {
+  background: var(--app-panel);
+}
+
 .search-card {
   margin-bottom: 20px;
-  background: var(--app-panel);
 }
 
-.table-card {
-  background: var(--app-panel);
-}
-
-.el-form--inline .el-form-item {
-  margin-right: 30px;
-}
-
-.pagination-wrapper {
-  margin-top: 20px;
+.table-toolbar,
+.form-card-head {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.table-toolbar-left {
+  display: flex;
+  gap: 8px;
+}
+
+.section-title {
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.section-subtitle {
+  margin-top: 4px;
+  color: var(--app-text-tertiary);
+  font-size: 13px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.relation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.relation-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  padding: 14px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius);
+  background: #fbfcff;
+}
+
+.summary-item span {
+  display: block;
+  color: var(--app-text-tertiary);
+  font-size: 12px;
+}
+
+.summary-item strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--app-text);
+  font-size: 14px;
+}
+
+.relation-form-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+:deep(.el-input),
+:deep(.el-select),
+:deep(.el-input-number) {
+  width: 100%;
 }
 
 :deep(.el-table) {
@@ -512,7 +547,7 @@ onMounted(async () => {
 }
 
 :deep(.el-table__header th) {
-  background-color: #f7f8fb;
+  background-color: #f7f8fb !important;
   color: var(--app-text-secondary);
 }
 

@@ -30,18 +30,14 @@ public enum ErrorCode {
     WAREHOUSE_FULL(1024, "库位已满"),
     MULTIPLE_USE_ASSAY_FLAGS(1025, "存在多次使用化验标记"),
     INVALID_SEMI_RECORD(1026, "无效的半成品记录"),
-    ASSAY_GROUP_RECORD_NOT_FOUND(1027, "找不到化验验收标准"),
-    SCREEN_MESH_NOT_FOUND(1028, "找不到关联筛网")
-    ;
+    ASSAY_GROUP_RECORD_NOT_FOUND(1027, "找不到批量化验组"),
+    SCREEN_MESH_NOT_FOUND(1028, "找不到关联筛网");
 
-    // 获取 code 和 message
     private final int code;
     private final String message;
 
-    // 构造函数
     ErrorCode(int code, String message) {
         this.code = code;
         this.message = message;
     }
-
 }

@@ -85,6 +85,52 @@ export function formatAssayStandard(value, emptyText = '无匹配标准') {
   return String(parsed);
 }
 
+export const ASSAY_JUDGE_MAP = {
+  PASS: { label: '合格', type: 'success' },
+  FAIL: { label: '不合格', type: 'danger' },
+  NO_STANDARD: { label: '无标准', type: 'warning' },
+  MULTIPLE_CANDIDATES: { label: '待确认', type: 'info' }
+};
+
+export function getAssayJudgeMeta(value, fallbackLabel = '未出结论') {
+  if (!value) {
+    return { label: fallbackLabel, type: 'info' };
+  }
+  return ASSAY_JUDGE_MAP[value] || { label: value, type: 'info' };
+}
+
+export function getCompareTypeLabel(value) {
+  return {
+    range: '区间',
+    lte: '不高于',
+    gte: '不低于'
+  }[value] || value || '-';
+}
+
+export function formatMetricRange(item, emptyText = '未设置') {
+  if (!item) return emptyText;
+  if (item.compareType === 'lte') {
+    return item.maxValue == null ? emptyText : `<= ${item.maxValue}${item.unit || ''}`;
+  }
+  if (item.compareType === 'gte') {
+    return item.minValue == null ? emptyText : `>= ${item.minValue}${item.unit || ''}`;
+  }
+  const min = item.minValue == null ? '-' : item.minValue;
+  const max = item.maxValue == null ? '-' : item.maxValue;
+  return `${min} ~ ${max}${item.unit || ''}`;
+}
+
+export function getAssayPrimaryStandard(assay, emptyText = '当前未采用标准') {
+  if (!assay) return emptyText;
+  if (assay.appliedStandard && assay.appliedStandard.standardName) {
+    return assay.appliedStandard.standardName;
+  }
+  if (assay.appliedStandardName) {
+    return assay.appliedStandardName;
+  }
+  return formatAssayStandard(assay.qualifiedStandards, emptyText);
+}
+
 export function enrichTask(task) {
   const status = getDictItem(TASK_STATUS, task.taskStatus || task.status);
   const type = task.taskType === 'OUT' && task.bizScene

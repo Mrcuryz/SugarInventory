@@ -1,388 +1,301 @@
-﻿<template>
-  <div class="operation-logs">
-    <el-card class="search-card" style="max-width: 1200px">
+<template>
+  <div class="user-management-page">
+    <el-card class="search-card">
       <el-form :model="searchForm" inline>
-        <el-form-item label="员工编号" style="width: 200px">
-          <el-input v-model="searchForm.employeeId" clearable/>
+        <el-form-item label="工号" style="width: 200px">
+          <el-input v-model="searchForm.employeeId" clearable />
         </el-form-item>
-        <el-form-item label="员工名称" style="width: 200px">
-          <el-input v-model="searchForm.name" clearable/>
+        <el-form-item label="姓名" style="width: 180px">
+          <el-input v-model="searchForm.name" clearable />
         </el-form-item>
-        <el-form-item label="员工手机" style="width: 300px">
-          <el-input v-model="searchForm.mobile" clearable/>
+        <el-form-item label="手机号" style="width: 220px">
+          <el-input v-model="searchForm.mobile" clearable />
         </el-form-item>
-        <br>
-        <el-form-item label="部门" style="width: 200px">
-          <el-input v-model="searchForm.department" clearable/>
+        <el-form-item label="部门" style="width: 180px">
+          <el-input v-model="searchForm.department" clearable />
         </el-form-item>
-        <el-form-item label="状态" style="width: 200px">
-          <el-select v-model="searchForm.status">
-            <el-option label="在职" value="在职"></el-option>
-            <el-option label="离职" value="离职"></el-option>
+        <el-form-item label="状态" style="width: 160px">
+          <el-select v-model="searchForm.status" clearable placeholder="全部状态">
+            <el-option label="在职" value="在职" />
+            <el-option label="离职" value="离职" />
           </el-select>
         </el-form-item>
-        <el-form-item label="角色" style="width: 300px">
-          <el-select v-model="searchForm.roleCode" clearable placeholder="请选择角色">
+        <el-form-item label="角色" style="width: 220px">
+          <el-select v-model="searchForm.roleCode" clearable placeholder="全部角色">
             <el-option
-                v-for="item in roleOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
+              v-for="item in roleOptions"
+              :key="item.roleCode"
+              :label="item.roleName"
+              :value="item.roleCode"
             />
           </el-select>
         </el-form-item>
-        <br>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
-    <el-card class="table-card" style="max-width: 1200px">
+
+    <el-card class="table-card">
       <div class="table-toolbar">
         <div class="table-toolbar-left">
           <el-upload
-              class="upload-demo"
-              :show-file-list="false"
-              :before-upload="beforeUpload"
-              :http-request="customRequest"
-              accept=".xlsx,.xls"
+            v-if="canCreate"
+            :show-file-list="false"
+            :before-upload="beforeUpload"
+            :http-request="customRequest"
+            accept=".xlsx,.xls"
           >
             <el-button :loading="uploadLoading">
               {{ uploadLoading ? '上传中...' : '导入Excel' }}
             </el-button>
           </el-upload>
-          <el-button type="primary" @click="handleAdd">新增员工</el-button>
-          <el-button type="danger" @click="handleDelete">删除离职员工</el-button>
+          <el-button v-if="canCreate" type="primary" @click="handleAdd">新增用户</el-button>
+          <el-button v-if="canDelete" type="danger" @click="handleDelete">清理离职员工</el-button>
         </div>
       </div>
+
       <el-table
-          :data="resultList"
-          style="width: 95%"
-          heigth="300"
-          stripe
-          border
-          v-loading="loading"
+        :data="resultList"
+        style="width: 100%"
+        stripe
+        border
+        v-loading="loading"
       >
-        <el-table-column prop="employeeId" label="工号" width="180">
-        </el-table-column>
-        <el-table-column prop="name" label="姓名" width="120">
-        </el-table-column>
-        <el-table-column prop="mobile" label="员工手机" width="150">
-        </el-table-column>
-        <el-table-column prop="department" label="部门" width="180">
-        </el-table-column>
-        <el-table-column prop="position" label="职位" width="120">
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="120">
+        <el-table-column prop="employeeId" label="工号" min-width="140" />
+        <el-table-column prop="name" label="姓名" min-width="120" />
+        <el-table-column prop="mobile" label="手机号" min-width="140" />
+        <el-table-column prop="department" label="部门" min-width="140" />
+        <el-table-column prop="position" label="职位" min-width="120" />
+        <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.status === '在职' ? 'success' : 'info'">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="roleCode" label="角色" width="120">
+        <el-table-column prop="roleCode" label="当前角色" min-width="140">
           <template #default="{ row }">
-            {{ roleMap[row.roleCode] || row.roleCode }}
+            {{ roleNameMap[row.roleCode] || row.roleCode || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="auto" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small"
-                       @click="dialogVisible = true;operationType='修改筛网';handleEdit(row)">编辑
-            </el-button>
+            <el-button v-if="canUpdate" type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
+
       <div class="pagination-wrapper">
         <el-pagination
-            background
-            layout="total, sizes, prev, pager, next"
-            :total="total"
-            :page-size="pageSize"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
+          background
+          layout="total, sizes, prev, pager, next"
+          :total="total"
+          :page-size="pageSize"
+          :current-page="currentPage"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
         />
       </div>
     </el-card>
 
     <el-dialog
-        :title="operationType"
-        v-model="dialogVisible"
-        width="40%"
-        :before-close="handleClose"
+      v-model="dialogVisible"
+      :title="operationType"
+      width="560px"
+      destroy-on-close
+      :before-close="handleClose"
     >
-      <el-form :model="submitForm" :rules="rule" label-width="auto">
-        <el-form-item label="员工编号" prop="employeeId">
-          <el-input v-model="submitForm.employeeId" clearable/>
+      <el-form ref="formRef" :model="submitForm" :rules="rules" label-width="88px">
+        <el-form-item label="工号" prop="employeeId">
+          <el-input v-model="submitForm.employeeId" clearable />
         </el-form-item>
-        <el-form-item label="员工名称" prop="name">
-          <el-input v-model="submitForm.name" clearable/>
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model="submitForm.name" clearable />
         </el-form-item>
-        <el-form-item label="员工手机" prop="mobile">
-          <el-input v-model="submitForm.mobile" clearable/>
+        <el-form-item label="手机号" prop="mobile">
+          <el-input v-model="submitForm.mobile" clearable />
         </el-form-item>
         <el-form-item label="部门" prop="department">
-          <el-input v-model="submitForm.department" clearable/>
+          <el-input v-model="submitForm.department" clearable />
         </el-form-item>
         <el-form-item label="职位" prop="position">
-          <el-input v-model="submitForm.position" clearable/>
+          <el-input v-model="submitForm.position" clearable />
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="submitForm.status">
-            <el-option label="在职" value="在职"></el-option>
-            <el-option label="离职" value="离职"></el-option>
+            <el-option label="在职" value="在职" />
+            <el-option label="离职" value="离职" />
           </el-select>
         </el-form-item>
         <el-form-item label="角色" prop="roleCode">
           <el-select v-model="submitForm.roleCode" clearable placeholder="请选择角色">
             <el-option
-                v-for="item in roleOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
+              v-for="item in roleOptions"
+              :key="item.roleCode"
+              :label="item.roleName"
+              :value="item.roleCode"
             />
           </el-select>
         </el-form-item>
       </el-form>
-      <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="handleUpdate()">确定</el-button>
+
+      <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-      </div>
+        <el-button type="primary" @click="handleSubmit">确定</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted, computed} from 'vue'
-import {addMesh, deleteMesh, getMesh, updateMesh} from '@/api/mesh'
-import {ElMessage, ElMessageBox} from 'element-plus'
-import {addEmployee, deleteEmployee, getEmployeeList, updateEmployee, uploadFile} from "@/api/employee";
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { addEmployee, deleteEmployee, getEmployeeList, updateEmployee, uploadFile } from '@/api/employee'
+import { getRoleOptions } from '@/api/rbac'
+import { useAuthStore } from '@/stores/auth'
 
-// 新增上传相关代码
-import {useTokenStore} from '@/stores/token'
+const authStore = useAuthStore()
+const canCreate = computed(() => authStore.hasPermission('user:create'))
+const canUpdate = computed(() => authStore.hasPermission('user:update'))
+const canDelete = computed(() => authStore.hasPermission('user:delete'))
 
-// 文件上传配置
-const tokenStore = useTokenStore()
+const roleOptions = ref([])
+const roleNameMap = computed(() => roleOptions.value.reduce((result, item) => {
+  result[item.roleCode] = item.roleName
+  return result
+}, {}))
+
 const uploadLoading = ref(false)
-
-// 更严格的文件类型验证
-const EXCEL_MIME_TYPES = [
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-]
-
-const beforeUpload = (file) => {
-  // 验证文件类型
-  if (!EXCEL_MIME_TYPES.includes(file.type)) {
-    ElMessage.error('仅支持.xls和.xlsx格式文件!')
-    return false
-  }
-
-  // 验证文件大小（20MB）
-  const MAX_SIZE = 20 * 1024 * 1024
-  if (file.size > MAX_SIZE) {
-    ElMessage.error('文件大小不能超过20MB!')
-    return false
-  }
-
-  return true
-}
-
-// 自定义上传请求
-const customRequest = async ({file}) => {
-  try {
-    uploadLoading.value = true
-
-    const formData = new FormData()
-    formData.append('file', file) // 参数名需与后端一致
-
-    const response = await uploadFile(formData)
-    if (response.code === 200) {
-      ElMessage.success('导入成功')
-      // 刷新表格数据
-      handleSearch()
-    } else {
-      ElMessage.error(response.msg || '导入失败')
-    }
-  } catch (error) {
-    ElMessage.error(`上传失败: ${error.message || '未知错误'}`)
-  } finally {
-    uploadLoading.value = false
-  }
-}
-// 在script setup部分添加映射关系
-const roleMap = {
-  ADMIN: '管理员',
-  QC: '化验员',
-  STAFF: '员工'
-}
-
-const roleOptions = ref([
-  {value: 'ADMIN', label: '管理员'},
-  {value: 'QC', label: '化验员'},
-  {value: 'STAFF', label: '员工'}
-])
-// 搜索表单
-const searchForm = ref({
-  status: '',
-  roleCode: '',
-  department: '',
-  mobile: '',
-  name: '',
-  employeeId: ''
-})
-// 筛网列表
-const resultList = ref([])
-// 分页参数
-const pageSize = ref(10)
-const currentPage = ref(1)
-const total = ref(0)
-// 加载状态
 const loading = ref(false)
-
-// 处理搜索
-const handleSearch = async () => {
-  let params = {
-    page: currentPage.value,
-    size: pageSize.value
-  }
-  if (searchForm.value.status !== '') {
-    params.status = searchForm.value.status
-  }
-  if (searchForm.value.roleCode !== '') {
-    params.roleCode = searchForm.value.roleCode
-  }
-  if (searchForm.value.department !== '') {
-    params.department = searchForm.value.department
-  }
-  if (searchForm.value.mobile !== '') {
-    params.mobile = searchForm.value.mobile
-  }
-  if (searchForm.value.name !== '') {
-    params.name = searchForm.value.name
-  }
-  if (searchForm.value.employeeId !== '') {
-    params.employeeId = searchForm.value.employeeId
-  }
-  loading.value = true
-  let res = await getEmployeeList(params)
-  if (res.code === 200) {
-    total.value = res.data.total
-    resultList.value = res.data.records
-    loading.value = false
-  } else {
-    ElMessage.error(res.msg)
-  }
-}
-// 处理重置
-const handleReset = () => {
-  searchForm.value = {}
-  handleSearch()
-}
-// 分页处理
-const handleSizeChange = (size) => {
-  pageSize.value = size
-  handleSearch()
-}
-const handleCurrentChange = (page) => {
-  currentPage.value = page
-  handleSearch()
-}
-
-const rule = {
-  employeeId: [
-    {required: true, message: '请输入员工编号', trigger: 'blur'}
-  ],
-  name: [
-    {required: true, message: '请输入员工名称', trigger: 'blur'}
-  ],
-  mobile: [
-    {required: true, message: '请输入员工手机', trigger: 'blur'}
-  ],
-  roleCode: [
-    {required: true, message: '请输入角色', trigger: 'blur'}
-  ]
-}
 const dialogVisible = ref(false)
-const handleClose = () => {
-  submitForm.value = {}
-  dialogVisible.value = false
-}
 const operationType = ref('')
-const submitForm = ref({
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+const resultList = ref([])
+const formRef = ref(null)
+
+const searchForm = reactive({
+  employeeId: '',
+  name: '',
+  mobile: '',
+  department: '',
+  status: '',
+  roleCode: ''
+})
+
+const createEmptySubmitForm = () => ({
   id: '',
   employeeId: '',
   name: '',
   mobile: '',
   department: '',
   position: '',
-  status: '',
+  status: '在职',
   roleCode: ''
 })
 
-// // 新增
-// const handleNew = async () => {
-//   // 校验表单
-//   if (submitForm.value.meshName === '') {
-//     ElMessage.error('请输入筛网名称')
-//     return
-//   }
-//   let res = await addMesh(submitForm.value)
-//   if (res.code === 200) {
-//     ElMessage.success('新增成功')
-//     await handleSearch()
-//     dialogVisible.value = false
-//     submitForm.value = {
-//       meshName: '',
-//       description: ''
-//     }
-//   } else {
-//     ElMessage.error(res.msg)
-//   }
-// }
+const submitForm = ref(createEmptySubmitForm())
 
-// 删除
-const handleDelete = async () => {
-  await ElMessageBox.confirm(
-      '你确认要删除吗?',
-      '温馨提示',
-      {
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-  )
-      .then(async () => {
-        //调用接口
-        let res = await deleteEmployee()
-        if (res.code === 200) {
-          ElMessage({
-            type: 'success',
-            message: '删除成功',
-          })
-          await handleSearch()
-        } else {
-          ElMessage.error(res.msg)
-        }
-      })
-      .catch(() => {
-        ElMessage({
-          type: 'info',
-          message: '用户取消了删除',
-        })
-      })
+const rules = {
+  employeeId: [{ required: true, message: '请输入员工编号', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入员工姓名', trigger: 'blur' }],
+  mobile: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
+  roleCode: [{ required: true, message: '请选择角色', trigger: 'change' }]
 }
-// 添加新增处理方法
-const handleAdd = () => {
-  operationType.value = '新增员工'
-  submitForm.value = {
-    status: '在职', // 默认状态
-    roleCode: ''    // 其他字段保持为空
+
+const EXCEL_MIME_TYPES = [
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+]
+
+const beforeUpload = file => {
+  if (!EXCEL_MIME_TYPES.includes(file.type)) {
+    ElMessage.error('仅支持 .xls 和 .xlsx 文件')
+    return false
   }
+  if (file.size > 20 * 1024 * 1024) {
+    ElMessage.error('文件大小不能超过 20MB')
+    return false
+  }
+  return true
+}
+
+const customRequest = async ({ file }) => {
+  try {
+    uploadLoading.value = true
+    const formData = new FormData()
+    formData.append('file', file)
+    await uploadFile(formData)
+    ElMessage.success('导入成功')
+    await handleSearch()
+  } finally {
+    uploadLoading.value = false
+  }
+}
+
+const loadRoleOptions = async () => {
+  const res = await getRoleOptions()
+  roleOptions.value = res.data || []
+}
+
+const handleSearch = async () => {
+  loading.value = true
+  try {
+    const params = {
+      page: currentPage.value,
+      size: pageSize.value,
+      employeeId: searchForm.employeeId || undefined,
+      name: searchForm.name || undefined,
+      mobile: searchForm.mobile || undefined,
+      department: searchForm.department || undefined,
+      status: searchForm.status || undefined,
+      roleCode: searchForm.roleCode || undefined
+    }
+    const res = await getEmployeeList(params)
+    total.value = res.data.total || 0
+    resultList.value = res.data.records || []
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleReset = () => {
+  Object.assign(searchForm, {
+    employeeId: '',
+    name: '',
+    mobile: '',
+    department: '',
+    status: '',
+    roleCode: ''
+  })
+  currentPage.value = 1
+  handleSearch()
+}
+
+const handleSizeChange = size => {
+  pageSize.value = size
+  handleSearch()
+}
+
+const handleCurrentChange = page => {
+  currentPage.value = page
+  handleSearch()
+}
+
+const handleClose = () => {
+  submitForm.value = createEmptySubmitForm()
+  dialogVisible.value = false
+}
+
+const handleAdd = () => {
+  operationType.value = '新增用户'
+  submitForm.value = createEmptySubmitForm()
   dialogVisible.value = true
 }
-// 编辑
-const handleEdit = (row) => {
-  operationType.value = '修改员工信息'
+
+const handleEdit = row => {
+  operationType.value = '编辑用户'
   submitForm.value = {
     id: row.id,
     employeeId: row.employeeId,
@@ -396,54 +309,41 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-// 修改提交处理方法
-const handleUpdate = async () => {
-  try {
-    // 表单验证
-    if (!submitForm.value.employeeId) {
-      ElMessage.error('请输入员工编号')
-      return
-    }
-    if (!submitForm.value.name) {
-      ElMessage.error('请输入员工名称')
-      return
-    }
-    if (!submitForm.value.mobile) {
-      ElMessage.error('请输入员工手机')
-      return
-    }
-    if (!submitForm.value.roleCode) {
-      ElMessage.error('请选择角色')
-      return
-    }
-    let res
-    if (operationType.value === '新增员工') {
-      res = await addEmployee(submitForm.value)
-    } else {
-      res = await updateEmployee(submitForm.value)
-    }
+const handleSubmit = async () => {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
 
-    if (res.code === 200) {
-      ElMessage.success(operationType.value + '成功')
-      await handleSearch()
-      dialogVisible.value = false
-      submitForm.value = {}
-    } else {
-      ElMessage.error(res.msg)
-    }
-  } catch (error) {
-    ElMessage.error('操作失败: ' + error.message)
+  if (operationType.value === '新增用户') {
+    await addEmployee(submitForm.value)
+    ElMessage.success('新增成功')
+  } else {
+    await updateEmployee(submitForm.value)
+    ElMessage.success('更新成功')
   }
+  dialogVisible.value = false
+  submitForm.value = createEmptySubmitForm()
+  await handleSearch()
 }
 
+const handleDelete = async () => {
+  await ElMessageBox.confirm('确认清理全部离职员工记录吗？', '清理离职员工', {
+    type: 'warning',
+    confirmButtonText: '确认',
+    cancelButtonText: '取消'
+  })
+  await deleteEmployee()
+  ElMessage.success('清理成功')
+  await handleSearch()
+}
 
-onMounted(() => {
-  handleSearch()
+onMounted(async () => {
+  await loadRoleOptions()
+  await handleSearch()
 })
 </script>
 
 <style scoped>
-.operation-logs {
+.user-management-page {
   padding: 20px;
 }
 
@@ -456,8 +356,16 @@ onMounted(() => {
   background: var(--app-panel);
 }
 
-.el-form--inline .el-form-item {
-  margin-right: 30px;
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.table-toolbar-left {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .pagination-wrapper {

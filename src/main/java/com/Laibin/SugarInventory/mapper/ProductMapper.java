@@ -4,40 +4,38 @@ import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.vo.ProductInfoVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import org.apache.ibatis.annotations.*;
+import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * <p>
- * Mapper 接口
- * </p>
- *
- * @author Mrcury
- * @since 2025-02-19
- */
 @Mapper
 public interface ProductMapper extends BaseMapper<Product> {
-    // 查询产品名称是否已存在
     @Select("SELECT COUNT(*) FROM product WHERE product_name = #{name}")
     boolean existsByName(@Param("name") String name);
 
-    // 根据名称查询产品
     @Select("<script>" +
-            "SELECT * FROM product " +
-            "WHERE 1=1 " +  // 确保 WHERE 存在
+            "SELECT p.*, qs.standard_name AS default_standard_name " +
+            "FROM product p " +
+            "LEFT JOIN product_quality_standard_relation r ON r.product_id = p.id AND r.is_default = 1 AND r.enabled = 1 " +
+            "LEFT JOIN quality_standards qs ON qs.id = r.quality_standard_id " +
+            "WHERE 1=1 " +
             "<if test='name != null and name != \"\"'>" +
-            "   AND product_name LIKE CONCAT('%', #{name}, '%') " +
+            "   AND p.product_name LIKE CONCAT('%', #{name}, '%') " +
             "</if>" +
             "<if test='type != null'>" +
-            "   AND product_type = #{type} " +
+            "   AND p.product_type = #{type} " +
             "</if>" +
             "<if test='status != null'>" +
-            "   AND status = #{status} " +
+            "   AND p.status = #{status} " +
             "</if>" +
+            "ORDER BY p.id ASC " +
             "</script>")
     List<Product> selectProductsByName(
             @Param("name") String name,
@@ -45,15 +43,12 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("status") String status
     );
 
-
-    // 查询所有半成品名称
     @Select("SELECT DISTINCT id AS productId, product_name AS productName, " +
             "packaging_method AS packagingMethod, product_type AS productType, " +
             "weight_per_piece AS weightPerPiece " +
             "FROM product WHERE status = '半成品'")
     List<ProductInfoVO> selectSemiProductNames();
 
-    // 根据名称或类型查询半成品
     @Select("<script>" +
             "SELECT id AS productId, product_name AS productName, " +
             "packaging_method AS packagingMethod, product_type AS productType, " +
@@ -72,14 +67,12 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("type") String type
     );
 
-    // 查询所有成品名称
     @Select("SELECT DISTINCT id AS productId, product_name AS productName, " +
             "packaging_method AS packagingMethod, product_type AS productType, " +
             "weight_per_piece AS weightPerPiece " +
             "FROM product WHERE status = '成品'")
     List<ProductInfoVO> selectFinishedProductNames();
 
-    // 根据名称或类型查询半成品
     @Select("<script>" +
             "SELECT id AS productId, product_name AS productName, " +
             "packaging_method AS packagingMethod, product_type AS productType, " +
@@ -98,7 +91,6 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("type") String type
     );
 
-    // 根据条件动态更新对应id的产品信息
     @Update("<script>" +
             "UPDATE product " +
             "<set>" +
@@ -129,7 +121,6 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("canStack") Boolean canStack
     );
 
-    // 根据id删除产品
     @Delete("DELETE FROM product WHERE id = #{id}")
     @Override
     int deleteById(Serializable id);

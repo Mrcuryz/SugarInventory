@@ -3,7 +3,8 @@ import {ref, computed, nextTick, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import PageTabs from '@/components/PageTabs.vue'
 import {useTabsStore} from '@/stores/tabs'
-import {menuList} from '@/utils/navigation'
+import {filterMenuByPermissions, menuList} from '@/utils/navigation'
+import {useAuthStore} from '@/stores/auth'
 
 
 // 侧边栏状态
@@ -16,6 +17,7 @@ const toggleCollapse = () => {
 const route = useRoute()
 const router = useRouter()
 const tabsStore = useTabsStore()
+const authStore = useAuthStore()
 const routerViewVisible = ref(true)
 const breadcrumbs = computed(() => {
   return route.matched
@@ -28,6 +30,7 @@ const breadcrumbs = computed(() => {
 
 // 当前激活菜单
 const activeMenu = computed(() => route.path)
+const visibleMenus = computed(() => filterMenuByPermissions(menuList, authStore.permissionCodes))
 
 watch(
     () => route.fullPath,
@@ -66,7 +69,7 @@ const refreshCurrentPage = async () => {
           :collapse="isCollapse"
           router
       >
-        <template v-for="item in menuList" :key="item.path">
+        <template v-for="item in visibleMenus" :key="item.path">
           <el-sub-menu v-if="item.children" :index="item.path">
             <template #title>
               <el-icon>

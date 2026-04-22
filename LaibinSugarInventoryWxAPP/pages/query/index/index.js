@@ -6,7 +6,7 @@ import { showError, showToast } from '../../../utils/toast';
 const RECENT_KEY = 'recentPalletQueries';
 
 const MODULES = [
-  { key: 'inventory', title: '库存查询', desc: '查看产品库存摘要与托盘明细', icon: '/assets/icons-line/icon-location.svg', url: '/pages/query/inventory/index' },
+  { key: 'inventory', title: '库存查询', desc: '查看产品库存摘要与二维码明细', icon: '/assets/icons-line/icon-location.svg', url: '/pages/query/inventory/index' },
   { key: 'assay', title: '化验查询', desc: '查看化验记录、结论与标准匹配', icon: '/assets/icons-line/flow-assay.svg', url: '/pages/query/assay/index' },
   { key: 'record', title: '作业记录', desc: '按时间和类型追溯现场动作', icon: '/assets/icons-line/icon-task.svg', url: '/pages/query/records/index' },
   { key: 'product', title: '产品查询', desc: '查看产品基础信息与包装参数', icon: '/assets/icons-line/icon-notice.svg', url: '/pages/query/product/index' },
@@ -35,7 +35,7 @@ Page({
     recentQueries: [],
     modules: MODULES,
     scenarioTips: [
-      '托盘查询：现场单码核对、问题复核、补查托盘状态。',
+      '二维码查询：现场单码核对、问题复核、补查二维码状态。',
       '库位查询：查找空位后可直接进入指定库位入库。',
       '化验查询：查看系统返回的结论、指标和标准说明。',
       '作业记录：追溯最近入库、出库、调拨、化验关联动作。'
@@ -93,7 +93,7 @@ Page({
     const code = (this.data.code || '').trim().toUpperCase();
     if (this.data.querying) return;
     if (!code) {
-      showToast('请输入托盘码');
+      showToast('请输入二维码编号');
       return;
     }
     this.setData({
@@ -115,7 +115,7 @@ Page({
         querying: false,
         queryState
       });
-      showError(error, queryState === 'empty' ? '未找到对应托盘' : '查询失败');
+      showError(error, queryState === 'empty' ? '未找到对应二维码' : '查询失败');
     }
   },
 

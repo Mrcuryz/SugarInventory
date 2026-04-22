@@ -37,6 +37,12 @@ public class PalletCode extends BaseEntity implements Serializable {
     @TableField("product_id")
     private Integer productId;
 
+    @TableField("fixed_product_id")
+    private Integer fixedProductId;
+
+    @TableField("fixed_mode_enabled")
+    private Boolean fixedModeEnabled;
+
     @TableField("product_status")
     private String productStatus;
 

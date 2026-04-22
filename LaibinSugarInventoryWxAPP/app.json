@@ -37,7 +37,7 @@
   "window": {
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#ffffff",
-    "navigationBarTitleText": "冰糖仓储",
+    "navigationBarTitleText": "数字仓储",
     "navigationBarTextStyle": "black"
   },
   "tabBar": {

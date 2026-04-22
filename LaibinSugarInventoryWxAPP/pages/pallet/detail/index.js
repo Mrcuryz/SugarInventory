@@ -1,4 +1,5 @@
 import { getProductsByStatus } from '../../../api/product';
+import { getAssayDetail } from '../../../api/query';
 import {
   getPalletAssay,
   getPalletFlowCycles,
@@ -15,7 +16,17 @@ import {
   confirmTransferTasks,
   getTaskList
 } from '../../../api/task';
-import { enrichPallet, enrichTask, FLOW_OPERATION, formatAssayStandard, formatDateTime, getDictItem } from '../../../utils/dict';
+import {
+  enrichPallet,
+  enrichTask,
+  FLOW_OPERATION,
+  formatAssayStandard,
+  formatDateTime,
+  formatMetricRange,
+  getAssayJudgeMeta,
+  getAssayPrimaryStandard,
+  getDictItem
+} from '../../../utils/dict';
 import { requireLogin } from '../../../utils/auth';
 import { normalizeQuantityByUnit, validateQuantity } from '../../../utils/quantity';
 import { getScanDefaults, setScanDefaults } from '../../../utils/storage';
@@ -74,7 +85,7 @@ function findProductConfig(pallet, productCatalog) {
 
 function calculatePalletQuantity(pallet, inventory, product) {
   if (!pallet || !pallet.productName) {
-    return { quantityText: '未绑定产品', weightText: '未绑定产品' };
+    return { quantityText: '-', weightText: '-' };
   }
 
   const piecesPerPallet = Number(product && (product.piecesPerPallet || product.pieces_per_pallet));
@@ -107,8 +118,8 @@ function calculatePalletQuantity(pallet, inventory, product) {
 function buildBaseFields(pallet, inventory, productCatalog) {
   const product = findProductConfig(pallet, productCatalog);
   const quantity = calculatePalletQuantity(pallet, inventory, product);
-  return [
-    { label: '产品', value: normalizeText(pallet.productName, '未绑定产品') },
+  const fields = [
+    { label: '产品', value: normalizeText(pallet.productName, '-') },
     { label: '产品状态', value: normalizeText(pallet.productStatus) },
     { label: '生产日期', value: formatDate(pallet.productionDate) },
     { label: '筛网', value: normalizeText(pallet.screenMeshName) },
@@ -116,24 +127,66 @@ function buildBaseFields(pallet, inventory, productCatalog) {
     { label: '绑定时间', value: formatDateTime(pallet.createdAt) },
     { label: '重量', value: quantity.weightText }
   ];
+  if (pallet.fixedModeEnabled || pallet.fixedProductName) {
+    fields.splice(1, 0, { label: '当前固定产品', value: normalizeText(pallet.fixedProductName, '-') });
+  }
+  return fields;
 }
 
 function buildAssayMetrics(assay) {
   if (!assay) return [];
-  const standardText = formatAssayStandard(assay.qualifiedStandards);
-  return [
-    { key: 'colorValue', label: '色值', value: assay.colorValue, unit: ' IU' },
-    { key: 'reducingSugar', label: '还原糖', value: assay.reducingSugar, unit: '' },
-    { key: 'dryWeight', label: '干燥失重', value: assay.dryWeight, unit: '' },
-    { key: 'conductivityAsh', label: '电导灰分', value: assay.conductivityAsh, unit: '' },
-    { key: 'sucrose', label: '蔗糖分', value: assay.sucrose, unit: ' g/100g' },
-    { key: 'insolubleImpurity', label: '不溶于水杂质', value: assay.insolubleImpurity, unit: '' },
-    { key: 'phValue', label: 'pH', value: assay.phValue, unit: '' }
-  ].map(item => ({
-    ...item,
-    valueText: item.value == null || item.value === '' ? '-' : `${item.value}${item.unit}`,
-    standardText
-  }));
+  const failedMap = (assay.failedMetrics || []).reduce((result, item) => {
+    result[item.metricCode] = item;
+    return result;
+  }, {});
+  const snapshotItems = assay.standardSnapshot && assay.standardSnapshot.items && assay.standardSnapshot.items.length
+    ? assay.standardSnapshot.items
+    : [
+      { metricCode: 'color_value', metricName: '色值', unit: ' IU' },
+      { metricCode: 'reducing_sugar', metricName: '还原糖', unit: '' },
+      { metricCode: 'dry_weight', metricName: '干燥失重', unit: '' },
+      { metricCode: 'conductivity_ash', metricName: '电导灰分', unit: '' },
+      { metricCode: 'sucrose', metricName: '蔗糖分', unit: ' g/100g' },
+      { metricCode: 'insoluble_impurity', metricName: '不溶于水杂质', unit: '' },
+      { metricCode: 'ph', metricName: 'pH', unit: '' }
+    ];
+  const valueFieldMap = {
+    color_value: 'colorValue',
+    reducing_sugar: 'reducingSugar',
+    dry_weight_loss: 'dryWeight',
+    dry_weight: 'dryWeight',
+    conductivity_ash: 'conductivityAsh',
+    sucrose: 'sucrose',
+    insoluble_impurity: 'insolubleImpurity',
+    ph: 'phValue',
+    ph_value: 'phValue'
+  };
+  return snapshotItems.map(item => {
+    const valueField = valueFieldMap[item.metricCode];
+    const value = valueField ? assay[valueField] : null;
+    const failed = failedMap[item.metricCode];
+    return {
+      key: item.metricCode,
+      label: item.metricName,
+      valueText: value == null || value === '' ? '-' : `${value}${item.unit || ''}`,
+      standardText: item.minValue != null || item.maxValue != null ? formatMetricRange(item) : (assay.appliedStandardText || assay.standardText || '未配置标准区间'),
+      statusText: failed ? '未达标' : '达标',
+      statusType: failed ? 'danger' : 'success',
+      reasonText: failed ? failed.reason : ''
+    };
+  });
+}
+
+function normalizePalletAssay(assay) {
+  if (!assay) return null;
+  return {
+    ...assay,
+    createdAtText: formatDateTime(assay.createdAt),
+    standardText: getAssayPrimaryStandard(assay, formatAssayStandard(assay.qualifiedStandards, '当前未采用标准')),
+    appliedStandardText: getAssayPrimaryStandard(assay, '当前未采用标准'),
+    matchedStandardsText: (assay.matchedStandards || []).join('、') || '无',
+    failedMetricCount: assay.failedMetricCount || 0
+  };
 }
 
 function buildLocationDisplay(warehouseName, side, rowNumber, layer) {
@@ -291,7 +344,7 @@ function buildFlowGroups(rows, palletCode) {
       hasLocation: location.hasLocation,
       locationSummary: location.summary,
       flowExtras: location.mode === 'route' ? [
-        palletCode ? `托盘 ${palletCode}` : ''
+        palletCode ? `二维码 ${palletCode}` : ''
       ].filter(Boolean) : [],
       remarkText: normalizeText(item.remark, ''),
       iconSrc: getFlowIconSrc(item.operationType),
@@ -322,13 +375,7 @@ function inferBusinessStage(pallet, flows) {
 }
 
 function assayResultMeta(result) {
-  const value = normalizeText(result, '未出结论');
-  const passed = value.includes('合格') && !value.includes('不合格');
-  const failed = value.includes('不合格');
-  return {
-    label: value,
-    type: passed ? 'success' : failed ? 'danger' : 'info'
-  };
+  return getAssayJudgeMeta(result, '未出结论');
 }
 
 Page({
@@ -340,6 +387,8 @@ Page({
     pallet: {},
     inventory: null,
     assay: null,
+    assayDetailId: '',
+    assayResolveMessage: '',
     assayMetrics: [],
     assayResult: { label: '未出结论', type: 'info' },
     baseFields: [],
@@ -409,7 +458,7 @@ Page({
 
   async loadDetail() {
     if (!this.data.code) {
-      showToast('缺少托盘码');
+      showToast('缺少二维码编号');
       return;
     }
     this.setData({ loading: true });
@@ -430,13 +479,26 @@ Page({
           inStockTimeText: formatDateTime(inventoryRes.value.inStockTime)
         }
         : null;
-      const assay = assayRes.status === 'fulfilled' && assayRes.value
-        ? {
-          ...assayRes.value,
-          createdAtText: formatDateTime(assayRes.value.createdAt),
-          standardText: formatAssayStandard(assayRes.value.qualifiedStandards)
+      const rawAssay = assayRes.status === 'fulfilled' ? assayRes.value : null;
+      let assay = null;
+      if (rawAssay && rawAssay.id) {
+        try {
+          const detailAssay = await getAssayDetail(rawAssay.id);
+          assay = normalizePalletAssay({
+            ...detailAssay,
+            resolveSource: rawAssay.resolveSource,
+            resolveStatus: rawAssay.resolveStatus,
+            resolveMessage: rawAssay.resolveMessage,
+            autoBound: rawAssay.autoBound,
+            multipleCandidates: rawAssay.multipleCandidates,
+            candidateCount: rawAssay.candidateCount
+          });
+        } catch (error) {
+          assay = normalizePalletAssay(rawAssay);
         }
-        : null;
+      } else if (rawAssay) {
+        assay = normalizePalletAssay(rawAssay);
+      }
       const pendingTasks = tasksRes.status === 'fulfilled'
         ? ((tasksRes.value && tasksRes.value.records) || []).map(item => ({
           ...enrichTask(item),
@@ -471,16 +533,18 @@ Page({
         pallet: displayPallet,
         inventory,
         assay,
+        assayDetailId: assay && assay.id ? assay.id : '',
+        assayResolveMessage: rawAssay && rawAssay.resolveMessage ? rawAssay.resolveMessage : '',
         assayMetrics: buildAssayMetrics(assay),
-        assayResult: assayResultMeta(assay && assay.isQualified),
+        assayResult: assayResultMeta(assay && assay.judgeResult),
         baseFields: buildBaseFields(displayPallet, inventory, this.data.productCatalog),
         pendingTasks,
         flows,
         flowGroups,
         actions,
         readonlyStageNotice: businessStage.readonly ? (businessStage.key === 'prepare'
-          ? '当前托盘已转入备料池，等待成品绑定并消耗，不再执行普通出库或调拨。'
-          : '当前托盘处于只读阶段，不再执行普通现场任务。') : '',
+          ? '当前二维码已转入备料池，等待成品绑定并消耗，不再执行普通出库或调拨。'
+          : '当前二维码处于只读阶段，不再执行普通现场任务。') : '',
         summary: this.buildSummary(displayPallet, inventory, pendingTasks, actions, businessStage),
         confirmTargets: [],
         confirmTargetCount: 0,
@@ -488,7 +552,7 @@ Page({
       });
     } catch (error) {
       this.setData({ loading: false });
-      showError(error, '托盘详情加载失败');
+      showError(error, '二维码详情加载失败');
     }
   },
 
@@ -506,7 +570,7 @@ Page({
         ? `入库时间 ${formatDateTime(inventory.inStockTime)}`
         : noLocationHint,
       taskText: businessStage.readonly ? businessStage.label : (pendingTasks.length ? `待处理 ${pendingTasks.length} 条任务` : '当前无待处理任务'),
-      actionText: businessStage.key === 'prepare' ? '等待成品绑定消耗' : (actions[0] ? actions[0].label : '查看托盘信息')
+      actionText: businessStage.key === 'prepare' ? '等待成品绑定消耗' : (actions[0] ? actions[0].label : '查看二维码信息')
     };
   },
 
@@ -583,6 +647,11 @@ Page({
     wx.switchTab({ url: '/pages/tasks/index/index' });
   },
 
+  openAssayDetail() {
+    if (!this.data.assayDetailId) return;
+    wx.navigateTo({ url: `/pages/query/assay-detail/index?id=${this.data.assayDetailId}` });
+  },
+
   onConfirmTask(e) {
     this.processPendingTasks([e.detail.task]);
   },
@@ -627,7 +696,7 @@ Page({
     const ok = await confirm(`取消 ${codes.length} 条待处理任务？`, '取消任务');
     if (!ok) return;
     try {
-      await cancelTasks(codes, '小程序托盘详情取消任务');
+      await cancelTasks(codes, '小程序二维码详情取消任务');
       showToast('已取消', 'success');
       this.loadDetail();
     } catch (error) {
@@ -671,7 +740,7 @@ Page({
       entryDate,
       quantity: quantityResult.value,
       unit,
-      remark: remark || '小程序托盘详情确认入库'
+      remark: remark || '小程序二维码详情确认入库'
     }));
 
     try {

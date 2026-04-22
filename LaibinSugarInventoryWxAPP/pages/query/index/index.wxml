@@ -1,5 +1,5 @@
 <page-shell>
-  <page-header title="查询中心" subtitle="现场查询与追溯入口，支持托盘、库存、化验、库位等快速查询" />
+  <page-header title="查询中心" subtitle="现场查询与追溯入口，支持二维码、库存、化验、库位等快速查询" />
 
   <view class="hero-card">
     <view class="hero-top">
@@ -8,9 +8,9 @@
           <view class="hero-icon">
             <image class="hero-icon-img" src="/assets/icons-line/icon-search.svg" mode="aspectFit"></image>
           </view>
-          <view class="hero-title">托盘查询</view>
+          <view class="hero-title">二维码查询</view>
         </view>
-        <view class="hero-desc">支持手动输入托盘码，也支持直接扫码进入详情。</view>
+        <view class="hero-desc">支持手动输入二维码编号，也支持直接扫码进入详情。</view>
       </view>
       <view class="hero-badges">
         <text class="hero-badge">手输</text>
@@ -18,7 +18,7 @@
         <text class="hero-badge">详情</text>
       </view>
     </view>
-    <input class="query-input" placeholder="请输入托盘码" value="{{code}}" bindinput="onInput" />
+    <input class="query-input" placeholder="请输入二维码编号" value="{{code}}" bindinput="onInput" />
     <view class="hero-actions">
       <button class="scan-btn" bindtap="onScan">扫码查询</button>
       <button class="search-btn" loading="{{querying}}" disabled="{{querying}}" bindtap="submitQuery">查看详情</button>
@@ -30,12 +30,12 @@
   </view>
 
   <view wx:if="{{queryState === 'loading'}}" class="state-card">
-    <view class="state-title">正在核对托盘信息</view>
-    <view class="state-desc">会先校验托盘码是否有效，再进入详情页。</view>
+    <view class="state-title">正在核对二维码信息</view>
+    <view class="state-desc">会先校验二维码编号是否有效，再进入详情页。</view>
   </view>
 
   <view wx:if="{{queryState === 'empty'}}" class="state-wrap">
-    <empty-state icon="/assets/icons-line/icon-search.svg" title="未找到对应托盘" description="请核对托盘码是否正确，或重新扫码一次。" />
+    <empty-state icon="/assets/icons-line/icon-search.svg" title="未找到对应二维码" description="请核对二维码编号是否正确，或重新扫码一次。" />
   </view>
 
   <view wx:if="{{queryState === 'error'}}" class="state-wrap">

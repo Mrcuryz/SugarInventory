@@ -1,15 +1,65 @@
 <page-shell>
-  <page-header title="工号绑定" subtitle="手机号无法匹配时，可用工号和姓名完成身份校验。" showBack="{{true}}" />
-  <view class="bind-card">
-    <view class="field">
-      <text class="label">工号</text>
-      <input class="input" placeholder="请输入员工工号" value="{{employeeId}}" data-field="employeeId" bindinput="onInput" />
+  <view class="bind-page">
+    <view class="bg-circle"></view>
+    <view class="bg-circle-ring"></view>
+
+    <view class="dot-grid">
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
     </view>
-    <view class="field">
-      <text class="label">姓名</text>
-      <input class="input" placeholder="请输入姓名或姓名关键字" value="{{namePart}}" data-field="namePart" bindinput="onInput" />
+
+    <page-header title="工号绑定" subtitle="手机号无法匹配时，可使用工号和姓名完成绑定。" showBack="{{true}}" />
+
+    <view class="hero">
+      <view class="hero-badge">备用方式</view>
+      <view class="hero-title">使用工号完成身份校验</view>
+      <view class="hero-desc">输入员工工号和姓名后，系统会核对员工名册信息并完成账号绑定。</view>
     </view>
-    <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onBind">完成绑定</button>
+
+    <view class="main-card">
+      <view class="card-title">填写绑定信息</view>
+      <view class="card-desc">请确保填写内容与员工名册中的工号和姓名一致。</view>
+
+      <view class="field">
+        <view class="label">工号</view>
+        <input class="input" placeholder="请输入员工工号" value="{{employeeId}}" data-field="employeeId" bindinput="onInput" />
+      </view>
+
+      <view class="field">
+        <view class="label">姓名</view>
+        <input class="input" placeholder="请输入姓名" value="{{namePart}}" data-field="namePart" bindinput="onInput" />
+      </view>
+
+      <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onBind">完成绑定</button>
+    </view>
+
+    <view class="tips-card">
+      <view class="tips-title">填写提醒</view>
+      <view class="tips-item">
+        <view class="tips-index">1</view>
+        <view class="tips-text">工号必须与后台员工名册中的工号完全一致。</view>
+      </view>
+      <view class="tips-item">
+        <view class="tips-index">2</view>
+        <view class="tips-text">姓名建议填写完整姓名，减少匹配失败的概率。</view>
+      </view>
+      <view class="tips-item">
+        <view class="tips-index">3</view>
+        <view class="tips-text">绑定成功后会自动返回工作台，无需再次登录。</view>
+      </view>
+    </view>
   </view>
 </page-shell>
-

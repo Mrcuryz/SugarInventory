@@ -1,6 +1,8 @@
 package com.Laibin.SugarInventory.mapper;
 
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductPoolQueryDTO;
+import com.Laibin.SugarInventory.domain.vo.FixedProductQrPoolVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodePageVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -108,4 +110,57 @@ public interface PalletCodeQueryMapper {
             "</script>"
     })
     Long countPalletCodes(@Param("q") PalletCodeQueryDTO q);
+
+    @Select({
+            "<script>",
+            "SELECT",
+            " pc.id, pc.code, pc.fixed_product_id AS fixedProductId,",
+            " p.product_name AS fixedProductName,",
+            " pc.status, pc.fixed_mode_enabled AS fixedModeEnabled,",
+            " CASE WHEN pc.status = 'FREE' THEN 1 ELSE 0 END AS allowPrint,",
+            " pc.updated_at AS updatedAt",
+            " FROM pallet_code pc",
+            " INNER JOIN product p ON pc.fixed_product_id = p.id",
+            " WHERE pc.fixed_mode_enabled = 1",
+            " <if test='q.productId != null'>",
+            "   AND pc.fixed_product_id = #{q.productId}",
+            " </if>",
+            " <if test='q.productName != null and q.productName != \"\"'>",
+            "   AND p.product_name LIKE CONCAT('%', #{q.productName}, '%')",
+            " </if>",
+            " <if test='q.status != null and q.status != \"\"'>",
+            "   AND pc.status = #{q.status}",
+            " </if>",
+            " <if test='q.freeOnly != null and q.freeOnly'>",
+            "   AND pc.status = 'FREE'",
+            " </if>",
+            " ORDER BY pc.updated_at DESC, pc.id DESC",
+            " LIMIT #{offset}, #{size}",
+            "</script>"
+    })
+    java.util.List<FixedProductQrPoolVO> pageFixedProductPool(@Param("q") FixedProductPoolQueryDTO q,
+                                                              @Param("offset") long offset,
+                                                              @Param("size") long size);
+
+    @Select({
+            "<script>",
+            "SELECT COUNT(*)",
+            " FROM pallet_code pc",
+            " INNER JOIN product p ON pc.fixed_product_id = p.id",
+            " WHERE pc.fixed_mode_enabled = 1",
+            " <if test='q.productId != null'>",
+            "   AND pc.fixed_product_id = #{q.productId}",
+            " </if>",
+            " <if test='q.productName != null and q.productName != \"\"'>",
+            "   AND p.product_name LIKE CONCAT('%', #{q.productName}, '%')",
+            " </if>",
+            " <if test='q.status != null and q.status != \"\"'>",
+            "   AND pc.status = #{q.status}",
+            " </if>",
+            " <if test='q.freeOnly != null and q.freeOnly'>",
+            "   AND pc.status = 'FREE'",
+            " </if>",
+            "</script>"
+    })
+    Long countFixedProductPool(@Param("q") FixedProductPoolQueryDTO q);
 }

@@ -2,8 +2,8 @@
   <div class="operation-logs">
     <el-card class="search-card" style="max-width: 1400px">
       <el-form :model="searchForm" inline>
-        <el-form-item label="托盘码">
-          <el-input v-model="searchForm.code" clearable placeholder="请输入托盘码" style="width: 180px"/>
+        <el-form-item label="二维码">
+          <el-input v-model="searchForm.code" clearable placeholder="请输入二维码" style="width: 180px"/>
         </el-form-item>
         <el-form-item label="当前状态">
           <el-select v-model="searchForm.status" clearable placeholder="请选择" style="width: 150px">
@@ -23,6 +23,8 @@
             <el-option v-for="item in PRODUCT_STATUS_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
           </el-select>
         </el-form-item>
+      </el-form>
+      <el-form :model="searchForm" inline>
         <el-form-item label="生产日期">
           <el-date-picker
               v-model="searchForm.productionDateRange"
@@ -44,7 +46,7 @@
     <el-card class="table-card" style="max-width: 1400px">
       <div class="table-toolbar">
         <div class="table-toolbar-left">
-          <el-button type="primary" @click="openGenerateDialog">生成托盘码</el-button>
+          <el-button type="primary" @click="openGenerateDialog">生成二维码</el-button>
           <el-button type="danger" :disabled="!selectedRows.length" @click="handleBatchInvalid">批量作废</el-button>
           <el-button
               type="primary"
@@ -66,8 +68,8 @@
           @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="45"/>
-        <el-table-column prop="code" label="托盘码" width="130" fixed="left" show-overflow-tooltip/>
-        <el-table-column prop="status" label="托盘状态" width="100">
+        <el-table-column prop="code" label="二维码" width="130" fixed="left" show-overflow-tooltip/>
+        <el-table-column prop="status" label="二维码状态" width="100">
           <template #default="{ row }">
             <el-tag :type="getDictType(PALLET_STATUS_MAP, row.status)">
               {{ getDictLabel(PALLET_STATUS_MAP, row.status) }}
@@ -129,7 +131,7 @@
       </div>
     </el-card>
 
-    <el-dialog title="生成托盘码" v-model="generateDialogVisible" width="420px" :before-close="closeGenerateDialog">
+    <el-dialog title="生成二维码" v-model="generateDialogVisible" width="420px" :before-close="closeGenerateDialog">
       <el-form :model="generateForm" label-width="100px">
         <el-form-item label="生成数量" required>
           <el-input-number v-model="generateForm.count" :min="1" :max="100"/>
@@ -154,9 +156,9 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="绑定托盘并创建入库任务" v-model="bindDialogVisible" width="560px" :before-close="closeBindDialog">
+    <el-dialog title="绑定二维码并创建入库任务" v-model="bindDialogVisible" width="560px" :before-close="closeBindDialog">
       <el-form ref="bindFormRef" :model="bindForm" :rules="bindRules" label-width="110px">
-        <el-form-item label="托盘码" prop="code">
+        <el-form-item label="二维码" prop="code">
           <el-input v-model="bindForm.code" clearable/>
         </el-form-item>
         <el-form-item label="产品" prop="productId">
@@ -184,7 +186,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="托盘二维码" v-model="qrDialogVisible" width="360px" :before-close="closeQrDialog">
+    <el-dialog title="二维码" v-model="qrDialogVisible" width="360px" :before-close="closeQrDialog">
       <div class="qr-wrapper">
         <div class="qr-code">{{ currentCode }}</div>
         <el-image v-if="qrImageUrl" :src="qrImageUrl" fit="contain" class="qr-image"/>
@@ -198,7 +200,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog title="托盘化验数据" v-model="assayDialogVisible" width="560px">
+    <el-dialog title="化验数据" v-model="assayDialogVisible" width="560px">
       <el-descriptions v-if="assayInfo" :column="1" border>
         <el-descriptions-item label="产品名称">{{ assayInfo.productName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="采样日期">{{ assayInfo.sampleDate || '-' }}</el-descriptions-item>
@@ -215,7 +217,7 @@
       <el-empty v-else description="暂无化验数据"/>
     </el-dialog>
 
-    <el-dialog title="托盘库存位置" v-model="inventoryDialogVisible" width="520px">
+    <el-dialog title="库存位置" v-model="inventoryDialogVisible" width="520px">
       <el-descriptions v-if="inventoryInfo" :column="1" border>
         <el-descriptions-item label="仓库">{{ inventoryInfo.warehouseName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="侧">{{ inventoryInfo.side || '-' }}</el-descriptions-item>
@@ -227,7 +229,7 @@
       <el-empty v-else description="暂无库存位置"/>
     </el-dialog>
 
-    <el-drawer v-model="flowDrawerVisible" title="托盘流转记录" size="70%" :before-close="closeFlowDrawer">
+    <el-drawer v-model="flowDrawerVisible" title="流转记录" size="70%" :before-close="closeFlowDrawer">
       <div class="flow-drawer">
         <div class="cycle-panel">
           <div class="panel-title">{{ currentCode }} 的循环轮次</div>
@@ -380,7 +382,7 @@ const bindDialogVisible = ref(false)
 const bindFormRef = ref(null)
 const bindForm = ref(defaultBindForm())
 const bindRules = {
-  code: [{required: true, message: '请输入托盘码', trigger: 'blur'}],
+  code: [{required: true, message: '请输入二维码', trigger: 'blur'}],
   productId: [{required: true, message: '请选择产品', trigger: 'change'}],
   productStatus: [{required: true, message: '请选择产品状态', trigger: 'change'}],
   productionDate: [{required: true, message: '请选择生产日期', trigger: 'change'}]
@@ -556,7 +558,7 @@ const downloadBlob = (blob, filename) => {
 
 const handleQrDownload = async (code, format) => {
   if (!code) {
-    ElMessage.warning('托盘码不能为空')
+    ElMessage.warning('二维码不能为空')
     return
   }
   qrDownloadLoading.value = true
@@ -586,7 +588,7 @@ const handleQrDownload = async (code, format) => {
 const handleBatchDownloadPdf = async (codes = selectedRows.value.map(row => row.code), fromGenerated = false) => {
   const exportCodes = Array.from(new Set((codes || []).filter(Boolean).map(code => String(code).trim().toUpperCase())))
   if (!exportCodes.length) {
-    ElMessage.warning('请选择托盘码')
+    ElMessage.warning('请选择二维码')
     return
   }
   if (fromGenerated) {
@@ -597,7 +599,7 @@ const handleBatchDownloadPdf = async (codes = selectedRows.value.map(row => row.
   try {
     const response = await batchDownloadPalletQrLabelPdf(exportCodes)
     downloadBlob(response.data, `pallet-labels-batch-${dayjs().format('YYYY-MM-DD')}.pdf`)
-    ElMessage.success(`已导出 ${exportCodes.length} 个托盘标签`)
+    ElMessage.success(`已导出 ${exportCodes.length} 个二维码标签`)
   } catch (error) {
     ElMessage.error('批量导出标签 PDF 失败')
   } finally {
@@ -633,10 +635,10 @@ const handleBatchInvalid = async () => {
 
 const invalidateByCodes = async (codes) => {
   if (!codes.length) {
-    ElMessage.warning('请选择托盘码')
+    ElMessage.warning('请选择二维码')
     return
   }
-  await ElMessageBox.confirm(`确认作废 ${codes.length} 个托盘码吗？`, '温馨提示', {type: 'warning'})
+  await ElMessageBox.confirm(`确认作废 ${codes.length} 个二维码吗？`, '温馨提示', {type: 'warning'})
   await invalidatePalletCodes({codes, remark: 'Web管理端作废'})
   ElMessage.success('作废成功')
   await handleSearch()

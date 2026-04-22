@@ -5,9 +5,8 @@
     <view class="account-head">
       <view>
         <view class="name">{{userInfo.name || userInfo.username || '未识别账号'}}</view>
-        <view class="account-desc">当前账号已接入现场扫码、任务处理与托盘查询能力。</view>
+        <view class="account-desc">当前账号已接入现场扫码、任务处理与二维码查询等能力。</view>
       </view>
-      <view class="account-tag">在线</view>
     </view>
     <view class="meta-grid">
       <view wx:for="{{accountMeta}}" wx:key="label" class="meta-card">
@@ -17,7 +16,7 @@
     </view>
   </view>
 
-  <view class="section-title">常用入口</view>
+  <view class="section-title">帮助</view>
   <view class="menu-list">
     <view wx:for="{{menus}}" wx:key="key" class="menu-card" data-key="{{item.key}}" bindtap="onMenuTap">
       <view class="menu-head">
@@ -32,7 +31,7 @@
   <view class="logout-card">
     <view class="logout-copy">
       <view class="logout-title">退出当前账号</view>
-      <view class="logout-desc">退出后会返回登录页，不影响后台已创建的任务与托盘记录。</view>
+      <view class="logout-desc">退出后会返回登录页，不影响后台已创建的任务与二维码记录。</view>
     </view>
     <button class="logout-btn" bindtap="onLogout">退出登录</button>
   </view>

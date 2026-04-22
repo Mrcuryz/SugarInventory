@@ -1,12 +1,18 @@
 .summary-card,
 .metric-card,
 .standard-card,
-.judge-card {
+.judge-card,
+.summary-grid-card {
   padding: 26rpx;
   border: 1rpx solid #e7edf5;
   border-radius: 24rpx;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+}
+
+.loading-card {
+  font-size: 27rpx;
+  color: #647089;
 }
 
 .summary-head,
@@ -54,7 +60,8 @@
 }
 
 .judge-desc,
-.metric-range {
+.metric-range,
+.metric-reason {
   margin-top: 8rpx;
   font-size: 23rpx;
   line-height: 1.45;
@@ -73,21 +80,22 @@
   color: #647089;
 }
 
-.info-grid {
+.info-grid,
+.summary-grid-card {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16rpx;
   margin-top: 24rpx;
 }
 
-.info-item {
+.info-item,
+.summary-item {
   padding: 18rpx;
   border-radius: 18rpx;
   background: #f6f9fe;
 }
 
-.info-label,
-.metric-hint {
+.info-label {
   font-size: 22rpx;
   color: #7a869a;
 }
@@ -97,6 +105,7 @@
   font-size: 25rpx;
   font-weight: 750;
   color: #172033;
+  line-height: 1.45;
 }
 
 .metric-list {
@@ -116,10 +125,6 @@
   color: #172033;
 }
 
-.metric-hint {
-  margin-top: 8rpx;
-}
-
 .metric-value {
   font-size: 30rpx;
   font-weight: 850;
@@ -132,6 +137,11 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 10rpx;
+}
+
+.failed-card {
+  border-color: rgba(217, 45, 32, 0.12);
+  background: #fffafb;
 }
 
 .standard-title {

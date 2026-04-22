@@ -1,8 +1,8 @@
 <page-meta page-style="{{confirmVisible ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <page-shell safeBottom="{{true}}">
-  <page-header title="托盘详情" subtitle="单码全链路查询" showBack="{{true}}" actionText="刷新" bind:action="refresh" />
+  <page-header title="二维码详情" subtitle="单码全链路查询" showBack="{{true}}" actionText="刷新" bind:action="refresh" />
 
-  <view wx:if="{{loading}}" class="light-card loading-card">正在加载托盘信息...</view>
+  <view wx:if="{{loading}}" class="light-card loading-card">正在加载二维码信息...</view>
 
   <block wx:else>
     <pallet-summary-card pallet="{{pallet}}" summary="{{summary}}" />
@@ -78,7 +78,7 @@
       </view>
       <view wx:else class="light-card empty-card">
         <view class="card-title">当前无待处理任务</view>
-        <view class="card-desc">该托盘目前没有需要立即处理的现场任务。</view>
+        <view class="card-desc">该二维码目前没有需要立即处理的现场任务。</view>
       </view>
     </block>
 
@@ -106,20 +106,36 @@
             <text class="meta-value">{{assay.createdAtText || '-'}}</text>
           </view>
         </view>
-        <view class="standard-pill">参考标准：{{assay.standardText}}</view>
+        <view class="standard-pill">采用标准：{{assay.appliedStandardText}}</view>
+        <view class="card-desc">{{assay.judgeMessage || assay.resolveMessage || '系统未返回额外说明。'}}</view>
+        <view class="assay-summary-grid">
+          <view class="assay-summary-item">
+            <text class="meta-label">满足标准</text>
+            <text class="meta-value">{{assay.matchedStandardsText}}</text>
+          </view>
+          <view class="assay-summary-item">
+            <text class="meta-label">不达标项</text>
+            <text class="meta-value">{{assay.failedMetricCount || 0}} 项</text>
+          </view>
+        </view>
+        <view wx:if="{{assayDetailId}}" class="assay-link" bindtap="openAssayDetail">查看完整化验详情</view>
       </view>
       <view wx:if="{{assay}}" class="metric-list">
         <view wx:for="{{assayMetrics}}" wx:key="key" class="metric-row">
           <view>
             <view class="metric-name">{{item.label}}</view>
             <view class="metric-range">{{item.standardText}}</view>
+            <view wx:if="{{item.reasonText}}" class="metric-reason">{{item.reasonText}}</view>
           </view>
-          <view class="metric-value">{{item.valueText}}</view>
+          <view class="metric-side">
+            <view class="metric-value">{{item.valueText}}</view>
+            <status-tag label="{{item.statusText}}" type="{{item.statusType}}" />
+          </view>
         </view>
       </view>
       <view wx:else class="light-card empty-card">
-        <view class="card-title">暂无化验数据</view>
-        <view class="card-desc">系统没有找到该托盘当前轮次关联的化验记录。</view>
+        <view class="card-title">{{assayResolveMessage || '暂无化验数据'}}</view>
+        <view class="card-desc">{{assayResolveMessage ? '该二维码未形成可展示的正式化验记录。' : '系统没有找到该二维码当前轮次关联的化验记录。'}}</view>
       </view>
     </block>
 
@@ -189,7 +205,7 @@
       </view>
       <view wx:else class="light-card empty-card">
         <view class="card-title">暂无流转记录</view>
-        <view class="card-desc">该托盘当前没有可展示的生命周期事件。</view>
+        <view class="card-desc">该二维码当前没有可展示的生命周期事件。</view>
       </view>
     </block>
   </block>
@@ -200,7 +216,7 @@
     <view class="modal-mask" bindtap="closeConfirm" catchtouchmove="noop"></view>
     <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">处理待入库任务</view>
-      <view class="modal-code">共 {{confirmTargetCount}} 个待处理托盘</view>
+      <view class="modal-code">共 {{confirmTargetCount}} 个待处理二维码</view>
       <view class="field">
         <text class="label">入库库位</text>
         <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />

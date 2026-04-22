@@ -11,6 +11,9 @@ public class PalletCodeInfoVO {
     private String code;
     private String status;
     private String productName;
+    private Integer fixedProductId;
+    private String fixedProductName;
+    private Boolean fixedModeEnabled;
     private String productStatus;
     private LocalDate productionDate;
     private String screenMeshName;

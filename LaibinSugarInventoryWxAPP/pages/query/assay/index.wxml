@@ -1,5 +1,5 @@
 <page-shell>
-  <page-header title="化验查询" subtitle="独立查询化验记录，查看结论、指标和标准匹配" showBack="{{true}}" />
+  <page-header title="化验查询" subtitle="按产品、化验员和判定结果查看记录" showBack="{{true}}" />
 
   <view class="filter-card">
     <input class="filter-input" placeholder="产品名称" value="{{productName}}" data-field="productName" bindinput="onInput" />
@@ -11,8 +11,8 @@
       <picker class="filter-picker" mode="date" value="{{endDate}}" data-field="endDate" bindchange="onDateChange">
         <view>{{endDate || '结束日期'}}</view>
       </picker>
-      <picker class="filter-picker small" range="{{qualifiedOptions}}" value="{{qualifiedIndex}}" bindchange="onQualifiedChange">
-        <view>{{qualifiedOptions[qualifiedIndex]}}</view>
+      <picker class="filter-picker small" range="{{judgeOptions}}" range-key="label" value="{{judgeIndex}}" bindchange="onJudgeChange">
+        <view>{{judgeOptions[judgeIndex].label}}</view>
       </picker>
     </view>
     <view class="filter-actions">
@@ -30,19 +30,23 @@
     <view wx:for="{{records}}" wx:key="id" class="assay-card" data-index="{{index}}" bindtap="openDetail">
       <view class="card-head">
         <view class="product-title">{{item.productName || '未命名产品'}}</view>
-        <status-tag label="{{item.qualifiedLabel}}" type="{{item.qualifiedType}}" />
+        <status-tag label="{{item.judgeLabel}}" type="{{item.judgeType}}" />
       </view>
       <view class="assay-meta">
         <text>抽样 {{item.sampleDateText}}</text>
-        <text>版本 v{{item.version || 1}}</text>
+        <text>不达标 {{item.failedMetricCount}} 项</text>
       </view>
       <view class="assay-line">
         <image src="/assets/icons-line/icon-user.svg" mode="aspectFit"></image>
         <text>{{item.testerName || '未记录化验员'}} · {{item.createdAtText}}</text>
       </view>
-      <view class="standard-text">{{item.standardText}}</view>
+      <view class="standard-card">
+        <view class="standard-label">采用标准</view>
+        <view class="standard-text">{{item.standardText}}</view>
+      </view>
       <view class="card-link">查看详情</view>
     </view>
   </view>
+
   <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
 </page-shell>

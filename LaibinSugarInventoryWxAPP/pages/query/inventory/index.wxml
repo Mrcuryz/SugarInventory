@@ -1,5 +1,5 @@
 <page-shell>
-  <page-header title="库存查询" subtitle="按产品维度查看库存摘要，并继续追到托盘明细" showBack="{{true}}" />
+  <page-header title="库存查询" subtitle="按产品维度查看库存摘要，并继续追到二维码明细" showBack="{{true}}" />
 
   <view class="filter-card">
     <view class="filter-row">
@@ -44,7 +44,7 @@
         <text>{{item.stockInfoText}}</text>
       </view>
       <view class="card-actions">
-        <button class="card-link" data-index="{{index}}" bindtap="openPallets">查看托盘</button>
+        <button class="card-link" data-index="{{index}}" bindtap="openPallets">查看二维码</button>
         <button class="card-link" data-index="{{index}}" bindtap="openAssay">查看化验</button>
       </view>
     </view>
@@ -54,13 +54,13 @@
   <view wx:else class="result-section">
     <view class="detail-title-row">
       <view>
-        <view class="section-title compact">托盘明细</view>
+        <view class="section-title compact">二维码明细</view>
         <view class="detail-subtitle">{{currentStock.productName}} · {{currentStock.productStatus}}</view>
       </view>
       <button class="secondary-btn back-list-btn" bindtap="backToSummary">返回汇总</button>
     </view>
-    <view wx:if="{{palletLoading}}" class="state-card">正在加载托盘...</view>
-    <empty-state wx:elif="{{!palletList.length}}" icon="/assets/icons-line/icon-search.svg" title="暂无托盘明细" description="当前库存项没有可展示的在库托盘。" />
+    <view wx:if="{{palletLoading}}" class="state-card">正在加载二维码...</view>
+    <empty-state wx:elif="{{!palletList.length}}" icon="/assets/icons-line/icon-search.svg" title="暂无二维码明细" description="当前库存项没有可展示的在库二维码。" />
     <view wx:for="{{palletList}}" wx:key="code" class="pallet-card">
       <view class="card-head">
         <view class="pallet-code">{{item.code}}</view>
@@ -76,7 +76,7 @@
         <text>{{item.assayText}} · 生产日期 {{item.productionDate || '-'}}</text>
       </view>
       <view class="card-actions">
-        <button class="card-link" data-code="{{item.code}}" bindtap="openPalletDetail">托盘详情</button>
+        <button class="card-link" data-code="{{item.code}}" bindtap="openPalletDetail">二维码详情</button>
       </view>
     </view>
     <query-pager wx:if="{{palletTotal > 0}}" page="{{palletPage}}" size="{{palletSize}}" total="{{palletTotal}}" loading="{{palletLoading}}" bind:change="onPalletPageChange" />

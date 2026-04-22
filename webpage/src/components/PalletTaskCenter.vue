@@ -29,8 +29,8 @@
         <el-form-item v-if="hasSearchField('productName')" label="产品名称">
           <el-input v-model="searchForm.productName" clearable placeholder="请输入产品名称" style="width: 170px"/>
         </el-form-item>
-        <el-form-item v-if="hasSearchField('targetWarehouseName')" label="目标仓库">
-          <el-input v-model="searchForm.targetWarehouseName" clearable placeholder="请输入目标仓库" style="width: 170px"/>
+        <el-form-item v-if="hasSearchField('targetWarehouseName')" label="目标库位">
+          <el-input v-model="searchForm.targetWarehouseName" clearable placeholder="请输入目标库位" style="width: 170px"/>
         </el-form-item>
         <el-form-item v-if="hasSearchField('productType')" label="产品类型">
           <el-select v-model="searchForm.productType" clearable placeholder="请选择" style="width: 140px">
@@ -110,7 +110,7 @@
         <el-table-column prop="productType" label="产品类型" width="100"/>
         <el-table-column v-if="hasColumn('productStatus')" prop="productStatus" label="产品状态" width="100"/>
         <el-table-column prop="productionDate" label="生产日期" width="120"/>
-        <el-table-column v-if="hasColumn('targetWarehouse')" prop="targetWarehouseName" label="目标仓库" width="130"/>
+        <el-table-column v-if="hasColumn('targetWarehouse')" prop="targetWarehouseName" label="目标库位" width="130"/>
         <el-table-column v-if="hasColumn('targetWarehouse')" prop="targetSide" label="目标侧" width="80"/>
         <el-table-column v-if="hasColumn('semiItemCount')" prop="semiItemCount" label="半成品数" width="100"/>
         <el-table-column v-if="hasColumn('hasSemiItems')" label="已绑定半成品" width="120">
@@ -213,8 +213,8 @@
         <el-form-item label="托盘码" prop="code">
           <el-input v-model="confirmInForm.code" disabled/>
         </el-form-item>
-        <el-form-item label="入库仓库" prop="warehouseName">
-          <el-select v-model="confirmInForm.warehouseName" filterable allow-create default-first-option placeholder="请选择或输入仓库" style="width: 100%">
+        <el-form-item label="入库库位" prop="warehouseName">
+          <el-select v-model="confirmInForm.warehouseName" filterable allow-create default-first-option placeholder="请选择或输入库位" style="width: 100%">
             <el-option v-for="item in warehouseList" :key="item.id" :label="item.warehouseName" :value="item.warehouseName"/>
           </el-select>
         </el-form-item>
@@ -254,9 +254,9 @@
       <el-table :data="batchConfirmInRows" border max-height="520">
         <el-table-column prop="code" label="托盘码" width="150" fixed="left"/>
         <el-table-column prop="productName" label="产品" min-width="150"/>
-        <el-table-column label="入库仓库" min-width="170">
+        <el-table-column label="入库库位" min-width="170">
           <template #default="{ row }">
-            <el-select v-model="row.warehouseName" filterable allow-create default-first-option placeholder="仓库" style="width: 100%">
+            <el-select v-model="row.warehouseName" filterable allow-create default-first-option placeholder="选择库位" style="width: 100%">
               <el-option v-for="item in warehouseList" :key="item.id" :label="item.warehouseName" :value="item.warehouseName"/>
             </el-select>
           </template>
@@ -359,9 +359,9 @@
               <el-input v-model="row.code" placeholder="托盘码"/>
             </template>
           </el-table-column>
-          <el-table-column label="目标仓库" min-width="150">
+          <el-table-column label="目标库位" min-width="150">
             <template #default="{ row }">
-              <el-select v-model="row.targetWarehouseName" filterable allow-create default-first-option placeholder="仓库" style="width: 100%">
+              <el-select v-model="row.targetWarehouseName" filterable allow-create default-first-option placeholder="选择库位" style="width: 100%">
                 <el-option v-for="item in warehouseList" :key="item.id" :label="item.warehouseName" :value="item.warehouseName"/>
               </el-select>
             </template>
@@ -508,8 +508,8 @@ const confirmInFormRef = ref(null)
 const confirmInForm = ref(defaultConfirmInForm())
 const confirmInProduct = ref(null)
 const confirmInRules = {
-  code: [{required: true, message: '缺少托盘码', trigger: 'blur'}],
-  warehouseName: [{required: true, message: '请选择入库仓库', trigger: 'change'}]
+  code: [{required: true, message: '缺少二维码', trigger: 'blur'}],
+  warehouseName: [{required: true, message: '请选择入库库位', trigger: 'change'}]
 }
 const confirmInPiecesLimit = computed(() => {
   const value = Number(confirmInProduct.value?.piecesPerPallet)
@@ -956,7 +956,7 @@ const submitBatchConfirmIn = async () => {
     return
   }
   if (batchConfirmInRows.value.some(row => !row.warehouseName)) {
-    ElMessage.warning('请填写所有入库仓库')
+    ElMessage.warning('请填写所有入库库位')
     return
   }
   if (!validateQuantityRows(batchConfirmInRows.value, '入库任务')) {
@@ -1103,7 +1103,7 @@ const submitCommonOperation = async () => {
   } else {
     const items = transferForm.value.items.filter(item => item.code && item.targetWarehouseName)
     if (!items.length) {
-      ElMessage.warning('请填写调拨托盘和目标仓库')
+      ElMessage.warning('请填写调拨托盘和目标库位')
       return
     }
     payload = {items}

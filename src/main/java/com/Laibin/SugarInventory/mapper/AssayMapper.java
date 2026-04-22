@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * <p>
- * Mapper 接口
+ * Mapper 鎺ュ彛
  * </p>
  *
  * @author Mrcury
@@ -103,4 +103,7 @@ public interface AssayMapper extends BaseMapper<Assay> {
             "</where> " +
             "</script>")
     Long countAssay(@Param("query") AssayQueryDTO query);
+    @Select("SELECT COUNT(*) FROM assay WHERE applied_standard_id = #{qualityStandardId}")
+    int countByAppliedStandardId(@Param("qualityStandardId") Integer qualityStandardId);
 }
+

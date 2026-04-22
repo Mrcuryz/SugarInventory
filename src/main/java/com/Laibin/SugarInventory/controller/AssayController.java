@@ -14,62 +14,44 @@ import com.Laibin.SugarInventory.service.AssayService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/assay")
-
-@Tag(name = "化验记录管理", description = "包括导入化验记录、查询化验记录、更新化验记录等接口")
+@Tag(name = "化验记录管理", description = "包括导入、查询、详情、更新、删除等接口")
 public class AssayController {
+
     @Autowired
     private AssayService assayService;
-
 
     @PostMapping("/import")
     @LogOperation(value = "化验数据", type = OperationType.INSERT)
     @Operation(summary = "导入化验记录", description = "批量导入化验记录")
     @PreAuthorize("hasAuthority('quality:test')")
-    public Result<Boolean> importAssays(
-            @RequestBody List<AssaySubmitDTO> dtos,
-            @AuthenticationPrincipal LoginUser loginUser
-    ) {
+    public Result<Boolean> importAssays(@RequestBody List<AssaySubmitDTO> dtos,
+                                        @AuthenticationPrincipal LoginUser loginUser) {
         try {
             assayService.importAssays(dtos, loginUser.getUser().getId());
             return Result.success(true);
         } catch (BusinessException e) {
-            e.printStackTrace();
             return Result.error(500, "化验记录导入失败：" + e.getMessage());
         }
     }
 
-//    @PostMapping("/copy")
-//    @LogOperation(value = "化验数据", type = OperationType.INSERT)
-//    @Operation(summary = "复制化验记录", description = "复制化验记录")
-//    @PreAuthorize("hasAuthority('quality:test')")
-//    public Result<Boolean> copyAssay(
-//            @RequestBody AssayCopyDTO dto,
-//            @AuthenticationPrincipal LoginUser loginUser
-//    ) {
-//        try {
-//            assayService.copyAssay(dto, loginUser.getUser().getId());
-//            return Result.success(true);
-//        } catch (BusinessException e) {
-//            e.printStackTrace();
-//            return Result.error(500, "化验记录复制失败：" + e.getMessage());
-//        }
-//    }
-
-    @Operation(summary = "检查化验记录是否存在", description = "根据产品id和日期检查化验记录是否存在")
+    @Operation(summary = "检查化验记录是否存在", description = "根据产品ID和日期检查化验记录是否存在")
     @PostMapping("/exists")
-    public Result<Boolean> exists(
-            @RequestBody AssayCheckDTO dto) {
+    public Result<Boolean> exists(@RequestBody AssayCheckDTO dto) {
         try {
             return Result.success(assayService.existedAssay(dto));
         } catch (BusinessException e) {
@@ -80,26 +62,31 @@ public class AssayController {
     @PreAuthorize("hasAuthority('quality:test')")
     @Operation(summary = "查询化验记录", description = "根据查询条件分页查询化验记录")
     @PostMapping("/query")
-    public Result<PageResult<AssayVO>> queryAssays(
-            @RequestBody AssayQueryDTO query
-    ) {
+    public Result<PageResult<AssayVO>> queryAssays(@RequestBody AssayQueryDTO query) {
         try {
             return Result.success(assayService.queryAssays(query));
         } catch (BusinessException e) {
-            e.printStackTrace();
             return Result.error(500, "化验记录查询失败：" + e.getMessage());
         }
     }
 
-    @Operation(summary = "更新化验记录", description = "根据化验记录ID更新化验数据（更新时保留旧记录，以便历史对比）")
-    @LogOperation(value = "化验数据", type = OperationType.INSERT)
-    @PreAuthorize("hasAuthority('quality:test')")
+    @GetMapping("/{id}")
+    @Operation(summary = "查询化验详情", description = "根据化验记录ID查询判定详情")
+    public Result<AssayVO> getAssayById(@PathVariable Integer id) {
+        try {
+            return Result.success(assayService.getAssayById(id));
+        } catch (BusinessException e) {
+            return Result.error(500, "化验详情查询失败：" + e.getMessage());
+        }
+    }
+
     @PostMapping("/{id}")
-    public Result<AssayVO> updateAssay(
-            @PathVariable("id") Integer id,
-            @RequestBody AssaySubmitDTO dto,
-            @AuthenticationPrincipal LoginUser loginUser
-    ) {
+    @LogOperation(value = "化验数据", type = OperationType.UPDATE)
+    @Operation(summary = "更新化验记录", description = "根据化验记录ID更新化验数据")
+    @PreAuthorize("hasAuthority('quality:test')")
+    public Result<AssayVO> updateAssay(@PathVariable("id") Integer id,
+                                       @RequestBody AssaySubmitDTO dto,
+                                       @AuthenticationPrincipal LoginUser loginUser) {
         try {
             return Result.success(assayService.updateAssay(id, dto, loginUser.getUser()));
         } catch (BusinessException | JsonProcessingException e) {

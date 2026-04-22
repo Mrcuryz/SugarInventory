@@ -1,30 +1,90 @@
 <page-shell>
-  <page-header title="帮助中心" subtitle="常用流程与现场问题处理" showBack="{{true}}" />
+  <page-header title="帮助中心" subtitle="按章节阅读流程指引，并直接进入对应操作页面" showBack="{{true}}" />
 
-  <view class="rules-card">
-    <view class="rules-title">现场提示</view>
-    <view wx:for="{{quickRules}}" wx:key="*this" class="rules-item">{{index + 1}}. {{item}}</view>
-  </view>
-
-  <view class="toc-card">
-    <view class="toc-title">目录</view>
-    <view class="toc-list">
-      <text wx:for="{{sections}}" wx:key="key" class="toc-item">{{index + 1}}. {{item.title}}</text>
-    </view>
-  </view>
-
-  <view class="section-list">
-    <view wx:for="{{sections}}" wx:key="key" class="section-card">
-      <view class="section-head" data-key="{{item.key}}" bindtap="toggleSection">
-        <view class="section-copy">
-          <text class="section-title">{{item.title}}</text>
-          <text class="section-summary">{{item.summary}}</text>
+  <view class="guide-layout {{tocCollapsed ? 'is-collapsed' : ''}}">
+    <scroll-view scroll-y class="toc-pane">
+      <view class="toc-toolbar">
+        <button class="toc-toggle-btn" bindtap="toggleToc">
+          {{tocCollapsed ? '展开目录' : '收起目录'}}
+        </button>
+      </view>
+      <view class="toc-list">
+        <view
+          wx:for="{{sections}}"
+          wx:key="key"
+          class="toc-item {{activeKey === item.key ? 'active' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="selectSection"
+        >
+          <view class="toc-index">{{index + 1}}</view>
+          <view class="toc-copy">
+            <view class="toc-short">{{item.shortTitle}}</view>
+            <view class="toc-title" wx:if="{{!tocCollapsed}}">{{item.title}}</view>
+          </view>
         </view>
-        <text class="section-arrow">{{item.open ? '收起' : '展开'}}</text>
       </view>
-      <view wx:if="{{item.open}}" class="section-body">
-        <view wx:for="{{item.items}}" wx:key="*this" class="section-item">{{index + 1}}. {{item}}</view>
+    </scroll-view>
+
+    <scroll-view scroll-y class="content-pane" scroll-top="{{contentScrollTop}}">
+      <view class="section-hero">
+        <view class="section-badge">第 {{activeSection.index + 1}} 章</view>
+        <view class="section-title">{{activeSection.title}}</view>
+        <view class="section-desc">{{activeSection.description}}</view>
       </view>
-    </view>
+
+      <view class="content-card card-overview">
+        <view class="card-title">本章说明</view>
+        <view class="card-copy">{{activeSection.summary}}</view>
+      </view>
+
+      <view class="content-card card-steps">
+        <view class="card-title">操作步骤</view>
+        <view wx:for="{{activeSection.steps}}" wx:key="*this" class="step-item">
+          <view class="step-index">{{index + 1}}</view>
+          <view class="step-copy">{{item}}</view>
+        </view>
+      </view>
+
+      <view class="content-card card-notice">
+        <view class="card-title">现场注意事项</view>
+        <view wx:for="{{activeSection.notices}}" wx:key="*this" class="notice-item">
+          <view class="notice-dot"></view>
+          <view class="notice-copy">{{item}}</view>
+        </view>
+      </view>
+
+      <view class="content-card card-faq">
+        <view class="card-title">常见问题</view>
+        <view wx:for="{{activeSection.faqs}}" wx:key="q" class="faq-item">
+          <view class="faq-question">{{item.q}}</view>
+          <view class="faq-answer">{{item.a}}</view>
+        </view>
+      </view>
+
+      <view class="content-card card-actions">
+        <view class="card-title">立即操作</view>
+        <view class="action-list">
+          <button
+            wx:for="{{activeSection.actions}}"
+            wx:key="label"
+            class="action-btn {{item.kind === 'primary' ? 'primary-btn' : 'secondary-btn'}} {{item.disabled ? 'is-disabled' : ''}}"
+            disabled="{{item.disabled}}"
+            data-section-index="{{activeSection.index}}"
+            data-action-index="{{index}}"
+            bindtap="onActionTap"
+          >
+            {{item.label}}
+          </button>
+        </view>
+        <view class="permission-tip" wx:if="{{activeSection.hasDisabledActions}}">
+          部分入口因当前账号权限不足暂不可用。
+        </view>
+      </view>
+
+      <view class="chapter-nav">
+        <button class="chapter-btn" bindtap="goPrevSection" disabled="{{activeSection.index === 0}}">上一章</button>
+        <button class="chapter-btn primary-next" bindtap="goNextSection" disabled="{{activeSection.index === sections.length - 1}}">下一章</button>
+      </view>
+    </scroll-view>
   </view>
 </page-shell>

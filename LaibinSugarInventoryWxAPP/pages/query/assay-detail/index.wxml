@@ -1,16 +1,17 @@
 <page-shell>
-  <page-header title="化验详情" subtitle="查看系统返回结论、实测指标和标准匹配说明" showBack="{{true}}" />
+  <page-header title="化验详情" subtitle="查看判定结论、标准快照和指标对比" showBack="{{true}}" />
 
-  <empty-state wx:if="{{!assay}}" icon="/assets/icons-line/flow-assay.svg" title="暂无化验详情" description="请从化验查询列表进入详情页。" />
+  <view wx:if="{{loading}}" class="summary-card loading-card">正在加载化验详情...</view>
+  <empty-state wx:elif="{{!assay}}" icon="/assets/icons-line/flow-assay.svg" title="暂无化验详情" description="请从化验查询列表或二维码详情进入本页。" />
 
   <block wx:else>
     <view class="summary-card conclusion-card">
       <view class="summary-head">
         <view>
           <view class="product-title">{{assay.productName || '未命名产品'}}</view>
-          <view class="summary-subtitle">采样日期 {{assay.sampleDateText}} · 版本 v{{assay.version || 1}}</view>
+          <view class="summary-subtitle">采样日期 {{assay.sampleDateText}} · 录入 {{assay.createdAtText}}</view>
         </view>
-        <status-tag label="{{assay.isQualified}}" type="{{qualifiedType}}" />
+        <status-tag label="{{assay.judgeLabel}}" type="{{assay.judgeType}}" />
       </view>
       <view class="info-grid">
         <view class="info-item">
@@ -18,8 +19,8 @@
           <view class="info-value">{{assay.testerName || '未记录'}}</view>
         </view>
         <view class="info-item">
-          <view class="info-label">录入时间</view>
-          <view class="info-value">{{assay.createdAtText}}</view>
+          <view class="info-label">采用标准</view>
+          <view class="info-value">{{assay.appliedStandardText}}</view>
         </view>
       </view>
     </view>
@@ -29,29 +30,64 @@
         <image src="/assets/icons-line/flow-assay.svg" mode="aspectFit"></image>
       </view>
       <view class="judge-body">
-        <view class="judge-title">{{judgeSummary.title}}</view>
-        <view class="judge-desc">{{judgeSummary.desc}}</view>
+        <view class="judge-title">{{assay.judgeLabel}}</view>
+        <view class="judge-desc">{{assay.judgeMessage || '系统未返回额外说明。'}}</view>
       </view>
     </view>
 
-    <view class="section-title">标准判定摘要</view>
-    <view class="standard-card">
-      <view class="standard-title">采用标准</view>
-      <view class="standard-text">{{standardText}}</view>
+    <view class="section-title">判定摘要</view>
+    <view class="summary-grid-card">
+      <view class="summary-item">
+        <view class="info-label">采用标准</view>
+        <view class="info-value">{{assay.appliedStandardText}}</view>
+      </view>
+      <view class="summary-item">
+        <view class="info-label">满足标准</view>
+        <view class="info-value">{{assay.matchedStandardsText}}</view>
+      </view>
+      <view class="summary-item">
+        <view class="info-label">不达标项</view>
+        <view class="info-value">{{assay.failedMetricCount || 0}} 项</view>
+      </view>
+      <view class="summary-item">
+        <view class="info-label">判定方式</view>
+        <view class="info-value">{{assay.standardSnapshot ? '使用快照' : '实时返回'}}</view>
+      </view>
+    </view>
+
+    <view wx:if="{{assay.failedMetrics && assay.failedMetrics.length}}" class="section-title">不达标项</view>
+    <view wx:if="{{assay.failedMetrics && assay.failedMetrics.length}}" class="metric-list">
+      <view wx:for="{{assay.failedMetrics}}" wx:key="metricCode" class="metric-card failed-card">
+        <view class="metric-main">
+          <view class="metric-label">{{item.metricName}}</view>
+          <view class="metric-range">{{item.reason || '未通过标准判定'}}</view>
+        </view>
+        <view class="metric-side">
+          <view class="metric-value">{{item.actualValue}}</view>
+          <status-tag label="未达标" type="danger" />
+        </view>
+      </view>
     </view>
 
     <view class="section-title">指标对比</view>
     <view class="metric-list">
-      <view wx:for="{{metrics}}" wx:key="key" class="metric-card">
+      <view wx:for="{{assay.metrics}}" wx:key="key" class="metric-card">
         <view class="metric-main">
           <view class="metric-label">{{item.label}}</view>
-          <view wx:if="{{item.standardRangeText}}" class="metric-range">标准范围：{{item.standardRangeText}}</view>
+          <view class="metric-range">标准范围：{{item.standardRangeText}}</view>
+          <view wx:if="{{item.reason}}" class="metric-reason">{{item.reason}}</view>
         </view>
         <view class="metric-side">
-          <view class="metric-value">{{item.valueText}}</view>
-          <status-tag wx:if="{{item.statusText}}" label="{{item.statusText}}" type="{{item.statusType}}" />
+          <view class="metric-value">{{item.actualText}}</view>
+          <status-tag label="{{item.statusText}}" type="{{item.statusType}}" />
         </view>
       </view>
+    </view>
+
+    <view class="section-title">标准说明</view>
+    <view class="standard-card">
+      <view class="standard-title">{{assay.standardNotice.title}}</view>
+      <view class="standard-text">{{assay.standardNotice.desc}}</view>
     </view>
   </block>
 </page-shell>

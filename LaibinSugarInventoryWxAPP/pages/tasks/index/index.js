@@ -11,7 +11,7 @@ import { getProductsByStatus } from '../../../api/product';
 import { enrichTask } from '../../../utils/dict';
 import { requireLogin } from '../../../utils/auth';
 import { normalizeQuantityByUnit, validateQuantity } from '../../../utils/quantity';
-import { getScanDefaults, setScanDefaults } from '../../../utils/storage';
+import { consumeTaskViewPreference, getScanDefaults, setScanDefaults } from '../../../utils/storage';
 import { confirm, showError, showToast } from '../../../utils/toast';
 
 function today() {
@@ -83,6 +83,15 @@ Page({
 
   onShow() {
     if (!requireLogin()) return;
+    const preference = consumeTaskViewPreference();
+    if (preference && (preference.status || preference.taskType !== undefined)) {
+      this.setData({
+        status: preference.status || this.data.status,
+        taskType: preference.taskType !== undefined ? preference.taskType : this.data.taskType,
+        selectedCodes: [],
+        pageNum: 1
+      });
+    }
     this.loadTasks();
   },
 

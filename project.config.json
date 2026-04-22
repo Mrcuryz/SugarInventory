@@ -1,6 +1,7 @@
 {
   "appid": "wx0ca93ac3276b51bc",
   "compileType": "miniprogram",
+  "miniprogramRoot": "LaibinSugarInventoryWxAPP/",
   "libVersion": "3.8.9",
   "packOptions": {
     "ignore": [],
@@ -13,7 +14,13 @@
     "minified": true,
     "enhance": true,
     "showShadowRootInWxmlPanel": true,
-    "packNpmRelationList": [],
+    "packNpmManually": true,
+    "packNpmRelationList": [
+      {
+        "packageJsonPath": "./LaibinSugarInventoryWxAPP/package.json",
+        "miniprogramNpmDistDir": "./LaibinSugarInventoryWxAPP/"
+      }
+    ],
     "babelSetting": {
       "ignore": [],
       "disablePlugins": [],

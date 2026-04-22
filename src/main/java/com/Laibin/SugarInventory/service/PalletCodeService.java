@@ -15,6 +15,9 @@ import com.Laibin.SugarInventory.domain.dto.CreateSemiOutTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductActivateDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductBindDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductPoolQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletQrExportDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO;
@@ -31,6 +34,7 @@ import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
 import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
+import com.Laibin.SugarInventory.domain.vo.FixedProductQrPoolVO;
 import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -58,6 +62,14 @@ public interface PalletCodeService extends IService<PalletCode> {
     String generateQrCodeSvg(String code);
 
     byte[] generateQrLabelPdf(PalletQrExportDTO dto);
+
+    int bindFixedProductCodes(FixedProductBindDTO dto, Integer userId);
+
+    PageResult<FixedProductQrPoolVO> pageFixedProductPool(FixedProductPoolQueryDTO queryDTO);
+
+    byte[] generateFixedProductQrLabelPdf(PalletQrExportDTO dto);
+
+    byte[] activateFixedProductCodesAndGeneratePdf(FixedProductActivateDTO dto, Integer userId);
 
     PageResult<PalletCodePageVO> pagePalletCodes(PalletCodeQueryDTO queryDTO);
 

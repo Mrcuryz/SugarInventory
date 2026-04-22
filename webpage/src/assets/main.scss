@@ -195,6 +195,21 @@ body {
   color: #b7bec9;
 }
 
+.el-select__placeholder {
+  color: #b7bec9 !important;
+}
+
+.el-select__selected-item,
+.el-select__wrapper .el-select__selected-item,
+.el-select__wrapper .el-select__selection-text,
+.el-select__wrapper .el-tag__content {
+  color: var(--app-text) !important;
+}
+
+.el-select__wrapper.is-filterable .el-select__input {
+  color: var(--app-text) !important;
+}
+
 .el-input__wrapper,
 .el-select__wrapper,
 .el-textarea__inner {

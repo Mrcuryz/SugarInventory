@@ -54,4 +54,3 @@ Page({
     wx.navigateTo({ url: '/pages/auth/bind-manual/index' });
   }
 });
-

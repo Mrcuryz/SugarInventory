@@ -12,9 +12,11 @@ import com.Laibin.SugarInventory.domain.enumObject.BindMethod;
 import com.Laibin.SugarInventory.domain.enumObject.BindStatus;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.EmployeeRoster;
+import com.Laibin.SugarInventory.domain.po.Permission;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.AuthVO;
 import com.Laibin.SugarInventory.mapper.EmployeeRosterMapper;
+import com.Laibin.SugarInventory.mapper.PermissionMapper;
 import com.Laibin.SugarInventory.mapper.UserMapper;
 import com.Laibin.SugarInventory.service.AuthService;
 import com.Laibin.SugarInventory.service.WechatAuthService;
@@ -28,7 +30,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -46,7 +50,11 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private final EmployeeRosterMapper rosterMapper;
 
+    @Autowired
+    private PermissionMapper permissionMapper;
+
     private static final String WEB_LOGIN_PASSWORD = "lbsp";
+    private static final String WEB_ACCESS_PERMISSION = "system:access";
 
     @Override
     public Result<AuthVO> handleWebLogin(String name, String password) {
@@ -73,11 +81,14 @@ public class AuthServiceImpl implements AuthService {
             user.setRoleCode(employee.getRoleCode());
             user.setLoginType("WEB");
             userMapper.insert(user);
+        } else if (!Objects.equals(user.getRoleCode(), employee.getRoleCode())) {
+            user.setRoleCode(employee.getRoleCode());
+            userMapper.updateById(user);
         }
 
-        if(!Objects.equals(user.getRoleCode(), "ADMIN")) {
-            System.out.println("User role is not admin" + user.getRoleCode());
-            throw new BusinessException("无权限登录");
+        List<String> permissionCodes = getPermissionCodes(user.getRoleCode());
+        if (!permissionCodes.contains(WEB_ACCESS_PERMISSION)) {
+            throw new BusinessException("当前角色没有 Web 端访问权限");
         }
 
         try {
@@ -89,7 +100,7 @@ public class AuthServiceImpl implements AuthService {
             } else {
                 System.out.println("Token format is incorrect!");
             }
-            return Result.success(new AuthVO(token, user.getName(), user.getRoleCode()));
+            return Result.success(new AuthVO(token, user.getName(), user.getRoleCode(), permissionCodes));
         } catch (UsernameNotFoundException e) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
@@ -111,7 +122,7 @@ public class AuthServiceImpl implements AuthService {
             } else {
                 System.out.println("Token format is incorrect!");
             }
-            return new AuthVO(token, user.getName(), user.getRoleCode());
+            return new AuthVO(token, user.getName(), user.getRoleCode(), getPermissionCodes(user.getRoleCode()));
         } catch (UsernameNotFoundException e) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
@@ -128,7 +139,7 @@ public class AuthServiceImpl implements AuthService {
             if (user != null && user.getBindStatus() != BindStatus.UNBOUND) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmployeeId());
                 String token = jwtUtils.generateToken(userDetails);
-                return new AuthVO(token, user.getName(), user.getRoleCode());
+                return new AuthVO(token, user.getName(), user.getRoleCode(), getPermissionCodes(user.getRoleCode()));
             }
 
             // 3. 尝试微信手机号绑定
@@ -192,7 +203,9 @@ public class AuthServiceImpl implements AuthService {
             userMapper.updateById(existingUser);
         }
         UserDetails userDetails = userDetailsService.loadUserByUsername(roster.getEmployeeId());
-        return new AuthVO(jwtUtils.generateToken(userDetails), user.getName(), user.getRoleCode());
+        String name = existingUser == null ? roster.getName() : existingUser.getName();
+        String roleCode = existingUser == null ? roster.getRoleCode() : existingUser.getRoleCode();
+        return new AuthVO(jwtUtils.generateToken(userDetails), name, roleCode, getPermissionCodes(roleCode));
     }
 
     private Object processWechatBind(SessionInfo session, EmployeeRoster roster) {
@@ -222,11 +235,23 @@ public class AuthServiceImpl implements AuthService {
             userMapper.updateById(existingUser);
         }
         UserDetails userDetails = userDetailsService.loadUserByUsername(roster.getEmployeeId());
-        return new AuthVO(jwtUtils.generateToken(userDetails), user.getName(), user.getRoleCode());
+        String name = existingUser == null ? roster.getName() : existingUser.getName();
+        String roleCode = existingUser == null ? roster.getRoleCode() : existingUser.getRoleCode();
+        return new AuthVO(jwtUtils.generateToken(userDetails), name, roleCode, getPermissionCodes(roleCode));
     }
 
     private String maskPhone(String phone) {
         return phone.replaceAll("(\\d{3})\\d{4}(\\d{4})", "$1****$2");
+    }
+
+    private List<String> getPermissionCodes(String roleCode) {
+        if (roleCode == null || roleCode.isBlank()) {
+            return List.of();
+        }
+        return permissionMapper.selectPermissionsByRoleCode(roleCode).stream()
+                .map(Permission::getPermCode)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
 }

@@ -152,7 +152,7 @@ Page({
         palletTotal: res.total || 0
       });
     } catch (error) {
-      showError(error, '托盘明细查询失败');
+      showError(error, '二维码明细查询失败');
     } finally {
       this.setData({ palletLoading: false });
     }

@@ -10,8 +10,8 @@ const OBJECT_OPTIONS = [
   { label: '筛网', value: '筛网' },
   { label: '化验', value: '化验数据' },
   { label: '检验标准', value: '检验标准' },
-  { label: '化验验收标准', value: '化验验收标准' },
-  { label: '化验验收标准数据', value: '化验验收标准数据' },
+  { label: '批量化验组', value: '批量化验组' },
+  { label: '批量化验组数据', value: '批量化验组数据' },
   { label: '员工名册', value: '员工名册' }
 ];
 

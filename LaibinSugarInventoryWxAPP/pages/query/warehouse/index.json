@@ -1,10 +1,10 @@
 {
-    "navigationBarTitleText":  "搴撲綅鏌ヨ",
-    "usingComponents":  {
-                            "page-shell":  "../../../components/page-shell/page-shell",
-                            "page-header":  "../../../components/page-header/page-header",
-                            "status-tag":  "../../../components/status-tag/status-tag",
-                            "empty-state":  "../../../components/empty-state/empty-state",
-                            "query-pager":  "../../../components/query-pager/query-pager"
-                        }
+  "navigationBarTitleText": "库位查询",
+  "usingComponents": {
+    "page-shell": "../../../components/page-shell/page-shell",
+    "page-header": "../../../components/page-header/page-header",
+    "status-tag": "../../../components/status-tag/status-tag",
+    "empty-state": "../../../components/empty-state/empty-state",
+    "query-pager": "../../../components/query-pager/query-pager"
+  }
 }

@@ -19,6 +19,9 @@ import com.Laibin.SugarInventory.domain.dto.CreateSemiPrepareTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.CreateTransferTaskItemDTO;
 import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductActivateDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductBindDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductPoolQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.InStockRequestDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletQrExportDTO;
@@ -50,6 +53,7 @@ import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
 import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
+import com.Laibin.SugarInventory.domain.vo.FixedProductQrPoolVO;
 import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
 import com.Laibin.SugarInventory.mapper.AssayMapper;
 import com.Laibin.SugarInventory.mapper.InventoryMapper;
@@ -115,6 +119,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     private static final String LEFT_SIDE = "左";
     private static final String RIGHT_SIDE = "右";
     private static final String BATCH_REMARK_PREFIX = "平面图操作批次";
+    private static final String FIXED_PRODUCT_ACTIVATE_REMARK = "固定产品二维码打印并启用";
 
     @Autowired
     private ProductMapper productMapper;
@@ -216,6 +221,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         vo.setId(palletCode.getId());
         vo.setCode(palletCode.getCode());
         vo.setStatus(palletCode.getStatus());
+        vo.setFixedProductId(palletCode.getFixedProductId());
+        vo.setFixedModeEnabled(Boolean.TRUE.equals(palletCode.getFixedModeEnabled()));
         vo.setCreatedAt(palletCode.getCreatedAt());
         vo.setUpdatedAt(palletCode.getUpdatedAt());
 
@@ -229,6 +236,16 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             Product product = productMapper.selectById(palletCode.getProductId());
             if (product != null) {
                 vo.setProductName(product.getProductName());
+            }
+        }
+
+        if (palletCode.getFixedProductId() != null) {
+            Product fixedProduct = productMapper.selectById(palletCode.getFixedProductId());
+            if (fixedProduct != null) {
+                vo.setFixedProductName(fixedProduct.getProductName());
+                if (vo.getProductName() == null && "FREE".equalsIgnoreCase(palletCode.getStatus())) {
+                    vo.setProductName(fixedProduct.getProductName());
+                }
             }
         }
 
@@ -285,6 +302,82 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         } catch (IOException e) {
             throw new BusinessException("生成二维码标签 PDF 失败");
         }
+    }
+
+    @Override
+    @Transactional
+    public int bindFixedProductCodes(FixedProductBindDTO dto, Integer userId) {
+        Product product = productMapper.selectById(dto.getProductId());
+        if (product == null) {
+            throw new BusinessException("产品不存在");
+        }
+
+        int expectedCount = dto.getNum() == null ? 0 : dto.getNum();
+        if (expectedCount <= 0) {
+            throw new BusinessException("绑定数量必须大于 0");
+        }
+
+        List<PalletCode> palletCodes = this.baseMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<PalletCode>()
+                        .eq("status", "FREE")
+                        .isNull("fixed_product_id")
+                        .orderByAsc("updated_at")
+                        .orderByAsc("id")
+                        .last("limit " + expectedCount + " for update")
+        );
+
+        if (palletCodes.size() < expectedCount) {
+            throw new BusinessException("可用于初始化绑定的空闲二维码数量不足");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (PalletCode palletCode : palletCodes) {
+            palletCode.setFixedProductId(product.getId());
+            palletCode.setFixedModeEnabled(Boolean.TRUE);
+            palletCode.setUpdatedBy(userId);
+            palletCode.setUpdatedAt(now);
+            this.baseMapper.updateById(palletCode);
+        }
+        return palletCodes.size();
+    }
+
+    @Override
+    public byte[] generateFixedProductQrLabelPdf(PalletQrExportDTO dto) {
+        List<String> codes = normalizeAndValidateUniqueCodes(dto.getCodes());
+        List<PalletCode> palletCodes = new ArrayList<>(codes.size());
+        for (String code : codes) {
+            PalletCode palletCode = parseAndFind(code);
+            validateFixedProductPrintable(palletCode);
+            palletCodes.add(palletCode);
+        }
+        return renderFixedProductQrLabelPdf(palletCodes);
+    }
+
+    @Override
+    @Transactional
+    public byte[] activateFixedProductCodesAndGeneratePdf(FixedProductActivateDTO dto, Integer userId) {
+        List<String> codes = normalizeAndValidateUniqueCodes(dto.getCodes());
+        List<PalletCode> palletCodes = new ArrayList<>(codes.size());
+        Product product = null;
+        Integer fixedProductId = null;
+        for (String code : codes) {
+            PalletCode palletCode = parseAndFindForUpdate(code);
+            validateFixedProductPrintable(palletCode);
+            if (fixedProductId == null) {
+                fixedProductId = palletCode.getFixedProductId();
+                product = requireFixedProduct(fixedProductId);
+            } else if (!Objects.equals(fixedProductId, palletCode.getFixedProductId())) {
+                throw new BusinessException("打印并启用时只能选择同一产品的二维码");
+            }
+            palletCodes.add(palletCode);
+        }
+
+        byte[] pdf = renderFixedProductQrLabelPdf(palletCodes);
+        String productStatus = resolveInboundProductStatus(product.getStatus());
+        for (PalletCode palletCode : palletCodes) {
+            createInboundTaskForPallet(palletCode, product, productStatus, dto.getProductionDate(), userId, FIXED_PRODUCT_ACTIVATE_REMARK);
+        }
+        return pdf;
     }
 
     // 查询托盘当前库存位置：需要库存表存在 pallet_code_id
@@ -422,12 +515,28 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     @Transactional
     public PalletBindResultVO bindPalletAndCreateTask(BindPalletTaskDTO dto, Integer operatorId) {
         PalletCode palletCode = parseAndFindForUpdate(dto.getCode());
+        if (Boolean.TRUE.equals(palletCode.getFixedModeEnabled())) {
+            if ("FREE".equalsIgnoreCase(palletCode.getStatus())) {
+                throw new BusinessException("当前二维码属于固定产品模式，无需绑定产品，请在后台执行打印并启用");
+            }
+            if ("PENDING".equalsIgnoreCase(palletCode.getStatus())) {
+                throw new BusinessException("当前二维码已由后台启用并创建任务，无需重复创建");
+            }
+        }
         if (!"FREE".equalsIgnoreCase(palletCode.getStatus())) {
             throw new BusinessException("托盘当前状态不可绑定（仅允许 FREE 状态绑定）");
         }
         Product product = productMapper.selectById(dto.getProductId());
         if (product == null) {
             throw new BusinessException("产品不存在");
+        }
+        if (Boolean.TRUE.equals(palletCode.getFixedModeEnabled())) {
+            if (palletCode.getFixedProductId() == null) {
+                throw new BusinessException("当前二维码未配置固定产品");
+            }
+            if (!Objects.equals(palletCode.getFixedProductId(), dto.getProductId())) {
+                throw new BusinessException("固定产品二维码不能绑定到其他产品");
+            }
         }
         Integer screenMeshId = product.getScreenMeshId();
 
@@ -623,6 +732,16 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         long offset = (pageNum - 1) * pageSize;
         List<PalletCodePageVO> records = palletCodeQueryMapper.pagePalletCodes(queryDTO, offset, pageSize);
         Long total = palletCodeQueryMapper.countPalletCodes(queryDTO);
+        return new PageResult<>(total, records);
+    }
+
+    @Override
+    public PageResult<FixedProductQrPoolVO> pageFixedProductPool(FixedProductPoolQueryDTO queryDTO) {
+        long pageNum = queryDTO.getPage() == null || queryDTO.getPage() <= 0 ? 1L : queryDTO.getPage();
+        long pageSize = queryDTO.getSize() == null || queryDTO.getSize() <= 0 ? 10L : queryDTO.getSize();
+        long offset = (pageNum - 1) * pageSize;
+        List<FixedProductQrPoolVO> records = palletCodeQueryMapper.pageFixedProductPool(queryDTO, offset, pageSize);
+        Long total = palletCodeQueryMapper.countFixedProductPool(queryDTO);
         return new PageResult<>(total, records);
     }
 
@@ -1247,6 +1366,131 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             throw new BusinessException("托盘码不能为空");
         }
         return code;
+    }
+
+    private byte[] renderFixedProductQrLabelPdf(List<PalletCode> palletCodes) {
+        List<PalletQrLabelPdfRenderer.LabelPayload> labels = new ArrayList<>(palletCodes.size());
+        for (PalletCode palletCode : palletCodes) {
+            Product product = requireFixedProduct(palletCode.getFixedProductId());
+            labels.add(new PalletQrLabelPdfRenderer.LabelPayload(palletCode.getCode(), product.getProductName()));
+        }
+        try {
+            return PalletQrLabelPdfRenderer.renderA4LabelsWithTitle(labels);
+        } catch (IOException e) {
+            throw new BusinessException("生成固定产品二维码标签 PDF 失败");
+        }
+    }
+
+    private Product requireFixedProduct(Integer productId) {
+        Product product = productMapper.selectById(productId);
+        if (product == null) {
+            throw new BusinessException("固定产品不存在");
+        }
+        return product;
+    }
+
+    private String resolveInboundProductStatus(String productStatus) {
+        if ("半成品".equals(productStatus) || "成品".equals(productStatus)) {
+            return productStatus;
+        }
+        throw new BusinessException("产品状态非法，无法启用固定产品二维码");
+    }
+
+    private PalletBindResultVO createInboundTaskForPallet(PalletCode palletCode,
+                                                          Product product,
+                                                          String productStatus,
+                                                          LocalDate productionDate,
+                                                          Integer operatorId,
+                                                          String remark) {
+        Integer screenMeshId = product.getScreenMeshId();
+
+        int currentCycleNo = getCurrentCycleNo(palletCode);
+        cancelPreviousCyclePendingTasks(palletCode, operatorId, "新轮次开始前自动收尾");
+        long pending = palletTaskMapper.countPendingInTasks(palletCode.getId(), currentCycleNo);
+        if (pending > 0) {
+            throw new BusinessException("该托盘已存在未完成的入库任务");
+        }
+
+        int nextCycle = currentCycleNo + 1;
+        String taskType;
+        if ("半成品".equals(productStatus)) {
+            taskType = "SEMI_IN";
+        } else if ("成品".equals(productStatus)) {
+            taskType = "FINISH_IN";
+        } else {
+            throw new BusinessException("产品状态非法");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        PalletTask task = new PalletTask();
+        task.setPalletCodeId(palletCode.getId());
+        task.setTaskType(taskType);
+        task.setStatus("PENDING");
+        task.setProductId(product.getId());
+        task.setProductStatus(productStatus);
+        task.setProductionDate(productionDate);
+        task.setScreenMeshId(screenMeshId);
+        task.setAssayId(null);
+        task.setCreatedBy(operatorId);
+        task.setCreatedAt(now);
+        task.setRemark(remark);
+        task.setCycleNo(nextCycle);
+        palletTaskMapper.insert(task);
+
+        palletCode.setStatus("PENDING");
+        palletCode.setProductId(product.getId());
+        palletCode.setProductStatus(productStatus);
+        palletCode.setProductionDate(productionDate);
+        palletCode.setScreenMeshId(screenMeshId);
+        palletCode.setCurrentCycleNo(nextCycle);
+        palletCode.setUpdatedBy(operatorId);
+        palletCode.setUpdatedAt(now);
+        this.updateById(palletCode);
+
+        PalletFlowRecord flow = new PalletFlowRecord();
+        flow.setPalletCodeId(palletCode.getId());
+        flow.setTaskId(task.getId());
+        flow.setOperationType("半成品".equals(productStatus) ? "SEMI_BIND" : "FINISH_BIND");
+        flow.setOperationName("半成品".equals(productStatus) ? "绑定半成品" : "绑定成品");
+        flow.setOperationTime(now);
+        flow.setOperatorId(operatorId);
+        flow.setProductId(product.getId());
+        flow.setProductStatus(productStatus);
+        flow.setAssayId(null);
+        flow.setCycleNo(nextCycle);
+        flow.setRemark(remark);
+        palletFlowRecordMapper.insert(flow);
+
+        PalletBindResultVO vo = new PalletBindResultVO();
+        vo.setPalletCodeId(palletCode.getId());
+        vo.setCode(palletCode.getCode());
+        vo.setPalletStatus(palletCode.getStatus());
+        vo.setTaskId(task.getId());
+        vo.setTaskType(task.getTaskType());
+        vo.setTaskStatus(task.getStatus());
+        vo.setProductId(product.getId());
+        vo.setProductName(product.getProductName());
+        vo.setProductType(product.getProductType());
+        vo.setProductStatus(productStatus);
+        vo.setScreenMeshId(screenMeshId);
+        if (screenMeshId != null) {
+            ScreenMesh sm = screenMeshMapper.selectById(screenMeshId);
+            vo.setScreenMeshName(sm != null ? sm.getMeshName() : null);
+        }
+        vo.setProductionDate(productionDate);
+        vo.setCreatedAt(task.getCreatedAt());
+        vo.setRemark(remark);
+        return vo;
+    }
+
+    private void validateFixedProductPrintable(PalletCode palletCode) {
+        if (!Boolean.TRUE.equals(palletCode.getFixedModeEnabled()) || palletCode.getFixedProductId() == null) {
+            throw new BusinessException("二维码未启用固定产品模式，不能在固定产品二维码池中打印");
+        }
+        if (!"FREE".equalsIgnoreCase(palletCode.getStatus())) {
+            throw new BusinessException("二维码 " + palletCode.getCode() + " 当前状态不是 FREE，不能重新打印");
+        }
     }
 
     private void validateSemiPalletForOutFlow(PalletCode palletCode) {

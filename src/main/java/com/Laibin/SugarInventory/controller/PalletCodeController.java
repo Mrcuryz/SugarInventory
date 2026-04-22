@@ -4,6 +4,9 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.GeneratePalletCodeDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductActivateDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductBindDTO;
+import com.Laibin.SugarInventory.domain.dto.FixedProductPoolQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletQrExportDTO;
 import com.Laibin.SugarInventory.domain.dto.BindPalletTaskDTO;
@@ -26,6 +29,7 @@ import com.Laibin.SugarInventory.domain.dto.WarehouseMapSlotInboundDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
 import com.Laibin.SugarInventory.domain.vo.PalletCodeInfoVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodePageVO;
+import com.Laibin.SugarInventory.domain.vo.FixedProductQrPoolVO;
 import com.Laibin.SugarInventory.domain.vo.PalletAssayVO;
 import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.PalletBindResultVO;
@@ -89,6 +93,46 @@ public class PalletCodeController {
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
         }
+    }
+
+    @Operation(summary = "固定产品二维码批量绑定", description = "按数量批量将空闲二维码初始化绑定到指定产品")
+    @PostMapping("/fixed-product/bind")
+    public Result<Integer> bindFixedProduct(@RequestBody @Valid FixedProductBindDTO dto,
+                                            @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            int count = palletCodeService.bindFixedProductCodes(dto, loginUser.getUser().getId());
+            return Result.success(count);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "固定产品二维码池查询", description = "按产品、状态和是否只看可打印二维码进行筛选")
+    @GetMapping("/fixed-product/pool")
+    public Result<PageResult<FixedProductQrPoolVO>> pageFixedProductPool(FixedProductPoolQueryDTO queryDTO) {
+        try {
+            PageResult<FixedProductQrPoolVO> page = palletCodeService.pageFixedProductPool(queryDTO);
+            return Result.success(page);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
+    @Operation(summary = "批量导出固定产品二维码标签 PDF", description = "仅允许导出固定产品模式且状态为 FREE 的二维码标签")
+    @PostMapping("/fixed-product/qrcode-labels/pdf")
+    public void batchDownloadFixedProductQrLabelPdf(@RequestBody @Valid PalletQrExportDTO dto,
+                                                    HttpServletResponse response) throws IOException {
+        byte[] pdf = palletCodeService.generateFixedProductQrLabelPdf(dto);
+        writeDownload(response, "application/pdf", "fixed-product-qrcode-labels-" + LocalDate.now() + ".pdf", pdf);
+    }
+
+    @Operation(summary = "固定产品二维码打印并启用", description = "打印固定产品二维码标签，并立即创建对应入库任务投入本轮业务")
+    @PostMapping("/fixed-product/activate/pdf")
+    public void activateFixedProductQrCodes(@RequestBody @Valid FixedProductActivateDTO dto,
+                                            @AuthenticationPrincipal LoginUser loginUser,
+                                            HttpServletResponse response) throws IOException {
+        byte[] pdf = palletCodeService.activateFixedProductCodesAndGeneratePdf(dto, loginUser.getUser().getId());
+        writeDownload(response, "application/pdf", "fixed-product-qrcodes-activated-" + LocalDate.now() + ".pdf", pdf);
     }
 
     @Operation(summary = "托盘入库任务列表", description = "托盘任务分页查询接口")

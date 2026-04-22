@@ -51,6 +51,7 @@ public class EmployeeRosterController {
     }
 
     @Operation(summary = "根据条件（可选）查询员工名册")
+    @PreAuthorize("hasAuthority('rbac:user:view')")
     @PostMapping("/query")
     public Result<PageResult<EmployeeRoster>> queryEmployee(@RequestBody EmployeeQueryDTO queryDTO) {
         PageResult<EmployeeRoster> result = employeeService.queryEmployee(queryDTO);

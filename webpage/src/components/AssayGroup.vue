@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="acceptance-standard">
     <!-- 搜索区域 -->
     <el-card class="search-card" style="max-width: 1200px">
@@ -6,7 +6,7 @@
         <el-form-item label="标准名称">
           <el-input
               v-model="searchForm.standardName"
-              placeholder="请输入验收标准名称"
+              placeholder="请输入批量化验组名称"
               clearable
               style="width: 200px"
           />
@@ -22,11 +22,11 @@
     <el-card class="table-card" style="max-width: 1200px">
       <div class="table-toolbar">
         <div class="table-toolbar-left">
-          <el-button type="primary" @click="openDialog('新增验收标准')">新增</el-button>
+          <el-button type="primary" @click="openDialog('新增批量化验组')">新增</el-button>
         </div>
       </div>
 
-      <!-- 验收标准表格 -->
+      <!-- 批量化验组表格 -->
       <el-table
           :data="standardList"
           style="width: 100%"
@@ -35,7 +35,7 @@
           v-loading="loading"
       >
         <el-table-column prop="id" label="ID" width="80" align="center"/>
-        <el-table-column prop="standardName" label="验收标准名称" min-width="200">
+        <el-table-column prop="standardName" label="批量化验组名称" min-width="200">
         </el-table-column>
         <el-table-column label="关联产品" min-width="300" class-name="related-products-column">
           <template #default="{ row }">
@@ -59,7 +59,7 @@
             <el-button
                 type="primary"
                 size="small"
-                @click="openDialog('编辑验收标准', row)"
+                @click="openDialog('编辑批量化验组', row)"
             >
               编辑
             </el-button>
@@ -105,10 +105,10 @@
           class="dialog-form"
       >
         <!-- 标准名称 -->
-        <el-form-item label="验收标准名称" prop="standardName" required>
+        <el-form-item label="批量化验组名称" prop="standardName" required>
           <el-input
               v-model="standardForm.standardName"
-              placeholder="请输入验收标准名称"
+              placeholder="请输入批量化验组名称"
               clearable
               max-length="50"
               show-word-limit
@@ -181,23 +181,23 @@ import * as XLSX from 'xlsx'
 import {getAssay, getSemiProduct, getStProduct} from "@/api/assay";
 
 // -------------------------- 接口请求（需根据实际项目替换）--------------------------
-// 模拟接口：获取验收标准列表
+// 模拟接口：获取批量化验组列表
 const getAcceptanceStandardList = async (params) => {
   loading.value = true
   return getAssayGroup(params)
 }
 
-// 模拟接口：新增验收标准
+// 模拟接口：新增批量化验组
 const addAcceptanceStandard = async (data) => {
   return addAssayGroup(data)
 }
 
-// 模拟接口：编辑验收标准
+// 模拟接口：编辑批量化验组
 const editAcceptanceStandard = async (data) => {
   return updateAssayGroup(data.id, data)
 }
 
-// 模拟接口：删除验收标准
+// 模拟接口：删除批量化验组
 const deleteAcceptanceStandard = async (id) => {
   return deleteAssayGroup(id)
 }
@@ -220,7 +220,7 @@ const cascaderProps = reactive({
   children: 'children'
 })
 
-// 验收标准列表
+// 批量化验组列表
 const standardList = ref([])
 
 // 加载状态
@@ -253,7 +253,7 @@ const standardForm = reactive({
 // 表单校验规则
 const formRules = reactive({
   standardName: [
-    {required: true, message: '请输入验收标准名称', trigger: 'blur'},
+    {required: true, message: '请输入批量化验组名称', trigger: 'blur'},
     {max: 50, message: '标准名称长度不能超过50个字符', trigger: 'blur'}
   ],
   relatedProducts: [
@@ -289,7 +289,7 @@ const StProduct = async () => {
   StProductList.value = res.data
 }
 // -------------------------- 方法定义 --------------------------
-// 获取验收标准列表
+// 获取批量化验组列表
 const getStandardList = async () => {
   try {
     loading.value = true
@@ -516,3 +516,4 @@ onMounted(() => {
   padding: 3px 8px;
 }
 </style>
+

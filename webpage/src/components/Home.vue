@@ -452,7 +452,7 @@ import dayjs from "dayjs";
 
 const router = useRouter()
 const quickEntries = [
-  {title: '托盘码管理', desc: '生成、查看和追溯托盘码', path: '/pallet-code/list'},
+  {title: '二维码管理', desc: '生成、查看和追溯二维码', path: '/pallet-code/list'},
   {title: '半成品入库任务', desc: '处理半成品入库确认', path: '/pallet-task/semi/in'},
   {title: '成品入库任务', desc: '绑定半成品并确认入库', path: '/pallet-task/finish/in'},
   {title: '半成品出库任务', desc: '普通出库与备料池转入', path: '/pallet-task/semi/out'},
@@ -1599,9 +1599,9 @@ const dashboardStats = computed(() => {
   const normal = CapacityList.value.filter(item => item.status === '正常').length
   return [
     {label: '库位总数', value: total, hint: '当前纳入统计的库位'},
-    {label: '正常库位', value: normal, hint: '可正常周转使用'},
+    {label: '正常库位', value: normal, hint: '正在正常使用中'},
     {label: '临期预警', value: warning, hint: '需要优先关注'},
-    {label: '满仓库位', value: full, hint: '容量已接近或达到上限'}
+    {label: '满仓库位', value: full, hint: '容量已达到上限'}
   ]
 })
 const getWarehouseStatusKey = (status) => {

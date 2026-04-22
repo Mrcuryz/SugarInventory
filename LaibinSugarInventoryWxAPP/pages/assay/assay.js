@@ -22,9 +22,9 @@ Page({
     },
     selectTypeOptions: [
       { id: 1, name: '产品' },
-      { id: 2, name: '验收标准' }
+      { id: 2, name: '批量化验组' }
     ],
-    // 验收标准选择器数据
+    // 批量化验组选择器数据
     standardOptions: [],
     totalPages: 1,
     currentPage: 1,
@@ -121,7 +121,7 @@ Page({
     });
     this.debouncedLoadData();
   },
-// 选择类型变更（1=产品，2=验收标准）
+// 选择类型变更（1=产品，2=批量化验组）
 onSelectTypeChange(e) {
   const index = e.detail.value;
   const selectType =  this.data.selectTypeOptions[index];
@@ -214,7 +214,7 @@ onSelectTypeChange(e) {
       }
     });
   },
-  // 初始化验收标准数据
+  // 初始化批量化验组数据
   initStandardOptions() {
     request('/api/assayGroup/query', 'POST', {
       page: 1,
@@ -227,7 +227,7 @@ onSelectTypeChange(e) {
       }
     })
   },
-  // 验收标准选择变更
+  // 批量化验组选择变更
   onStandardChange(e) {
     const index = e.detail.value;
     const standard = this.data.standardOptions[index];

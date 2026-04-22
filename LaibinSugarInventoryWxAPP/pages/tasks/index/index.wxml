@@ -52,7 +52,7 @@
     <view class="modal-mask" bindtap="closeConfirm" catchtouchmove="noop"></view>
     <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">确认入库</view>
-      <view class="modal-code">已选 {{selectedCodes.length}} 个托盘</view>
+      <view class="modal-code">已选 {{selectedCodes.length}} 个二维码</view>
       <view class="field">
         <text class="label">入库库位</text>
         <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />

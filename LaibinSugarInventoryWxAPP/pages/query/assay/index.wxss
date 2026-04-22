@@ -98,11 +98,20 @@
   height: 26rpx;
 }
 
-.standard-text {
+.standard-card {
   margin-top: 16rpx;
   padding: 16rpx;
-  border-radius: 16rpx;
+  border-radius: 18rpx;
   background: #f6f9fe;
+}
+
+.standard-label {
+  font-size: 22rpx;
+  color: #7a869a;
+}
+
+.standard-text {
+  margin-top: 8rpx;
   font-size: 24rpx;
   line-height: 1.45;
   color: #526072;

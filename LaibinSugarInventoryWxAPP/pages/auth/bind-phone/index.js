@@ -1,6 +1,6 @@
 import { bindPhone, wxLoginCode } from '../../../api/auth';
 import { setAuth } from '../../../utils/storage';
-import { showError, showToast } from '../../../utils/toast';
+import { showToast } from '../../../utils/toast';
 
 Page({
   data: {
@@ -11,7 +11,7 @@ Page({
     if (e.detail.errMsg !== 'getPhoneNumber:ok') {
       wx.showModal({
         title: '授权未完成',
-        content: '可以改用工号绑定完成身份校验。',
+        content: '如果当前微信手机号无法使用，可以改用工号绑定完成身份校验。',
         confirmText: '工号绑定',
         success: (res) => {
           if (res.confirm) wx.redirectTo({ url: '/pages/auth/bind-manual/index' });
@@ -47,4 +47,3 @@ Page({
     wx.redirectTo({ url: '/pages/auth/bind-manual/index' });
   }
 });
-

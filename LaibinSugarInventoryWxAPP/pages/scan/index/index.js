@@ -22,10 +22,10 @@ import { getScanDefaults, pushRecentScan, setScanDefaults } from '../../../utils
 import { confirm, showError, showToast } from '../../../utils/toast';
 
 const MODES = [
-  { key: 'in', label: '入库', desc: '扫码绑定托盘，创建待入库任务。' },
-  { key: 'out', label: '出库', desc: '扫码在库托盘，创建出库任务。' },
-  { key: 'prepare', label: '转入备料池', desc: '扫码半成品托盘，创建转入备料池任务。' },
-  { key: 'transfer', label: '调拨', desc: '扫码在库托盘，指定目标库位创建调拨任务。' }
+  { key: 'in', label: '入库', desc: '扫码创建待入库任务。固定产品二维码请先在后台打印并启用。' },
+  { key: 'out', label: '出库', desc: '扫码在库二维码，创建出库任务。' },
+  { key: 'prepare', label: '转入备料池', desc: '扫码半成品二维码，创建转入备料池任务。' },
+  { key: 'transfer', label: '调拨', desc: '扫码在库二维码，指定目标库位创建调拨任务。' }
 ];
 
 function today() {
@@ -195,6 +195,15 @@ Page({
     const code = pallet.code;
     const tasksRes = await getTaskList({ code, status: 'PENDING', pageNum: 1, pageSize: 1 });
     const hasPending = Boolean(tasksRes && tasksRes.records && tasksRes.records.length);
+    const fixedModeEnabled = Boolean(pallet.fixedModeEnabled);
+    if (mode === 'in') {
+      if (fixedModeEnabled && pallet.status === 'FREE') {
+        return { valid: false, message: '当前码属于固定产品模式，无需绑定产品，请先在后台打印并启用' };
+      }
+      if (fixedModeEnabled && (hasPending || pallet.status === 'PENDING')) {
+        return { valid: false, message: '当前码已由后台启用并创建任务，无需重复创建' };
+      }
+    }
     if (hasPending) {
       return { valid: false, message: '该码已有待处理任务' };
     }
@@ -237,7 +246,7 @@ Page({
       return { valid: true };
     }
 
-    return { valid: false, message: '当前模式不支持该托盘' };
+    return { valid: false, message: '当前模式不支持该二维码' };
   },
 
   async isActivePreparePallet(code) {
@@ -265,7 +274,7 @@ Page({
       if (this.data.pool.some(item => item.code === code)) {
         this.updateSummary({ duplicate: 1 });
         this.createFeedback('warning', `${code} 已在本次作业中，无需重复扫码`);
-        showToast('本次作业已扫描该托盘');
+        showToast('本次作业已扫描该二维码');
         vibrate();
         return;
       }
@@ -428,7 +437,7 @@ Page({
     if (result.duplicated) {
       this.updateSummary({ duplicate: 1 });
       this.createFeedback('warning', `${task.code} 已在本次作业中`);
-      showToast('本次作业已扫描该托盘');
+      showToast('本次作业已扫描该二维码');
       return;
     }
     this.setData({

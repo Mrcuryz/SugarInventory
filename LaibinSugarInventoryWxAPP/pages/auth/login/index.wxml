@@ -1,32 +1,98 @@
 <page-shell>
   <view class="login-page">
-    <view class="brand">
-      <image class="logo" src="/assets/logo.png" mode="aspectFit"></image>
-      <view class="brand-copy">
-        <view class="eyebrow">现场作业端</view>
-        <view class="title">冰糖仓储</view>
-        <view class="subtitle">扫码作业、任务处理、托盘追溯</view>
+    <view class="bg-circle"></view>
+    <view class="bg-circle-ring"></view>
+
+    <view class="dot-grid">
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
       </view>
     </view>
 
-    <view class="panel">
-      <view class="panel-title">员工登录</view>
-      <view class="panel-desc">使用微信身份进入系统。首次使用需要完成员工身份绑定。</view>
-      <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">
-        {{loading ? '登录中' : '一键微信登录'}}
+    <view class="hero">
+      <view class="logo-card">
+        <image class="logo-image" src="/assets/logo.png" mode="aspectFit"></image>
+      </view>
+      <view class="hero-chip">现场作业端</view>
+      <view class="hero-title">数字仓储平台</view>
+      <view class="hero-subtitle">广西糖罐子食品</view>
+      <view class="hero-desc">现场扫码、任务处理、二维码追溯</view>
+    </view>
+
+    <view class="login-card">
+      <view class="card-title">欢迎登录</view>
+      <view class="card-desc">使用微信快速登录，首次使用请先完成绑定。</view>
+
+      <button class="login-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">
+        <image class="login-btn-icon" src="/assets/icons/login.png" mode="aspectFit"></image>
+        <text>{{loading ? '登录中...' : '微信一键登录'}}</text>
       </button>
-      <view class="bind-row">
-        <button class="link-btn" bindtap="goBindPhone">手机号绑定</button>
-        <button class="link-btn" bindtap="goBindManual">工号绑定</button>
+
+      <view class="sub-actions">
+        <button class="sub-btn" bindtap="goBindPhone">
+          <image class="sub-btn-svg" src="/assets/icons-line/icon-user.svg" mode="aspectFit"></image>
+          <text>手机号绑定</text>
+        </button>
+        <button class="sub-btn" bindtap="goBindManual">
+          <image class="sub-btn-svg" src="/assets/icons-line/icon-user.svg" mode="aspectFit"></image>
+          <text>工号绑定</text>
+        </button>
       </view>
     </view>
 
-    <view class="guide">
-      <view class="guide-title">首次使用</view>
-      <view class="guide-item">1. 员工信息需要先由管理员导入系统。</view>
-      <view class="guide-item">2. 可用微信手机号完成绑定。</view>
-      <view class="guide-item">3. 手机号不一致时，可使用工号和姓名校验绑定。</view>
+    <view class="guide-card">
+      <view class="guide-header">
+        <view class="guide-badge">
+          <image class="guide-badge-icon" src="/assets/icons-line/icon-user.svg" mode="aspectFit"></image>
+        </view>
+        <view class="guide-title">首次使用</view>
+      </view>
+
+      <view class="guide-list">
+        <view class="guide-item">
+          <view class="guide-index">1</view>
+          <view class="guide-text">员工信息需先由管理员导入系统。</view>
+        </view>
+        <view class="guide-item">
+          <view class="guide-index">2</view>
+          <view class="guide-text">可使用微信手机号完成快速绑定。</view>
+        </view>
+        <view class="guide-item">
+          <view class="guide-index">3</view>
+          <view class="guide-text">手机号不一致时，可改用工号和姓名绑定。</view>
+        </view>
+      </view>
+
+      <view class="guide-illustration">
+        <view class="guide-ill-panel">
+          <view class="guide-ill-clip"></view>
+        </view>
+        <view class="guide-ill-line line-one"></view>
+        <view class="guide-ill-line line-two"></view>
+        <view class="guide-ill-line line-three"></view>
+        <view class="guide-ill-check">
+          <view class="guide-ill-hook hook-one"></view>
+          <view class="guide-ill-hook hook-two"></view>
+        </view>
+      </view>
     </view>
+
+    <view class="bottom-wave wave-back"></view>
+    <view class="bottom-wave wave-front"></view>
   </view>
 </page-shell>
-

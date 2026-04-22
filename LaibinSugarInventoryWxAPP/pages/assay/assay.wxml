@@ -130,7 +130,7 @@
     </view>
 
     <scroll-view class="modal-body" scroll-y>
-       <!-- 1. 选择类型切换（picker组件，1=产品，2=验收标准） -->
+       <!-- 1. 选择类型切换（picker组件，1=产品，2=批量化验组） -->
        <view class="form-item">
         <text class="required">*</text>
         <text class="label">选择类型</text>
@@ -154,7 +154,7 @@
       </view>
       <view class="form-item" wx:if="{{currentLabData.selectType === 2}}">
         <text class="required">*</text>
-        <text class="label">验收标准</text>
+        <text class="label">批量化验组</text>
         <picker mode="selector" 
           range="{{standardOptions}}" 
           range-key="standardName"
@@ -162,7 +162,7 @@
           bindchange="onStandardChange"
         >
           <view class="picker">
-            {{currentLabData.standardName || '请选择验收标准'}}
+            {{currentLabData.standardName || '请选择批量化验组'}}
           </view>
         </picker>
       </view>

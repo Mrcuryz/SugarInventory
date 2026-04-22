@@ -1,12 +1,60 @@
 <page-shell>
-  <page-header title="手机号绑定" subtitle="授权微信手机号，与员工名册中的手机号进行匹配。" showBack="{{true}}" />
-  <view class="bind-card">
-    <view class="title">推荐方式</view>
-    <view class="desc">手机号一致时可快速完成绑定，后续即可一键登录。</view>
-    <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" loading="{{loading}}" disabled="{{loading}}">
-      授权手机号并绑定
-    </button>
-    <button class="plain-btn" bindtap="goManual">手机号不一致，使用工号绑定</button>
+  <view class="bind-page">
+    <view class="bg-circle"></view>
+    <view class="bg-circle-ring"></view>
+
+    <view class="dot-grid">
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+      <view class="dot-row">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+    </view>
+
+    <page-header title="手机号绑定" subtitle="优先使用微信手机号完成快速绑定。" showBack="{{true}}" />
+
+    <view class="hero">
+      <view class="hero-badge">推荐方式</view>
+      <view class="hero-title">快速完成身份绑定</view>
+      <view class="hero-desc">当微信手机号与员工名册一致时，可直接授权并完成绑定，后续即可一键登录。</view>
+    </view>
+
+    <view class="main-card">
+      <view class="card-title">授权手机号并绑定</view>
+      <view class="card-desc">点击下方按钮后，系统会校验微信手机号与员工名册中的手机号是否一致。</view>
+
+      <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" loading="{{loading}}" disabled="{{loading}}">
+        <image class="btn-icon" src="/assets/icons/login.png" mode="aspectFit"></image>
+        <text>{{loading ? '绑定中...' : '授权手机号并绑定'}}</text>
+      </button>
+
+      <button class="secondary-btn" bindtap="goManual">手机号不一致，改用工号绑定</button>
+    </view>
+
+    <view class="tips-card">
+      <view class="tips-title">绑定说明</view>
+      <view class="tips-item">
+        <view class="tips-index">1</view>
+        <view class="tips-text">员工手机号必须已在后台员工名册中维护。</view>
+      </view>
+      <view class="tips-item">
+        <view class="tips-index">2</view>
+        <view class="tips-text">授权失败或号码不一致时，可直接切换到工号绑定。</view>
+      </view>
+      <view class="tips-item">
+        <view class="tips-index">3</view>
+        <view class="tips-text">绑定成功后，将自动返回工作台并保留登录状态。</view>
+      </view>
+    </view>
   </view>
 </page-shell>
-

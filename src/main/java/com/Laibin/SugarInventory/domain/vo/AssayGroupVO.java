@@ -1,28 +1,24 @@
 package com.Laibin.SugarInventory.domain.vo;
 
 import com.Laibin.SugarInventory.domain.po.Product;
-import com.Laibin.SugarInventory.domain.po.SemiProductRecord;
-import com.baomidou.mybatisplus.annotation.TableField;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@Schema(description = "化验验收标准返回VO")
+@Schema(description = "批量化验组返回 VO")
 public class AssayGroupVO {
     private Integer id;
 
-    @Schema(description = "产品列表", example = "1")
+    @Schema(description = "关联产品列表", example = "1")
     private List<Product> relatedProductList;
 
-    @Schema(description = "产品ID", example = "1")
+    @Schema(description = "关联产品 ID 列表", example = "1,2,3")
     private String relatedProducts;
 
-    @Schema(description = "标准名称", example = "冰糖")
+    @Schema(description = "批量化验组名称", example = "中粮黄冰糖批量组")
     private String standardName;
 
     @Schema(description = "创建时间", example = "2025-02-27")
@@ -34,7 +30,7 @@ public class AssayGroupVO {
     @Schema(description = "更新人")
     private String updateName;
 
-    @Schema(description = "修改时间", example = "2025-02-27")
+    @Schema(description = "更新时间", example = "2025-02-27")
     private LocalDate updatedAt;
 
     @Schema(description = "备注")

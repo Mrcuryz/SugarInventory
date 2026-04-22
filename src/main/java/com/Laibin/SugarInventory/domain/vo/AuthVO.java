@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.domain.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,4 +19,11 @@ public class AuthVO {
 
     @Schema(description = "角色代码", example = "ADMIN")
     private String roleCode;
+
+    @Schema(description = "权限编码集合")
+    private List<String> permissionCodes;
+
+    public AuthVO(String token, String name, String roleCode) {
+        this(token, name, roleCode, List.of());
+    }
 }

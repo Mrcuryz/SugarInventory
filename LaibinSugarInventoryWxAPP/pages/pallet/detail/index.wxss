@@ -53,7 +53,8 @@
 
 .grid-card,
 .location-grid,
-.assay-meta-grid {
+.assay-meta-grid,
+.assay-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16rpx;
@@ -69,7 +70,8 @@
 }
 
 .location-item,
-.assay-meta-item {
+.assay-meta-item,
+.assay-summary-item {
   padding: 20rpx;
   border-radius: 18rpx;
   background: #f7f9fc;
@@ -130,7 +132,8 @@
 }
 
 .location-grid,
-.assay-meta-grid {
+.assay-meta-grid,
+.assay-summary-grid {
   margin-top: 18rpx;
 }
 
@@ -182,6 +185,27 @@
   font-weight: 800;
   color: #246bfe;
   text-align: right;
+}
+
+.metric-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10rpx;
+}
+
+.metric-reason {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.45;
+  color: #c2410c;
+}
+
+.assay-link {
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  font-weight: 800;
+  color: #246bfe;
 }
 
 .flow-item {

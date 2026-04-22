@@ -2,12 +2,21 @@ import { getProfile } from '../../../api/auth';
 import { logout, requireLogin } from '../../../utils/auth';
 import { confirm, showToast } from '../../../utils/toast';
 
+function getBindMethodLabel(userInfo = {}) {
+  if (userInfo.bindMethod === 'WECHAT') return '手机号绑定';
+  if (userInfo.bindMethod === 'MANUAL') return '工号绑定';
+  if (userInfo.mobile || userInfo.phone) return '手机号已登记';
+  return '未绑定';
+}
+
 function buildAccountMeta(userInfo = {}) {
+  const mobile = userInfo.mobile || userInfo.phone || '';
+
   return [
-    { label: '角色', value: userInfo.roleCode || '未分配' },
-    { label: '手机号', value: userInfo.phone || '未绑定' },
-    { label: '绑定方式', value: userInfo.phone ? '手机号绑定' : '工号绑定' },
-    { label: '当前版本', value: 'P1 查询版' }
+    { label: '角色', value: userInfo.roleName || userInfo.roleCode || '未分配' },
+    { label: '手机号', value: mobile || '未绑定' },
+    { label: '绑定方式', value: getBindMethodLabel(userInfo) },
+    { label: '当前版本', value: 'v2.0' }
   ];
 }
 
@@ -16,9 +25,9 @@ Page({
     userInfo: {},
     accountMeta: buildAccountMeta(),
     menus: [
-      { key: 'help', title: '帮助中心', desc: '查看登录、扫码、任务处理说明。', icon: '/assets/icons-line/icon-help.svg' },
-      { key: 'contact', title: '联系管理员', desc: '员工信息异常、权限问题可联系管理员。', icon: '/assets/icons-line/icon-contact.svg' },
-      { key: 'version', title: '版本信息', desc: 'P1 查询版：托盘、库存、化验和作业记录查询。', icon: '/assets/icons-line/icon-version.svg' }
+      { key: 'help', title: '帮助中心', desc: '查看登录、扫码、任务处理等操作说明。', icon: '/assets/icons-line/icon-help.svg' },
+      { key: 'contact', title: '联系管理员', desc: '员工信息异常或权限问题，请联系系统管理员。', icon: '/assets/icons-line/icon-contact.svg' },
+      { key: 'version', title: '版本信息', desc: 'v2.0：支持二维码、库存、化验和作业记录查询。', icon: '/assets/icons-line/icon-version.svg' }
     ]
   },
 
@@ -50,10 +59,6 @@ Page({
     }
     if (key === 'contact') {
       showToast('请联系仓储系统管理员');
-      return;
-    }
-    if (key === 'version') {
-      showToast('当前为 P1 查询版');
     }
   },
 

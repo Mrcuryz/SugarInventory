@@ -9,6 +9,19 @@ const baseURL = '/api';
 const instance = axios.create({baseURL})
 
 import {useTokenStore} from '@/stores/token.js'
+
+const redirectToLogin = () => {
+    try {
+        localStorage.removeItem('token')
+        localStorage.removeItem('auth')
+    } catch (error) {
+        // ignore storage cleanup errors
+    }
+    if (window.location.pathname !== '/login') {
+        window.location.replace('/login')
+    }
+}
+
 //添加请求拦截器
 instance.interceptors.request.use(
     (config) => {
@@ -23,19 +36,14 @@ instance.interceptors.request.use(
         return config;
     },
     (err) => {
-        if (err.response.code === 401) {
+        if (err?.response?.status === 401) {
             ElMessage.error('认证失败,请重新登录')
-            router.push('/login')
+            redirectToLogin()
         }
         //请求错误的回调
-        Promise.reject(err)
+        return Promise.reject(err)
     }
 )
-
-/* import {useRouter} from 'vue-router'
-const router = useRouter(); */
-
-import router from '@/router'
 //添加响应拦截器
 instance.interceptors.response.use(
     result => {
@@ -59,9 +67,11 @@ instance.interceptors.response.use(
     },
     err => {
         //判断响应状态码,如果为401,则证明未登录,提示请登录,并跳转到登录页面
-        if (err.response.status === 401) {
-            ElMessage.error(err.response.data)
-            router.push('/login')
+        if (err?.response?.status === 401) {
+            const tokenStore = useTokenStore()
+            tokenStore.removeToken()
+            ElMessage.error(err.response.data || '登录状态已失效，请重新登录')
+            redirectToLogin()
         }
         return Promise.reject(err);//异步的状态转化成失败的状态
     }

@@ -4,10 +4,12 @@ import {useRouter} from 'vue-router'
 import {Box, Lock, User} from '@element-plus/icons-vue'
 import {login} from '@/api/login.js'
 import {useTokenStore} from '@/stores/token'
+import {useAuthStore} from '@/stores/auth'
 import rememberMeStore from '@/stores/rememberMe'
 
 const router = useRouter()
 const tokenStore = useTokenStore()
+const authStore = useAuthStore()
 const rememberStore = rememberMeStore()
 const loginFormRef = ref(null)
 const loading = ref(false)
@@ -37,7 +39,7 @@ const rules = {
   ]
 }
 
-const businessTags = ['托盘二维码', '任务流转', '仓库平面图', '单据与追溯']
+const businessTags = ['二维码管理', '任务流转', '仓库平面图', '单据与追溯']
 
 const errorMessage = computed(() => {
   if (!loginError.value) return ''
@@ -62,6 +64,7 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     tokenStore.removeToken()
+    authStore.clearAuth()
     const result = await login({
       name: form.name,
       password: form.password,
@@ -77,9 +80,11 @@ const handleSubmit = async () => {
       rememberStore.removeInfo()
     }
     tokenStore.setToken(token)
+    authStore.setUserInfo(result?.data || {})
     await router.push('/home')
   } catch (error) {
     tokenStore.removeToken()
+    authStore.clearAuth()
     loginError.value = resolveLoginError(error)
   } finally {
     loading.value = false

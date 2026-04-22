@@ -1,7 +1,7 @@
 <view class="pallet-card">
   <view class="head-row">
     <view>
-      <view class="eyebrow">托盘码</view>
+      <view class="eyebrow">二维码</view>
       <text class="code">{{pallet.code || '-'}}</text>
     </view>
     <view class="tag-list">
@@ -9,7 +9,7 @@
       <status-tag label="{{pallet.productStatus || '未绑定'}}" type="info" />
     </view>
   </view>
-  <view class="product">{{pallet.productName || '未绑定产品'}}</view>
+  <view class="product">{{pallet.productName || '未绑定'}}</view>
   <view class="product-meta">{{pallet.productionDate ? '生产日期 ' + pallet.productionDate : '暂无生产日期'}}</view>
 
   <view class="hero-grid">

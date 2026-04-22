@@ -1,108 +1,371 @@
 .login-page {
-  min-height: 100vh;
+  position: relative;
+  min-height: calc(100vh - 74rpx);
+  overflow: hidden;
+  padding: 110rpx 20rpx 220rpx;
+  box-sizing: border-box;
+}
+
+.bg-circle {
+  position: absolute;
+  top: -56rpx;
+  left: -118rpx;
+  width: 300rpx;
+  height: 300rpx;
+  border-radius: 50%;
+  background: rgba(174, 202, 255, 0.72);
+}
+
+.bg-circle-ring {
+  position: absolute;
+  top: -96rpx;
+  left: -158rpx;
+  width: 380rpx;
+  height: 380rpx;
+  border-radius: 50%;
+  border: 44rpx solid rgba(255, 255, 255, 0.34);
+}
+
+.dot-grid {
+  position: absolute;
+  top: 18rpx;
+  right: 12rpx;
+  width: 184rpx;
+}
+
+.dot-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12rpx;
+}
+
+.dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: rgba(170, 196, 245, 0.58);
+}
+
+.hero {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 28rpx;
+  align-items: center;
+  text-align: center;
 }
 
-.brand {
+.logo-card {
+  width: 118rpx;
+  height: 118rpx;
+  padding: 18rpx;
+  box-sizing: border-box;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 20rpx 40rpx rgba(61, 111, 198, 0.12);
+}
+
+.logo-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hero-chip {
+  margin-top: 18rpx;
+  padding: 12rpx 32rpx;
+  border-radius: 999rpx;
+  background: rgba(49, 118, 255, 0.12);
+  color: #2f74ff;
+  font-size: 24rpx;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.hero-title {
+  margin-top: 34rpx;
+  font-size: 76rpx;
+  line-height: 1.08;
+  font-weight: 800;
+  color: #13234a;
+  letter-spacing: 0;
+}
+
+.hero-subtitle {
+  margin-top: 28rpx;
+  font-size: 38rpx;
+  line-height: 1.2;
+  font-weight: 700;
+  color: #24365d;
+}
+
+.hero-desc {
+  margin-top: 34rpx;
+  font-size: 26rpx;
+  line-height: 1.65;
+  color: #62728d;
+}
+
+.login-card,
+.guide-card {
+  position: relative;
+  z-index: 2;
+  margin: 44rpx auto 0;
+  width: 100%;
+  max-width: 640rpx;
+  box-sizing: border-box;
+  border-radius: 26rpx;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1rpx solid rgba(220, 229, 246, 0.95);
+  box-shadow: 0 18rpx 42rpx rgba(47, 82, 148, 0.11);
+}
+
+.login-card {
+  padding: 42rpx 28rpx 30rpx;
+}
+
+.card-title {
+  text-align: center;
+  font-size: 58rpx;
+  line-height: 1.12;
+  font-weight: 800;
+  color: #13234a;
+}
+
+.card-desc {
+  margin-top: 28rpx;
+  text-align: center;
+  font-size: 25rpx;
+  line-height: 1.65;
+  color: #6d7b95;
+}
+
+.login-btn {
   display: flex;
   align-items: center;
-  gap: 22rpx;
-}
-
-.logo {
-  width: 112rpx;
-  height: 112rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-}
-
-.brand-copy {
-  flex: 1;
-  min-width: 0;
-}
-
-.eyebrow {
-  font-size: 24rpx;
-  color: #246bfe;
-  font-weight: 700;
-}
-
-.title {
-  margin-top: 8rpx;
-  font-size: 52rpx;
-  line-height: 1.1;
-  font-weight: 800;
-  color: #172033;
-}
-
-.subtitle {
-  margin-top: 12rpx;
-  font-size: 26rpx;
-  color: #647089;
-}
-
-.panel,
-.guide {
-  padding: 32rpx;
-  border-radius: 8rpx;
-  background: #ffffff;
-  box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, 0.06);
-}
-
-.panel-title,
-.guide-title {
-  font-size: 34rpx;
-  font-weight: 800;
-  color: #172033;
-}
-
-.panel-desc {
-  margin-top: 12rpx;
-  font-size: 26rpx;
-  line-height: 1.55;
-  color: #647089;
-}
-
-.primary-btn {
-  margin-top: 30rpx;
-  height: 84rpx;
-  line-height: 84rpx;
-  border-radius: 8rpx;
+  justify-content: center;
+  gap: 16rpx;
+  margin-top: 34rpx;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(180deg, #3a7cff 0%, #246bfe 100%);
   color: #ffffff;
-  background: #246bfe;
   font-size: 30rpx;
   font-weight: 700;
+  box-shadow: 0 14rpx 26rpx rgba(36, 107, 254, 0.24);
 }
 
-.primary-btn::after,
-.link-btn::after {
+.login-btn::after,
+.sub-btn::after {
   border: 0;
 }
 
-.bind-row {
-  display: flex;
-  gap: 16rpx;
-  margin-top: 18rpx;
+.login-btn-icon {
+  width: 36rpx;
+  height: 36rpx;
 }
 
-.link-btn {
+.sub-actions {
+  display: flex;
+  gap: 18rpx;
+  margin-top: 24rpx;
+}
+
+.sub-btn {
   flex: 1;
-  height: 72rpx;
-  line-height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14rpx;
+  height: 84rpx;
+  line-height: 84rpx;
   margin: 0;
-  border-radius: 8rpx;
+  border-radius: 18rpx;
+  background: #edf3ff;
   color: #246bfe;
-  background: #eaf1ff;
-  font-size: 26rpx;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.sub-btn-icon {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.sub-btn-svg {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.guide-card {
+  margin-top: 28rpx;
+  padding: 34rpx 28rpx 36rpx;
+  background: rgba(246, 250, 255, 0.96);
+}
+
+.guide-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.guide-badge {
+  width: 44rpx;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(49, 118, 255, 0.14);
+}
+
+.guide-badge-icon {
+  width: 22rpx;
+  height: 22rpx;
+}
+
+.guide-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #24365d;
+}
+
+.guide-list {
+  margin-top: 26rpx;
+  padding-right: 170rpx;
 }
 
 .guide-item {
-  margin-top: 14rpx;
-  font-size: 25rpx;
-  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.guide-item + .guide-item {
+  margin-top: 22rpx;
+}
+
+.guide-index {
+  width: 34rpx;
+  height: 34rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(49, 118, 255, 0.12);
+  color: #246bfe;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  text-align: center;
+  font-weight: 700;
+}
+
+.guide-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  line-height: 1.7;
   color: #647089;
 }
 
+.guide-illustration {
+  position: absolute;
+  right: 30rpx;
+  bottom: 30rpx;
+  width: 126rpx;
+  height: 126rpx;
+  opacity: 0.5;
+}
+
+.guide-ill-panel {
+  position: absolute;
+  top: 12rpx;
+  right: 20rpx;
+  bottom: 22rpx;
+  left: 22rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(180deg, rgba(227, 237, 255, 0.88) 0%, rgba(210, 225, 252, 0.7) 100%);
+}
+
+.guide-ill-clip {
+  position: absolute;
+  top: -10rpx;
+  left: 20rpx;
+  width: 44rpx;
+  height: 18rpx;
+  border-radius: 12rpx;
+  background: rgba(227, 237, 255, 0.88);
+}
+
+.guide-ill-line {
+  position: absolute;
+  left: 46rpx;
+  right: 42rpx;
+  height: 8rpx;
+  border-radius: 999rpx;
+  background: rgba(141, 169, 221, 0.7);
+}
+
+.line-one {
+  top: 42rpx;
+}
+
+.line-two {
+  top: 62rpx;
+}
+
+.line-three {
+  top: 82rpx;
+  width: 46rpx;
+}
+
+.guide-ill-check {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 46rpx;
+  height: 46rpx;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #9ec0ff 0%, #7faeff 100%);
+  box-shadow: 0 12rpx 22rpx rgba(86, 136, 227, 0.18);
+}
+
+.guide-ill-hook {
+  position: absolute;
+  background: #ffffff;
+  border-radius: 999rpx;
+}
+
+.hook-one {
+  left: 13rpx;
+  top: 21rpx;
+  width: 10rpx;
+  height: 4rpx;
+  transform: rotate(45deg);
+}
+
+.hook-two {
+  left: 19rpx;
+  top: 18rpx;
+  width: 18rpx;
+  height: 4rpx;
+  transform: rotate(-45deg);
+}
+
+.bottom-wave {
+  position: absolute;
+  left: -60rpx;
+  right: -60rpx;
+  border-radius: 50%;
+  background: rgba(172, 197, 244, 0.22);
+}
+
+.wave-back {
+  bottom: -210rpx;
+  height: 320rpx;
+}
+
+.wave-front {
+  bottom: -250rpx;
+  height: 360rpx;
+  background: rgba(165, 191, 242, 0.16);
+}

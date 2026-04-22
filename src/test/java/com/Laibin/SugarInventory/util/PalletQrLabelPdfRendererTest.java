@@ -21,4 +21,20 @@ class PalletQrLabelPdfRendererTest {
         assertTrue(body.contains("/Subtype /Image"));
         assertTrue(body.endsWith("%%EOF\n"));
     }
+
+    @Test
+    void renderA4LabelsWithTitleShouldCreatePrintablePdf() throws Exception {
+        byte[] pdf = PalletQrLabelPdfRenderer.renderA4LabelsWithTitle(List.of(
+                new PalletQrLabelPdfRenderer.LabelPayload("BT0008T5", "黄中冰"),
+                new PalletQrLabelPdfRenderer.LabelPayload("BT0009AA", "白中冰")
+        ));
+        String header = new String(pdf, 0, 5, StandardCharsets.ISO_8859_1);
+        String body = new String(pdf, StandardCharsets.ISO_8859_1);
+
+        assertTrue(pdf.length > 1024);
+        assertTrue(header.startsWith("%PDF-"));
+        assertTrue(body.contains("/MediaBox [0 0 595.28 841.89]"));
+        assertTrue(body.contains("/Subtype /Image"));
+        assertTrue(body.endsWith("%%EOF\n"));
+    }
 }

@@ -4,6 +4,18 @@ export const pagePalletCodes = (params) => request.post('/pallet-codes', params)
 
 export const generatePalletCodes = (params) => request.post('/pallet-codes/generate', params)
 
+export const bindFixedProductCodes = (params) => request.post('/pallet-codes/fixed-product/bind', params)
+
+export const pageFixedProductPool = (params) => request.get('/pallet-codes/fixed-product/pool', {params})
+
+export const batchDownloadFixedProductQrLabelPdf = (codes) => {
+  return request.post('/pallet-codes/fixed-product/qrcode-labels/pdf', {codes}, {responseType: 'blob'})
+}
+
+export const activateFixedProductQrCodes = (params) => {
+  return request.post('/pallet-codes/fixed-product/activate/pdf', params, {responseType: 'blob'})
+}
+
 export const getPalletQrCode = (code) => {
   return request.get(`/pallet-codes/${encodeURIComponent(code)}/qrcode`, {responseType: 'blob'})
 }

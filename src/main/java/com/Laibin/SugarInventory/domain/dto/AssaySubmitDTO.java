@@ -16,11 +16,11 @@ public class AssaySubmitDTO {
     @Schema(description = "产品ID", example = "1")
     private Integer productId;
 
-    @Schema(description = "选择类型：1产品默认，2添加的验收标准", example = "0")
+    @Schema(description = "选择类型：1产品默认，2添加的批量化验组", example = "0")
     private Integer selectType;
 
 
-    @Schema(description = "验收标准id", example = "0")
+    @Schema(description = "批量化验组id", example = "0")
     private Integer relatedId;
 
     @NotNull(message = "采样日期不能为空")
