@@ -19,11 +19,25 @@ export const menuList = [
   { path: '/home', title: '首页', icon: House, permCode: 'dashboard:view' },
   { path: '/operationlogs', title: '操作日志', icon: Document, permCode: 'log:view' },
   { path: '/product', title: '产品管理', icon: Histogram, permCode: 'product:view' },
-  { path: '/productStock', title: '库存汇总', icon: ShoppingCart, permCode: 'inventory:view' },
-  { path: '/warehouse', title: '库位管理', icon: Box, permCode: 'warehouse:view' },
-  { path: '/warehouse-map', title: '仓库平面图', icon: Location, permCode: 'warehouse_map:view' },
-  { path: '/pallet-code/list', title: '二维码管理', icon: Tickets, permCode: 'qrcode:view' },
-  { path: '/pallet-code/fixed-product', title: '固定产品二维码池', icon: Tickets, permCode: 'qrcode:pool_view' },
+  {
+    path: '/warehouse-management',
+    title: '仓库管理',
+    icon: Box,
+    children: [
+      { path: '/productStock', title: '库存汇总', icon: ShoppingCart, permCode: 'inventory:view' },
+      { path: '/warehouse', title: '库位管理', icon: Box, permCode: 'warehouse:view' },
+      { path: '/warehouse-map', title: '仓库平面图', icon: Location, permCode: 'warehouse_map:view' }
+    ]
+  },
+  {
+    path: '/qrcode-center',
+    title: '二维码中心',
+    icon: Tickets,
+    children: [
+      { path: '/pallet-code/list', title: '二维码管理', icon: Tickets, permCode: 'qrcode:view' },
+      { path: '/pallet-code/fixed-product', title: '固定产品二维码池', icon: Tickets, permCode: 'qrcode:pool_view' }
+    ]
+  },
   {
     path: '/pallet-task',
     title: '任务中心',
@@ -52,9 +66,16 @@ export const menuList = [
     ]
   },
   { path: '/screenMesh', title: '筛网管理', icon: Filter, permCode: 'screen_mesh:view' },
-  { path: '/assay', title: '化验管理', icon: PieChart, permCode: 'assay:view' },
-  { path: '/assayGroup', title: '批量化验组', icon: Document, permCode: 'assay_group:view' },
-  { path: '/standard', title: '化验标准管理', icon: Finished, permCode: 'quality_standard:view' },
+  {
+    path: '/assay-center',
+    title: '化验中心',
+    icon: PieChart,
+    children: [
+      { path: '/assay', title: '化验管理', icon: PieChart, permCode: 'assay:view' },
+      { path: '/assayGroup', title: '批量化验组', icon: Document, permCode: 'assay_group:view' },
+      { path: '/standard', title: '化验标准管理', icon: Finished, permCode: 'quality_standard:view' }
+    ]
+  },
   {
     path: '/stock',
     title: '单据中心',
@@ -65,8 +86,15 @@ export const menuList = [
       { path: '/stock/finish', title: '成品单据', icon: Finished, permCode: 'document:view' }
     ]
   },
-  { path: '/employee', title: '用户管理', icon: User, permCode: 'rbac:user:view' },
-  { path: '/role', title: '角色管理', icon: User, permCode: 'rbac:role:view' }
+  {
+    path: '/staff-management',
+    title: '员工管理',
+    icon: User,
+    children: [
+      { path: '/employee', title: '用户管理', icon: User, permCode: 'rbac:user:view' },
+      { path: '/role', title: '角色管理', icon: User, permCode: 'rbac:role:view' }
+    ]
+  }
 ]
 
 const flattenMenu = (items, result = []) => {
