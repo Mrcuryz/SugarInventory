@@ -118,6 +118,7 @@ const refreshCurrentPage = async () => {
     </el-aside>
 
     <div class="main-container">
+      <div class="main-top">
       <!-- 顶部导航 -->
       <el-header>
         <div class="header-left">
@@ -138,6 +139,7 @@ const refreshCurrentPage = async () => {
 
       <!-- 主内容区 -->
       <PageTabs @refresh-current="refreshCurrentPage"/>
+      </div>
       <el-main>
         <router-view v-slot="{ Component, route: currentRoute }">
           <keep-alive :include="tabsStore.cachedTabNames" :max="10">
@@ -158,10 +160,15 @@ const refreshCurrentPage = async () => {
 <style scoped lang="scss">
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
   background: var(--app-bg);
+  overflow: hidden;
 
   .el-aside {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
     background: #ffffff;
     border-right: 1px solid var(--app-border-soft);
     transition: width 0.3s;
@@ -189,8 +196,19 @@ const refreshCurrentPage = async () => {
 
   .main-container {
     flex: 1;
+    min-width: 0;
+    height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+
+    .main-top {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      flex: 0 0 auto;
+      background: var(--app-bg);
+    }
 
     .el-header {
       display: flex;
@@ -225,6 +243,8 @@ const refreshCurrentPage = async () => {
       padding: 16px;
       background: var(--app-bg);
       flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
     }
 
     .icp-footer {
