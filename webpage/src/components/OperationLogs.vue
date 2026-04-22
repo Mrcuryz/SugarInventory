@@ -61,7 +61,7 @@
       <el-table
           :data="filteredLogs"
           style="width: 95%"
-          heigth="300"
+          height="300"
           stripe
           border
           v-loading="loading"
@@ -130,7 +130,7 @@
 
 <script setup>
 import {ref, onMounted} from 'vue'
-import {getOperationLogs} from '@/api/operationLogs'
+import {getOperationLogs} from '@/api/operationlogs'
 import {ElMessage} from "element-plus"
 import * as XLSX from 'xlsx'
 import {useI18n} from "vue-i18n";
@@ -154,7 +154,7 @@ const exportExcel = async () => {
     if (searchForm.value.operator) {
       params.operator = searchForm.value.operator
     }
-    if (searchForm.value.dateRange !== []) {
+    if (Array.isArray(searchForm.value.dateRange) && searchForm.value.dateRange.length === 2) {
       params.startTime = searchForm.value.dateRange[0]
       params.endTime = searchForm.value.dateRange[1]
     }
@@ -285,7 +285,7 @@ const handleSearch = async () => {
   if (searchForm.value.operator) {
     params.operator = searchForm.value.operator
   }
-  if (searchForm.value.dateRange !== []) {
+  if (Array.isArray(searchForm.value.dateRange) && searchForm.value.dateRange.length === 2) {
     params.startTime = searchForm.value.dateRange[0]
     params.endTime = searchForm.value.dateRange[1]
   }

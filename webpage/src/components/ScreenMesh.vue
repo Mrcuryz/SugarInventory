@@ -26,7 +26,7 @@
       <el-table
           :data="resultList"
           style="width: 95%"
-          heigth="300"
+          height="300"
           stripe
           border
           v-loading="loading"

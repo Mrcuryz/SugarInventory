@@ -20,8 +20,6 @@
     "pages/tasks/detail/index",
     "pages/login/login",
     "pages/home/home",
-    "pages/bind-phone/bind-phone",
-    "pages/bind-manual/bind-manual",
     "pages/in-stock/in-stock",
     "pages/manual/manual",
     "pages/products/products",
@@ -80,11 +78,6 @@
   },
   "useExtendedLib": {
     "weui": true
-  },
-  "permission": {
-    "scope.phoneNumber": {
-      "desc": "用于完成员工身份绑定"
-    }
   },
   "lazyCodeLoading": "requiredComponents"
 }
