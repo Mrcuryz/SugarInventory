@@ -4,11 +4,13 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
+import java.awt.FontFormatException;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -43,6 +45,9 @@ public final class PalletQrLabelPdfRenderer {
     private static final int QR_IMAGE_SIZE = 512;
     private static final int LABEL_IMAGE_WIDTH = 900;
     private static final int LABEL_IMAGE_HEIGHT = 675;
+    private static final String BUNDLED_CJK_FONT_RESOURCE = "/fonts/NotoSansSC-VF.ttf";
+    private static final String CJK_FONT_SAMPLE = "固定产品二维码黄中冰白砂糖";
+    private static volatile Font bundledCjkBaseFont;
 
     private PalletQrLabelPdfRenderer() {
     }
@@ -216,15 +221,45 @@ public final class PalletQrLabelPdfRenderer {
         graphics.drawString(text, x, baselineY);
     }
 
-    private static Font pickFont(int style, int size) {
+    static Font pickFont(int style, int size) {
+        Font bundledFont = loadBundledCjkFont();
+        if (canDisplayCjk(bundledFont)) {
+            return bundledFont.deriveFont(style, (float) size);
+        }
+
         String[] candidates = {"Microsoft YaHei", "SimHei", "SimSun", "SansSerif"};
         for (String candidate : candidates) {
             Font font = new Font(candidate, style, size);
-            if (font.canDisplayUpTo("固定产品二维码") == -1) {
+            if (canDisplayCjk(font)) {
                 return font;
             }
         }
         return new Font("SansSerif", style, size);
+    }
+
+    private static Font loadBundledCjkFont() {
+        Font cached = bundledCjkBaseFont;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (PalletQrLabelPdfRenderer.class) {
+            if (bundledCjkBaseFont != null) {
+                return bundledCjkBaseFont;
+            }
+            try (InputStream inputStream = PalletQrLabelPdfRenderer.class.getResourceAsStream(BUNDLED_CJK_FONT_RESOURCE)) {
+                if (inputStream == null) {
+                    return null;
+                }
+                bundledCjkBaseFont = Font.createFont(Font.TRUETYPE_FONT, inputStream);
+                return bundledCjkBaseFont;
+            } catch (FontFormatException | IOException | RuntimeException e) {
+                return null;
+            }
+        }
+    }
+
+    private static boolean canDisplayCjk(Font font) {
+        return font != null && font.canDisplayUpTo(CJK_FONT_SAMPLE) == -1;
     }
 
     private static byte[] buildImageObject(BufferedImage image) throws IOException {

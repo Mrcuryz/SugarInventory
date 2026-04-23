@@ -36,7 +36,7 @@
 
     <view class="login-card">
       <view class="card-title">欢迎登录</view>
-      <view class="card-desc">使用微信快速登录，首次使用请先完成绑定。</view>
+      <view class="card-desc">仅供公司内部人员使用，首次使用请先完成绑定。</view>
 
       <button class="login-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">
         <image class="login-btn-icon" src="/assets/icons/login.png" mode="aspectFit"></image>

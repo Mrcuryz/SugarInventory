@@ -26,8 +26,16 @@ export function queryAssays(params = {}) {
   return request('/api/assay/query', 'POST', compactParams(params));
 }
 
+export function createAssays(payload = []) {
+  return request('/api/assay/import', 'POST', payload);
+}
+
 export function getAssayDetail(id) {
   return request(`/api/assay/${id}`, 'GET');
+}
+
+export function queryAssayGroups(params = {}) {
+  return request('/api/assayGroup/query', 'POST', compactParams(params));
 }
 
 export function queryOperationLogs(params = {}) {

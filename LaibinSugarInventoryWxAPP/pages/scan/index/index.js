@@ -11,7 +11,8 @@ import {
   createFinishOutTasks,
   createSemiOutTasks,
   createSemiPrepareTasks,
-  createTransferTasks
+  createTransferTasks,
+  getTaskList
 } from '../../../api/task';
 import { enrichPallet } from '../../../utils/dict';
 import { requireLogin } from '../../../utils/auth';
@@ -56,7 +57,11 @@ function isScanCancel(error) {
 }
 
 function getErrorMessage(error, fallback = '扫码失败') {
-  return error && (error.msg || error.message || error.errMsg) || fallback;
+  const message = error && (error.msg || error.message || error.errMsg) || fallback;
+  if (typeof message === 'string' && message.includes("Can't find variable")) {
+    return '扫码失败，请稍后重试';
+  }
+  return message;
 }
 
 Page({
@@ -193,8 +198,14 @@ Page({
   async validatePalletForMode(pallet) {
     const mode = this.data.currentMode;
     const code = pallet.code;
-    const tasksRes = await getTaskList({ code, status: 'PENDING', pageNum: 1, pageSize: 1 });
-    const hasPending = Boolean(tasksRes && tasksRes.records && tasksRes.records.length);
+    let hasPending = false;
+    try {
+      const tasksRes = await getTaskList({ code, status: 'PENDING', pageNum: 1, pageSize: 1 });
+      hasPending = Boolean(tasksRes && tasksRes.records && tasksRes.records.length);
+    } catch (error) {
+      return { valid: false, message: getErrorMessage(error, '二维码状态校验失败，请稍后重试') };
+    }
+
     const fixedModeEnabled = Boolean(pallet.fixedModeEnabled);
     if (mode === 'in') {
       if (fixedModeEnabled && pallet.status === 'FREE') {
@@ -266,10 +277,8 @@ Page({
   async onScan() {
     if (this.data.scanning) return;
     this.setData({ scanning: true });
-    let currentCode = '';
     try {
       const code = await scanCode();
-      currentCode = code;
       this.updateSummary({ total: 1 });
       if (this.data.pool.some(item => item.code === code)) {
         this.updateSummary({ duplicate: 1 });
@@ -323,7 +332,7 @@ Page({
       const message = getErrorMessage(error);
       this.updateSummary({ error: 1 });
       this.createFeedback('danger', message);
-      showError(error, '扫码失败');
+      showError({ ...error, msg: message }, '扫码失败');
     } finally {
       this.setData({ scanning: false });
     }

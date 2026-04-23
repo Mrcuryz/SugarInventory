@@ -37,6 +37,16 @@ import java.util.*;
 @Aspect
 @Component
 public class OperationLogAspect {
+    private static final Set<String> INTERNAL_AUDIT_FIELDS = Set.of(
+            "appliedStandardId",
+            "appliedStandardName",
+            "appliedStandardVersion",
+            "judgeResult",
+            "failedMetricCount",
+            "failedMetricsJson",
+            "standardSnapshotJson",
+            "judgeMessage"
+    );
 
     @Autowired
     private ApplicationContext applicationContext;
@@ -377,7 +387,7 @@ public class OperationLogAspect {
     private boolean isIgnoredField(String field) {
         return field.equals("createdAt") || field.equals("updatedAt") || field.equals("testedBy") ||
                 field.equals("createdBy") || field.equals("updatedBy") || field.equals("selectType") ||
-                field.equals("relatedId") || field.isEmpty();
+                field.equals("relatedId") || INTERNAL_AUDIT_FIELDS.contains(field) || field.isEmpty();
     }
 
     // 将对象转换为 JSON 字符串

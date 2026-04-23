@@ -25,11 +25,20 @@
       </view>
     </scroll-view>
 
-    <scroll-view scroll-y class="content-pane" scroll-top="{{contentScrollTop}}">
+    <view class="content-column">
       <view class="section-hero">
         <view class="section-badge">第 {{activeSection.index + 1}} 章</view>
         <view class="section-title">{{activeSection.title}}</view>
         <view class="section-desc">{{activeSection.description}}</view>
+      </view>
+
+      <scroll-view scroll-y class="content-pane" scroll-top="{{contentScrollTop}}">
+      <view wx:if="{{activeSection.poster}}" class="poster-card">
+        <image class="poster-image" src="{{activeSection.poster}}" mode="widthFix" />
+        <view class="poster-copy">
+          <view class="poster-title">数字仓储小程序</view>
+          <view class="poster-desc">面向现场员工的移动作业入口，支持扫码入库、出库、调拨、任务处理、库存查询和二维码追溯。</view>
+        </view>
       </view>
 
       <view class="content-card card-overview">
@@ -37,7 +46,7 @@
         <view class="card-copy">{{activeSection.summary}}</view>
       </view>
 
-      <view class="content-card card-steps">
+      <view wx:if="{{!activeSection.isHome}}" class="content-card card-steps">
         <view class="card-title">操作步骤</view>
         <view wx:for="{{activeSection.steps}}" wx:key="*this" class="step-item">
           <view class="step-index">{{index + 1}}</view>
@@ -45,7 +54,7 @@
         </view>
       </view>
 
-      <view class="content-card card-notice">
+      <view wx:if="{{!activeSection.isHome}}" class="content-card card-notice">
         <view class="card-title">现场注意事项</view>
         <view wx:for="{{activeSection.notices}}" wx:key="*this" class="notice-item">
           <view class="notice-dot"></view>
@@ -53,7 +62,7 @@
         </view>
       </view>
 
-      <view class="content-card card-faq">
+      <view wx:if="{{!activeSection.isHome}}" class="content-card card-faq">
         <view class="card-title">常见问题</view>
         <view wx:for="{{activeSection.faqs}}" wx:key="q" class="faq-item">
           <view class="faq-question">{{item.q}}</view>
@@ -61,7 +70,7 @@
         </view>
       </view>
 
-      <view class="content-card card-actions">
+      <view wx:if="{{!activeSection.isHome}}" class="content-card card-actions">
         <view class="card-title">立即操作</view>
         <view class="action-list">
           <button
@@ -85,6 +94,7 @@
         <button class="chapter-btn" bindtap="goPrevSection" disabled="{{activeSection.index === 0}}">上一章</button>
         <button class="chapter-btn primary-next" bindtap="goNextSection" disabled="{{activeSection.index === sections.length - 1}}">下一章</button>
       </view>
-    </scroll-view>
+      </scroll-view>
+    </view>
   </view>
 </page-shell>

@@ -801,6 +801,18 @@ const handleReset = async () => {
   detailMatchedPositions.value = []
   await fetchCapacity()
 }
+
+const resolveRouteQueryValue = (value) => Array.isArray(value) ? (value[0] || '') : (value || '')
+
+const applyRouteQueryFilters = async () => {
+  const palletCode = resolveRouteQueryValue(route.query.palletCode || route.query.code)
+  if (!palletCode) {
+    return
+  }
+  searchForm.value.palletCodes = palletCode
+  await handleSearch()
+}
+
 const handleSelectLocation = async (location) => {
   selectedLocation.value = {...location}
   detailPage.value = 1
@@ -1118,21 +1130,36 @@ const buildResultText = (item) => {
 
 const selectWarehouseFromRoute = async () => {
   const warehouseId = Number(route.query.warehouseId)
+  const warehouseName = resolveRouteQueryValue(route.query.warehouseName)
+  let target = null
   if (warehouseId) {
-    const target = mapLocations.value.find(item => item.id === warehouseId)
-    if (target) {
-      await handleSelectLocation(target)
-    }
+    target = mapLocations.value.find(item => item.id === warehouseId) || null
+  }
+  if (!target && warehouseName) {
+    target = mapLocations.value.find(item => item.warehouseName === warehouseName) || null
+  }
+  if (target) {
+    await handleSelectLocation(target)
   }
 }
 
 onMounted(async () => {
   await Promise.all([fetchCapacity(), fetchOptions()])
+  await applyRouteQueryFilters()
   await selectWarehouseFromRoute()
 })
 
-watch(() => route.query.warehouseId, () => {
+watch(() => [route.query.warehouseId, route.query.warehouseName], () => {
   selectWarehouseFromRoute()
+})
+
+watch(() => [route.query.palletCode, route.query.code], async ([palletCode, code]) => {
+  const value = resolveRouteQueryValue(palletCode || code)
+  if (!value) {
+    return
+  }
+  searchForm.value.palletCodes = value
+  await handleSearch()
 })
 </script>
 

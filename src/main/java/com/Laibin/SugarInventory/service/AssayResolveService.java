@@ -14,4 +14,11 @@ public interface AssayResolveService {
                                         LocalDate businessDate,
                                         Integer operatorId,
                                         boolean writeBack);
+
+    default AssayResolveResult previewForPallet(PalletCode palletCode,
+                                                PalletTask task,
+                                                Inventory inventory,
+                                                LocalDate businessDate) {
+        return resolveForPallet(palletCode, task, inventory, businessDate, null, false);
+    }
 }

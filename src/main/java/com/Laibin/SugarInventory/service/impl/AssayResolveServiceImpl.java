@@ -172,6 +172,9 @@ public class AssayResolveServiceImpl implements AssayResolveService {
 
     private void insertAssayFlowIfAbsent(PalletCode palletCode, PalletTask task, Assay assay,
                                          Integer operatorId, String operationName) {
+        if (operatorId == null) {
+            return;
+        }
         Integer cycleNo = palletCode.getCurrentCycleNo() == null ? 0 : palletCode.getCurrentCycleNo();
         Long existing = palletFlowRecordMapper.selectCount(new LambdaQueryWrapper<PalletFlowRecord>()
                 .eq(PalletFlowRecord::getPalletCodeId, palletCode.getId())

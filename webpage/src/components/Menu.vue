@@ -1,46 +1,46 @@
 <script setup>
-import {ref, computed, nextTick, watch} from 'vue'
-import {useRoute, useRouter} from 'vue-router'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import PageTabs from '@/components/PageTabs.vue'
-import {useTabsStore} from '@/stores/tabs'
-import {filterMenuByPermissions, menuList} from '@/utils/navigation'
-import {useAuthStore} from '@/stores/auth'
+import { useTabsStore } from '@/stores/tabs'
+import { filterMenuByPermissions, menuList } from '@/utils/navigation'
+import { useAuthStore } from '@/stores/auth'
+import { useTokenStore } from '@/stores/token'
+import appLogo from '@/assets/logo.png'
 
-
-// 侧边栏状态
 const isCollapse = ref(false)
-const toggleCollapse = () => {
-  isCollapse.value = !isCollapse.value
-}
-
-// 面包屑导航
 const route = useRoute()
 const router = useRouter()
 const tabsStore = useTabsStore()
 const authStore = useAuthStore()
+const tokenStore = useTokenStore()
 const routerViewVisible = ref(true)
-const breadcrumbs = computed(() => {
-  return route.matched
-      .filter(item => item.meta?.title) // 过滤有标题的路由
-      .map(item => ({
-        title: item.meta.title,
-        path: item.path
-      }))
-})
 
-// 当前激活菜单
+const toggleCollapse = () => {
+  isCollapse.value = !isCollapse.value
+}
+
+const breadcrumbs = computed(() => route.matched
+  .filter(item => item.meta?.title)
+  .map(item => ({
+    title: item.meta.title,
+    path: item.path
+  })))
+
 const activeMenu = computed(() => route.path)
 const visibleMenus = computed(() => filterMenuByPermissions(menuList, authStore.permissionCodes))
+const displayName = computed(() => authStore.name || authStore.employeeId || '当前账号')
 
 watch(
-    () => route.fullPath,
-    () => {
-      const added = tabsStore.addTab(route)
-      if (!added) {
-        router.replace(tabsStore.activeTab)
-      }
-    },
-    {immediate: true}
+  () => route.fullPath,
+  () => {
+    const added = tabsStore.addTab(route)
+    if (!added) {
+      router.replace(tabsStore.activeTab)
+    }
+  },
+  { immediate: true }
 )
 
 const refreshCurrentPage = async () => {
@@ -56,62 +56,70 @@ const refreshCurrentPage = async () => {
   }
   routerViewVisible.value = true
 }
+
+const handleLogout = async () => {
+  const confirmed = await ElMessageBox.confirm('退出后将返回登录页，是否继续？', '退出登录', {
+    type: 'warning',
+    confirmButtonText: '退出',
+    cancelButtonText: '取消'
+  }).catch(() => false)
+  if (!confirmed) return
+  tokenStore.removeToken()
+  authStore.clearAuth()
+  tabsStore.closeAllTabs()
+  await router.replace('/login')
+}
 </script>
+
 <template>
   <div class="app-container">
-    <!-- 侧边栏 -->
     <el-aside class="el-aside" :width="isCollapse ? '64px' : '240px'">
       <div class="logo-container">
-        <span v-show="!isCollapse">仓储管理系统</span>
+        <img :src="appLogo" alt="数字仓储平台" class="logo">
+        <span v-show="!isCollapse">数字仓储平台</span>
       </div>
-      <el-menu
-          :default-active="activeMenu"
-          :collapse="isCollapse"
-          router
-      >
+
+      <el-menu :default-active="activeMenu" :collapse="isCollapse" router>
         <template v-for="item in visibleMenus" :key="item.path">
           <el-sub-menu v-if="item.children" :index="item.path">
             <template #title>
               <el-icon>
-                <component :is="item.icon"/>
+                <component :is="item.icon" />
               </el-icon>
               <span>{{ item.title }}</span>
             </template>
+
             <template v-for="child in item.children" :key="child.path">
               <el-sub-menu v-if="child.children" :index="child.path">
                 <template #title>
                   <el-icon v-if="child.icon">
-                    <component :is="child.icon"/>
+                    <component :is="child.icon" />
                   </el-icon>
                   <span>{{ child.title }}</span>
                 </template>
-                <el-menu-item
-                    v-for="sub in child.children"
-                    :key="sub.path"
-                    :index="sub.path"
-                >
+
+                <el-menu-item v-for="sub in child.children" :key="sub.path" :index="sub.path">
                   <el-icon v-if="sub.icon">
-                    <component :is="sub.icon"/>
+                    <component :is="sub.icon" />
                   </el-icon>
                   <span>{{ sub.title }}</span>
                 </el-menu-item>
               </el-sub-menu>
+
               <el-menu-item v-else :index="child.path">
                 <el-icon v-if="child.icon">
-                  <component :is="child.icon"/>
+                  <component :is="child.icon" />
                 </el-icon>
                 <span>{{ child.title }}</span>
               </el-menu-item>
             </template>
           </el-sub-menu>
-          <el-menu-item
-              v-else
-              :index="item.path"
-          >
-          <el-icon>
-            <component :is="item.icon"/>
-          </el-icon>
-          <span>{{ item.title }}</span>
+
+          <el-menu-item v-else :index="item.path">
+            <el-icon>
+              <component :is="item.icon" />
+            </el-icon>
+            <span>{{ item.title }}</span>
           </el-menu-item>
         </template>
       </el-menu>
@@ -119,44 +127,63 @@ const refreshCurrentPage = async () => {
 
     <div class="main-container">
       <div class="main-top">
-      <!-- 顶部导航 -->
-      <el-header>
-        <div class="header-left">
-          <el-icon @click="toggleCollapse">
-            <component :is="isCollapse ? 'Expand' : 'Fold'"/>
-          </el-icon>
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item
+        <el-header>
+          <div class="header-left">
+            <el-icon @click="toggleCollapse">
+              <component :is="isCollapse ? 'Expand' : 'Fold'" />
+            </el-icon>
+            <el-breadcrumb separator="/">
+              <el-breadcrumb-item
                 v-for="(item, index) in breadcrumbs"
                 :key="item.path"
                 :to="index < breadcrumbs.length - 1 ? { path: item.path } : null"
-            >
-              {{ item.title }}
-            </el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
-      </el-header>
+              >
+                {{ item.title }}
+              </el-breadcrumb-item>
+            </el-breadcrumb>
+          </div>
 
-      <!-- 主内容区 -->
-      <PageTabs @refresh-current="refreshCurrentPage"/>
+          <div class="header-right">
+            <el-dropdown trigger="click">
+              <span class="user-trigger">
+                <img :src="appLogo" alt="用户" class="user-logo">
+                <span class="username">{{ displayName }}</span>
+                <el-icon><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="handleLogout">
+                    <el-icon><SwitchButton /></el-icon>
+                    退出登录
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </el-header>
+
+        <PageTabs @refresh-current="refreshCurrentPage" />
       </div>
+
       <el-main>
         <router-view v-slot="{ Component, route: currentRoute }">
           <keep-alive :include="tabsStore.cachedTabNames" :max="10">
             <component
-                :is="Component"
-                v-if="routerViewVisible"
-                :key="currentRoute.path"
+              :is="Component"
+              v-if="routerViewVisible"
+              :key="currentRoute.path"
             />
           </keep-alive>
         </router-view>
       </el-main>
+
       <footer class="icp-footer">
-        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂ICP备2025058642号-2</a>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂 ICP 备 2025058642 号-2</a>
       </footer>
     </div>
   </div>
 </template>
+
 <style scoped lang="scss">
 .app-container {
   display: flex;
@@ -178,18 +205,22 @@ const refreshCurrentPage = async () => {
       height: 60px;
       display: flex;
       align-items: center;
-      padding: 0 20px;
+      gap: 12px;
+      padding: 0 18px;
       color: var(--app-text);
       border-bottom: 1px solid var(--app-border-soft);
 
       .logo {
-        width: 32px;
-        margin-right: 12px;
+        width: 30px;
+        height: 30px;
+        flex: 0 0 auto;
+        object-fit: contain;
       }
 
       span {
         font-size: 18px;
         font-weight: 700;
+        white-space: nowrap;
       }
     }
   }
@@ -228,14 +259,32 @@ const refreshCurrentPage = async () => {
         }
       }
 
-      .user-wrapper {
+      .header-right {
         display: flex;
         align-items: center;
-        cursor: pointer;
+      }
 
-        .username {
-          margin: 0 8px;
-        }
+      .user-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--app-text-secondary);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .user-logo {
+        width: 28px;
+        height: 28px;
+        object-fit: contain;
+      }
+
+      .username {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
       }
     }
 

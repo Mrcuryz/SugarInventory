@@ -1,5 +1,6 @@
 .filter-card,
-.assay-card {
+.assay-card,
+.form-section {
   padding: 26rpx;
   border: 1rpx solid #e7edf5;
   border-radius: 24rpx;
@@ -17,27 +18,37 @@
 .filter-actions,
 .card-head,
 .assay-meta,
-.assay-line {
+.assay-line,
+.summary-bar,
+.modal-header,
+.modal-footer {
   display: flex;
   align-items: center;
   gap: 14rpx;
 }
 
 .filter-input,
-.filter-picker {
-  height: 76rpx;
+.filter-picker,
+.picker-field,
+.metric-input {
+  min-height: 76rpx;
   padding: 0 20rpx;
   border: 1rpx solid #d8e0ec;
   border-radius: 18rpx;
   background: #fbfcfe;
   font-size: 26rpx;
   color: #172033;
+  box-sizing: border-box;
+}
+
+.filter-picker,
+.picker-field {
+  display: flex;
+  align-items: center;
 }
 
 .filter-picker {
   flex: 1;
-  display: flex;
-  align-items: center;
 }
 
 .filter-picker.small {
@@ -53,10 +64,25 @@
   font-size: 26rpx;
 }
 
-.summary-line {
+.summary-bar {
+  justify-content: space-between;
   margin: 28rpx 0 16rpx;
+}
+
+.summary-line {
   font-size: 24rpx;
   color: #647089;
+}
+
+.add-btn {
+  margin: 0;
+  min-width: 148rpx;
+  height: 70rpx;
+  line-height: 70rpx;
+  padding: 0 28rpx;
+  border-radius: 18rpx;
+  font-size: 26rpx;
+  font-weight: 700;
 }
 
 .assay-list {
@@ -122,4 +148,128 @@
   font-size: 24rpx;
   font-weight: 800;
   color: #246bfe;
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.modal-panel {
+  position: fixed;
+  left: 24rpx;
+  right: 24rpx;
+  top: 72rpx;
+  bottom: 32rpx;
+  z-index: 91;
+  display: flex;
+  flex-direction: column;
+  border-radius: 28rpx;
+  background: #f7faff;
+  box-shadow: 0 24rpx 80rpx rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.modal-header,
+.modal-footer {
+  flex: 0 0 auto;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  background: #ffffff;
+}
+
+.modal-header {
+  align-items: flex-start;
+  border-bottom: 1rpx solid #e7edf5;
+}
+
+.modal-title {
+  font-size: 34rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.modal-subtitle {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #7a869a;
+}
+
+.close-btn {
+  margin: 0;
+  min-width: 116rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  padding: 0 22rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid #d8e0ec;
+  background: #f8fbff;
+  color: #526072;
+  font-size: 24rpx;
+}
+
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.form-section {
+  margin-bottom: 18rpx;
+}
+
+.section-title {
+  margin-bottom: 18rpx;
+  font-size: 28rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.form-item,
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.form-item + .form-item,
+.metric-item + .metric-item {
+  margin-top: 18rpx;
+}
+
+.field-label {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #526072;
+}
+
+.field-label.required::before {
+  content: '* ';
+  color: #f53f3f;
+}
+
+.picker-field {
+  width: 100%;
+  padding-top: 20rpx;
+  padding-bottom: 20rpx;
+  line-height: 1.5;
+}
+
+.metric-input {
+  width: 100%;
+  padding-top: 20rpx;
+  padding-bottom: 20rpx;
+}
+
+.footer-btn {
+  flex: 1;
+  margin: 0;
+  height: 74rpx;
+  line-height: 74rpx;
+  border-radius: 18rpx;
+  font-size: 26rpx;
+  font-weight: 700;
 }

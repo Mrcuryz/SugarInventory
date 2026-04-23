@@ -38,6 +38,8 @@ export const batchDownloadPalletQrLabelPdf = (codes) => {
 
 export const invalidatePalletCodes = (params) => request.post('/pallet-codes/invalid', params)
 
+export const restoreInvalidPalletCodes = (params) => request.post('/pallet-codes/invalid/restore', params)
+
 export const parsePalletCode = (code) => request.get('/pallet-codes/parse', {params: {code}})
 
 export const getPalletAssay = (code) => request.get(`/pallet-codes/${encodeURIComponent(code)}/assay`)

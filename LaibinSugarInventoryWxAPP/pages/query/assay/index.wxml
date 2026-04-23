@@ -1,3 +1,4 @@
+<page-meta page-style="{{showCreateModal ? 'overflow: hidden; height: 100vh;' : ''}}"></page-meta>
 <page-shell>
   <page-header title="化验查询" subtitle="按产品、化验员和判定结果查看记录" showBack="{{true}}" />
 
@@ -21,7 +22,10 @@
     </view>
   </view>
 
-  <view class="summary-line">共 {{total}} 条化验记录</view>
+  <view class="summary-bar">
+    <view class="summary-line">共 {{total}} 条化验记录</view>
+    <button wx:if="{{canCreate}}" class="primary-btn add-btn" bindtap="openCreateModal">新增</button>
+  </view>
 
   <empty-state wx:if="{{error}}" icon="/assets/icons-line/flow-assay.svg" title="化验查询失败" description="请稍后重试，或检查账号权限。" />
   <empty-state wx:elif="{{!loading && !records.length}}" icon="/assets/icons-line/flow-assay.svg" title="暂无化验记录" description="没有匹配当前筛选条件的化验数据。" />
@@ -49,4 +53,92 @@
   </view>
 
   <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
+
+  <view wx:if="{{showCreateModal}}" class="modal-mask" bindtap="closeCreateModal" catchtouchmove="noop"></view>
+  <view wx:if="{{showCreateModal}}" class="modal-panel" catchtouchmove="noop">
+    <view class="modal-header">
+      <view>
+        <view class="modal-title">新增化验</view>
+        <view class="modal-subtitle">录入化验实测值</view>
+      </view>
+      <button class="close-btn" bindtap="closeCreateModal">关闭</button>
+    </view>
+
+    <scroll-view class="modal-body" scroll-y>
+      <view class="form-section">
+        <view class="section-title">录入方式</view>
+        <view class="form-item">
+          <view class="field-label required">选择类型</view>
+          <picker mode="selector" range="{{selectTypeOptions}}" range-key="label" value="{{form.selectType === '2' ? 1 : 0}}" bindchange="onSelectTypeChange">
+            <view class="picker-field">{{form.selectTypeLabel}}</view>
+          </picker>
+        </view>
+
+        <view class="form-item" wx:if="{{form.selectType === '1'}}">
+          <view class="field-label required">化验产品名称</view>
+          <picker mode="multiSelector" range="{{productPickerColumns}}" value="{{productPickerIndexes}}" bindcolumnchange="onProductPickerColumnChange" bindchange="onProductPickerChange">
+            <view class="picker-field">{{form.productName || '请选择化验产品名称'}}</view>
+          </picker>
+        </view>
+
+        <view class="form-item" wx:if="{{form.selectType === '2'}}">
+          <view class="field-label required">批量化验组</view>
+          <picker mode="selector" range="{{assayGroupOptions}}" range-key="standardName" value="{{assayGroupIndex}}" bindchange="onAssayGroupChange">
+            <view class="picker-field">{{form.relatedName || '请选择批量化验组'}}</view>
+          </picker>
+        </view>
+
+        <view class="form-item">
+          <view class="field-label required">采样日期</view>
+          <picker mode="date" value="{{form.sampleDate}}" bindchange="onFormDateChange">
+            <view class="picker-field">{{form.sampleDate || '请选择采样日期'}}</view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="form-section">
+        <view class="section-title">指标录入</view>
+
+        <view class="metric-item">
+          <view class="field-label">色值</view>
+          <input class="metric-input" type="digit" placeholder="请输入色值" value="{{form.colorValue}}" data-field="colorValue" bindinput="onMetricInput" />
+        </view>
+
+        <view class="metric-item">
+          <view class="field-label">还原糖分</view>
+          <input class="metric-input" type="digit" placeholder="请输入还原糖分" value="{{form.reducingSugar}}" data-field="reducingSugar" bindinput="onMetricInput" />
+        </view>
+
+        <view class="metric-item">
+          <view class="field-label">干燥失重</view>
+          <input class="metric-input" type="digit" placeholder="请输入干燥失重" value="{{form.dryWeight}}" data-field="dryWeight" bindinput="onMetricInput" />
+        </view>
+
+        <view class="metric-item">
+          <view class="field-label">电导灰分</view>
+          <input class="metric-input" type="digit" placeholder="请输入电导灰分" value="{{form.conductivityAsh}}" data-field="conductivityAsh" bindinput="onMetricInput" />
+        </view>
+
+        <view class="metric-item">
+          <view class="field-label">蔗糖分</view>
+          <input class="metric-input" type="digit" placeholder="请输入蔗糖分" value="{{form.sucrose}}" data-field="sucrose" bindinput="onMetricInput" />
+        </view>
+
+        <view class="metric-item">
+          <view class="field-label">不溶于水杂质</view>
+          <input class="metric-input" type="digit" placeholder="请输入不溶于水杂质" value="{{form.insolubleImpurity}}" data-field="insolubleImpurity" bindinput="onMetricInput" />
+        </view>
+
+        <view class="metric-item">
+          <view class="field-label">pH值</view>
+          <input class="metric-input" type="digit" placeholder="请输入 pH 值" value="{{form.phValue}}" data-field="phValue" bindinput="onMetricInput" />
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="modal-footer">
+      <button class="secondary-btn footer-btn" bindtap="closeCreateModal" disabled="{{createSubmitting}}">取消</button>
+      <button class="primary-btn footer-btn" bindtap="submitCreateForm" loading="{{createSubmitting}}" disabled="{{createSubmitting}}">提交</button>
+    </view>
+  </view>
 </page-shell>

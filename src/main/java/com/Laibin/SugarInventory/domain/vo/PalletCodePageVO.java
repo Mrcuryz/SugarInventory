@@ -10,6 +10,7 @@ public class PalletCodePageVO {
     private Integer id;
     private String code;
     private String status;
+    private Integer productId;
     private String productName;
     private String productType;
     private String productStatus;

@@ -398,7 +398,7 @@
 import {computed, onMounted, ref, watch} from 'vue'
 import dayjs from 'dayjs'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {useRouter} from 'vue-router'
+import {useRoute, useRouter} from 'vue-router'
 import {getProductList} from '@/api/product'
 import {getWarehouse} from '@/api/warehouse'
 import {formatDateTime} from '@/utils/dateTime'
@@ -476,6 +476,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const route = useRoute()
 const activeBizScene = ref(props.bizSceneTabs[0]?.value || props.defaultQuery.bizScene || '')
 const title = computed(() => props.title)
 const description = computed(() => props.description)
@@ -545,16 +546,20 @@ const batchCodeOperation = computed(() => commonOperations[batchCodeOperationKey
 
 function defaultSearchForm() {
   return {
-    code: '',
+    code: resolveRouteQueryValue(route.query.code) || '',
     taskType: props.defaultQuery.taskType || '',
     bizScene: props.defaultQuery.bizScene || '',
-    status: '',
+    status: resolveRouteQueryValue(route.query.status) || '',
     productName: '',
     targetWarehouseName: '',
     productType: '',
     productStatus: props.defaultQuery.productStatus || '',
     productionDateRange: []
   }
+}
+
+function resolveRouteQueryValue(value) {
+  return Array.isArray(value) ? (value[0] || '') : (value || '')
 }
 
 function defaultSemiItem() {
@@ -1143,6 +1148,16 @@ onMounted(async () => {
   await Promise.all([loadWarehouses(), loadProducts()])
   await handleSearch()
 })
+
+watch(
+    () => [route.query.code, route.query.status],
+    ([code, status]) => {
+      searchForm.value.code = resolveRouteQueryValue(code)
+      searchForm.value.status = resolveRouteQueryValue(status)
+      currentPage.value = 1
+      handleSearch()
+    }
+)
 </script>
 
 <style scoped>

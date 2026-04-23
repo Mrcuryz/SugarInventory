@@ -1,11 +1,13 @@
 .guide-layout {
   display: flex;
   gap: 18rpx;
-  min-height: calc(100vh - 240rpx);
+  height: calc(100vh - 220rpx);
+  overflow: hidden;
 }
 
 .toc-pane {
   width: 220rpx;
+  height: 100%;
   flex-shrink: 0;
   border: 1rpx solid #e7edf5;
   border-radius: 24rpx;
@@ -17,9 +19,19 @@
   width: 116rpx;
 }
 
+.content-column {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
 .content-pane {
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 .toc-toolbar {
@@ -144,9 +156,44 @@
   color: #647089;
 }
 
+.poster-card {
+  border: 1rpx solid #e7edf5;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 12rpx 32rpx rgba(23, 32, 51, 0.065);
+  overflow: hidden;
+}
+
+.poster-image {
+  display: block;
+  width: 100%;
+  background: #eef3ff;
+}
+
+.poster-copy {
+  padding: 24rpx 26rpx 26rpx;
+}
+
+.poster-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #172033;
+}
+
+.poster-desc {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.65;
+  color: #526072;
+}
+
 .content-card {
   margin-top: 18rpx;
   padding: 26rpx;
+}
+
+.poster-card + .content-card {
+  margin-top: 18rpx;
 }
 
 .card-title {

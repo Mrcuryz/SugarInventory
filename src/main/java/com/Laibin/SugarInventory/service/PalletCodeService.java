@@ -100,6 +100,8 @@ public interface PalletCodeService extends IService<PalletCode> {
     // 批量作废空闲托盘码
     void invalidatePalletCodes(CancelPalletBatchDTO dto, Integer operatorId);
 
+    void restoreInvalidPalletCodes(CancelPalletBatchDTO dto, Integer operatorId);
+
     // 批量取消当前轮次待处理任务，并释放托盘回 FREE
     void cancelTasksByCodes(CancelPalletBatchDTO dto, Integer operatorId);
 

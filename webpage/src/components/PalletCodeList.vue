@@ -97,11 +97,11 @@
         </el-table-column>
         <el-table-column label="操作" width="520" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'FREE'" type="success" size="small" @click="openBindDialog(row)">绑定</el-button>
+            <el-button v-if="canShowBindAction(row)" type="success" size="small" @click="openBindDialog(row)">绑定</el-button>
             <el-button type="primary" size="small" @click="openQrDialog(row)">二维码</el-button>
             <el-dropdown trigger="click" @command="format => handleQrDownload(row.code, format)">
               <el-button type="primary" plain size="small" :loading="qrDownloadLoading">
-                下载打印版
+                下载
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -111,10 +111,12 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <el-button type="info" size="small" @click="openAssayDialog(row)">化验</el-button>
-            <el-button type="info" size="small" @click="openInventoryDialog(row)">位置</el-button>
-            <el-button type="primary" size="small" @click="openFlowDrawer(row)">流转</el-button>
-            <el-button v-if="row.status === 'FREE'" type="danger" size="small" @click="handleInvalid(row)">作废</el-button>
+            <el-button v-if="canShowTaskAction(row)" type="info" size="small" @click="goTaskCenter(row)">任务</el-button>
+            <el-button v-if="canShowAssayAction(row)" type="info" size="small" @click="openAssayDialog(row)">化验</el-button>
+            <el-button v-if="canShowLocationAction(row)" type="info" size="small" @click="goWarehouseMap(row)">位置</el-button>
+            <el-button v-if="canShowFlowAction(row)" type="primary" size="small" @click="openFlowDrawer(row)">流转</el-button>
+            <el-button v-if="canShowInvalidAction(row)" type="danger" size="small" @click="handleInvalid(row)">作废</el-button>
+            <el-button v-if="canShowRestoreInvalidAction(row)" type="warning" size="small" @click="handleRestoreInvalid(row)">取消作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -217,10 +219,40 @@
       <el-empty v-else description="暂无化验数据"/>
     </el-dialog>
 
+    <el-dialog title="新增化验" v-model="assayCreateDialogVisible" width="560px">
+      <el-form :model="assayCreateForm" label-width="110px">
+        <el-form-item label="化验产品">
+          <el-cascader
+              v-model="assayCreateForm.productId"
+              :options="productOptions"
+              :props="productCascaderProps"
+              clearable
+              filterable
+              placeholder="请选择化验产品"
+              style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="采样日期">
+          <el-date-picker v-model="assayCreateForm.sampleDate" value-format="YYYY-MM-DD" type="date" style="width: 100%"/>
+        </el-form-item>
+        <el-form-item label="色值"><el-input v-model="assayCreateForm.colorValue" /></el-form-item>
+        <el-form-item label="还原糖分"><el-input v-model="assayCreateForm.reducingSugar" /></el-form-item>
+        <el-form-item label="干燥失重"><el-input v-model="assayCreateForm.dryWeight" /></el-form-item>
+        <el-form-item label="电导灰分"><el-input v-model="assayCreateForm.conductivityAsh" /></el-form-item>
+        <el-form-item label="蔗糖分"><el-input v-model="assayCreateForm.sucrose" /></el-form-item>
+        <el-form-item label="不溶于水杂质"><el-input v-model="assayCreateForm.insolubleImpurity" /></el-form-item>
+        <el-form-item label="pH值"><el-input v-model="assayCreateForm.phValue" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="assayCreateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="assayCreateSubmitting" @click="submitAssayCreate">提交</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog title="库存位置" v-model="inventoryDialogVisible" width="520px">
       <el-descriptions v-if="inventoryInfo" :column="1" border>
         <el-descriptions-item label="仓库">{{ inventoryInfo.warehouseName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="侧">{{ inventoryInfo.side || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="侧别">{{ inventoryInfo.side || '-' }}</el-descriptions-item>
         <el-descriptions-item label="排">{{ inventoryInfo.rowNumber || '-' }}</el-descriptions-item>
         <el-descriptions-item label="层">{{ inventoryInfo.layer || '-' }}</el-descriptions-item>
         <el-descriptions-item label="数量">{{ inventoryInfo.quantity ?? '-' }} {{ inventoryInfo.unit ? '件' : '板' }}</el-descriptions-item>
@@ -238,7 +270,7 @@
               <span>轮次</span>
               <span>产品</span>
               <span>状态</span>
-              <span>操作数</span>
+              <span>记录数</span>
             </div>
             <button
                 v-for="row in cycleList"
@@ -316,10 +348,11 @@
 
 <script setup>
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import {useRoute} from 'vue-router'
+import {useRoute, useRouter} from 'vue-router'
 import dayjs from 'dayjs'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {getProductList} from '@/api/product'
+import {addAssay} from '@/api/assay'
 import {formatDateTime} from '@/utils/dateTime'
 import {buildProductCascaderOptions, productCascaderProps} from '@/utils/productCascader'
 import {
@@ -336,7 +369,8 @@ import {
   invalidatePalletCodes,
   listPalletFlowsByCycle,
   pagePalletCodes,
-  pagePalletFlowCycles
+  pagePalletFlowCycles,
+  restoreInvalidPalletCodes
 } from '@/api/palletCode'
 import {
   FLOW_OPERATION_MAP,
@@ -348,6 +382,7 @@ import {
 } from '@/utils/palletCodeDict'
 
 const route = useRoute()
+const router = useRouter()
 const searchForm = ref({
   code: '',
   status: '',
@@ -392,6 +427,9 @@ const qrDialogVisible = ref(false)
 const qrImageUrl = ref('')
 const assayDialogVisible = ref(false)
 const assayInfo = ref(null)
+const assayCreateDialogVisible = ref(false)
+const assayCreateSubmitting = ref(false)
+const assayCreateForm = ref(defaultAssayCreateForm())
 const inventoryDialogVisible = ref(false)
 const inventoryInfo = ref(null)
 
@@ -419,6 +457,33 @@ function defaultBindForm() {
     remark: ''
   }
 }
+
+function defaultAssayCreateForm() {
+  return {
+    code: '',
+    productId: null,
+    sampleDate: dayjs().format('YYYY-MM-DD'),
+    colorValue: '',
+    reducingSugar: '',
+    dryWeight: '',
+    conductivityAsh: '',
+    sucrose: '',
+    insolubleImpurity: '',
+    phValue: ''
+  }
+}
+
+const isFreeRow = (row) => row.status === 'FREE'
+const isPendingRow = (row) => row.status === 'PENDING'
+const isInstockRow = (row) => row.status === 'INSTOCK'
+const isInvalidRow = (row) => row.status === 'INVALID'
+const canShowBindAction = (row) => isFreeRow(row)
+const canShowTaskAction = (row) => isPendingRow(row)
+const canShowAssayAction = (row) => isPendingRow(row) || isInstockRow(row)
+const canShowLocationAction = (row) => isInstockRow(row)
+const canShowFlowAction = (row) => isFreeRow(row) || isPendingRow(row) || isInstockRow(row)
+const canShowInvalidAction = (row) => isFreeRow(row)
+const canShowRestoreInvalidAction = (row) => isInvalidRow(row)
 
 const buildQuery = () => {
   const params = {
@@ -614,19 +679,32 @@ const handleBatchDownloadPdf = async (codes = selectedRows.value.map(row => row.
 const openAssayDialog = async (row) => {
   currentCode.value = row.code
   const res = await getPalletAssay(row.code)
-  assayInfo.value = res.data || null
-  assayDialogVisible.value = true
-}
-
-const openInventoryDialog = async (row) => {
-  currentCode.value = row.code
-  const res = await getPalletInventory(row.code)
-  inventoryInfo.value = res.data || null
-  inventoryDialogVisible.value = true
+  if (res.data?.id) {
+    assayInfo.value = res.data || null
+    assayDialogVisible.value = true
+    return
+  }
+  const action = await ElMessageBox.confirm(
+      `当前二维码 ${row.code} 暂无化验记录，是否现在新增？`,
+      '新增化验',
+      {
+        confirmButtonText: '新增化验',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+  ).catch(() => null)
+  if (!action) {
+    return
+  }
+  prepareAssayCreate(row)
 }
 
 const handleInvalid = async (row) => {
   await invalidateByCodes([row.code])
+}
+
+const handleRestoreInvalid = async (row) => {
+  await restoreInvalidByCodes([row.code])
 }
 
 const handleBatchInvalid = async () => {
@@ -638,10 +716,83 @@ const invalidateByCodes = async (codes) => {
     ElMessage.warning('请选择二维码')
     return
   }
-  await ElMessageBox.confirm(`确认作废 ${codes.length} 个二维码吗？`, '温馨提示', {type: 'warning'})
-  await invalidatePalletCodes({codes, remark: 'Web管理端作废'})
+  await ElMessageBox.confirm(`确认作废 ${codes.length} 个二维码吗？`, '提示', {type: 'warning'})
+  await invalidatePalletCodes({codes, remark: 'Web 管理端作废'})
   ElMessage.success('作废成功')
   await handleSearch()
+}
+
+const restoreInvalidByCodes = async (codes) => {
+  if (!codes.length) {
+    ElMessage.warning('请选择二维码')
+    return
+  }
+  await ElMessageBox.confirm(`确认恢复 ${codes.length} 个作废二维码吗？`, '提示', {type: 'warning'})
+  await restoreInvalidPalletCodes({codes, remark: 'Web 管理端取消作废'})
+  ElMessage.success('取消作废成功')
+  await handleSearch()
+}
+
+const prepareAssayCreate = (row) => {
+  assayCreateForm.value = {
+    ...defaultAssayCreateForm(),
+    code: row.code,
+    productId: row.productId || null,
+    sampleDate: row.productionDate || dayjs().format('YYYY-MM-DD')
+  }
+  assayCreateDialogVisible.value = true
+}
+
+const submitAssayCreate = async () => {
+  if (!assayCreateForm.value.productId) {
+    ElMessage.warning('请选择化验产品')
+    return
+  }
+  if (!assayCreateForm.value.sampleDate) {
+    ElMessage.warning('请选择采样日期')
+    return
+  }
+  assayCreateSubmitting.value = true
+  try {
+    const payload = {
+      selectType: '1',
+      productId: assayCreateForm.value.productId,
+      sampleDate: assayCreateForm.value.sampleDate
+    }
+    ;['colorValue', 'reducingSugar', 'dryWeight', 'conductivityAsh', 'sucrose', 'insolubleImpurity', 'phValue']
+        .forEach((field) => {
+          if (assayCreateForm.value[field] !== '' && assayCreateForm.value[field] != null) {
+            payload[field] = assayCreateForm.value[field]
+          }
+        })
+    await addAssay([payload])
+    assayCreateDialogVisible.value = false
+    ElMessage.success('新增化验成功')
+    await openAssayDialog({code: assayCreateForm.value.code, productId: assayCreateForm.value.productId, productionDate: assayCreateForm.value.sampleDate})
+    await handleSearch()
+  } finally {
+    assayCreateSubmitting.value = false
+  }
+}
+
+const goTaskCenter = (row) => {
+  const path = row.productStatus === '半成品' ? '/pallet-task/semi/in' : '/pallet-task/finish/in'
+  router.push({path, query: {code: row.code, status: 'PENDING'}})
+}
+
+const goWarehouseMap = async (row) => {
+  try {
+    const res = await getPalletInventory(row.code)
+    router.push({
+      path: '/warehouse-map',
+      query: {
+        palletCode: row.code,
+        warehouseName: res.data?.warehouseName || ''
+      }
+    })
+  } catch (error) {
+    ElMessage.error(error?.message || '跳转仓库平面图失败')
+  }
 }
 
 const openFlowDrawer = async (row) => {
@@ -722,10 +873,10 @@ const canSelectFlow = (row) => {
 
 const handleDeleteFlows = async () => {
   if (!selectedFlowIds.value.length) {
-    ElMessage.warning('请选择可删除的历史flow')
+    ElMessage.warning('请选择可删除的历史记录')
     return
   }
-  await ElMessageBox.confirm(`确认删除 ${selectedFlowIds.value.length} 条历史flow吗？`, '温馨提示', {type: 'warning'})
+  await ElMessageBox.confirm(`确认删除 ${selectedFlowIds.value.length} 条历史记录吗？`, '提示', {type: 'warning'})
   await deletePalletFlows({ids: selectedFlowIds.value})
   ElMessage.success('删除成功')
   await selectCycle(selectedCycle.value)

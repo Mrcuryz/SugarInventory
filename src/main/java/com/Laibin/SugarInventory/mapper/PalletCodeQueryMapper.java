@@ -15,6 +15,7 @@ public interface PalletCodeQueryMapper {
             "<script>",
             "SELECT ",
             " pc.id, pc.code, pc.status,",
+            " CASE WHEN pc.status = 'FREE' THEN pc.fixed_product_id ELSE pc.product_id END AS productId,",
             " CASE WHEN pc.status = 'FREE' THEN NULL ELSE pc.product_status END AS productStatus,",
             " CASE WHEN pc.status = 'FREE' THEN NULL ELSE pc.production_date END AS productionDate,",
             " CASE WHEN pc.status = 'FREE' THEN NULL ELSE pc.assay_id END AS assayId,",

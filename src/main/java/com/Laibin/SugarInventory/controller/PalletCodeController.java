@@ -193,6 +193,8 @@ public class PalletCodeController {
             return Result.success(result);
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, "入库确认失败，请联系管理员处理");
         }
     }
 
@@ -205,6 +207,22 @@ public class PalletCodeController {
             return Result.success(null);
         } catch (BusinessException e) {
             return Result.error(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, "二维码作废失败，请联系管理员处理");
+        }
+    }
+
+    @Operation(summary = "取消作废二维码", description = "将作废状态的二维码恢复为空闲状态")
+    @PostMapping("/invalid/restore")
+    public Result<Void> restoreInvalidCodes(@RequestBody @Valid CancelPalletBatchDTO dto,
+                                            @AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            palletCodeService.restoreInvalidPalletCodes(dto, loginUser.getUser().getId());
+            return Result.success(null);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, "取消作废失败，请联系管理员处理");
         }
     }
 
@@ -272,7 +290,9 @@ public class PalletCodeController {
             PalletAssayVO vo = palletCodeService.getAssayByCode(code);
             return Result.success(vo);
         } catch (BusinessException e) {
-            return Result.error(500, "化验记录查询失败：" + e.getMessage());
+            return Result.error(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, "化验记录查询失败，请联系管理员处理");
         }
     }
 
@@ -283,7 +303,9 @@ public class PalletCodeController {
             PalletInventoryVO vo = palletCodeService.getInventoryByCode(code);
             return Result.success(vo);
         } catch (BusinessException e) {
-            return Result.error(500, e.getMessage());
+            return Result.error(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, "库存位置查询失败，请联系管理员处理");
         }
     }
 

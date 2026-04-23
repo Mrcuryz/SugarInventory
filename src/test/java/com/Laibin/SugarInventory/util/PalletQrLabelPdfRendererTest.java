@@ -2,8 +2,10 @@ package com.Laibin.SugarInventory.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.awt.Font;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,5 +38,13 @@ class PalletQrLabelPdfRendererTest {
         assertTrue(body.contains("/MediaBox [0 0 595.28 841.89]"));
         assertTrue(body.contains("/Subtype /Image"));
         assertTrue(body.endsWith("%%EOF\n"));
+    }
+
+    @Test
+    void titleFontShouldUseBundledChineseFont() {
+        Font font = PalletQrLabelPdfRenderer.pickFont(Font.BOLD, 42);
+
+        assertTrue(font.canDisplayUpTo("黄中冰白砂糖") == -1);
+        assertTrue(font.getFontName(Locale.ENGLISH).contains("Noto Sans SC"));
     }
 }

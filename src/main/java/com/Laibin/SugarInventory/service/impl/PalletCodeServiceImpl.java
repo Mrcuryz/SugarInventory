@@ -1968,10 +1968,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (product == null) {
             throw new BusinessException("产品不存在");
         }
-        Integer assayId = ensureAssayId(palletCode, task, entryDate);
-        if (assayId == null) {
-            throw new BusinessException("找不到化验数据");
-        }
+        Integer assayId = ensureAssayId(palletCode, task, entryDate, operatorId, true);
         AddSemiProductRecordDTO recordDTO = new AddSemiProductRecordDTO();
         recordDTO.setProductId(task.getProductId());
         recordDTO.setWarehouseName(warehouse.getWarehouseName());
@@ -2001,10 +1998,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         }
         List<SemiRecordDTO> semiRecords = buildSemiRecords(task);
         validateUseAssayCount(semiRecords);
-        Integer assayId = ensureAssayId(palletCode, task, entryDate);
-        if (assayId == null) {
-            throw new BusinessException("找不到化验数据");
-        }
+        Integer assayId = ensureAssayId(palletCode, task, entryDate, operatorId, true);
         InStockRequestDTO requestDTO = new InStockRequestDTO();
         requestDTO.setProductId(task.getProductId());
         requestDTO.setWarehouseName(warehouse.getWarehouseName());
@@ -2192,15 +2186,16 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         return operator.getName();
     }
 
-    private Integer ensureAssayId(PalletCode palletCode, PalletTask task, LocalDate entryDate) {
+    private Integer ensureAssayId(PalletCode palletCode, PalletTask task, LocalDate entryDate,
+                                  Integer operatorId, boolean writeBack) {
         Inventory inventory = lambdaQueryInventoryByPalletId(palletCode.getId());
         AssayResolveResult result = assayResolveService.resolveForPallet(
                 palletCode,
                 task,
                 inventory,
                 entryDate,
-                null,
-                true
+                operatorId,
+                writeBack
         );
         return result.hasAssay() ? result.getAssay().getId() : null;
     }
@@ -2238,6 +2233,38 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             flow.setOperationType("CANCELED");
             flow.setOperationName("作废托盘码");
             flow.setOperationTime(LocalDateTime.now());
+            flow.setOperatorId(operatorId);
+            flow.setProductId(palletCode.getProductId());
+            flow.setProductStatus(palletCode.getProductStatus());
+            flow.setAssayId(palletCode.getAssayId());
+            flow.setCycleNo(palletCode.getCurrentCycleNo());
+            flow.setRemark(dto.getRemark());
+            palletFlowRecordMapper.insert(flow);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void restoreInvalidPalletCodes(CancelPalletBatchDTO dto, Integer operatorId) {
+        if (dto == null || dto.getCodes() == null || dto.getCodes().isEmpty()) {
+            throw new BusinessException("二维码列表不能为空");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (String rawCode : dto.getCodes()) {
+            PalletCode palletCode = parseAndFind(rawCode);
+            if (!"INVALID".equalsIgnoreCase(palletCode.getStatus())) {
+                throw new BusinessException("仅作废状态的二维码才可取消作废");
+            }
+            palletCode.setStatus("FREE");
+            palletCode.setUpdatedBy(operatorId);
+            palletCode.setUpdatedAt(now);
+            this.updateById(palletCode);
+
+            PalletFlowRecord flow = new PalletFlowRecord();
+            flow.setPalletCodeId(palletCode.getId());
+            flow.setOperationType("RESTORED");
+            flow.setOperationName("取消作废二维码");
+            flow.setOperationTime(now);
             flow.setOperatorId(operatorId);
             flow.setProductId(palletCode.getProductId());
             flow.setProductStatus(palletCode.getProductStatus());
@@ -2330,13 +2357,11 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                 getCurrentCycleNo(palletCode)
         );
         Inventory inventory = lambdaQueryInventoryByPalletId(palletCode.getId());
-        AssayResolveResult resolveResult = assayResolveService.resolveForPallet(
+        AssayResolveResult resolveResult = assayResolveService.previewForPallet(
                 palletCode,
                 latestWithAssay,
                 inventory,
-                null,
-                null,
-                true
+                null
         );
         Assay assay = resolveResult.getAssay();
         PalletAssayVO vo = new PalletAssayVO();

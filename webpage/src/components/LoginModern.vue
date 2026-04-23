@@ -1,11 +1,12 @@
 <script setup>
 import {computed, reactive, ref} from 'vue'
 import {useRouter} from 'vue-router'
-import {Box, Lock, User} from '@element-plus/icons-vue'
+import {Lock, User} from '@element-plus/icons-vue'
 import {login} from '@/api/login.js'
 import {useTokenStore} from '@/stores/token'
 import {useAuthStore} from '@/stores/auth'
 import rememberMeStore from '@/stores/rememberMe'
+import appLogo from '@/assets/logo.png'
 
 const router = useRouter()
 const tokenStore = useTokenStore()
@@ -98,7 +99,7 @@ const handleSubmit = async () => {
       <div class="brand-content">
         <div class="brand-mark">
           <div class="brand-icon">
-            <Box/>
+            <img :src="appLogo" alt="数字仓储平台" class="brand-logo-image">
           </div>
           <span>广西糖罐子食品有限公司</span>
         </div>
@@ -156,7 +157,7 @@ const handleSubmit = async () => {
       <el-card class="login-card" shadow="never">
         <div class="card-heading">
           <div class="card-logo">
-            <Box/>
+            <img :src="appLogo" alt="数字仓储平台" class="card-logo-image">
           </div>
           <div>
             <h2>欢迎登录</h2>
@@ -309,9 +310,10 @@ const handleSubmit = async () => {
   color: #fff;
 }
 
-.brand-icon :deep(svg) {
+.brand-logo-image {
   width: 18px;
   height: 18px;
+  object-fit: contain;
 }
 
 .brand-copy {
@@ -510,10 +512,10 @@ const handleSubmit = async () => {
   box-shadow: 0 12px 28px rgba(22, 93, 255, 0.08);
 }
 
-.card-logo :deep(svg) {
+.card-logo-image {
   width: 30px;
   height: 30px;
-  color: var(--app-primary);
+  object-fit: contain;
 }
 
 .card-heading h2 {
