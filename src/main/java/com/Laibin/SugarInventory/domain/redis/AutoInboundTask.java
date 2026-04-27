@@ -59,6 +59,16 @@ public class AutoInboundTask {
     private Integer finishedPieceQuantity;
 
     /**
+     * 标准化后的单二维码任务项。
+     */
+    private Integer requiredQrCount;
+    private Integer availableQrCount;
+    private List<String> missingFields;
+    private List<String> warnings;
+    private List<AutoInboundTaskItem> taskItems;
+    private String status;
+
+    /**
      * 成品入库时建议的半成品记录（映射自 sources，可被前端编辑后作为 dto.semiRecords 传回）
      */
     private List<SemiRecordDTO> suggestedSemiRecords;

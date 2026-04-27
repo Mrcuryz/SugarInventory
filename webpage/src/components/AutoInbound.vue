@@ -2,7 +2,7 @@
   <div class="auto-inbound-page">
     <!-- 解析区 -->
     <el-card class="search-card" style="max-width: 1200px">
-      <div class="card-title">自动入库解析</div>
+      <div class="card-title">智能报数入库</div>
       <el-dialog
           v-model="semiEditVisible"
           title="关联半成品"
@@ -486,6 +486,15 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="侧别" width="90">
+          <template #default="{ row }">
+            <el-select v-model="row.side" size="small" style="width: 72px">
+              <el-option label="左" value="左" />
+              <el-option label="右" value="右" />
+            </el-select>
+          </template>
+        </el-table-column>
+
         <el-table-column label="板数" width="100">
           <template #default="{ row }">
             <el-input-number
@@ -563,6 +572,49 @@
             >
               {{ row.canAutoStockIn ? '是' : '否' }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="二维码" width="110">
+          <template #default="{ row }">
+            <div class="qr-demand">
+              <span>需 {{ row.requiredQrCount ?? 0 }}</span>
+              <span>可 {{ row.availableQrCount ?? 0 }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="拆分结果" min-width="150">
+          <template #default="{ row }">
+            <div class="split-items">
+              <el-tag
+                  v-for="item in row.taskItems || []"
+                  :key="item.seq"
+                  size="small"
+                  :type="item.unit === '1' ? 'warning' : 'info'"
+              >
+                {{ item.displayQuantity }}
+              </el-tag>
+              <span v-if="!row.taskItems || !row.taskItems.length">-</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="执行结果" min-width="180">
+          <template #default="{ row }">
+            <div class="result-items">
+              <div
+                  v-for="item in row.taskItems || []"
+                  :key="`${item.seq}-${item.code || 'pending'}`"
+                  class="result-line"
+              >
+                <el-tag
+                    size="small"
+                    :type="item.status === 'SUCCESS' ? 'success' : (item.status === 'FAILED' ? 'danger' : 'info')"
+                >
+                  {{ item.code || '未分配' }}
+                </el-tag>
+                <span>{{ item.message || item.status || '-' }}</span>
+              </div>
+              <span v-if="!row.taskItems || !row.taskItems.length">-</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="关联半成品" width="100">
@@ -1106,10 +1158,20 @@ const handleConfirm = async () => {
   console.log('payload:', payload)
   loadingConfirm.value = true
   try {
-    await confirmAutoInbound(batchId.value, payload)
+    const res = await confirmAutoInbound(batchId.value, payload)
+    const rawTasks = res.data?.tasks || []
+    taskList.value = rawTasks.map(t => {
+      const _productId = t.type === 'SEMI_PRODUCT' ? t.semiProductId : t.productId
+      return {
+        ...t,
+        _productId,
+        semiRecords: Array.isArray(t.semiRecords) && t.semiRecords.length
+            ? t.semiRecords
+            : (t.suggestedSemiRecords || [])
+      }
+    })
+    globalRemarks.value = res.data?.globalRemarks || globalRemarks.value
     ElMessage.success('入库成功')
-    batchId.value = ''
-    taskList.value = []
     selectedTaskIds.value = []
   } catch (e) {
     console.error(e)
@@ -1250,6 +1312,32 @@ onMounted(() => {
 
 .global-remark-alert {
   margin-bottom: 10px;
+}
+
+.qr-demand {
+  display: grid;
+  gap: 2px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.split-items,
+.result-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.result-items {
+  display: grid;
+}
+
+.result-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
 }
 
 </style>

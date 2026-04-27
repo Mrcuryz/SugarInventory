@@ -74,6 +74,7 @@ import com.Laibin.SugarInventory.service.AssayResolveService;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.PalletCodeService;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
+import com.Laibin.SugarInventory.service.model.PalletInventoryOccupancyRule;
 import com.Laibin.SugarInventory.util.PalletCodeGenerator;
 import com.Laibin.SugarInventory.util.PalletQrLabelPdfRenderer;
 import com.Laibin.SugarInventory.util.QrCodeUtils;
@@ -530,6 +531,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (product == null) {
             throw new BusinessException("产品不存在");
         }
+        validateSinglePalletOccupancy(normalizeUnit(dto.getUnit()), normalizeQuantity(dto.getQuantity()), product.getPiecesPerPallet(), "二维码绑定");
         if (Boolean.TRUE.equals(palletCode.getFixedModeEnabled())) {
             if (palletCode.getFixedProductId() == null) {
                 throw new BusinessException("当前二维码未配置固定产品");
@@ -662,6 +664,11 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                 throw new BusinessException("同一请求中不允许重复绑定同一半成品托盘");
             }
             requireActivePreparePoolForBinding(semiPallet);
+            Product semiProduct = semiPallet.getProductId() != null ? productMapper.selectById(semiPallet.getProductId()) : null;
+            if (semiProduct == null) {
+                throw new BusinessException("产品不存在");
+            }
+            validateSinglePalletOccupancy(itemDTO.getUnit(), itemDTO.getQuantity(), semiProduct.getPiecesPerPallet(), "半成品绑定");
 
             Integer assayId = null;
             if (useAssay) {
@@ -685,7 +692,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             TaskSemiItemVO vo = new TaskSemiItemVO();
             vo.setSemiPalletCode(semiPallet.getCode());
             vo.setSemiProductId(semiPallet.getProductId());
-            Product semiProduct = semiPallet.getProductId() != null ? productMapper.selectById(semiPallet.getProductId()) : null;
             vo.setSemiProductName(semiProduct != null ? semiProduct.getProductName() : null);
             vo.setProductionDate(semiPallet.getProductionDate());
             vo.setQuantity(itemDTO.getQuantity());
@@ -871,6 +877,11 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (!"0".equals(unit) && !"1".equals(unit)) {
             throw new BusinessException("单位仅支持0=板或1=件");
         }
+        Product taskProduct = productMapper.selectById(task.getProductId());
+        if (taskProduct == null) {
+            throw new BusinessException("产品不存在");
+        }
+        validateSinglePalletOccupancy(unit, quantity, taskProduct.getPiecesPerPallet(), "二维码入库");
         // 4) 按任务类型分支处理
         if ("SEMI_IN".equals(task.getTaskType())) {
             return handleSemiInTask(dto.getRemark(), palletCode, task, warehouse, entryDate, side,
@@ -881,6 +892,35 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                     dto.getRowNumber(), dto.getLayer(), unit, quantity, operatorId);
         }
         throw new BusinessException("任务类型不支持入库确认");
+    }
+
+    @Override
+    @Transactional
+    public InVO createFixedProductInboundAndConfirm(BindPalletTaskDTO bindDTO,
+                                                    ConfirmPalletInItemDTO confirmDTO,
+                                                    Integer operatorId) {
+        PalletCode palletCode = parseAndFindForUpdate(bindDTO.getCode());
+        if (!Boolean.TRUE.equals(palletCode.getFixedModeEnabled()) || palletCode.getFixedProductId() == null) {
+            throw new BusinessException("二维码未启用固定产品模式");
+        }
+        if (!"FREE".equalsIgnoreCase(palletCode.getStatus())) {
+            throw new BusinessException("二维码 " + palletCode.getCode() + " 当前不是空闲状态");
+        }
+        if (!Objects.equals(palletCode.getFixedProductId(), bindDTO.getProductId())) {
+            throw new BusinessException("固定产品二维码不能绑定到其他产品");
+        }
+        Product product = requireFixedProduct(palletCode.getFixedProductId());
+        String productStatus = resolveInboundProductStatus(product.getStatus());
+        validateSinglePalletOccupancy(normalizeUnit(bindDTO.getUnit()), normalizeQuantity(bindDTO.getQuantity()),
+                product.getPiecesPerPallet(), "固定产品二维码入库");
+
+        createInboundTaskForPallet(palletCode, product, productStatus, bindDTO.getProductionDate(),
+                operatorId, bindDTO.getRemark());
+
+        confirmDTO.setCode(palletCode.getCode());
+        confirmDTO.setQuantity(bindDTO.getQuantity());
+        confirmDTO.setUnit(bindDTO.getUnit());
+        return confirmSingleFinishedTaskIn(confirmDTO, operatorId);
     }
 
     @Override
@@ -2210,6 +2250,10 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
 
     private int normalizeQuantity(Integer quantity) {
         return quantity == null || quantity <= 0 ? 1 : quantity;
+    }
+
+    private void validateSinglePalletOccupancy(String unit, Integer quantity, Integer piecesPerPallet, String scene) {
+        PalletInventoryOccupancyRule.validateSingleQrInventory(unit, normalizeQuantity(quantity), piecesPerPallet, scene);
     }
 
     @Override

@@ -48,12 +48,12 @@ public class AutoInboundController {
 
     @Operation(summary = "自动入库确认")
     @PostMapping("/{batchId}/confirm")
-    public Result<Void> confirm(@PathVariable String batchId,
-                                @RequestBody AutoInboundConfirmRequest request,
-                                @AuthenticationPrincipal LoginUser loginUser) {
+    public Result<AutoInboundParseResponse> confirm(@PathVariable String batchId,
+                                                    @RequestBody AutoInboundConfirmRequest request,
+                                                    @AuthenticationPrincipal LoginUser loginUser) {
         try {
-            autoInboundConfirmService.confirm(batchId, request, loginUser.getUser());
-            return Result.success(null);
+            AutoInboundParseResponse response = autoInboundConfirmService.confirm(batchId, request, loginUser.getUser());
+            return Result.success(response);
         } catch (BusinessException e) {
             return Result.error(500, "自动入库确认失败：" + e.getMessage());
         }

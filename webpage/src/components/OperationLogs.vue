@@ -196,6 +196,29 @@ const detailTitle = computed(() => {
 })
 
 const detailRows = computed(() => buildDetailRows(detailLog.value))
+const hiddenDetailFields = new Set([
+  'id',
+  'productId',
+  'product_id',
+  'screenMeshId',
+  'warehouseId',
+  'assayId',
+  'relatedId',
+  'testedBy',
+  'createdBy',
+  'updatedBy',
+  'createdAt',
+  'updatedAt',
+  'selectType',
+  'appliedStandardId',
+  'appliedStandardName',
+  'appliedStandardVersion',
+  'judgeResult',
+  'failedMetricCount',
+  'failedMetricsJson',
+  'standardSnapshotJson',
+  'judgeMessage'
+])
 
 function parseJsonField(value) {
   if (value === null || value === undefined || value === '') {
@@ -222,7 +245,21 @@ function formatDateTime(value) {
   return String(value).replace('T', ' ').replace('Z', ' ').trim()
 }
 
+function tryParseStructuredValue(value) {
+  if (typeof value !== 'string') return value
+  const text = value.trim()
+  if (!text || (!text.startsWith('[') && !text.startsWith('{'))) {
+    return value
+  }
+  try {
+    return JSON.parse(text)
+  } catch (error) {
+    return value
+  }
+}
+
 function formatValue(value) {
+  value = tryParseStructuredValue(value)
   if (value === null || value === undefined || value === '') return '-'
   if (value === 'ADMIN') return '管理员'
   if (value === 'QC') return '化验员'
@@ -242,11 +279,24 @@ function getFieldLabel(key) {
   return te(`fields.${key}`) ? t(`fields.${key}`) : key
 }
 
+function sanitizeDetailMap(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return {}
+  }
+
+  const sanitized = {}
+  Object.entries(data).forEach(([key, value]) => {
+    if (hiddenDetailFields.has(key)) {
+      return
+    }
+    sanitized[key] = value
+  })
+  return sanitized
+}
+
 function normalizeLog(log) {
-  const changedFields = parseJsonField(log.changedFields)
-  const oldData = parseJsonField(log.oldData)
-  delete changedFields.id
-  delete oldData.id
+  const changedFields = sanitizeDetailMap(parseJsonField(log.changedFields))
+  const oldData = sanitizeDetailMap(parseJsonField(log.oldData))
 
   return {
     ...log,

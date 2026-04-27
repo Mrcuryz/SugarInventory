@@ -18,6 +18,7 @@ export default {
         screenMeshId: "筛网ID",
         //化验表字段翻译
         productId: "产品ID",
+        testerName: "化验员",
         sampleDate: "化验日期",
         colorValue: "色值(IU)",
         reducingSugar: "还原糖分(g/100g)",
@@ -45,6 +46,7 @@ export default {
         isQualified: "是否合格",
         version: "化验次数",
         //筛网表字段翻译
+        screenMeshName: "筛网名称",
         meshName: "筛网类型",
         description: "筛网描述",
         //库位表字段翻译

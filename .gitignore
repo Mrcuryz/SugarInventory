@@ -47,3 +47,11 @@ nbdist/
 !*/build/*.html
 !*/build/*.xml
 /node_modules/
+
+/deliverables/
+/META-INF/
+/target/
+
+*.msi
+*.exe
+*.jar

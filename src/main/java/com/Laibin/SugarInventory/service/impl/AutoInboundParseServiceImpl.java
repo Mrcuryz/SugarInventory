@@ -8,10 +8,16 @@ import com.Laibin.SugarInventory.domain.enumObject.AutoInboundRiskLevel;
 import com.Laibin.SugarInventory.domain.enumObject.AutoInboundType;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.redis.AutoInboundTask;
+import com.Laibin.SugarInventory.domain.redis.AutoInboundTaskItem;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse;
 import com.Laibin.SugarInventory.mapper.AssayMapper;
+import com.Laibin.SugarInventory.mapper.PalletCodeMapper;
+import com.Laibin.SugarInventory.mapper.ProductMapper;
+import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.AutoInboundParseService;
 import com.Laibin.SugarInventory.service.LlmParseService;
+import com.Laibin.SugarInventory.service.model.AutoInboundQuantityNormalizer;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +37,9 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
 
     private final LlmParseService llmParseService;
     private final AssayMapper assayMapper;
+    private final ProductMapper productMapper;
+    private final WarehouseMapper warehouseMapper;
+    private final PalletCodeMapper palletCodeMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -112,12 +121,15 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         task.setTaskId(UUID.randomUUID().toString());
         task.setBatchId(batchId);
         task.setType(AutoInboundType.SEMI_PRODUCT);
-        task.setEntryDate(req.getEntryDate());
-        task.setSide("左"); // 默认左侧
+        LocalDate entryDate = resolveEntryDate(item, req.getEntryDate());
+        task.setEntryDate(entryDate);
+        task.setSide(resolveSide(item));
         task.setRawBlock(item.getRawBlock());
 
         List<String> reasons = new ArrayList<>();
         List<String> remarks = new ArrayList<>();
+        List<String> missingFields = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         if (notBlank(item.getRemark())) {
             remarks.add(item.getRemark());
         }
@@ -125,18 +137,32 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         // === 产品：直接用 LLM 的 product_id / product_name ===
         Integer productId = item.getProductId();
         if (productId != null) {
-            task.setSemiProductId(productId);
-            task.setSemiProductName(item.getProductName());
+            Product product = productMapper.selectById(productId);
+            if (product != null) {
+                task.setSemiProductId(product.getId());
+                task.setSemiProductName(product.getProductName());
+            } else {
+                missingFields.add("产品");
+                reasons.add("未匹配到产品：" + safe(item.getProductNameRaw()));
+            }
         } else {
+            missingFields.add("产品");
             reasons.add("未匹配到产品：" + safe(item.getProductNameRaw()));
         }
 
         // === 仓库：直接用 LLM 的 warehouse_id / warehouse_name ===
         Integer whId = item.getWarehouseId();
         if (whId != null) {
-            task.setSemiWarehouseId(whId);
-            task.setSemiWarehouseName(item.getWarehouseName());
+            Warehouse warehouse = warehouseMapper.selectById(whId);
+            if (warehouse != null) {
+                task.setSemiWarehouseId(warehouse.getId());
+                task.setSemiWarehouseName(warehouse.getWarehouseName());
+            } else {
+                missingFields.add("库位");
+                reasons.add("未匹配到库位：" + safe(item.getLocation()));
+            }
         } else {
+            missingFields.add("库位");
             String loc = safe(item.getLocation());
             if (!loc.isEmpty()) {
                 reasons.add("未匹配到库位：" + loc);
@@ -153,16 +179,17 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         task.setSemiPieceQuantity(pieces);
 
         if (pallets <= 0 && pieces <= 0) {
+            missingFields.add("数量");
             reasons.add("半成品板数与件数均为空或为0");
         }
 
         // === 化验：按 productId + entryDate 查当日化验 ===
         boolean hasAssay = false;
-        if (productId != null) {
-            Assay assay = assayMapper.selectByProductIdAndDate(productId, req.getEntryDate());
+        if (task.getSemiProductId() != null) {
+            Assay assay = assayMapper.selectByProductIdAndDate(task.getSemiProductId(), entryDate);
             hasAssay = (assay != null);
             if (!hasAssay) {
-                reasons.add("半成品当日化验记录缺失");
+                warnings.add("半成品当日化验记录缺失");
             }
         } else {
             reasons.add("未能匹配到半成品产品，无法检查化验记录");
@@ -170,29 +197,8 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         task.setHasAssay(hasAssay);
 
         // === 风险等级 ===
-        boolean missingKey =
-                task.getSemiProductId() == null ||
-                        task.getSemiWarehouseId() == null ||
-                        !hasAssay ||
-                        (pallets <= 0 && pieces <= 0);
-
-        AutoInboundRiskLevel level;
-        boolean canAutoStockIn;
-        if (missingKey) {
-            level = AutoInboundRiskLevel.RED;
-            canAutoStockIn = false;
-        } else if (!reasons.isEmpty()) {
-            level = AutoInboundRiskLevel.YELLOW;
-            canAutoStockIn = true;
-        } else {
-            level = AutoInboundRiskLevel.GREEN;
-            canAutoStockIn = true;
-        }
-
-        task.setRiskLevel(level);
-        task.setRiskReason(String.join("；", reasons));
+        refreshTaskValidation(task, missingFields, warnings, reasons);
         task.setRemark(String.join("；", remarks));
-        task.setCanAutoStockIn(canAutoStockIn);
         return task;
     }
 
@@ -204,12 +210,15 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         task.setTaskId(UUID.randomUUID().toString());
         task.setBatchId(batchId);
         task.setType(AutoInboundType.FINISHED_PRODUCT);
-        task.setEntryDate(req.getEntryDate());
-        task.setSide("左");
+        LocalDate entryDate = resolveEntryDate(item, req.getEntryDate());
+        task.setEntryDate(entryDate);
+        task.setSide(resolveSide(item));
         task.setRawBlock(item.getRawBlock());
 
         List<String> reasons = new ArrayList<>();
         List<String> remarks = new ArrayList<>();
+        List<String> missingFields = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         if (notBlank(item.getRemark())) {
             remarks.add(item.getRemark());
         }
@@ -217,18 +226,32 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         // === 成品产品：直接用 LLM ===
         Integer productId = item.getProductId();
         if (productId != null) {
-            task.setProductId(productId);
-            task.setProductName(item.getProductName());
+            Product product = productMapper.selectById(productId);
+            if (product != null) {
+                task.setProductId(product.getId());
+                task.setProductName(product.getProductName());
+            } else {
+                missingFields.add("产品");
+                reasons.add("未匹配到成品产品：" + safe(item.getProductNameRaw()));
+            }
         } else {
+            missingFields.add("产品");
             reasons.add("未匹配到成品产品：" + safe(item.getProductNameRaw()));
         }
 
         // === 仓库：直接用 LLM ===
         Integer whId = item.getWarehouseId();
         if (whId != null) {
-            task.setWarehouseId(whId);
-            task.setWarehouseName(item.getWarehouseName());
+            Warehouse warehouse = warehouseMapper.selectById(whId);
+            if (warehouse != null) {
+                task.setWarehouseId(warehouse.getId());
+                task.setWarehouseName(warehouse.getWarehouseName());
+            } else {
+                missingFields.add("库位");
+                reasons.add("未匹配到库位：" + safe(item.getLocation()));
+            }
         } else {
+            missingFields.add("库位");
             String loc = safe(item.getLocation());
             if (!loc.isEmpty()) {
                 reasons.add("未匹配到库位：" + loc);
@@ -244,16 +267,17 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         task.setFinishedBoardQuantity(pallets);
         task.setFinishedPieceQuantity(pieces);
         if (pallets <= 0 && pieces <= 0) {
+            missingFields.add("数量");
             reasons.add("成品板数与件数均为空或为0");
         }
 
         // === 成品化验 ===
         boolean hasAssay = false;
-        if (productId != null) {
-            Assay assay = assayMapper.selectByProductIdAndDate(productId, req.getEntryDate());
+        if (task.getProductId() != null) {
+            Assay assay = assayMapper.selectByProductIdAndDate(task.getProductId(), entryDate);
             hasAssay = (assay != null);
             if (!hasAssay) {
-                reasons.add("成品当日化验记录缺失");
+                warnings.add("成品当日化验记录缺失");
             }
         } else {
             reasons.add("未能匹配到成品产品，无法检查化验记录");
@@ -264,29 +288,8 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         List<SemiRecordDTO> semiRecords = buildSuggestedSemiRecords(item.getSources(), reasons, remarks);
         task.setSuggestedSemiRecords(semiRecords);
 
-        boolean missingKey =
-                task.getProductId() == null ||
-                        task.getWarehouseId() == null ||
-                        !hasAssay ||
-                        (pallets <= 0 && pieces <= 0);
-
-        AutoInboundRiskLevel level;
-        boolean canAutoStockIn;
-        if (missingKey) {
-            level = AutoInboundRiskLevel.RED;
-            canAutoStockIn = false;
-        } else if (!reasons.isEmpty()) {
-            level = AutoInboundRiskLevel.YELLOW;
-            canAutoStockIn = true;
-        } else {
-            level = AutoInboundRiskLevel.GREEN;
-            canAutoStockIn = true;
-        }
-
-        task.setRiskLevel(level);
-        task.setRiskReason(String.join("；", reasons));
+        refreshTaskValidation(task, missingFields, warnings, reasons);
         task.setRemark(String.join("；", remarks));
-        task.setCanAutoStockIn(canAutoStockIn);
         return task;
     }
 
@@ -392,6 +395,119 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         }
 
         return result;
+    }
+
+    private void refreshTaskValidation(AutoInboundTask task, List<String> missingFields,
+                                       List<String> warnings, List<String> reasons) {
+        if (!notBlank(task.getSide())) {
+            missingFields.add("侧别");
+            reasons.add("缺少侧别信息");
+        }
+        Product product = resolveTaskProduct(task);
+        Warehouse warehouse = resolveTaskWarehouse(task);
+        if (product != null) {
+            try {
+                List<AutoInboundTaskItem> taskItems = AutoInboundQuantityNormalizer.normalize(
+                        getBoardQuantity(task), getPieceQuantity(task), product.getPiecesPerPallet(), "报数入库");
+                task.setTaskItems(taskItems);
+                task.setRequiredQrCount(taskItems.size());
+                task.setAvailableQrCount(countAvailableFixedQr(product.getId()));
+                if (task.getAvailableQrCount() < task.getRequiredQrCount()) {
+                    warnings.add(product.getProductName() + " 需要 " + task.getRequiredQrCount()
+                            + " 个固定产品二维码，当前可用 " + task.getAvailableQrCount() + " 个");
+                }
+                if (warehouse != null && warehouse.getMaxCapacity() != null && warehouse.getCurCapacity() != null
+                        && warehouse.getCurCapacity() + task.getRequiredQrCount() > warehouse.getMaxCapacity()) {
+                    warnings.add(warehouse.getWarehouseName() + " 剩余板位不足，本次需要 "
+                            + task.getRequiredQrCount() + " 个板位");
+                }
+            } catch (RuntimeException e) {
+                missingFields.add("数量");
+                reasons.add(e.getMessage());
+                task.setTaskItems(Collections.emptyList());
+                task.setRequiredQrCount(0);
+                task.setAvailableQrCount(0);
+            }
+        } else {
+            task.setTaskItems(Collections.emptyList());
+            task.setRequiredQrCount(0);
+            task.setAvailableQrCount(0);
+        }
+
+        task.setMissingFields(distinct(missingFields));
+        task.setWarnings(distinct(warnings));
+        task.setRiskReason(String.join("；", distinct(joinReasons(reasons, warnings))));
+        task.setStatus("DRAFT");
+        if (!task.getMissingFields().isEmpty()) {
+            task.setRiskLevel(AutoInboundRiskLevel.RED);
+            task.setCanAutoStockIn(false);
+        } else if (!task.getWarnings().isEmpty() || !reasons.isEmpty()) {
+            task.setRiskLevel(AutoInboundRiskLevel.YELLOW);
+            task.setCanAutoStockIn(true);
+        } else {
+            task.setRiskLevel(AutoInboundRiskLevel.GREEN);
+            task.setCanAutoStockIn(true);
+        }
+    }
+
+    private Product resolveTaskProduct(AutoInboundTask task) {
+        Integer productId = task.getType() == AutoInboundType.SEMI_PRODUCT ? task.getSemiProductId() : task.getProductId();
+        return productId == null ? null : productMapper.selectById(productId);
+    }
+
+    private Warehouse resolveTaskWarehouse(AutoInboundTask task) {
+        Integer warehouseId = task.getType() == AutoInboundType.SEMI_PRODUCT ? task.getSemiWarehouseId() : task.getWarehouseId();
+        return warehouseId == null ? null : warehouseMapper.selectById(warehouseId);
+    }
+
+    private Integer getBoardQuantity(AutoInboundTask task) {
+        return task.getType() == AutoInboundType.SEMI_PRODUCT ? task.getSemiBoardQuantity() : task.getFinishedBoardQuantity();
+    }
+
+    private Integer getPieceQuantity(AutoInboundTask task) {
+        return task.getType() == AutoInboundType.SEMI_PRODUCT ? task.getSemiPieceQuantity() : task.getFinishedPieceQuantity();
+    }
+
+    private int countAvailableFixedQr(Integer productId) {
+        Long count = palletCodeMapper.selectCount(new QueryWrapper<PalletCode>()
+                .eq("fixed_product_id", productId)
+                .eq("fixed_mode_enabled", true)
+                .eq("status", "FREE"));
+        return count == null ? 0 : count.intValue();
+    }
+
+    private LocalDate resolveEntryDate(ParsedInboundItem item, LocalDate fallback) {
+        if (notBlank(item.getProductionDate())) {
+            try {
+                return LocalDate.parse(item.getProductionDate());
+            } catch (Exception ignored) {
+                // fall through to request date
+            }
+        }
+        return fallback == null ? LocalDate.now() : fallback;
+    }
+
+    private String resolveSide(ParsedInboundItem item) {
+        if (notBlank(item.getSide())) {
+            return item.getSide().contains("右") ? "右" : "左";
+        }
+        String text = safe(item.getLocation()) + safe(item.getRawBlock());
+        return text.contains("右") ? "右" : "左";
+    }
+
+    private List<String> joinReasons(List<String> reasons, List<String> warnings) {
+        List<String> all = new ArrayList<>();
+        all.addAll(reasons);
+        all.addAll(warnings);
+        return all;
+    }
+
+    private List<String> distinct(List<String> values) {
+        return values.stream()
+                .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .toList();
     }
 
     private static String safe(String s) {

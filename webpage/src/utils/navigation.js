@@ -25,6 +25,7 @@ export const menuList = [
     icon: Box,
     children: [
       { path: '/productStock', title: '库存汇总', icon: ShoppingCart, permCode: 'inventory:view' },
+      { path: '/auto-inbound', title: '智能报数入库', icon: Promotion, permCode: 'inventory:view' },
       { path: '/warehouse', title: '库位管理', icon: Box, permCode: 'warehouse:view' },
       { path: '/warehouse-map', title: '仓库平面图', icon: Location, permCode: 'warehouse_map:view' }
     ]

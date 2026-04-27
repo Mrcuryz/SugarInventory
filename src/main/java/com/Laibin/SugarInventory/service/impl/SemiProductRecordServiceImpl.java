@@ -11,6 +11,7 @@ import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
 import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
+import com.Laibin.SugarInventory.service.model.PalletInventoryOccupancyRule;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,35 +63,24 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         if(product.getScreenMeshId() == null){
             throw new BusinessException(ErrorCode.SCREEN_MESH_NOT_FOUND);
         }
-        // 计算总重量
-        BigDecimal totalWeight;
-        // 存入板数
         InVO inVO;
         Integer quantity = dto.getQuantity();
         if (dto.getUnit().equals("0")) {
-            totalWeight = new BigDecimal(quantity)
-                    .multiply(BigDecimal.valueOf(product.getPiecesPerPallet()))
-                    .multiply(product.getWeightPerPiece());
-            // 整版入库
             inVO = this.handlerInStock(dto, product, warehouse, assay, false, 0);
         } else {
-            totalWeight = new BigDecimal(quantity)
-                    .multiply(product.getWeightPerPiece());
-            // 总散件数
             inVO = this.handlerInStockPieces(dto, product, warehouse, assay);
         }
-        // **4. 记录入库信息**
+        int actualQuantity = Math.max(quantity - (inVO.getRemainingQuantity() == null ? 0 : inVO.getRemainingQuantity()), 0);
         SemiProductRecord semiProductRecord = new SemiProductRecord();
         semiProductRecord.setWarehouseId(warehouse.getId());
         semiProductRecord.setProductId(dto.getProductId());
-        semiProductRecord.setQuantity(quantity);
+        semiProductRecord.setQuantity(actualQuantity);
         semiProductRecord.setScreenMeshId(product.getScreenMeshId());
         semiProductRecord.setOperator(operator);
         semiProductRecord.setOperationDate(dto.getEntryDate());
         semiProductRecord.setAssayId(assay == null ? null : assay.getId());
-        semiProductRecord.setTotalWeight(totalWeight);
+        semiProductRecord.setTotalWeight(calculateTotalWeight(product, actualQuantity, dto.getUnit()));
         semiProductRecord.setCreatedAt(LocalDateTime.now());
-        // 散件凑一板
         semiProductRecord.setUnit(dto.getUnit());
         recordMapper.insert(semiProductRecord);
         return inVO;
@@ -99,47 +89,33 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
 
     @Override
     public InVO handlerInStockPieces(BaseInStockDTO dto, Product product, Warehouse warehouse, Assay assay) {
-        Integer quantity = dto.getQuantity();
-        // 每板件数
+        int requestedPieces = dto.getQuantity() == null ? 0 : dto.getQuantity();
         Integer piecesPerPallet = product.getPiecesPerPallet();
-        // 先把存在的散件的行数补齐，再入库整行
-        // 获取货架上存在散件的行数
-        List<Inventory> hasPiecesRows = inventoryMapper.getHasPiecesRows(warehouse.getId(), dto.getEntryDate(),
-                product.getId(), piecesPerPallet);
-        for (Inventory inventory : hasPiecesRows) {
-            // 可额外容纳件数
-            int canAddPieces = piecesPerPallet - inventory.getPieces();
-            if (quantity > canAddPieces) {
-                inventory.setPieces(piecesPerPallet);
-            } else {
-                inventory.setPieces(inventory.getPieces() + quantity);
-            }
-            quantity = quantity - canAddPieces;
-            inventoryMapper.updatePieces(inventory.getId(), inventory.getPieces());
-            if (quantity < 0) {
-                return InVO.createDefault();
-            }
+        PalletInventoryOccupancyRule.validatePiecesPerPallet(piecesPerPallet, "散件入库");
+        if (dto.getPalletCodeId() != null) {
+            PalletInventoryOccupancyRule.validateSingleQrInventory(dto.getUnit(), requestedPieces, piecesPerPallet, "二维码入库");
+            dto.setQuantity(1);
+            InVO inVO = this.handlerInStock(dto, product, warehouse, assay, true, requestedPieces);
+            inVO.setRemainingQuantity(convertLoosePiecesRemaining(inVO, requestedPieces));
+            return inVO;
         }
 
-        // 散件板数
-        int boardNum = quantity / piecesPerPallet;
-        // 剩余散件数
-        int piecesNum = quantity % piecesPerPallet;
-        if (boardNum > 0) {
-            dto.setQuantity(boardNum);
-            //存放散件整板
-            InVO inVO = this.handlerInStock(dto, product, warehouse, assay, true, piecesPerPallet);
-            if (inVO.getRemainingQuantity() > 0) {
-                inVO.setRemainingQuantity(inVO.getRemainingQuantity() + 1);
+        PalletInventoryOccupancyRule.PieceSplit split =
+                PalletInventoryOccupancyRule.splitPieces(requestedPieces, piecesPerPallet, "散件入库");
+        if (split.fullPalletCount() > 0) {
+            dto.setQuantity(split.fullPalletCount());
+            InVO inVO = this.handlerInStock(dto, product, warehouse, assay, false, 0);
+            if (inVO.getRemainingQuantity() != null && inVO.getRemainingQuantity() > 0) {
+                inVO.setRemainingQuantity(inVO.getRemainingQuantity() * piecesPerPallet + split.loosePieces());
                 return inVO;
             }
-            // 这里重新获取库位信息，因为cur_capacity当前容量已经更新了
             warehouse = warehouseMapper.selectById(warehouse.getId());
         }
-        // 货架散件补满后，再开一行放剩余散件
-        if (piecesNum > 0) {
+        if (split.loosePieces() > 0) {
             dto.setQuantity(1);
-            return this.handlerInStock(dto, product, warehouse, assay, true, piecesNum);
+            InVO inVO = this.handlerInStock(dto, product, warehouse, assay, true, split.loosePieces());
+            inVO.setRemainingQuantity(convertLoosePiecesRemaining(inVO, split.loosePieces()));
+            return inVO;
         }
         return InVO.createDefault();
     }
@@ -212,9 +188,6 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         if (!Integer.valueOf(1).equals(dto.getQuantity())) {
             throw new BusinessException("指定位置入库仅支持单板操作");
         }
-        if (Boolean.TRUE.equals(isPieces)) {
-            throw new BusinessException("指定位置入库暂不支持散件");
-        }
         if (dto.getRowNumber() < 1 || dto.getRowNumber() > warehouse.getMaxRows()) {
             throw new BusinessException("目标排号超出库位范围");
         }
@@ -230,7 +203,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         }
 
         InventoryLocationCandidate candidate = new InventoryLocationCandidate(dto.getSide(), dto.getRowNumber(), dto.getLayer());
-        Inventory inventory = buildInventory(dto, product, warehouse, assay, false, 0, candidate);
+        Inventory inventory = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
         try {
             inventoryMapper.insert(inventory);
         } catch (DuplicateKeyException e) {
@@ -324,6 +297,22 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         return List.of("左", "右");
     }
 
+    private int convertLoosePiecesRemaining(InVO inVO, int requestedPieces) {
+        return inVO.getRemainingQuantity() != null && inVO.getRemainingQuantity() > 0 ? requestedPieces : 0;
+    }
+
+    private BigDecimal calculateTotalWeight(Product product, int quantity, String unit) {
+        if (quantity <= 0) {
+            return BigDecimal.ZERO;
+        }
+        if ("1".equals(unit)) {
+            return product.getWeightPerPiece().multiply(BigDecimal.valueOf(quantity));
+        }
+        return product.getWeightPerPiece()
+                .multiply(BigDecimal.valueOf(quantity))
+                .multiply(BigDecimal.valueOf(product.getPiecesPerPallet()));
+    }
+
     private Inventory buildInventory(BaseInStockDTO dto, Product product, Warehouse warehouse, Assay assay,
                                      Boolean isPieces, Integer piecesNum, InventoryLocationCandidate candidate) {
         Inventory inventory = new Inventory();
@@ -379,36 +368,27 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
 
         Assay assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
 
-        // 计算总重量
-        BigDecimal totalWeight;
-        // 存入板数
         InVO vo = new InVO();
         Integer quantity = dto.getQuantity();
         if (dto.getUnit().equals("0")) {
-            totalWeight = new BigDecimal(quantity)
-                    .multiply(BigDecimal.valueOf(product.getPiecesPerPallet()))
-                    .multiply(product.getWeightPerPiece());
-            // 整版入库
             Integer remaining = this.stackModeInStockQuantity(dto, warehouse, assay, product, false, 0);
             vo.setRemainingQuantity(remaining);
             vo.setMessage(remaining > 0 ? "库位已满，剩余 " + remaining + " 板未入库" : "入库成功");
         } else {
-            totalWeight = new BigDecimal(quantity)
-                    .multiply(product.getWeightPerPiece());
-            // 总散件数
             Integer modeInStockPiece = this.stackModeInStockPiece(dto, warehouse, assay, product);
             vo.setRemainingQuantity(modeInStockPiece);
             vo.setMessage(modeInStockPiece > 0 ? "库位已满，剩余 " + modeInStockPiece + " 件未入库" : "入库成功");
         }
+        int actualQuantity = Math.max(quantity - (vo.getRemainingQuantity() == null ? 0 : vo.getRemainingQuantity()), 0);
         SemiProductRecord record = new SemiProductRecord();
         record.setWarehouseId(warehouse.getId());
         record.setProductId(dto.getProductId());
-        record.setQuantity(dto.getQuantity() - vo.getRemainingQuantity());
+        record.setQuantity(actualQuantity);
         record.setScreenMeshId(product.getScreenMeshId());
         record.setOperator(operator);
         record.setOperationDate(dto.getEntryDate());
         record.setAssayId(assay == null ? null : assay.getId());
-        record.setTotalWeight(totalWeight);
+        record.setTotalWeight(calculateTotalWeight(product, actualQuantity, dto.getUnit()));
         record.setCreatedAt(LocalDateTime.now());
         record.setUnit(dto.getUnit());
         recordMapper.insert(record);
@@ -416,49 +396,25 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     }
 
     private Integer stackModeInStockPiece(AddSemiProductRecordDTO dto, Warehouse warehouse, Assay assay, Product product) {
-        Integer quantity = dto.getQuantity();
-        // 每板件数
+        int quantity = dto.getQuantity() == null ? 0 : dto.getQuantity();
         Integer piecesPerPallet = product.getPiecesPerPallet();
-        // 先把存在的散件的行数补齐，再入库整行
-        // 获取货架上存在散件的行数
-        List<Inventory> hasPiecesRows = inventoryMapper.getHasPiecesRows(warehouse.getId(), dto.getEntryDate(),
-                product.getId(), piecesPerPallet);
-        for (Inventory inventory : hasPiecesRows) {
-            // 可额外容纳件数
-            int canAddPieces = piecesPerPallet - inventory.getPieces();
-            if (quantity > canAddPieces) {
-                inventory.setPieces(piecesPerPallet);
-            } else {
-                inventory.setPieces(inventory.getPieces() + quantity);
-            }
-            quantity = quantity - canAddPieces;
-            inventoryMapper.updatePieces(inventory.getId(), inventory.getPieces());
-            if (quantity < 0) {
-                return 0;
-            }
-        }
-        // 散件板数
-        int boardNum = quantity / piecesPerPallet;
-        // 剩余散件数
-        int piecesNum = quantity % piecesPerPallet;
-        if (boardNum > 0) {
-            dto.setQuantity(boardNum);
-            //存放散件整板
+        PalletInventoryOccupancyRule.PieceSplit split =
+                PalletInventoryOccupancyRule.splitPieces(quantity, piecesPerPallet, "散件入库");
+        if (split.fullPalletCount() > 0) {
+            dto.setQuantity(split.fullPalletCount());
             Integer remainingQuantity = this.stackModeInStockQuantity(dto, warehouse, assay, product, false, 0);
             if (remainingQuantity > 0) {
-                return remainingQuantity * piecesPerPallet + piecesNum;
+                return remainingQuantity * piecesPerPallet + split.loosePieces();
             }
-            // 这里重新获取库位信息，因为cur_capacity当前容量已经更新了
             warehouse = warehouseMapper.selectById(warehouse.getId());
         }
-        // 货架散件补满后，再开一行放剩余散件
-        if (piecesNum > 0) {
+        if (split.loosePieces() > 0) {
             dto.setQuantity(1);
-            Integer modeInStockQuantity = this.stackModeInStockQuantity(dto, warehouse, assay, product, true, piecesNum);
+            Integer modeInStockQuantity = this.stackModeInStockQuantity(dto, warehouse, assay, product, true, split.loosePieces());
             if (modeInStockQuantity > 0) {
-                return piecesNum;
+                return split.loosePieces();
             }
-            return modeInStockQuantity;
+            return 0;
         }
         return 0;
     }

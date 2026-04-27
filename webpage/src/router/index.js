@@ -21,6 +21,7 @@ const routes = [
       },
       { path: 'product', name: 'Product', meta: { title: '产品管理', keepAlive: true, permCode: 'product:view' }, component: () => import('@/components/Product.vue') },
       { path: 'productStock', name: 'ProductStock', meta: { title: '库存汇总', keepAlive: true, permCode: 'inventory:view' }, component: () => import('@/components/ProductStock.vue') },
+      { path: 'auto-inbound', name: 'AutoInbound', meta: { title: '智能报数入库', keepAlive: true, permCode: 'inventory:view' }, component: () => import('@/components/AutoInbound.vue') },
       { path: 'warehouse', name: 'Warehouse', meta: { title: '库位管理', keepAlive: true, permCode: 'warehouse:view' }, component: () => import('@/components/WareHouse.vue') },
       { path: 'warehouse-map', name: 'WarehouseMap', meta: { title: '仓库平面图', keepAlive: true, permCode: 'warehouse_map:view' }, component: () => import('@/components/WarehouseMap.vue') },
       { path: 'pallet-code/list', name: 'PalletCodeList', meta: { title: '二维码管理', keepAlive: true, permCode: 'qrcode:view' }, component: () => import('@/components/PalletCodeList.vue') },

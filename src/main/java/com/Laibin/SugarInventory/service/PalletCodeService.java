@@ -94,6 +94,8 @@ public interface PalletCodeService extends IService<PalletCode> {
     // 单托盘入库确认（封装 DTO 后调用 stockIn/addSemiProductRecord）
     InVO confirmSingleFinishedTaskIn(ConfirmPalletInItemDTO dto, Integer operatorId);
 
+    InVO createFixedProductInboundAndConfirm(BindPalletTaskDTO bindDTO, ConfirmPalletInItemDTO confirmDTO, Integer operatorId);
+
     // 批量入库确认，任一失败整体回滚
     List<InVO> confirmFinishedTaskInBatch(ConfirmPalletInBatchDTO dto, Integer operatorId);
 

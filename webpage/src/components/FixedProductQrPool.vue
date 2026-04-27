@@ -42,6 +42,7 @@
           <div class="section-subtitle">先完成静态准备，再通过打印并启用正式进入本轮业务。</div>
         </div>
         <div class="toolbar-actions">
+          <el-button @click="printerSettingsVisible = true">打印助手设置</el-button>
           <el-button type="primary" @click="bindDialogVisible = true">批量绑定产品</el-button>
           <el-button
             type="primary"
@@ -59,7 +60,15 @@
             :loading="printLoading"
             @click="handleBatchPrint"
           >
-            仅打印
+            直接打印
+          </el-button>
+          <el-button
+            plain
+            :disabled="!selectedRows.length"
+            :loading="pdfLoading"
+            @click="handleBatchExportPdf"
+          >
+            导出 PDF
           </el-button>
         </div>
       </div>
@@ -180,13 +189,17 @@
         <el-empty v-else-if="!previewLoading" description="暂无二维码" :image-size="96" />
       </div>
     </el-dialog>
+
+    <LocalPrinterSettingsDialog v-model="printerSettingsVisible" />
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import LocalPrinterSettingsDialog from '@/components/LocalPrinterSettingsDialog.vue'
 import { getProductList } from '@/api/product'
+import { buildAssistantErrorMessage, printLocalLabels } from '@/api/localPrinter'
 import {
   activateFixedProductQrCodes,
   batchDownloadFixedProductQrLabelPdf,
@@ -226,11 +239,13 @@ const activateForm = ref({
 const loading = ref(false)
 const bindLoading = ref(false)
 const printLoading = ref(false)
+const pdfLoading = ref(false)
 const activateLoading = ref(false)
 const previewLoading = ref(false)
 const bindDialogVisible = ref(false)
 const activateDialogVisible = ref(false)
 const previewDialogVisible = ref(false)
+const printerSettingsVisible = ref(false)
 const previewCode = ref('')
 const previewImageUrl = ref('')
 const resultList = ref([])
@@ -254,6 +269,19 @@ const buildQuery = () => ({
   page: currentPage.value,
   size: pageSize.value
 })
+
+const normalizeCode = code => String(code || '').trim().toUpperCase()
+
+const buildLabelsByCodes = codes => {
+  const rowMap = new Map(resultList.value.map(item => [normalizeCode(item.code), item]))
+  return Array.from(new Set((codes || []).map(normalizeCode).filter(Boolean))).map(code => {
+    const row = rowMap.get(code)
+    return {
+      code,
+      title: row?.fixedProductName || activateForm.value.productName || ''
+    }
+  })
+}
 
 const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob)
@@ -357,6 +385,21 @@ const submitBind = async () => {
   }
 }
 
+const exportPdfByCodes = async codes => {
+  if (!codes.length) {
+    ElMessage.warning('请选择可打印的二维码')
+    return
+  }
+  pdfLoading.value = true
+  try {
+    const response = await batchDownloadFixedProductQrLabelPdf(codes)
+    downloadBlob(response.data, `fixed-product-qrcodes-${Date.now()}.pdf`)
+    ElMessage.success(`已导出 ${codes.length} 个二维码标签`)
+  } finally {
+    pdfLoading.value = false
+  }
+}
+
 const printCodes = async codes => {
   if (!codes.length) {
     ElMessage.warning('请选择可打印的二维码')
@@ -364,9 +407,17 @@ const printCodes = async codes => {
   }
   printLoading.value = true
   try {
-    const response = await batchDownloadFixedProductQrLabelPdf(codes)
-    downloadBlob(response.data, `fixed-product-qrcodes-${Date.now()}.pdf`)
-    ElMessage.success(`已导出 ${codes.length} 个二维码标签`)
+    const labels = buildLabelsByCodes(codes)
+    const response = await printLocalLabels({
+      template: 'fixed_product_qrcode',
+      copies: 1,
+      labels
+    })
+    const printedCount = response.data?.printedCount || labels.length
+    ElMessage.success(`已提交 ${printedCount} 张标签到打印机`)
+  } catch (error) {
+    await exportPdfByCodes(codes)
+    ElMessage.warning(`${buildAssistantErrorMessage(error)}，已回退为 PDF 导出`)
   } finally {
     printLoading.value = false
   }
@@ -411,12 +462,23 @@ const submitActivate = async () => {
 
   activateLoading.value = true
   try {
+    const labels = buildLabelsByCodes(selectedRows.value.map(item => item.code))
     const response = await activateFixedProductQrCodes({
       codes: selectedRows.value.map(item => item.code),
       productionDate: activateForm.value.productionDate
     })
-    downloadBlob(response.data, `fixed-product-qrcodes-activated-${Date.now()}.pdf`)
-    ElMessage.success(`已打印并启用 ${selectedRows.value.length} 个二维码`)
+    try {
+      const printRes = await printLocalLabels({
+        template: 'fixed_product_qrcode',
+        copies: 1,
+        labels
+      })
+      const printedCount = printRes.data?.printedCount || labels.length
+      ElMessage.success(`已启用并提交 ${printedCount} 张标签到打印机`)
+    } catch (error) {
+      downloadBlob(response.data, `fixed-product-qrcodes-activated-${Date.now()}.pdf`)
+      ElMessage.warning(`${buildAssistantErrorMessage(error)}，已完成启用并回退导出 PDF`)
+    }
     closeActivateDialog()
     await handleSearch(1)
   } finally {
@@ -426,6 +488,10 @@ const submitActivate = async () => {
 
 const handleBatchPrint = async () => {
   await printCodes(selectedRows.value.map(item => item.code))
+}
+
+const handleBatchExportPdf = async () => {
+  await exportPdfByCodes(selectedRows.value.map(item => normalizeCode(item.code)))
 }
 
 const handlePreview = async row => {

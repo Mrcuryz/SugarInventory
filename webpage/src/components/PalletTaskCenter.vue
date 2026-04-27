@@ -516,7 +516,15 @@ const confirmInPiecesLimit = computed(() => {
   const value = Number(confirmInProduct.value?.piecesPerPallet)
   return Number.isFinite(value) && value > 0 ? value : null
 })
-const confirmInQuantityMax = computed(() => confirmInForm.value.unit === '0' ? 1 : (confirmInPiecesLimit.value || undefined))
+const confirmInQuantityMax = computed(() => {
+  if (confirmInForm.value.unit === '0') {
+    return 1
+  }
+  if (!confirmInPiecesLimit.value) {
+    return undefined
+  }
+  return Math.max(confirmInPiecesLimit.value - 1, 1)
+})
 
 const commonDialogVisible = ref(false)
 const currentOperationKey = ref('')
@@ -675,7 +683,11 @@ const getQuantityMax = (row) => {
   if (row.unit === '0') {
     return 1
   }
-  return getPiecesLimitByProductId(row.productId) || undefined
+  const limit = getPiecesLimitByProductId(row.productId)
+  if (!limit) {
+    return undefined
+  }
+  return Math.max(limit - 1, 1)
 }
 
 const normalizeQuantityByUnit = (row) => {
@@ -687,8 +699,8 @@ const normalizeQuantityByUnit = (row) => {
     row.quantity = 1
   }
   const limit = getPiecesLimitByProductId(row.productId)
-  if (limit && row.quantity > limit) {
-    row.quantity = limit
+  if (limit && row.quantity >= limit) {
+    row.quantity = Math.max(limit - 1, 1)
   }
 }
 
@@ -707,8 +719,8 @@ const validateQuantityRows = (rows, label = '任务') => {
       ElMessage.error(`${label} ${row.code || row.semiPalletCode} 件数必须大于 0`)
       return false
     }
-    if (row.quantity > limit) {
-      ElMessage.error(`${label} ${row.code || row.semiPalletCode} 件数不能超过每板件数 ${limit}`)
+    if (row.quantity >= limit) {
+      ElMessage.error(`${label} ${row.code || row.semiPalletCode} 件数必须少于每板件数 ${limit}；整板请使用 1 板`)
       return false
     }
   }
@@ -800,7 +812,11 @@ const getSemiItemQuantityMax = (row) => {
   if (row.unit === '0') {
     return 1
   }
-  return getSemiItemPiecesLimit(row) || undefined
+  const limit = getSemiItemPiecesLimit(row)
+  if (!limit) {
+    return undefined
+  }
+  return Math.max(limit - 1, 1)
 }
 
 const normalizeSemiItemQuantity = (row) => {
@@ -812,8 +828,8 @@ const normalizeSemiItemQuantity = (row) => {
     row.quantity = 1
   }
   const limit = getSemiItemPiecesLimit(row)
-  if (limit && row.quantity > limit) {
-    row.quantity = limit
+  if (limit && row.quantity >= limit) {
+    row.quantity = Math.max(limit - 1, 1)
   }
 }
 
@@ -832,8 +848,8 @@ const validateSemiBindItems = (items) => {
       ElMessage.error(`半成品 ${item.semiPalletCode} 件数必须大于 0`)
       return false
     }
-    if (item.quantity > limit) {
-      ElMessage.error(`半成品 ${item.semiPalletCode} 件数不能超过每板件数 ${limit}`)
+    if (item.quantity >= limit) {
+      ElMessage.error(`半成品 ${item.semiPalletCode} 件数必须少于每板件数 ${limit}；整板请使用 1 板`)
       return false
     }
   }
@@ -899,8 +915,8 @@ const submitConfirmIn = async () => {
       ElMessage.error('未找到该产品的每板件数配置，不能按件确认入库')
       return
     }
-    if (confirmInForm.value.quantity > confirmInPiecesLimit.value) {
-      ElMessage.error(`件数不能超过该产品每板件数 ${confirmInPiecesLimit.value}`)
+    if (confirmInForm.value.quantity >= confirmInPiecesLimit.value) {
+      ElMessage.error(`件数必须少于该产品每板件数 ${confirmInPiecesLimit.value}；整板请使用 1 板`)
       return
     }
   }

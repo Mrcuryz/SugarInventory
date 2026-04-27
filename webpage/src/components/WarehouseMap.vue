@@ -610,7 +610,7 @@ const formatInventoryQuantity = (item) => {
   if (!item) return '-'
   const quantity = Number(item.quantity || 0)
   const pieces = Number(item.pieces || 0)
-  if (pieces > 0) return `${pieces}件`
+  if (pieces > 0) return `${pieces}件，占1板位`
   if (quantity > 0) return `${quantity}板`
   return '0'
 }

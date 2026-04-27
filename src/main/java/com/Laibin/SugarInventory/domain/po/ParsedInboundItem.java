@@ -38,6 +38,8 @@ public class ParsedInboundItem {
     @JsonProperty("warehouse_name")
     private String warehouseName;
 
+    private String side;
+
     /**
      * 文本里的库位原文，如“6号烘房”“3号库位”
      */

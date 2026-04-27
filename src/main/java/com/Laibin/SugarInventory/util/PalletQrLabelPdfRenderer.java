@@ -184,6 +184,10 @@ public final class PalletQrLabelPdfRenderer {
         return pageObjectId;
     }
 
+    public static BufferedImage renderLabelImage(String code, String title) {
+        return createLabelImage(code, title);
+    }
+
     private static BufferedImage createLabelImage(String code, String title) {
         BufferedImage canvas = new BufferedImage(LABEL_IMAGE_WIDTH, LABEL_IMAGE_HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = canvas.createGraphics();
@@ -199,7 +203,9 @@ public final class PalletQrLabelPdfRenderer {
 
             Font titleFont = pickFont(Font.BOLD, 42);
             Font codeFont = new Font("SansSerif", Font.BOLD, 34);
-            drawCenteredText(graphics, title == null || title.isBlank() ? "-" : title.trim(), titleFont, 70);
+            if (title != null && !title.isBlank()) {
+                drawCenteredText(graphics, title.trim(), titleFont, 70);
+            }
 
             BufferedImage qrImage = QrCodeUtils.generateQrCode(code, 420, 420);
             int qrX = (LABEL_IMAGE_WIDTH - qrImage.getWidth()) / 2;

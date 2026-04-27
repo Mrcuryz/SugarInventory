@@ -8,10 +8,15 @@ import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.BaseEntity;
 import com.Laibin.SugarInventory.domain.po.OperationLog;
 import com.Laibin.SugarInventory.domain.po.Product;
+import com.Laibin.SugarInventory.domain.po.ScreenMesh;
+import com.Laibin.SugarInventory.domain.po.User;
+import com.Laibin.SugarInventory.domain.po.Warehouse;
 import com.Laibin.SugarInventory.domain.vo.BaseVO;
-import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.Laibin.SugarInventory.mapper.OperationLogMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
+import com.Laibin.SugarInventory.mapper.ScreenMeshMapper;
+import com.Laibin.SugarInventory.mapper.UserMapper;
+import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,14 +26,11 @@ import jakarta.annotation.PostConstruct;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.*;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.springframework.beans.BeanWrapper;
-import org.springframework.beans.BeanWrapperImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.beans.PropertyDescriptor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -47,6 +49,15 @@ public class OperationLogAspect {
             "standardSnapshotJson",
             "judgeMessage"
     );
+    private static final Set<String> HIDDEN_ID_FIELDS = Set.of(
+            "id",
+            "productId",
+            "product_id",
+            "screenMeshId",
+            "warehouseId",
+            "assayId",
+            "relatedId"
+    );
 
     @Autowired
     private ApplicationContext applicationContext;
@@ -57,6 +68,15 @@ public class OperationLogAspect {
 
     @Autowired
     private ProductMapper productMapper;
+
+    @Autowired
+    private ScreenMeshMapper screenMeshMapper;
+
+    @Autowired
+    private WarehouseMapper warehouseMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -119,13 +139,10 @@ public class OperationLogAspect {
             Object newData = null;
             List<Integer> ids = new ArrayList<>();
 
-            // **1. 处理参数**
             for (Object arg : args) {
-                System.out.println("arg: " + arg);
                 if (operationType == OperationType.UPDATE || operationType == OperationType.DELETE) {
                     if (arg instanceof Integer) {
                         ids.add((Integer) arg);
-                        System.out.println("id: " + arg);
                     } else if (arg instanceof BaseDTO) {
                         if (((BaseDTO) arg).getId() != null)
                             ids.add(((BaseDTO) arg).getId());
@@ -149,7 +166,6 @@ public class OperationLogAspect {
                 }
             }
 
-            // **2. 预查询旧数据（批量 `UPDATE` / `DELETE`）**
             List<Object> oldDataList = new ArrayList<>();
             if ((operationType == OperationType.UPDATE || operationType == OperationType.DELETE) && !ids.isEmpty()) {
                 LoggableService<?> service = tableServiceMap.get(tableName);
@@ -160,7 +176,6 @@ public class OperationLogAspect {
                 }
             }
 
-            // **3. 执行目标方法**
             Object result = joinPoint.proceed();
 
             if (result instanceof Result) {
@@ -168,23 +183,20 @@ public class OperationLogAspect {
                     return result;
             }
 
-            // **4. 获取新数据**
             List<Object> newDataList = new ArrayList<>();
             if (operationType == OperationType.UPDATE) {
                 if (result instanceof List<?>) {
                     newDataList.addAll((List<?>) result);
                 } else if (result instanceof BaseVO || result instanceof BaseEntity) {
                     newDataList.add(result);
-                } else if (result instanceof Result && ((Result<?>) result).getData() instanceof BaseVO
-                        || ((Result<?>) result).getData() instanceof BaseEntity) {
-                    newDataList.add(((Result<?>) result).getData());
+                } else if (result instanceof Result<?> resultWrapper
+                        && (resultWrapper.getData() instanceof BaseVO || resultWrapper.getData() instanceof BaseEntity)) {
+                    newDataList.add(resultWrapper.getData());
                 }
             }
 
-            // **5. 记录日志**
             List<OperationLog> logEntries = new ArrayList<>();
             if (operationType == OperationType.INSERT) {
-                // **批量插入**
                 if (newData instanceof List<?>) {
                     for (Object item : (List<?>) newData) {
                         logEntries.add(createLog(tableName, operationType, null, item, operator));
@@ -201,7 +213,6 @@ public class OperationLogAspect {
                 }
             }
 
-            // **6. 批量插入日志**
             for (OperationLog log : logEntries) {
                 operationLogMapper.insert(log);
             }
@@ -217,13 +228,10 @@ public class OperationLogAspect {
         OperationLog log = new OperationLog();
         String changedFieldsJson = "{}";
         if (operationType == OperationType.UPDATE) {
-            Map<String, Object> changedFields = getChangedFields(oldData, newData);
-            changedFields = convertProductIdToName(changedFields);
-            System.out.println("changedFields: " + changedFields);
+            Map<String, Object> changedFields = normalizeDisplayFields(getChangedFields(oldData, newData));
             changedFieldsJson = convertToJson(changedFields);
-            System.out.println("changedFieldsJson: " + changedFieldsJson);
         } else if (operationType == OperationType.INSERT) {
-            Map<String, Object> newDataMap = convertProductIdToName(getOrderedFieldMap(newData, true));
+            Map<String, Object> newDataMap = normalizeDisplayFields(getOrderedFieldMap(newData, true));
             changedFieldsJson = convertToJson(newDataMap);
         }
 
@@ -231,18 +239,12 @@ public class OperationLogAspect {
         log.setOperationType(operationType.name());
         log.setOperationTime(LocalDateTime.now());
         log.setChangedFields(changedFieldsJson);
-        Map<String, Object> oldData1 = getOrderedFieldMap(oldData, true);
-        System.out.println("oldData1: " + oldData1);
-        Map<String, Object> oldData2 = convertProductIdToName(oldData1);
-        System.out.println("oldData2: " + oldData2);
-
-        log.setOldData(convertToJson(oldData2));
-        System.out.println("oldDataJson: " + convertToJson(oldData2));
+        Map<String, Object> oldDataMap = normalizeDisplayFields(getOrderedFieldMap(oldData, true));
+        log.setOldData(convertToJson(oldDataMap));
         log.setOperator(operator);
         return log;
     }
 
-    // 修改后的getChangedFields方法（使用反射保持顺序）
     private Map<String, Object> getChangedFields(Object oldData, Object newData) {
         Map<String, Object> changes = new LinkedHashMap<>();
         if (oldData == null || newData == null) return changes;
@@ -275,7 +277,6 @@ public class OperationLogAspect {
         return changes;
     }
 
-    // 辅助方法：获取类字段的声明顺序映射
     private Map<String, Field> getDeclaredFieldsMap(Class<?> clazz) {
         Map<String, Field> fieldMap = new LinkedHashMap<>(); // 保持顺序
         for (Field field : clazz.getDeclaredFields()) {
@@ -284,28 +285,6 @@ public class OperationLogAspect {
         return fieldMap;
     }
 
-//    private Map<String, Object> getChangedFields(Object oldData, Object newData) {
-//        Map<String, Object> changes = new LinkedHashMap<>();
-//        if (oldData == null || newData == null) {
-//            return changes;
-//        }
-//        BeanWrapper oldWrapper = new BeanWrapperImpl(oldData);
-//        BeanWrapper newWrapper = new BeanWrapperImpl(newData);
-//        for (PropertyDescriptor pd : oldWrapper.getPropertyDescriptors()) {
-//            String field = pd.getName();
-//            if ("class".equals(field) || isIgnoredField(field)) { // 过滤字段
-//                continue;
-//            }
-//            Object oldVal = oldWrapper.getPropertyValue(field);
-//            Object newVal = newWrapper.getPropertyValue(field);
-//            if (!isEqual(oldVal, newVal)) { // 精准比较值
-//                changes.put(field, newVal);
-//            }
-//        }
-//        return changes;
-//    }
-
-    // 精准比较值
     private boolean isEqual(Object oldVal, Object newVal) {
         if (oldVal instanceof LocalDateTime && newVal instanceof LocalDateTime) {
             return ((LocalDateTime) oldVal).isEqual((LocalDateTime) newVal);
@@ -319,28 +298,41 @@ public class OperationLogAspect {
         return Objects.equals(oldVal, newVal);
     }
 
-    // 转换 product_id 为 product_name
-    private Map<String, Object> convertProductIdToName(Map<String, Object> dataMap) {
-        if (dataMap == null) return null;
-
-        Map<String, Object> updatedMap = new LinkedHashMap<>(dataMap);
-        if (updatedMap.containsKey("productId") || updatedMap.containsKey("product_id")) {
-            Integer productId = (Integer) updatedMap.get("product_id");
-            if (productId == null) {
-                productId = (Integer) updatedMap.get("productId");
-            }
-            System.out.println("productId: " + productId);
-            if (productId != null) {
-                Product product = productMapper.selectById(productId);
-                if (product != null) {
-                    System.out.println("productName: " + product.getProductName());
-                    updatedMap.put("productName", product.getProductName()); // 替换 product_id 为 product_name
-                    updatedMap.remove("productId"); // 移除原 product_id
-                    System.out.println("updatedMap: " + updatedMap);
-                }
-            }
+    Map<String, Object> normalizeDisplayFields(Map<String, Object> dataMap) {
+        if (dataMap == null || dataMap.isEmpty()) {
+            return Collections.emptyMap();
         }
-        return updatedMap;
+
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        String resolvedProductName = resolveProductName(getIntegerValue(dataMap, "productId", "product_id"));
+        String resolvedScreenMeshName = resolveScreenMeshName(getIntegerValue(dataMap, "screenMeshId"));
+        String resolvedWarehouseName = resolveWarehouseName(getIntegerValue(dataMap, "warehouseId"));
+        String resolvedTesterName = resolveUserName(getIntegerValue(dataMap, "testedBy"));
+
+        for (Map.Entry<String, Object> entry : dataMap.entrySet()) {
+            String fieldName = entry.getKey();
+            Object value = entry.getValue();
+
+            if (shouldHideFromDisplay(fieldName)) {
+                if (("productId".equals(fieldName) || "product_id".equals(fieldName))
+                        && isBlankValue(normalized.get("productName")) && resolvedProductName != null) {
+                    normalized.put("productName", resolvedProductName);
+                } else if ("screenMeshId".equals(fieldName)
+                        && isBlankValue(normalized.get("screenMeshName")) && resolvedScreenMeshName != null) {
+                    normalized.put("screenMeshName", resolvedScreenMeshName);
+                } else if ("warehouseId".equals(fieldName)
+                        && isBlankValue(normalized.get("warehouseName")) && resolvedWarehouseName != null) {
+                    normalized.put("warehouseName", resolvedWarehouseName);
+                } else if ("testedBy".equals(fieldName)
+                        && isBlankValue(normalized.get("testerName")) && resolvedTesterName != null) {
+                    normalized.put("testerName", resolvedTesterName);
+                }
+                continue;
+            }
+
+            normalized.put(fieldName, value);
+        }
+        return normalized;
     }
 
     private Map<String, Object> getOrderedFieldMap(Object obj, boolean filterIgnored) {
@@ -348,11 +340,9 @@ public class OperationLogAspect {
 
         Map<String, Object> map = new LinkedHashMap<>();
         try {
-            // 通过反射直接获取字段声明顺序
             Class<?> clazz = obj.getClass();
             List<Field> fields = new ArrayList<>(Arrays.asList(clazz.getDeclaredFields()));
 
-            // 按字段声明顺序处理
             for (Field field : fields) {
                 String fieldName = field.getName();
                 if (filterIgnored && isIgnoredField(fieldName)) continue;
@@ -367,30 +357,81 @@ public class OperationLogAspect {
         return map;
     }
 
-    // 将对象转换为 Map
-//    private Map<String, Object> objectToMap(Object obj) {
-//        if (obj == null) return Collections.emptyMap();
-//        Map<String, Object> map = new LinkedHashMap<>();
-//        BeanWrapper beanWrapper = new BeanWrapperImpl(obj);
-//        for (PropertyDescriptor pd : beanWrapper.getPropertyDescriptors()) {
-//            String field = pd.getName();
-//            if ("class".equals(field) || isIgnoredField(field)) {
-//                continue;
-//            }
-//            Object value = beanWrapper.getPropertyValue(field);
-//            map.put(field, value);
-//        }
-//        return map;
-//    }
-
-    // 忽略自动填充字段（如 createdAt/updatedAt）
     private boolean isIgnoredField(String field) {
-        return field.equals("createdAt") || field.equals("updatedAt") || field.equals("testedBy") ||
+        return field.equals("id") || HIDDEN_ID_FIELDS.contains(field)
+                || field.equals("createdAt") || field.equals("updatedAt") || field.equals("testedBy") ||
                 field.equals("createdBy") || field.equals("updatedBy") || field.equals("selectType") ||
                 field.equals("relatedId") || INTERNAL_AUDIT_FIELDS.contains(field) || field.isEmpty();
     }
 
-    // 将对象转换为 JSON 字符串
+    private boolean shouldHideFromDisplay(String field) {
+        return field == null || field.isEmpty()
+                || HIDDEN_ID_FIELDS.contains(field)
+                || INTERNAL_AUDIT_FIELDS.contains(field)
+                || field.equals("testedBy")
+                || field.equals("createdBy")
+                || field.equals("updatedBy")
+                || field.equals("createdAt")
+                || field.equals("updatedAt")
+                || field.equals("selectType");
+    }
+
+    private Integer getIntegerValue(Map<String, Object> dataMap, String... keys) {
+        for (String key : keys) {
+            Object value = dataMap.get(key);
+            if (value instanceof Integer integerValue) {
+                return integerValue;
+            }
+            if (value instanceof Number numberValue) {
+                return numberValue.intValue();
+            }
+            if (value instanceof String stringValue && !stringValue.isBlank()) {
+                try {
+                    return Integer.parseInt(stringValue.trim());
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String resolveProductName(Integer productId) {
+        if (productId == null) {
+            return null;
+        }
+        Product product = productMapper.selectById(productId);
+        return product == null ? null : product.getProductName();
+    }
+
+    private String resolveScreenMeshName(Integer screenMeshId) {
+        if (screenMeshId == null) {
+            return null;
+        }
+        ScreenMesh screenMesh = screenMeshMapper.selectById(screenMeshId);
+        return screenMesh == null ? null : screenMesh.getMeshName();
+    }
+
+    private String resolveWarehouseName(Integer warehouseId) {
+        if (warehouseId == null) {
+            return null;
+        }
+        Warehouse warehouse = warehouseMapper.selectById(warehouseId);
+        return warehouse == null ? null : warehouse.getWarehouseName();
+    }
+
+    private String resolveUserName(Integer userId) {
+        if (userId == null) {
+            return null;
+        }
+        User user = userMapper.selectById(userId);
+        return user == null ? null : user.getName();
+    }
+
+    private boolean isBlankValue(Object value) {
+        return value == null || (value instanceof String text && text.isBlank());
+    }
+
     private String convertToJson(Object obj) {
         try {
             if (obj == null) return "{}";

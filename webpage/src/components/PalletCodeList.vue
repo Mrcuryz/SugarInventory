@@ -46,8 +46,18 @@
     <el-card class="table-card" style="max-width: 1400px">
       <div class="table-toolbar">
         <div class="table-toolbar-left">
+          <el-button @click="printerSettingsVisible = true">打印助手设置</el-button>
           <el-button type="primary" @click="openGenerateDialog">生成二维码</el-button>
           <el-button type="danger" :disabled="!selectedRows.length" @click="handleBatchInvalid">批量作废</el-button>
+          <el-button
+              type="primary"
+              plain
+              :loading="batchPrintLoading"
+              :disabled="!selectedRows.length || batchPrintLoading"
+              @click="handleBatchDirectPrint()"
+          >
+            批量直接打印
+          </el-button>
           <el-button
               type="primary"
               plain
@@ -99,12 +109,13 @@
           <template #default="{ row }">
             <el-button v-if="canShowBindAction(row)" type="success" size="small" @click="openBindDialog(row)">绑定</el-button>
             <el-button type="primary" size="small" @click="openQrDialog(row)">二维码</el-button>
-            <el-dropdown trigger="click" @command="format => handleQrDownload(row.code, format)">
+            <el-dropdown trigger="click" @command="command => handleQrAction(row, command)">
               <el-button type="primary" plain size="small" :loading="qrDownloadLoading">
                 下载
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="print">直接打印标签</el-dropdown-item>
                   <el-dropdown-item command="pdf">下载标签 PDF</el-dropdown-item>
                   <el-dropdown-item command="png">下载 PNG</el-dropdown-item>
                   <el-dropdown-item command="svg">下载 SVG</el-dropdown-item>
@@ -193,6 +204,9 @@
         <div class="qr-code">{{ currentCode }}</div>
         <el-image v-if="qrImageUrl" :src="qrImageUrl" fit="contain" class="qr-image"/>
         <div class="qr-download-actions">
+          <el-button type="success" plain :loading="qrPrintLoading" @click="handleDirectPrintByCodes([currentCode])">
+            直接打印标签
+          </el-button>
           <el-button type="primary" :loading="qrDownloadLoading" @click="handleQrDownload(currentCode, 'pdf')">
             下载标签 PDF
           </el-button>
@@ -255,7 +269,7 @@
         <el-descriptions-item label="侧别">{{ inventoryInfo.side || '-' }}</el-descriptions-item>
         <el-descriptions-item label="排">{{ inventoryInfo.rowNumber || '-' }}</el-descriptions-item>
         <el-descriptions-item label="层">{{ inventoryInfo.layer || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="数量">{{ inventoryInfo.quantity ?? '-' }} {{ inventoryInfo.unit ? '件' : '板' }}</el-descriptions-item>
+        <el-descriptions-item label="数量">{{ formatInventoryOccupancy(inventoryInfo) }}</el-descriptions-item>
         <el-descriptions-item label="入库时间">{{ formatDateTime(inventoryInfo.inStockTime) }}</el-descriptions-item>
       </el-descriptions>
       <el-empty v-else description="暂无库存位置"/>
@@ -343,6 +357,8 @@
         <el-descriptions-item label="目标位置">{{ formatLocation(currentFlowLocation, 'to', '无') }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <LocalPrinterSettingsDialog v-model="printerSettingsVisible" />
   </div>
 </template>
 
@@ -351,8 +367,10 @@ import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import dayjs from 'dayjs'
 import {ElMessage, ElMessageBox} from 'element-plus'
+import LocalPrinterSettingsDialog from '@/components/LocalPrinterSettingsDialog.vue'
 import {getProductList} from '@/api/product'
 import {addAssay} from '@/api/assay'
+import {buildAssistantErrorMessage, printLocalLabels} from '@/api/localPrinter'
 import {formatDateTime} from '@/utils/dateTime'
 import {buildProductCascaderOptions, productCascaderProps} from '@/utils/productCascader'
 import {
@@ -396,10 +414,13 @@ const selectedRows = ref([])
 const loading = ref(false)
 const qrDownloadLoading = ref(false)
 const batchPdfLoading = ref(false)
+const batchPrintLoading = ref(false)
 const generatedPdfLoading = ref(false)
+const qrPrintLoading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const printerSettingsVisible = ref(false)
 
 const productList = ref([])
 const productOptions = computed(() => buildProductCascaderOptions(productList.value))
@@ -500,6 +521,19 @@ const buildQuery = () => {
     params.productionDateEnd = searchForm.value.productionDateRange[1]
   }
   return params
+}
+
+const normalizeCode = (code) => String(code || '').trim().toUpperCase()
+
+const buildPrintLabelsByCodes = (codes) => {
+  const rowMap = new Map(resultList.value.map(item => [normalizeCode(item.code), item]))
+  return Array.from(new Set((codes || []).map(normalizeCode).filter(Boolean))).map(code => {
+    const row = rowMap.get(code)
+    return {
+      code,
+      title: row?.productName || ''
+    }
+  })
 }
 
 const handleSearch = async () => {
@@ -650,6 +684,14 @@ const handleQrDownload = async (code, format) => {
   }
 }
 
+const handleQrAction = async (row, command) => {
+  if (command === 'print') {
+    await handleDirectPrintByCodes([row.code], true)
+    return
+  }
+  await handleQrDownload(row.code, command)
+}
+
 const handleBatchDownloadPdf = async (codes = selectedRows.value.map(row => row.code), fromGenerated = false) => {
   const exportCodes = Array.from(new Set((codes || []).filter(Boolean).map(code => String(code).trim().toUpperCase())))
   if (!exportCodes.length) {
@@ -674,6 +716,43 @@ const handleBatchDownloadPdf = async (codes = selectedRows.value.map(row => row.
       batchPdfLoading.value = false
     }
   }
+}
+
+const handleDirectPrintByCodes = async (codes = selectedRows.value.map(row => row.code), single = false) => {
+  const labels = buildPrintLabelsByCodes(codes)
+  if (!labels.length) {
+    ElMessage.warning('请选择二维码')
+    return
+  }
+
+  if (single) {
+    qrPrintLoading.value = true
+  } else {
+    batchPrintLoading.value = true
+  }
+
+  try {
+    const response = await printLocalLabels({
+      template: 'fixed_product_qrcode',
+      copies: 1,
+      labels
+    })
+    const printedCount = response.data?.printedCount || labels.length
+    ElMessage.success(`已提交 ${printedCount} 张标签到打印机`)
+  } catch (error) {
+    await handleBatchDownloadPdf(labels.map(item => item.code))
+    ElMessage.warning(`${buildAssistantErrorMessage(error)}，已回退为 PDF 导出`)
+  } finally {
+    if (single) {
+      qrPrintLoading.value = false
+    } else {
+      batchPrintLoading.value = false
+    }
+  }
+}
+
+const handleBatchDirectPrint = async () => {
+  await handleDirectPrintByCodes()
 }
 
 const openAssayDialog = async (row) => {
@@ -1094,3 +1173,15 @@ onBeforeUnmount(() => {
   background-color: var(--app-hover) !important;
 }
 </style>
+const formatInventoryOccupancy = (inventory) => {
+  if (!inventory) return '-'
+  const quantity = Number(inventory.quantity || 0)
+  const pieces = Number(inventory.pieces || 0)
+  if (pieces > 0) {
+    return `${pieces}件，占1板位`
+  }
+  if (quantity > 0) {
+    return `${quantity}板`
+  }
+  return '0'
+}
