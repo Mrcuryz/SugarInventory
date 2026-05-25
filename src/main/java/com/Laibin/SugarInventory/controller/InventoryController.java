@@ -62,7 +62,7 @@ public class InventoryController {
         return Result.success(inventoryService.pageProductStock(productStatus, productName, page, size));
     }
 
-    @Operation(summary = "备料池库存分页", description = "查询已生产领用但尚未被成品生产消耗的半成品余额")
+    @Operation(summary = "历史半成品占用分页", description = "查询历史生产占用形成的半成品余额；新流程请查看生产订单材料记录")
     @GetMapping("/prepare-pool-balance")
     public Result<PageResult<SemiPreparePoolBalanceVO>> pagePreparePoolBalance(
             @RequestParam(required = false) String productName,

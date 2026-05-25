@@ -323,7 +323,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "成品任务登记半成品用量", description = "为成品入库任务登记使用的备料池半成品批次及用量（全量覆盖）")
+    @Operation(summary = "历史成品任务登记半成品用量", description = "历史接口已停用；新流程通过生产订单关联追溯")
     @PostMapping("/tasks/semi-bind")
     public Result<List<TaskSemiItemVO>> bindSemiItems(@RequestBody @Valid BindTaskSemiItemsDTO dto,
                                                       @AuthenticationPrincipal LoginUser loginUser) {
@@ -361,7 +361,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "创建半成品生产领用任务", description = "扫码一个或多个半成品托盘码，创建生产领用任务")
+    @Operation(summary = "创建历史生产占用任务", description = "历史接口已停用；半成品进入生产请通过生产订单领用")
     @PostMapping("/semi/prepare/create")
     public Result<Void> createSemiPrepareTasks(@RequestBody @Valid CreateSemiPrepareTaskDTO dto,
                                                @AuthenticationPrincipal LoginUser loginUser) {
@@ -373,7 +373,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "确认半成品生产领用", description = "批量确认半成品生产领用任务")
+    @Operation(summary = "确认历史生产占用", description = "历史接口已停用；半成品进入生产请通过生产订单领用")
     @PostMapping("/semi/prepare/confirm")
     public Result<Void> confirmSemiPrepareTasks(@RequestBody @Valid ConfirmSemiPrepareBatchDTO dto,
                                                 @AuthenticationPrincipal LoginUser loginUser) {
@@ -385,7 +385,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "确认半成品消耗", description = "旧版接口：批量确认生产领用中的半成品托盘已最终消耗")
+    @Operation(summary = "确认历史半成品消耗", description = "历史接口已停用；新流程通过生产订单关联追溯")
     @PostMapping("/semi/consume/confirm")
     public Result<Void> confirmSemiConsume(@RequestBody @Valid ConfirmSemiConsumeBatchDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {
@@ -445,7 +445,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "仓库平面图批量创建任务", description = "按库位、侧别和前N板创建出库/调拨/生产领用任务；传入 codes 时按指定托盘码精确创建")
+    @Operation(summary = "仓库平面图批量创建任务", description = "按库位、侧别和前N板创建出库或调拨任务；传入 codes 时按指定托盘码精确创建")
     @PostMapping("/warehouse-map/tasks/create")
     public Result<WarehouseMapTaskCreateResultVO> createWarehouseMapTasks(@RequestBody @Valid WarehouseMapBatchOperationDTO dto,
                                                                           @AuthenticationPrincipal LoginUser loginUser) {

@@ -15,7 +15,7 @@ export const TASK_TYPE_MAP = {
 
 export const BIZ_SCENE_MAP = {
   DIRECT_OUT: { label: '半成品普通出库', type: 'warning' },
-  PREPARE_CONSUMED: { label: '生产领用', type: 'primary' },
+  PREPARE_CONSUMED: { label: '历史生产占用', type: 'primary' },
   FINISH_OUT: { label: '成品出库', type: 'danger' }
 }
 
@@ -34,7 +34,7 @@ export const FLOW_OPERATION_MAP = {
   ORDER_LABEL_RESERVE: { label: '订单预分配标签', type: 'warning' },
   ORDER_LABEL_USED: { label: '订单标签核销', type: 'primary' },
   ORDER_LABEL_RECYCLE: { label: '订单未用标签回收', type: 'info' },
-  PREPARE_CONSUMED: { label: '生产领用', type: 'warning' },
+  PREPARE_CONSUMED: { label: '历史生产占用', type: 'warning' },
   TRANSFER: { label: '调拨', type: 'info' },
   CONSUMED: { label: '消耗', type: 'danger' },
   OUT: { label: '出库', type: 'danger' },

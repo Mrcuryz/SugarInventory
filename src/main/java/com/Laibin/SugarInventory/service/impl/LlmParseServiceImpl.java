@@ -11,14 +11,16 @@ import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.LlmParseService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.client.OpenAIClient;
-import com.openai.models.responses.Response;
-import com.openai.models.responses.ResponseCreateParams;
+import com.openai.core.JsonValue;
+import com.openai.models.ResponseFormatJsonObject;
+import com.openai.models.chat.completions.ChatCompletion;
+import com.openai.models.chat.completions.ChatCompletionCreateParams;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -34,6 +36,12 @@ public class LlmParseServiceImpl implements LlmParseService {
     private final ObjectMapper objectMapper;
     private final WarehouseMapper warehouseMapper;
     private static final Logger log = LoggerFactory.getLogger(LlmParseServiceImpl.class);
+
+    @Value("${openai.model:deepseek-v4-flash}")
+    private String model;
+
+    @Value("${openai.max-tokens:8192}")
+    private Long maxTokens;
 
     @Override
     public LlmParseResult parseReport(AutoInboundParseRequest request) {
@@ -191,10 +199,15 @@ public class LlmParseServiceImpl implements LlmParseService {
                   - 生产消耗留档：
                     - 当 `type` 为 `"FINISHED_PRODUCT_IN"` 且 parseType = "FINISHED_PRODUCT" 时，
                       - 当前 item 一定是成品；
+                      - 不允许生成无产品、无数量的成品 item；如果一段文本不是成品产出，只能放入 sources、reason 或 globalRemarks。
                       - 当前成品后面出现的半成品/原料用量信息，必须解析为当前 item 的 `sources`。
                     - 一种成品可能对应多个半成品/原料，可以生成多个 sources 条目。
                     - sources 只作为生产消耗备注保存，不用于 WMS 半成品二维码绑定，不自动扣减库存。
                       - 在成品的原始文本块之后，遇到所有“带数量的半成品/用料描述”，都解析为 `sources`，直到遇到下一条成品描述或文本结束
+                      - 半成品用料标题后面的每一行“日期 + 数量”都必须生成一条独立 source。
+                        例如“机破黄中\\n11月19号16板\\n11月21号1板十6件”必须生成两条 source。
+                      - 每条 source 必须把该行日期写入 `productionDate`，如 `"2025-11-19"`、`"2025-11-21"`。
+                      - 不允许只把日期写入 `remark`；`remark` 只能补充原文和说明。
                     - 文本可能包含所使用的半成品或原料信息，如"用50kg白砂糖57件",解析后填入 `sources`,包含：
                       -   产品类型 `sourceType` 即SEMI_PRODUCT_IN;
                       -   品名原文 `productNameRaw`;
@@ -322,49 +335,28 @@ public class LlmParseServiceImpl implements LlmParseService {
     }
 
     private String callOpenAi(String systemMessage, String userMessage) {
-        ResponseCreateParams params = ResponseCreateParams.builder()
-                // 直连 OpenAI 用官方模型名
-                .model("gpt-4o-mini")
-                // system prompt 单独放在 instructions 字段
-                .instructions(systemMessage)
-                // 用户真实输入
-                .input(ResponseCreateParams.Input.ofText(userMessage))
+        ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
+                .model(model)
+                .addSystemMessage(systemMessage)
+                .addUserMessage(userMessage)
+                .responseFormat(ResponseFormatJsonObject.builder()
+                        .type(JsonValue.from("json_object"))
+                        .build())
+                .maxTokens(maxTokens)
                 .temperature(0.1)
                 .build();
 
         try {
-            Response resp = openAIClient.responses().create(params);
-            return extractTextFromResponse(resp);
+            ChatCompletion resp = openAIClient.chat().completions().create(params);
+            return resp.choices().stream()
+                    .findFirst()
+                    .flatMap(choice -> choice.message().content())
+                    .orElseThrow(() -> new BusinessException("大模型返回内容为空，请重试"));
         } catch (Exception e) {
             // 这里抛 BusinessException，前端 msg 至少能看到具体原因
-            log.error("调用 OpenAI 失败: {}", e.getMessage(), e);
+            log.error("调用 OpenAI 兼容大模型失败: {}", e.getMessage(), e);
             throw new BusinessException("调用大模型失败：" + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
-    }
-
-    /**
-     * 把 Response 里的所有 text 段拼接起来
-     */
-    private String extractTextFromResponse(Response resp) {
-        // 直接把 Response 映射为 JsonNode，而不是先转字符串再 parse
-        JsonNode root = objectMapper.valueToTree(resp);
-
-        StringBuilder sb = new StringBuilder();
-        JsonNode outputArray = root.path("output");
-        if (outputArray.isArray()) {
-            for (JsonNode outItem : outputArray) {
-                JsonNode contentArray = outItem.path("content");
-                if (contentArray.isArray()) {
-                    for (JsonNode contentItem : contentArray) {
-                        JsonNode textNode = contentItem.get("text");
-                        if (textNode != null && !textNode.isNull()) {
-                            sb.append(textNode.asText());
-                        }
-                    }
-                }
-            }
-        }
-        return sb.toString();
     }
 }
 

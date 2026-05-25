@@ -20,7 +20,7 @@ import {useRouter} from 'vue-router'
 const router = useRouter()
 const entries = [
   {title: '半成品入库任务', desc: '确认半成品二维码入库、取消待处理任务', path: '/pallet-task/semi/in'},
-  {title: '半成品出库任务', desc: '确认半成品普通出库；生产领用走生产订单', path: '/pallet-task/semi/out'},
+  {title: '半成品出库任务', desc: '确认半成品普通出库；进入生产走生产订单领用', path: '/pallet-task/semi/out'},
   {title: '成品入库任务', desc: '确认成品二维码入库；追溯关系走生产订单', path: '/pallet-task/finish/in'},
   {title: '成品出库任务', desc: '创建并确认成品二维码出库', path: '/pallet-task/finish/out'},
   {title: '调拨任务', desc: '创建并确认调拨', path: '/pallet-task/transfer'}

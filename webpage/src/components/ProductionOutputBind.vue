@@ -295,7 +295,9 @@ const labelBatches = computed(() => detail.value?.labelBatches || [])
 const isSemiOrder = computed(() => selectedOrder.value?.orderType === 'SEMI')
 const pageTitle = computed(() => isSemiOrder.value ? '产出半成品贴码' : '产出成品贴码')
 const outputTableTitle = computed(() => isSemiOrder.value ? '实际产出半成品' : '实际产出成品')
-const pageSubtitle = computed(() => isSemiOrder.value ? '半成品生产订单只允许选择半成品，绑定后创建半成品入库任务。' : '成品生产订单只允许选择成品，绑定后创建成品入库任务。')
+const pageSubtitle = computed(() => isSemiOrder.value
+  ? '半成品生产订单只允许选择半成品；确认生产结束后生成半成品入库任务。'
+  : '成品生产订单只允许选择成品；确认生产结束后生成成品入库任务。')
 const productPlaceholder = computed(() => isSemiOrder.value ? '请选择半成品' : '请选择成品')
 const appendOutputNotice = computed(() => ['WAIT_INBOUND', 'PART_INBOUND'].includes(selectedOrder.value?.status)
   ? '当前订单已进入待入库阶段，实际产出已核销；如需变更需走异常处理。'

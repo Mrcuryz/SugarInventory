@@ -18,6 +18,7 @@ import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.AutoInboundParseService;
 import com.Laibin.SugarInventory.service.LlmParseService;
+import com.Laibin.SugarInventory.service.model.AutoInboundSourcePostProcessor;
 import com.Laibin.SugarInventory.service.model.AutoInboundQuantityNormalizer;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -65,9 +66,14 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         LlmParseResult llmResult = llmParseService.parseReport(request);
         List<AutoInboundTask> tasks = new ArrayList<>();
 
-        // 2. 根据 LLM 结果，直接构造 AutoInboundTask
+        List<String> globalRemarks = new ArrayList<>();
+        if (llmResult != null && llmResult.getGlobalRemarks() != null) {
+            globalRemarks.addAll(llmResult.getGlobalRemarks());
+        }
+
+        // 2. 根据 LLM 结果构造 AutoInboundTask，并对明显错误的结构化结果做兜底清洗。
         if (llmResult != null && llmResult.getItems() != null) {
-            for (ParsedInboundItem item : llmResult.getItems()) {
+            for (ParsedInboundItem item : normalizeParsedItems(llmResult.getItems(), globalRemarks)) {
                 log.info("Parsed item -> index={}, type={}, productId={}, productName={}, whId={}, whName={}",
                         item.getIndex(), item.getType(),
                         item.getProductId(), item.getProductName(),
@@ -100,9 +106,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         AutoInboundParseResponse resp = new AutoInboundParseResponse();
         resp.setBatchId(batchId);
         resp.setTasks(tasks);
-        if (llmResult != null) {
-            resp.setGlobalRemarks(llmResult.getGlobalRemarks());
-        }
+        resp.setGlobalRemarks(globalRemarks);
         return resp;
     }
 
@@ -298,17 +302,55 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         }
         task.setHasAssay(hasAssay);
 
-        List<ProductionConsumptionItem> consumptionItems = buildProductionConsumptionItems(item.getSources(), warnings);
+        List<ParsedSemiSource> normalizedSources = AutoInboundSourcePostProcessor.normalizeSources(item, req.getEntryDate(), entryDate);
+        List<ProductionConsumptionItem> consumptionItems = buildProductionConsumptionItems(normalizedSources, warnings);
         task.setProductionConsumptionItems(consumptionItems);
         task.setUnmatchedNames(resolveUnmatchedNames(consumptionItems));
         task.setConsumptionRemark(buildConsumptionRemark(consumptionItems, task.getUnmatchedNames()));
         if (!consumptionItems.isEmpty()) {
-            warnings.add("生产消耗信息将在成品入库成功后优先扣减备料池余额；未匹配或余额不足的部分仅留档");
+            warnings.add("半成品用料仅作为生产订单领用提示；需选择实际库存二维码后才会扣库存");
         }
 
         refreshTaskValidation(task, missingFields, warnings, reasons);
         task.setRemark(String.join("；", remarks));
         return task;
+    }
+
+    private List<ParsedInboundItem> normalizeParsedItems(List<ParsedInboundItem> items, List<String> globalRemarks) {
+        if (items == null || items.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ParsedInboundItem> result = new ArrayList<>();
+        ParsedInboundItem lastValidFinishedItem = null;
+        for (ParsedInboundItem item : items) {
+            if (AutoInboundSourcePostProcessor.isInvalidFinishedItem(item)) {
+                List<ParsedSemiSource> carriedSources = new ArrayList<>();
+                ParsedSemiSource selfSource = AutoInboundSourcePostProcessor.sourceFromInvalidFinishedItem(item);
+                if (selfSource != null) {
+                    carriedSources.add(selfSource);
+                }
+                if (item.getSources() != null && !item.getSources().isEmpty()) {
+                    carriedSources.addAll(item.getSources());
+                }
+                if (lastValidFinishedItem != null && !carriedSources.isEmpty()) {
+                    List<ParsedSemiSource> merged = new ArrayList<>();
+                    if (lastValidFinishedItem.getSources() != null) {
+                        merged.addAll(lastValidFinishedItem.getSources());
+                    }
+                    merged.addAll(carriedSources);
+                    lastValidFinishedItem.setSources(merged);
+                    globalRemarks.add("已忽略无效成品产出，并将其半成品用料并入上一条成品：" + truncateForRemark(item.getRawBlock()));
+                } else {
+                    globalRemarks.add("已忽略无效成品产出：" + truncateForRemark(item.getRawBlock()));
+                }
+                continue;
+            }
+            result.add(item);
+            if ("FINISHED_PRODUCT_IN".equalsIgnoreCase(item.getType())) {
+                lastValidFinishedItem = item;
+            }
+        }
+        return result;
     }
 
     private List<ProductionConsumptionItem> buildProductionConsumptionItems(List<ParsedSemiSource> sources,
@@ -384,7 +426,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
             return null;
         }
         List<String> lines = new ArrayList<>();
-        lines.add("生产消耗备注（优先扣减备料池余额；未匹配或余额不足的部分仅留档）");
+        lines.add("半成品用料提示（请在生产订单中选择实际库存二维码确认领用）");
         if (consumptionItems != null) {
             for (ProductionConsumptionItem item : consumptionItems) {
                 String material = firstNonBlank(item.getMaterialNameRaw(), item.getProductName());
@@ -502,6 +544,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
             option.setDisplayName(parseTime);
             option.setTaskCount(tasks.size());
             option.setStatus(resolveBatchStatus(tasks));
+            option.setParseType(resolveBatchParseType(tasks));
             result.add(option);
         }
         return result;
@@ -521,6 +564,24 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         }
         boolean allCommitted = tasks.stream().allMatch(t -> "COMMITTED".equalsIgnoreCase(t.getStatus()));
         return allCommitted ? "COMMITTED" : "DRAFT";
+    }
+
+    private String resolveBatchParseType(List<AutoInboundTask> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return "UNKNOWN";
+        }
+        boolean hasFinished = tasks.stream().anyMatch(task -> task.getType() == AutoInboundType.FINISHED_PRODUCT);
+        boolean hasSemi = tasks.stream().anyMatch(task -> task.getType() == AutoInboundType.SEMI_PRODUCT);
+        if (hasFinished && hasSemi) {
+            return "MIXED";
+        }
+        if (hasFinished) {
+            return "FINISHED_PRODUCT";
+        }
+        if (hasSemi) {
+            return "SEMI_PRODUCT";
+        }
+        return "UNKNOWN";
     }
 
     private String formatHistoryTime(long timestamp) {
@@ -612,5 +673,13 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
 
     private static boolean notBlank(String s) {
         return s != null && !s.isBlank();
+    }
+
+    private static String truncateForRemark(String value) {
+        if (value == null || value.isBlank()) {
+            return "无原文";
+        }
+        String compact = value.replaceAll("\\s+", " ").trim();
+        return compact.length() <= 120 ? compact : compact.substring(0, 120) + "...";
     }
 }

@@ -34,8 +34,10 @@ wechat:
   appid: wxb2e24e10a7cb3ef8
   secret: 0e992128f83b91b6e618da3151f108f7
 openai:
-  api-url: https://www.dmxapi.cn/v1
+  api-url: https://api.deepseek.com
   api-key: ${OPENAI_API_KEY}
+  model: deepseek-v4-flash
+  max-tokens: 8192
 jwt:
   secret: xVqyO+0aawRF/LNpEjDDe1w/VXjnbgjJsm43uq0dbpTTt5EHbldZ3FLohntYJfRlXAhW2ZNww27q04Ja2C9kNw==
   expiration: 86400000

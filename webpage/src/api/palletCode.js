@@ -50,7 +50,7 @@ export const bindPalletTask = (params) => request.post('/pallet-codes/bind', par
 
 export const pagePalletTasks = (params) => request.post('/pallet-codes/tasks/list', params)
 
-export const bindSemiItemsToTask = (params) => request.post('/pallet-codes/tasks/semi-bind', params)
+export const bindSemiItemsToTask = () => Promise.reject(new Error('成品与半成品追溯请通过生产订单关联'))
 
 export const confirmPalletInBatch = (params) => request.post('/pallet-codes/tasks/confirm', params)
 
@@ -60,9 +60,9 @@ export const createSemiOutTasks = (params) => request.post('/pallet-codes/semi/o
 
 export const confirmSemiOutTasks = (params) => request.post('/pallet-codes/semi/out/confirm', params)
 
-export const createSemiPrepareTasks = (params) => request.post('/pallet-codes/semi/prepare/create', params)
+export const createSemiPrepareTasks = () => Promise.reject(new Error('半成品进入生产请通过生产订单领用'))
 
-export const confirmSemiPrepareTasks = (params) => request.post('/pallet-codes/semi/prepare/confirm', params)
+export const confirmSemiPrepareTasks = () => Promise.reject(new Error('历史生产占用任务仅保留查询，不再允许确认'))
 
 export const createFinishOutTasks = (params) => request.post('/pallet-codes/finish/out/create', params)
 

@@ -210,14 +210,14 @@
             @change="handleHistoryChange"
         >
           <el-option
-              v-for="item in historyOptions"
+              v-for="item in filteredHistoryOptions"
               :key="item.batchId"
               :label="item.displayName"
               :value="item.batchId"
           >
             <div class="history-option">
               <span>{{ item.displayName }}</span>
-              <span>{{ item.taskCount || 0 }} 条</span>
+              <span>{{ historyOptionTypeLabel(item) }} · {{ item.taskCount || 0 }} 条</span>
             </div>
           </el-option>
         </el-select>
@@ -340,9 +340,14 @@
                 <el-tag size="small" type="danger">{{ finishDraftSummary.riskCount }} 条风险</el-tag>
               </div>
             </template>
-            <div class="tag-list">
-              <el-tag v-for="name in finishFlow.unmatchedNames" :key="name" type="warning" size="small">{{ name }}</el-tag>
-              <span v-if="!finishFlow.unmatchedNames.length" class="empty-text">没有未识别的产品名称</span>
+            <div v-if="finishRiskItems.length" class="risk-list">
+              <div v-for="item in finishRiskItems" :key="item.key" class="risk-item">
+                <el-tag :type="item.type" size="small">{{ item.label }}</el-tag>
+                <span>{{ item.text }}</span>
+              </div>
+            </div>
+            <div v-else class="empty-text">
+              暂无需要处理的问题。
             </div>
           </el-collapse-item>
         </el-collapse>
@@ -470,7 +475,7 @@
       <div v-if="finishStep === 2" class="step-actions">
         <el-button @click="finishStep = 1">上一步</el-button>
         <el-button type="primary" :loading="loadingCreateFinishOrder || loadingFinishDetail" @click="useRecommendedFinishPlan">
-          {{ finishRecommendation.mode === 'CREATE' && !finishFlow.orderId ? '创建生产订单并保存草稿' : '使用推荐方案' }}
+          {{ finishRecommendation.mode === 'CREATE' && !finishFlow.orderId ? '创建生产订单并保存草稿' : '下一步' }}
         </el-button>
       </div>
 
@@ -506,6 +511,22 @@
               </el-button>
             </div>
             <el-alert v-if="!hint.productId" type="warning" :closable="false" title="该用料未匹配到半成品产品，请先选择产品。" />
+            <div v-if="hint.recommendation" class="material-recommendation">
+              <div>
+                <span>用料需求</span>
+                <strong>{{ quantityText(hint.recommendation.requiredBoardCount, hint.recommendation.requiredPieceCount) }}</strong>
+              </div>
+              <div>
+                <span>建议领用</span>
+                <strong>{{ materialRecommendationPickText(hint.recommendation) }}</strong>
+              </div>
+              <div>
+                <span>预计退回</span>
+                <strong :class="{ 'return-warning': hint.recommendation.expectedReturnPieces > 0 }">
+                  {{ materialRecommendationReturnText(hint.recommendation) }}
+                </strong>
+              </div>
+            </div>
             <div class="hint-edit-grid">
               <el-cascader
                   v-model="hint.productId"
@@ -542,6 +563,12 @@
               <el-table-column prop="productName" label="产品" min-width="140" />
               <el-table-column prop="productionDate" label="生产日期" width="120" />
               <el-table-column prop="quantityText" label="库存数量" width="110" />
+              <el-table-column label="推荐" width="92">
+                <template #default="{ row }">
+                  <el-tag v-if="isRecommendedCandidate(hint, row)" type="success" size="small">建议领用</el-tag>
+                  <span v-else class="muted-text">-</span>
+                </template>
+              </el-table-column>
               <el-table-column label="库位" min-width="150">
                 <template #default="{ row }">{{ candidateLocationText(row) }}</template>
               </el-table-column>
@@ -568,7 +595,8 @@
             <div v-for="hint in autoMatchedMaterialHints" :key="hint.key" class="matched-row">
               <strong>{{ hint.productName || hint.materialNameRaw }}</strong>
               <span>{{ hint.productionDate || '日期待确认' }} / {{ quantityText(hint.boardCount, hint.pieceCount) }}</span>
-              <em>已选 {{ hint.selectedCandidateIds.length }} 个库存二维码</em>
+              <span v-if="hint.recommendation">建议：{{ materialRecommendationPickText(hint.recommendation) }}</span>
+              <em>预计退回：{{ materialRecommendationReturnText(hint.recommendation) }}</em>
             </div>
           </div>
         </el-collapse-item>
@@ -641,9 +669,14 @@
               <el-tag size="small" type="danger">{{ finishDraftSummary.riskCount }} 条风险</el-tag>
             </div>
           </template>
-          <div class="tag-list">
-            <el-tag v-for="name in finishFlow.unmatchedNames" :key="name" type="warning" size="small">{{ name }}</el-tag>
-            <span v-if="!finishFlow.unmatchedNames.length" class="empty-text">没有未识别的产品名称</span>
+          <div v-if="finishRiskItems.length" class="risk-list">
+            <div v-for="item in finishRiskItems" :key="item.key" class="risk-item">
+              <el-tag :type="item.type" size="small">{{ item.label }}</el-tag>
+              <span>{{ item.text }}</span>
+            </div>
+          </div>
+          <div v-else class="empty-text">
+            暂无需要处理的问题。
           </div>
           <div class="risk-list compact">
             <div>成品报数不会直接创建成品入库任务，必须先关联成品生产订单。</div>
@@ -701,11 +734,13 @@
     </el-card>
 
     <!-- 任务列表区 -->
-    <el-card v-if="isSemiMode" class="table-card" style="max-width: 1200px">
-      <div class="card-title">半成品快速入库任务</div>
-      <div class="parse-text-subtitle">半成品报数沿用解析、分配固定产品二维码、创建半成品入库任务和确认入库流程。</div>
-      <div class="table-header">
-        <div class="left">
+    <el-card v-if="isSemiMode" class="table-card semi-flow-card" style="max-width: 1200px">
+      <div class="finish-flow-header">
+        <div>
+          <div class="card-title">半成品快速入库处理</div>
+          <div class="parse-text-subtitle">系统先生成半成品入库草稿，确认产品、日期、库位和固定二维码后再执行入库。</div>
+        </div>
+        <div class="semi-history-actions">
           <el-select
               v-model="batchId"
               placeholder="暂无历史解析"
@@ -717,14 +752,14 @@
               @change="handleHistoryChange"
           >
             <el-option
-                v-for="item in historyOptions"
+                v-for="item in filteredHistoryOptions"
                 :key="item.batchId"
                 :label="item.displayName"
                 :value="item.batchId"
             >
               <div class="history-option">
                 <span>{{ item.displayName }}</span>
-                <span>{{ item.taskCount || 0 }} 条</span>
+                <span>{{ historyOptionTypeLabel(item) }} · {{ item.taskCount || 0 }} 条</span>
               </div>
             </el-option>
           </el-select>
@@ -735,31 +770,77 @@
               size="small"
               :loading="loadingBatch"
               @click="handleReloadBatch"
-              style="margin-left: 8px"
           >
             重新加载
           </el-button>
         </div>
-        <div class="right">
-          <el-form :inline="true" :model="filterForm" class="filter-form">
-            <el-form-item label="类型">
-              <el-select v-model="filterForm.type" size="small" style="width: 120px">
-                <el-option label="全部" value="ALL" />
-                <el-option label="半成品" value="SEMI_PRODUCT" />
-                <el-option label="成品" value="FINISHED_PRODUCT" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="风险">
-              <el-select v-model="filterForm.risk" size="small" style="width: 120px">
-                <el-option label="全部" value="ALL" />
-                <el-option label="高" value="RED" />
-                <el-option label="中" value="YELLOW" />
-                <el-option label="低" value="GREEN" />
-              </el-select>
-            </el-form-item>
-          </el-form>
+      </div>
+
+      <el-empty
+          v-if="!taskList.length && !batchId"
+          description="暂无半成品报数解析结果，可先解析报数文本，或从右上角选择历史解析。"
+      />
+
+      <template v-else>
+      <div class="draft-overview semi-overview">
+        <div class="draft-overview-card">
+          <div class="overview-label">系统已识别</div>
+          <strong>半成品入库 {{ semiTaskSummary.total }} 项，可直接确认 {{ semiTaskSummary.ready }} 项</strong>
+          <span>已选择 {{ selectedTaskIds.length }} 项，待补充信息 {{ semiTaskSummary.needConfirm }} 项</span>
+        </div>
+        <div class="draft-overview-card">
+          <div class="overview-label">固定码准备</div>
+          <strong>预计需要 {{ semiTaskSummary.requiredQr }} 个二维码</strong>
+          <span>当前可用 {{ semiTaskSummary.availableQr }} 个，库存和库位容量仍按原流程校验。</span>
+        </div>
+        <div class="draft-overview-card warning">
+          <div class="overview-label">需要用户确认</div>
+          <strong>{{ semiTaskSummary.risk }} 项风险，{{ semiTaskSummary.blocked }} 项暂不可入库</strong>
+          <span>请确认产品、生产日期、库位、侧别和数量后再执行入库。</span>
         </div>
       </div>
+
+      <el-alert
+          v-if="globalRemarks.length"
+          type="info"
+          show-icon
+          class="global-remark-alert"
+          title="解析备注"
+      >
+        <template #default>
+          <div v-for="(r, idx) in globalRemarks" :key="idx">
+            {{ idx + 1 }}. {{ r }}
+          </div>
+        </template>
+      </el-alert>
+
+      <el-collapse class="draft-detail-collapse semi-detail-collapse">
+        <el-collapse-item name="tasks">
+          <template #title>
+            <div class="smart-collapse-title">
+              <div class="smart-collapse-left">
+                <el-icon class="smart-collapse-icon"><Box /></el-icon>
+                <div>
+                  <div class="smart-collapse-main">识别到的半成品入库任务</div>
+                  <div class="smart-collapse-sub">请确认产品、生产日期、库位和数量是否正确。</div>
+                </div>
+              </div>
+              <el-tag size="small" type="success">{{ semiTaskSummary.total }} 项</el-tag>
+            </div>
+          </template>
+
+          <div class="semi-table-toolbar">
+            <el-form :inline="true" :model="filterForm" class="filter-form">
+              <el-form-item label="风险">
+                <el-select v-model="filterForm.risk" size="small" style="width: 120px">
+                  <el-option label="全部" value="ALL" />
+                  <el-option label="高" value="RED" />
+                  <el-option label="中" value="YELLOW" />
+                  <el-option label="低" value="GREEN" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+          </div>
 
       <el-table
           :data="filteredTasks"
@@ -1108,29 +1189,9 @@
           </el-button>
         </div>
       </div>
-    </el-card>
-
-    <el-card class="table-card" style="max-width: 1200px" v-if="isSemiMode && (taskList.length || batchId)">
-      <!-- 全局备注展示 -->
-      <el-alert
-          v-if="globalRemarks.length"
-          type="info"
-          show-icon
-          class="global-remark-alert"
-          title="备注"
-      >
-        <template #default>
-          <div v-for="(r, idx) in globalRemarks" :key="idx">
-            {{ idx + 1 }}. {{ r }}
-          </div>
-        </template>
-      </el-alert>
-
-      <div class="table-header">
-        <!-- 原来的当前批次 / 筛选条件 -->
-      </div>
-
-      <!-- el-table ... -->
+        </el-collapse-item>
+      </el-collapse>
+      </template>
     </el-card>
 
     <el-drawer v-model="detailDrawerVisible" title="解析详情" size="65%" class="auto-inbound-detail-drawer">
@@ -1296,6 +1357,12 @@ import {
   pageMaterialCandidates,
   pickProductionMaterials
 } from '@/api/production'
+import {
+  buildMaterialPickRecommendation,
+  materialPickRecommendationIds,
+  materialPickRecommendationPickText,
+  materialPickRecommendationReturnText
+} from '@/utils/materialPickRecommendation.mjs'
 
 // ---------- 工具：从 JWT 里解析出当前用户ID（sub） ----------
 function decodeJwtSub (token) {
@@ -1390,6 +1457,12 @@ const parseModeSubtitle = computed(() => isSemiMode.value
     ? '半成品报数将解析为半成品快速入库任务，支持确认入库和批量打印。'
     : '成品报数用于识别生产产出和半成品用料，关联生产订单后生成生产处理草稿，不直接入库。'
 )
+const filteredHistoryOptions = computed(() => historyOptions.value.filter(item => item.parseType === parseForm.value.parseType))
+const historyOptionTypeLabel = (item) => {
+  if (item?.parseType === 'SEMI_PRODUCT') return '半成品'
+  if (item?.parseType === 'FINISHED_PRODUCT') return '成品'
+  return '未知'
+}
 const selectedMaterialCandidateIds = computed(() => finishFlow.value.materialHints
     .filter(item => !item.skipped)
     .flatMap(item => item.selectedCandidateIds || [])
@@ -1562,6 +1635,32 @@ const filteredTasks = computed(() => {
   })
 })
 
+const semiTasks = computed(() => taskList.value.filter(t => t.type === 'SEMI_PRODUCT'))
+
+const semiTaskSummary = computed(() => {
+  const tasks = semiTasks.value
+  const requiredQr = tasks.reduce((sum, item) => sum + Number(item.requiredQrCount || 0), 0)
+  const availableQr = tasks.reduce((sum, item) => sum + Number(item.availableQrCount || 0), 0)
+  const risk = tasks.filter(item => item.riskLevel && item.riskLevel !== 'GREEN').length
+  const blocked = tasks.filter(item => !item.canAutoStockIn).length
+  const needConfirm = tasks.filter(item =>
+      !item.semiProductId
+      || !item.entryDate
+      || !item.semiWarehouseName
+      || !item.side
+      || (Number(item.semiBoardQuantity || 0) <= 0 && Number(item.semiPieceQuantity || 0) <= 0)
+  ).length
+  return {
+    total: tasks.length,
+    ready: tasks.filter(item => item.canAutoStockIn).length,
+    needConfirm,
+    risk,
+    blocked,
+    requiredQr,
+    availableQr
+  }
+})
+
 // -------- 产品级联选择数据 --------
 const semiProductList = ref([])
 const stProductList = ref([])
@@ -1677,6 +1776,80 @@ const finishDraftSummary = computed(() => {
         ? (noPreprint ? '当前订单未看到预打印记录，需先预打印订单码。' : '当前订单已有预打印记录，可继续确认实际产出。')
         : '尚未关联生产订单，无法判断预打印状态。'
   }
+})
+
+const finishRiskItems = computed(() => {
+  const items = []
+  finishFlow.value.unmatchedNames.forEach((name, index) => {
+    items.push({
+      key: `unmatched-${index}-${name}`,
+      label: '未识别内容',
+      type: 'warning',
+      text: `未能识别或匹配：${name}`
+    })
+  })
+  finishFlow.value.finishOutputItems.forEach((item, index) => {
+    const name = item.productName || item.productNameRaw || `第 ${index + 1} 条成品产出`
+    if (!item.productId) {
+      items.push({
+        key: `output-product-${index}`,
+        label: '成品待确认',
+        type: 'danger',
+        text: `${name} 未匹配到成品产品，请确认产品。`
+      })
+    }
+    if (!item.productionDate) {
+      items.push({
+        key: `output-date-${index}`,
+        label: '日期待确认',
+        type: 'warning',
+        text: `${name} 缺少生产日期，请确认日期。`
+      })
+    }
+  })
+  activeMaterialHints.value.forEach((hint, index) => {
+    const name = hint.productName || hint.materialNameRaw || `第 ${index + 1} 条半成品用料`
+    if (!hint.productId) {
+      items.push({
+        key: `material-product-${hint.key || index}`,
+        label: '用料待确认',
+        type: 'danger',
+        text: `${name} 未匹配到半成品产品，请选择产品。`
+      })
+    }
+    if (!hint.productionDate) {
+      items.push({
+        key: `material-date-${hint.key || index}`,
+        label: '日期待确认',
+        type: 'warning',
+        text: `${name} 缺少生产日期，请确认日期后查询库存。`
+      })
+    }
+    if (hint.matchStatus === 'SHORTAGE') {
+      items.push({
+        key: `material-shortage-${hint.key || index}`,
+        label: '库存不足',
+        type: 'danger',
+        text: hint.candidateRisk || `${name} 候选库存不足，请调整条件或人工处理。`
+      })
+    } else if (!['AUTO_MATCHED', 'PICKED', 'SKIPPED'].includes(hint.matchStatus)) {
+      items.push({
+        key: `material-pending-${hint.key || index}`,
+        label: '用料待确认',
+        type: 'warning',
+        text: hint.candidateRisk || `${name} 需要选择实际库存二维码。`
+      })
+    }
+  })
+  if (finishFlow.value.selectedOrder && !hasSelectedOrderPreprint(finishFlow.value.selectedOrder)) {
+    items.push({
+      key: 'preprint-missing',
+      label: '待预打印',
+      type: 'warning',
+      text: '当前生产订单未看到预打印记录，需先预打印订单码。'
+    })
+  }
+  return items
 })
 
 const finishRecommendation = computed(() => {
@@ -1913,6 +2086,7 @@ const handleMaterialHintProductChange = (row, value) => {
 const clearMaterialHintCandidates = (row) => {
   row.candidates = []
   row.selectedCandidateIds = []
+  row.recommendation = null
   row.candidateRisk = ''
   row.matchStatus = row.productId && row.productionDate ? 'PENDING_QUERY' : 'NEEDS_CONFIRM'
 }
@@ -1921,6 +2095,7 @@ const toggleMaterialHintSkipped = (row) => {
   row.skipped = !row.skipped
   if (row.skipped) {
     row.selectedCandidateIds = []
+    row.recommendation = null
     row.candidateRisk = '已跳过该条用料提示，不会参与本次领用确认。'
     row.matchStatus = 'SKIPPED'
   } else {
@@ -1942,6 +2117,30 @@ const toggleHintCandidate = (hint, row, checked) => {
   }
   hint.selectedCandidateIds = Array.from(set)
 }
+
+const materialRecommendationPickText = recommendation => materialPickRecommendationPickText(recommendation)
+
+const materialRecommendationReturnText = recommendation => materialPickRecommendationReturnText(recommendation)
+
+const materialRecommendationTypeText = recommendation => ({
+  EXACT_PIECE_COMBO: '散件刚好匹配',
+  NEAREST_PIECE_OVER: '散件最接近匹配',
+  PIECE_PLUS_FULL_PALLET: '散件不足，补整板',
+  FULL_ONLY: '仅整板领用',
+  INSUFFICIENT: '库存不足'
+}[recommendation?.matchType] || '待推荐')
+
+const isRecommendedCandidate = (hint, row) => {
+  const id = row?.palletCodeId
+  return Boolean(id && materialPickRecommendationIds(hint?.recommendation).includes(id))
+}
+
+const buildHintRecommendation = (hint) => buildMaterialPickRecommendation({
+  requiredBoardCount: hint?.boardCount || 0,
+  requiredPieceCount: hint?.pieceCount || 0,
+  piecesPerPallet: productPiecesPerPallet(hint?.productId),
+  candidates: hint?.candidates || []
+})
 
 const setParseType = (type) => {
   if (parseForm.value.parseType === type) return
@@ -2027,6 +2226,7 @@ const normalizeMaterialHints = (tasks) => {
           warehouseHint: item.warehouseHint || '',
           candidates: [],
           selectedCandidateIds: [],
+          recommendation: null,
           skipped: false,
           candidateRisk: '',
           matchStatus: item.productId && entry.productionDate ? 'PENDING_QUERY' : 'NEEDS_CONFIRM',
@@ -2298,14 +2498,17 @@ const loadMaterialCandidatesForHint = async (index) => {
       size: 100
     })
     hint.candidates = res.data?.records || []
-    const required = estimatedLabelCount(hint)
-    if (required > 0 && hint.candidates.length === required) {
-      hint.selectedCandidateIds = hint.candidates.map(item => item.palletCodeId).filter(Boolean)
-      hint.candidateRisk = `候选库存刚好满足需要，已自动选中 ${hint.selectedCandidateIds.length} 个二维码，请确认后再领用。`
+    const recommendation = buildHintRecommendation(hint)
+    hint.recommendation = recommendation
+    const selectedIds = materialPickRecommendationIds(recommendation)
+    if (recommendation.selectable && selectedIds.length) {
+      hint.selectedCandidateIds = selectedIds
+      const returnText = materialRecommendationReturnText(recommendation)
+      hint.candidateRisk = `${materialRecommendationTypeText(recommendation)}：已推荐 ${selectedIds.length} 个二维码。预计退回：${returnText}。请确认后再领用。`
       hint.matchStatus = 'AUTO_MATCHED'
-    } else if (required > 0 && hint.candidates.length < required) {
+    } else if (!recommendation.selectable) {
       hint.selectedCandidateIds = []
-      hint.candidateRisk = `候选库存不足：预计需要 ${required} 个二维码，当前找到 ${hint.candidates.length} 个。`
+      hint.candidateRisk = recommendation.reason || '候选库存不足，无法生成完整领用推荐。'
       hint.matchStatus = 'SHORTAGE'
     } else if (hint.candidates.length) {
       hint.candidateRisk = `已找到 ${hint.candidates.length} 个候选二维码，请选择实际领用项。`
@@ -2469,8 +2672,8 @@ const loadHistoryOptions = async (selectLatest = false) => {
   try {
     const res = await listAutoInboundHistory()
     historyOptions.value = res.data || []
-    if (selectLatest && historyOptions.value.length) {
-      batchId.value = historyOptions.value[0].batchId
+    if (selectLatest && filteredHistoryOptions.value.length) {
+      batchId.value = filteredHistoryOptions.value[0].batchId
       await handleReloadBatch()
     }
   } catch (e) {
@@ -2867,6 +3070,22 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.semi-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.semi-overview {
+  margin-top: 18px;
+}
+
+.semi-table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
 
 .history-option {
@@ -3556,6 +3775,37 @@ onMounted(async () => {
   color: #b45309 !important;
 }
 
+.material-recommendation {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(240px, 1.4fr) minmax(180px, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--app-radius);
+  background: #eff6ff;
+}
+
+.material-recommendation div {
+  display: grid;
+  gap: 4px;
+}
+
+.material-recommendation span {
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.material-recommendation strong {
+  color: #1e3a8a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.material-recommendation .return-warning {
+  color: #b45309;
+}
+
 .hint-edit-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) 160px 100px 100px;
@@ -3581,7 +3831,7 @@ onMounted(async () => {
 
 .matched-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(140px, auto);
+  grid-template-columns: minmax(150px, 0.8fr) minmax(140px, 0.7fr) minmax(220px, 1.2fr) minmax(140px, 0.7fr);
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--app-border-soft);

@@ -250,7 +250,7 @@ Page({
       ? await this.isActivePreparePallet(code)
       : false;
     if (activePrepare) {
-      return { valid: false, message: '该码已被旧流程生产领用，不属于普通可操作库存' };
+      return { valid: false, message: '该码已处于历史生产占用状态，不属于普通可操作库存' };
     }
 
     if (mode === 'out' || mode === 'transfer') {

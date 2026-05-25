@@ -3,7 +3,6 @@ import {
   confirmFinishOutTasks,
   confirmPalletInBatch,
   confirmSemiOutTasks,
-  confirmSemiPrepareTasks,
   confirmTransferTasks,
   getTaskList
 } from '../../../api/task';
@@ -107,15 +106,17 @@ Page({
       if (this.data.taskType) params.taskType = this.data.taskType;
       const res = await getTaskList(params);
       const selectedSet = new Set(this.data.selectedCodes);
-      const tasks = ((res && res.records) || []).map(item => ({
-        ...enrichTask(item),
-        selected: selectedSet.has(item.code),
-        canConfirm: item.taskStatus === 'PENDING',
-        canCancel: item.taskStatus === 'PENDING'
-      }));
+      const tasks = ((res && res.records) || [])
+        .filter(item => item.bizScene !== 'PREPARE_CONSUMED')
+        .map(item => ({
+          ...enrichTask(item),
+          selected: selectedSet.has(item.code),
+          canConfirm: item.taskStatus === 'PENDING',
+          canCancel: item.taskStatus === 'PENDING'
+        }));
       this.setData({
         tasks,
-        total: res && res.total || tasks.length,
+        total: tasks.length,
         loading: false
       });
       this.refreshActions();
@@ -215,11 +216,9 @@ Page({
     if (!ok) return;
     try {
       const semiOut = tasks.filter(item => item.taskType === 'OUT' && item.bizScene === 'DIRECT_OUT').map(item => item.code);
-      const semiPrepare = tasks.filter(item => item.taskType === 'OUT' && item.bizScene === 'PREPARE_CONSUMED').map(item => item.code);
       const finishOut = tasks.filter(item => item.taskType === 'OUT' && item.bizScene === 'FINISH_OUT').map(item => item.code);
       const transfer = tasks.filter(item => item.taskType === 'TRANSFER').map(item => item.code);
       if (semiOut.length) await confirmSemiOutTasks(semiOut);
-      if (semiPrepare.length) await confirmSemiPrepareTasks(semiPrepare);
       if (finishOut.length) await confirmFinishOutTasks(finishOut);
       if (transfer.length) await confirmTransferTasks(transfer);
       showToast('确认完成', 'success');

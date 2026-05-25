@@ -5,13 +5,13 @@ import lombok.Data;
 
 @Data
 /**
- * 成品任务登记的半成品用量，按备料池余额批次扣减。
+ * 历史成品任务登记的半成品用量。
  */
 public class TaskSemiItemDTO {
     @Schema(description = "旧版半成品托盘码，已停用，仅保留兼容")
     private String semiPalletCode;
 
-    @Schema(description = "备料池余额ID")
+    @Schema(description = "半成品历史余额ID")
     private Long prepareBalanceId;
 
     @Schema(description = "板数")

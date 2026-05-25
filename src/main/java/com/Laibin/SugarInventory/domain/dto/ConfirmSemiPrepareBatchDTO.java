@@ -8,7 +8,7 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-@Schema(description = "确认半成品生产领用请求")
+@Schema(description = "确认历史生产占用请求")
 public class ConfirmSemiPrepareBatchDTO {
     @NotEmpty
     @Valid

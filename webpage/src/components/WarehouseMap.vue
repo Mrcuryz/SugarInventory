@@ -1133,7 +1133,7 @@ const showAssay = async (record) => {
   }
 }
 const buildResultText = (item) => {
-  const typeName = item.taskType === 'TRANSFER' ? '调拨任务' : (item.taskType === 'PREPARE' ? '旧版生产领用任务' : '出库任务')
+  const typeName = item.taskType === 'TRANSFER' ? '调拨任务' : (item.taskType === 'PREPARE' ? '历史生产占用任务' : '出库任务')
   return `创建了 ${item.count} 条${item.productStatus}${typeName}`
 }
 

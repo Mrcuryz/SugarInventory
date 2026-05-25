@@ -44,38 +44,40 @@
         <el-button type="primary" @click="openCreateDialog">新增</el-button>
       </div>
 
-      <el-table :data="resultList" row-key="id" border stripe v-loading="loading">
-        <el-table-column prop="productName" label="产品名称" min-width="180" />
-        <el-table-column prop="sampleDate" label="采样日期" width="130" />
-        <el-table-column prop="testerName" label="化验员" width="140" />
-        <el-table-column label="是否合格" width="120">
+      <el-table class="assay-table" :data="resultList" row-key="id" border stripe v-loading="loading">
+        <el-table-column prop="productName" label="产品名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="sampleDate" label="采样日期" width="112" />
+        <el-table-column prop="testerName" label="化验员" width="96" show-overflow-tooltip />
+        <el-table-column label="是否合格" width="104">
           <template #default="{ row }">
             <el-tag :type="getQualificationTagType(row)">
               {{ getQualificationLabel(row) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="合格标准" min-width="220">
+        <el-table-column label="合格标准" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <span>{{ getStandardDisplayName(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="190" align="left" header-align="left">
           <template #default="{ row }">
-            <el-button type="primary" link @click="openDetailDrawer(row)">查看详细数据</el-button>
-            <el-button type="primary" link @click="openHistoryDrawer(row)">查看历史数据</el-button>
-            <el-dropdown trigger="click" @command="(command) => handleMoreCommand(command, row)">
-              <el-button type="primary" link>
-                更多
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="edit">编辑</el-dropdown-item>
-                  <el-dropdown-item command="copy">复制</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+            <div class="table-actions">
+              <el-button type="primary" link @click="openDetailDrawer(row)">详细</el-button>
+              <el-button type="primary" link @click="openHistoryDrawer(row)">历史</el-button>
+              <el-dropdown trigger="click" @command="(command) => handleMoreCommand(command, row)">
+                <el-button type="primary" link>
+                  更多
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                    <el-dropdown-item command="copy">复制</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -308,7 +310,8 @@
 
 <script setup>
 import dayjs from 'dayjs'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   addAssay,
@@ -321,6 +324,8 @@ import {
 } from '@/api/assay'
 import { getAssayGroup } from '@/api/assayGroup'
 
+const route = useRoute()
+
 const metricDefinitions = [
   { metricCode: 'color_value', metricName: '色值', field: 'colorValue' },
   { metricCode: 'reducing_sugar', metricName: '还原糖分', field: 'reducingSugar' },
@@ -332,7 +337,7 @@ const metricDefinitions = [
 ]
 
 const searchForm = ref({
-  productName: '',
+  productName: getRouteQueryValue('productName'),
   dateRange: [],
   testerName: '',
   version: ''
@@ -431,6 +436,12 @@ function createSubmitForm() {
     insolubleImpurity: '',
     phValue: ''
   }
+}
+
+function getRouteQueryValue(key) {
+  const value = route.query[key]
+  if (Array.isArray(value)) return value[0] || ''
+  return value || ''
 }
 
 function parseArrayField(value) {
@@ -718,6 +729,18 @@ function handleReset() {
   handleSearch(1)
 }
 
+function applyRouteSearch() {
+  const productName = getRouteQueryValue('productName')
+  if (productName) {
+    searchForm.value.productName = productName
+  }
+  const startDate = getRouteQueryValue('startDate')
+  const endDate = getRouteQueryValue('endDate')
+  if (startDate && endDate) {
+    searchForm.value.dateRange = [startDate, endDate]
+  }
+}
+
 function handleSizeChange(size) {
   pageSize.value = size
   handleSearch(1)
@@ -804,6 +827,26 @@ function openCreateDialog() {
   operationType.value = '新增化验'
   submitForm.value = createSubmitForm()
   dialogVisible.value = true
+}
+
+function findProductIdByName(productName) {
+  if (!productName) return undefined
+  const allProducts = [...stProductList.value, ...semiProductList.value]
+  return allProducts.find(item => item.productName === productName)?.productId
+}
+
+function openCreateDialogFromRoute() {
+  openCreateDialog()
+  const productId = getRouteQueryValue('productId')
+  const productName = getRouteQueryValue('productName')
+  const sampleDate = getRouteQueryValue('sampleDate') || getRouteQueryValue('startDate')
+  const matchedProductId = productId || findProductIdByName(productName)
+  if (matchedProductId) {
+    submitForm.value.productId = Number(matchedProductId)
+  }
+  if (sampleDate) {
+    submitForm.value.sampleDate = sampleDate
+  }
 }
 
 function handleClose() {
@@ -969,11 +1012,26 @@ async function loadFinishedProducts() {
 onMounted(async () => {
   await Promise.all([
     getAssayStandards(),
-    handleSearch(1),
     loadSemiProducts(),
     loadFinishedProducts()
   ])
+  applyRouteSearch()
+  await handleSearch(1)
+  if (getRouteQueryValue('create') === '1') {
+    openCreateDialogFromRoute()
+  }
 })
+
+watch(
+  () => [route.query.productName, route.query.productId, route.query.create, route.query.startDate, route.query.endDate, route.query.sampleDate],
+  async () => {
+    applyRouteSearch()
+    await handleSearch(1)
+    if (getRouteQueryValue('create') === '1') {
+      openCreateDialogFromRoute()
+    }
+  }
+)
 </script>
 
 <style scoped>
@@ -1016,6 +1074,19 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+.table-actions {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.table-actions :deep(.el-button) {
+  margin-left: 0;
+  padding: 0;
 }
 
 .assay-drawer {

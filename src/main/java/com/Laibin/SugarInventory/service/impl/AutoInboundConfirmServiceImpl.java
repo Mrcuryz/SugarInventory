@@ -347,7 +347,7 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
         int available = balances.stream().mapToInt(balance -> safeInt(balance.getRemainingPieces())).sum();
         if (available < consumePieces) {
             results.add(product.getProductName() + " " + entry.getProductionDate()
-                    + " 备料池余额不足，需要" + consumePieces + "件，当前" + available + "件，生产消耗仅留档");
+                    + " 半成品历史余额不足，需要" + consumePieces + "件，当前" + available + "件，生产消耗仅留档");
             return;
         }
         int rest = consumePieces;
@@ -373,7 +373,7 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
             rest -= deducted;
         }
         results.add(product.getProductName() + " " + entry.getProductionDate()
-                + " 已扣减备料池" + consumePieces + "件");
+                + " 已登记半成品历史用量" + consumePieces + "件");
     }
 
     private int calculateConsumePieces(Product product, ProductionConsumptionEntry entry) {
@@ -406,7 +406,7 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
         record.setSourceText(task.getSourceText());
         record.setCreatedBy(user == null ? null : user.getId());
         record.setCreatedAt(now);
-        record.setRemark("智能报数成品入库扣减备料池余额");
+        record.setRemark("智能报数成品入库登记半成品历史用量");
         productionConsumptionRecordMapper.insert(record);
     }
 

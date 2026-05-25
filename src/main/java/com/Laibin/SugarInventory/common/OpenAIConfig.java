@@ -13,10 +13,7 @@ import java.net.Proxy;
 public class OpenAIConfig {
 
     /**
-     * 从配置文件读取 OpenAI API Key
-     * application.yml:
-     * openai:
-     * api-key: sk-xxx
+     * 从配置文件读取 OpenAI 兼容 API 配置。
      */
     @Bean
     public OpenAIClient openAIClient(@Value("${openai.api-key}") String apiKey, @Value("${openai.api-url}") String apiUrl) {

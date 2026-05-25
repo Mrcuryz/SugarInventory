@@ -64,7 +64,6 @@
             <el-tag :type="getDocumentTagType(row.documentType)">{{ row.documentTypeName }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="sourcePage" label="来源页面" min-width="130" show-overflow-tooltip/>
         <el-table-column prop="operator" label="操作人" min-width="100" show-overflow-tooltip/>
         <el-table-column prop="createdAt" label="创建时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
@@ -78,12 +77,11 @@
         <el-table-column prop="productName" label="产品名称" min-width="160" show-overflow-tooltip/>
         <el-table-column prop="quantityText" label="数量" width="120" show-overflow-tooltip/>
         <el-table-column prop="totalWeight" label="重量(kg)" width="120" show-overflow-tooltip/>
-        <el-table-column label="联动" width="280" fixed="right">
+        <el-table-column label="联动" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">看单</el-button>
             <el-button link type="primary" @click="openTaskCenter(row)">任务</el-button>
             <el-button link type="primary" @click="openAssay(row)">化验</el-button>
-            <el-button link type="primary" @click="openProduct(row)">产品</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -106,7 +104,6 @@
         <el-descriptions class="document-head" :column="2" border>
           <el-descriptions-item label="单号">{{ currentDocument.documentNo }}</el-descriptions-item>
           <el-descriptions-item label="单据类型">{{ currentDocument.documentTypeName }}</el-descriptions-item>
-          <el-descriptions-item label="来源页面">{{ currentDocument.sourcePage }}</el-descriptions-item>
           <el-descriptions-item label="操作人">{{ currentDocument.operator || '-' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDateTime(currentDocument.createdAt) }}</el-descriptions-item>
           <el-descriptions-item label="仓库">{{ currentDocument.warehouseName || '-' }}</el-descriptions-item>
@@ -144,7 +141,6 @@
 
         <div class="drawer-actions">
           <el-button @click="openTaskCenter(currentDocument)">关联任务</el-button>
-          <el-button @click="openProduct(currentDocument)">产品详情</el-button>
         </div>
       </template>
     </el-drawer>
@@ -153,10 +149,12 @@
 
 <script setup>
 import {computed, onMounted, ref, watch} from 'vue'
-import {ElMessage} from 'element-plus'
+import {ElMessage, ElMessageBox} from 'element-plus'
 import {useRouter} from 'vue-router'
 import * as XLSX from 'xlsx'
 import {pagePalletTasks} from '@/api/palletCode'
+import {getProductList} from '@/api/product'
+import {getAssay} from '@/api/assay'
 import {formatDateTime} from '@/utils/dateTime'
 
 const props = defineProps({
@@ -197,6 +195,7 @@ const pageSize = ref(10)
 const total = ref(0)
 const detailVisible = ref(false)
 const currentDocument = ref(null)
+const productSpecMap = ref(new Map())
 
 const resolvedPageTitle = computed(() => props.pageTitle)
 const resolvedPageDescription = computed(() => props.pageDescription)
@@ -300,6 +299,7 @@ function buildPrepareTaskQuery() {
 async function handleSearch() {
   loading.value = true
   try {
+    await ensureProductSpecs()
     let res
     if (activeTab.value === 'IN') {
       res = await pagePalletTasks(buildInboundQuery())
@@ -369,9 +369,12 @@ function normalizeInboundTask(row) {
     warehouseId: row.targetWarehouseId,
     status,
     statusName: getTaskStatusName(status),
+    code: row.code,
+    taskId: row.taskId,
+    productId: row.productId,
     productName: row.productName,
     quantityText: '1板',
-    totalWeight: '',
+    totalWeight: formatWeight(resolveTaskWeight(row)),
     assayId: row.assayId,
     taskRoute: row.taskType === 'FINISH_IN' ? '/pallet-task/finish/in' : '/pallet-task/semi/in',
     details: [detail]
@@ -405,9 +408,12 @@ function normalizeOutTask(row) {
     warehouseId: row.targetWarehouseId,
     status,
     statusName: getTaskStatusName(status),
+    code: row.code,
+    taskId: row.taskId,
+    productId: row.productId,
     productName: row.productName,
     quantityText: '1板',
-    totalWeight: '',
+    totalWeight: formatWeight(resolveTaskWeight(row)),
     assayId: row.assayId,
     taskRoute: row.productStatus === '半成品' ? '/pallet-task/semi/out' : '/pallet-task/finish/out',
     details: [detail]
@@ -424,7 +430,7 @@ function normalizePrepareTask(row) {
     quantityText: '1板',
     unitName: '板',
     fromLocation: row.targetWarehouseName || '原库存位置',
-    toLocation: '旧版生产领用',
+    toLocation: '历史生产占用',
     taskId: row.taskId,
     status,
     statusName: getTaskStatusName(status)
@@ -433,7 +439,7 @@ function normalizePrepareTask(row) {
     raw: row,
     documentNo,
     documentType: 'PREPARE',
-    documentTypeName: '旧版生产领用单',
+    documentTypeName: '历史生产占用单',
     sourcePage: inferSourcePage(row, 'PREPARE'),
     operator: row.confirmedBy || row.createdBy,
     createdAt: row.confirmedAt || row.createdAt,
@@ -441,9 +447,12 @@ function normalizePrepareTask(row) {
     warehouseId: row.targetWarehouseId,
     status,
     statusName: getTaskStatusName(status),
+    code: row.code,
+    taskId: row.taskId,
+    productId: row.productId,
     productName: row.productName,
     quantityText: '1板',
-    totalWeight: '',
+    totalWeight: formatWeight(resolveTaskWeight(row)),
     assayId: row.assayId,
     taskRoute: '/pallet-task/semi/out',
     details: [detail]
@@ -477,9 +486,12 @@ function normalizeTransferTask(row) {
     warehouseId: row.targetWarehouseId,
     status,
     statusName: getTaskStatusName(status),
+    code: row.code,
+    taskId: row.taskId,
+    productId: row.productId,
     productName: row.productName,
     quantityText: '1板',
-    totalWeight: '',
+    totalWeight: formatWeight(resolveTaskWeight(row)),
     assayId: row.assayId,
     taskRoute: '/pallet-task/transfer',
     details: [detail]
@@ -525,6 +537,52 @@ function createDocumentNo(prefix, row, id) {
 
 function formatLocation(warehouseName, side) {
   return [warehouseName, side].filter(Boolean).join(' / ') || '无'
+}
+
+function formatWeight(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  const number = Number(value)
+  if (!Number.isFinite(number)) return String(value)
+  return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/\.?0+$/, '')
+}
+
+async function ensureProductSpecs() {
+  if (productSpecMap.value.size) return
+  try {
+    const res = await getProductList({})
+    const rows = Array.isArray(res.data) ? res.data : []
+    const map = new Map()
+    rows.forEach(item => {
+      if (item.id != null) map.set(`id:${item.id}`, item)
+      if (item.productName) map.set(`name:${item.productName}`, item)
+    })
+    productSpecMap.value = map
+  } catch (error) {
+    productSpecMap.value = new Map()
+  }
+}
+
+function resolveProductSpec(row) {
+  return productSpecMap.value.get(`id:${row.productId}`) || productSpecMap.value.get(`name:${row.productName}`) || null
+}
+
+function resolveTaskWeight(row) {
+  if (row.totalWeight !== null && row.totalWeight !== undefined && row.totalWeight !== '') return row.totalWeight
+  const product = resolveProductSpec(row)
+  if (!product) return ''
+  const weightPerPiece = Number(product.weightPerPiece || 0)
+  const piecesPerPallet = Number(product.piecesPerPallet || 0)
+  if (!weightPerPiece || !piecesPerPallet) return ''
+  const unit = String(row.productionOutputUnit ?? '')
+  if (row.productionOutputCodeId) {
+    if (unit === '1') {
+      const pieces = Number(row.productionOutputPieces || row.productionOutputQuantity || 0)
+      return pieces ? pieces * weightPerPiece : ''
+    }
+    const boards = Number(row.productionOutputQuantity || 1)
+    return boards * piecesPerPallet * weightPerPiece
+  }
+  return piecesPerPallet * weightPerPiece
 }
 
 function getTaskStatusName(status) {
@@ -590,7 +648,12 @@ function openPallet(code) {
 
 function openTaskCenter(row) {
   const path = row.taskRoute || getTaskRoute(row)
-  router.push(path)
+  const code = resolveTaskCode(row)
+  const query = {}
+  if (code) query.code = code
+  if (row.status) query.status = row.status
+  if (row.productName) query.productNameExact = row.productName
+  router.push({path, query})
 }
 
 function getTaskRoute(row) {
@@ -605,20 +668,67 @@ function openWarehouseMap(row) {
   router.push({path: '/warehouse-map', query: warehouseId ? {warehouseId} : {}})
 }
 
-function openAssay(row) {
+function resolveTaskCode(row) {
+  return row.code || row.raw?.code || row.details?.[0]?.palletCode || ''
+}
+
+async function hasRelatedAssay(row) {
+  if (row.assayId) return true
+  if (!row.productName) return false
+  const assayDate = resolveAssayDate(row)
+  const res = await getAssay({
+    page: 1,
+    size: 1,
+    productName: row.productName,
+    ...(assayDate ? {startDate: assayDate, endDate: assayDate} : {})
+  })
+  return (res.data?.records || []).length > 0
+}
+
+function resolveAssayDate(row) {
+  const value = row.productionDate || row.raw?.productionDate || row.raw?.entryDate || row.raw?.outDate || ''
+  return value ? String(value).slice(0, 10) : ''
+}
+
+async function openAssay(row) {
+  let hasAssay = false
+  try {
+    hasAssay = await hasRelatedAssay(row)
+  } catch (error) {
+    ElMessage.error(error?.msg || error?.message || '查询化验记录失败')
+    return
+  }
+
+  if (!hasAssay) {
+    try {
+      await ElMessageBox.confirm('当前暂无相关化验记录', '提示', {
+        confirmButtonText: '去新增',
+        cancelButtonText: '取消',
+        type: 'info'
+      })
+    } catch {
+      return
+    }
+    router.push({
+      path: '/assay',
+      query: {
+        create: '1',
+        productName: row.productName || '',
+        productId: row.productId || row.raw?.productId || '',
+        sampleDate: resolveAssayDate(row)
+      }
+    })
+    return
+  }
+
   router.push({
     path: '/assay',
     query: {
       productName: row.productName || '',
-      assayId: row.assayId || ''
+      assayId: row.assayId || '',
+      startDate: resolveAssayDate(row),
+      endDate: resolveAssayDate(row)
     }
-  })
-}
-
-function openProduct(row) {
-  router.push({
-    path: '/product',
-    query: {name: row.productName || ''}
   })
 }
 
@@ -630,7 +740,6 @@ function exportLedger() {
   const data = ledgerRows.value.map(row => ({
     单号: row.documentNo,
     单据类型: row.documentTypeName,
-    来源页面: row.sourcePage,
     操作人: row.operator,
     创建时间: formatDateTime(row.createdAt),
     仓库: row.warehouseName,

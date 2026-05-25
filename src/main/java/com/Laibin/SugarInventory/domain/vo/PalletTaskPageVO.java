@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.domain.vo;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,6 +22,7 @@ public class PalletTaskPageVO {
     private String productName;
     private String productType;
     private String productStatus;
+    private BigDecimal totalWeight;
     private LocalDate productionDate;
     private Integer screenMeshId;
     private String screenMeshName;

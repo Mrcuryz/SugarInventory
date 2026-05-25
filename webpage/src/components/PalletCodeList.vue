@@ -105,29 +105,31 @@
             <span :title="formatDateTime(row.updatedAt)">{{ formatDateTime(row.updatedAt) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="520" fixed="right">
+        <el-table-column label="操作" width="290" fixed="right" align="right" header-align="right">
           <template #default="{ row }">
-            <el-button v-if="canShowBindAction(row)" type="success" size="small" @click="openBindDialog(row)">绑定</el-button>
-            <el-button type="primary" size="small" @click="openQrDialog(row)">二维码</el-button>
-            <el-dropdown trigger="click" @command="command => handleQrAction(row, command)">
-              <el-button type="primary" plain size="small" :loading="qrDownloadLoading">
-                下载
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="print">直接打印标签</el-dropdown-item>
-                  <el-dropdown-item command="pdf">下载标签 PDF</el-dropdown-item>
-                  <el-dropdown-item command="png">下载 PNG</el-dropdown-item>
-                  <el-dropdown-item command="svg">下载 SVG</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <el-button v-if="canShowTaskAction(row)" type="info" size="small" @click="goTaskCenter(row)">任务</el-button>
-            <el-button v-if="canShowAssayAction(row)" type="info" size="small" @click="openAssayDialog(row)">化验</el-button>
-            <el-button v-if="canShowLocationAction(row)" type="info" size="small" @click="goWarehouseMap(row)">位置</el-button>
-            <el-button v-if="canShowFlowAction(row)" type="primary" size="small" @click="openFlowDrawer(row)">流转</el-button>
-            <el-button v-if="canShowInvalidAction(row)" type="danger" size="small" @click="handleInvalid(row)">作废</el-button>
-            <el-button v-if="canShowRestoreInvalidAction(row)" type="warning" size="small" @click="handleRestoreInvalid(row)">取消作废</el-button>
+            <div class="row-actions">
+              <el-button v-if="canShowBindAction(row)" type="success" link @click="openBindDialog(row)">绑定</el-button>
+              <el-button type="primary" link @click="openQrDialog(row)">二维码</el-button>
+              <el-dropdown trigger="click" @command="command => handleQrAction(row, command)">
+                <el-button type="primary" link :loading="qrDownloadLoading">
+                  下载
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="print">直接打印标签</el-dropdown-item>
+                    <el-dropdown-item command="pdf">下载标签 PDF</el-dropdown-item>
+                    <el-dropdown-item command="png">下载 PNG</el-dropdown-item>
+                    <el-dropdown-item command="svg">下载 SVG</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <el-button v-if="canShowTaskAction(row)" type="primary" link @click="goTaskCenter(row)">任务</el-button>
+              <el-button v-if="canShowAssayAction(row)" type="primary" link @click="openAssayDialog(row)">化验</el-button>
+              <el-button v-if="canShowLocationAction(row)" type="primary" link @click="goWarehouseMap(row)">位置</el-button>
+              <el-button v-if="canShowFlowAction(row)" type="primary" link @click="openFlowDrawer(row)">流转</el-button>
+              <el-button v-if="canShowInvalidAction(row)" type="danger" link @click="handleInvalid(row)">作废</el-button>
+              <el-button v-if="canShowRestoreInvalidAction(row)" type="warning" link @click="handleRestoreInvalid(row)">取消作废</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -855,8 +857,19 @@ const submitAssayCreate = async () => {
 }
 
 const goTaskCenter = (row) => {
+  if (!row.code) {
+    ElMessage.warning('当前二维码为空，无法定位任务')
+    return
+  }
   const path = row.productStatus === '半成品' ? '/pallet-task/semi/in' : '/pallet-task/finish/in'
-  router.push({path, query: {code: row.code, status: 'PENDING'}})
+  router.push({
+    path,
+    query: {
+      code: row.code,
+      status: 'PENDING',
+      productNameExact: row.productName || ''
+    }
+  })
 }
 
 const goWarehouseMap = async (row) => {
@@ -1044,6 +1057,20 @@ onBeforeUnmount(() => {
 .no-ellipsis-cell {
   display: inline-block;
   min-width: max-content;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.row-actions :deep(.el-button) {
+  margin-left: 0;
+  padding: 0;
 }
 
 .qr-wrapper {

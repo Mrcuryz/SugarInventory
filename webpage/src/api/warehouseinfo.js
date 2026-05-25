@@ -40,7 +40,7 @@ export const getProductStock = (params) => {
 }
 
 export const pagePreparePoolBalance = (params) => {
-    return request.get('/inventory/prepare-pool-balance', {params: params})
+    return Promise.reject(new Error('历史生产占用查询已从主流程移除，请查看库存汇总的生产中半成品'))
 }
 
 //根据id查询仓库最大行数

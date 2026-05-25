@@ -12,7 +12,6 @@ import {
   confirmFinishOutTasks,
   confirmPalletInBatch,
   confirmSemiOutTasks,
-  confirmSemiPrepareTasks,
   confirmTransferTasks,
   getTaskList
 } from '../../../api/task';
@@ -251,7 +250,7 @@ function buildFlowLocation(flow) {
   }
 
   if (flow.operationType === 'PREPARE_CONSUMED') {
-    const route = buildLocationRoute('from', '旧版生产领用', fromText, '原位置未记录', '');
+    const route = buildLocationRoute('from', '历史生产占用', fromText, '原位置未记录', '');
     return {
       hasLocation: true,
       mode: 'single',
@@ -384,7 +383,7 @@ function inferBusinessStage(pallet, flows) {
   const hasConsumed = sorted.some(item => item.operationType === 'CONSUMED') || pallet.status === 'CONSUMED';
   const isSemi = pallet.productStatus === '半成品';
   if (hasConsumed) return { key: 'consumed', label: '已消耗', type: 'info', readonly: true };
-  if (isSemi && pallet.status === 'INSTOCK' && hasPrepare) return { key: 'prepare', label: '旧版生产领用中', type: 'warning', readonly: true };
+  if (isSemi && pallet.status === 'INSTOCK' && hasPrepare) return { key: 'prepare', label: '历史生产占用中', type: 'warning', readonly: true };
   if (pallet.status === 'FREE') return { key: 'free', label: '空闲 / 未绑定', type: 'success', readonly: false };
   if (pallet.status === 'PENDING' || pallet.status === 'PENDING_IN') return { key: 'pending', label: '待入库', type: 'warning', readonly: false };
   if (pallet.status === 'INSTOCK') return { key: 'instock', label: '在库', type: 'primary', readonly: false };
@@ -518,11 +517,13 @@ Page({
         assay = normalizePalletAssay(rawAssay);
       }
       const pendingTasks = tasksRes.status === 'fulfilled'
-        ? ((tasksRes.value && tasksRes.value.records) || []).map(item => ({
-          ...enrichTask(item),
-          canConfirm: item.taskStatus === 'PENDING',
-          canCancel: item.taskStatus === 'PENDING'
-        }))
+        ? ((tasksRes.value && tasksRes.value.records) || [])
+          .filter(item => item.bizScene !== 'PREPARE_CONSUMED')
+          .map(item => ({
+            ...enrichTask(item),
+            canConfirm: item.taskStatus === 'PENDING',
+            canCancel: item.taskStatus === 'PENDING'
+          }))
         : [];
 
       let flows = [];
@@ -561,7 +562,7 @@ Page({
         flowGroups,
         actions,
         readonlyStageNotice: businessStage.readonly ? (businessStage.key === 'prepare'
-          ? '当前二维码已由旧流程生产领用，已离开仓库主库存。'
+          ? '当前二维码已处于历史生产占用状态，已离开仓库主库存。'
           : '当前二维码处于只读阶段，不再执行普通现场任务。') : '',
         summary: this.buildSummary(displayPallet, inventory, pendingTasks, actions, businessStage),
         confirmTargets: [],
@@ -576,12 +577,12 @@ Page({
 
   buildSummary(pallet, inventory, pendingTasks, actions, businessStage) {
     const noLocationHint = businessStage.key === 'prepare'
-      ? '已由旧流程生产领用'
+      ? '已处于历史生产占用'
       : businessStage.key === 'consumed'
         ? '已被成品生产消耗'
         : businessStage.key === 'free'
           ? '未入库，暂无库位信息'
-          : '可能处于未入库、已出库、旧版生产领用或已释放状态';
+          : '可能处于未入库、已出库、历史生产占用或已释放状态';
     return {
       locationText: formatLocationText(inventory),
       locationHint: inventory && inventory.inStockTime
@@ -695,11 +696,9 @@ Page({
     if (!ok) return;
     try {
       const semiOut = taskList.filter(item => item.taskType === 'OUT' && item.bizScene === 'DIRECT_OUT').map(item => item.code);
-      const semiPrepare = taskList.filter(item => item.taskType === 'OUT' && item.bizScene === 'PREPARE_CONSUMED').map(item => item.code);
       const finishOut = taskList.filter(item => item.taskType === 'OUT' && item.bizScene === 'FINISH_OUT').map(item => item.code);
       const transfer = taskList.filter(item => item.taskType === 'TRANSFER').map(item => item.code);
       if (semiOut.length) await confirmSemiOutTasks(semiOut);
-      if (semiPrepare.length) await confirmSemiPrepareTasks(semiPrepare);
       if (finishOut.length) await confirmFinishOutTasks(finishOut);
       if (transfer.length) await confirmTransferTasks(transfer);
       showToast('任务已处理', 'success');

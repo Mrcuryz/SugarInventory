@@ -28,17 +28,17 @@ export function confirmSemiOutTasks(codes, remark = '小程序确认半成品出
   return request('/api/pallet-codes/semi/out/confirm', 'POST', { codes, remark });
 }
 
-export function createSemiPrepareTasks(codes, remark = '小程序创建旧版生产领用任务') {
+export function createSemiPrepareTasks(codes, remark = '小程序创建历史生产占用任务') {
   return Promise.reject(new Error('半成品进入生产请在管理端通过生产订单领用'));
 }
 
-export function confirmSemiPrepareTasks(codes, remark = '小程序确认旧版生产领用') {
-  return request('/api/pallet-codes/semi/prepare/confirm', 'POST', { codes, remark });
+export function confirmSemiPrepareTasks(codes, remark = '小程序确认历史生产占用') {
+  return Promise.reject(new Error('历史生产占用任务仅保留查询，不再允许确认'));
 }
 
 // 旧版接口保留兼容，不作为新版成品消耗入口；新版通过生产订单关联追溯。
 export function confirmSemiConsume(codes, remark = '小程序确认消耗') {
-  return request('/api/pallet-codes/semi/consume/confirm', 'POST', { codes, remark });
+  return Promise.reject(new Error('历史生产占用任务仅保留查询，不再允许消耗确认'));
 }
 
 export function createFinishOutTasks(codes, remark = '小程序创建成品出库任务') {

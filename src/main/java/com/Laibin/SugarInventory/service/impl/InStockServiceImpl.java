@@ -377,13 +377,13 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 
     private void validatePreparePoolSemiRecord(SemiRecordDTO semiRecord) {
         if (semiRecord.getSemiProductId() == null) {
-            throw new BusinessException("备料池半成品来源缺少产品信息");
+            throw new BusinessException("半成品来源缺少产品信息");
         }
         if (semiRecord.getProductionDate() == null) {
-            throw new BusinessException("备料池半成品来源缺少生产日期");
+            throw new BusinessException("半成品来源缺少生产日期");
         }
         if (semiRecord.getQuantity() == null || semiRecord.getQuantity() <= 0) {
-            throw new BusinessException("备料池半成品来源缺少消耗数量");
+            throw new BusinessException("半成品来源缺少消耗数量");
         }
     }
 

@@ -9,4 +9,5 @@ public class AutoInboundBatchOptionVO {
     private String displayName;
     private Integer taskCount;
     private String status;
+    private String parseType;
 }
