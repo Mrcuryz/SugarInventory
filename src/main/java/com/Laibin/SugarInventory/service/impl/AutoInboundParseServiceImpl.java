@@ -3,12 +3,14 @@ package com.Laibin.SugarInventory.service.impl;
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.domain.dto.AutoInboundParseRequest;
-import com.Laibin.SugarInventory.domain.dto.SemiRecordDTO;
 import com.Laibin.SugarInventory.domain.enumObject.AutoInboundRiskLevel;
 import com.Laibin.SugarInventory.domain.enumObject.AutoInboundType;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.redis.AutoInboundTask;
 import com.Laibin.SugarInventory.domain.redis.AutoInboundTaskItem;
+import com.Laibin.SugarInventory.domain.redis.ProductionConsumptionEntry;
+import com.Laibin.SugarInventory.domain.redis.ProductionConsumptionItem;
+import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchOptionVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse;
 import com.Laibin.SugarInventory.mapper.AssayMapper;
 import com.Laibin.SugarInventory.mapper.PalletCodeMapper;
@@ -25,9 +27,14 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -45,6 +52,9 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
 
     private static final Logger log = LoggerFactory.getLogger(AutoInboundParseServiceImpl.class);
     private static final String REDIS_PREFIX = "auto_inbound:batch:";
+    private static final String HISTORY_PREFIX = "auto_inbound:history:";
+    private static final int HISTORY_LIMIT = 20;
+    private static final DateTimeFormatter HISTORY_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
     public AutoInboundParseResponse parse(AutoInboundParseRequest request, User user) {
@@ -80,6 +90,8 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
             String json = objectMapper.writeValueAsString(tasks);
             stringRedisTemplate.opsForValue()
                     .set(key, json, 24, TimeUnit.HOURS);
+            stringRedisTemplate.opsForZSet().add(historyKey(user), batchId, System.currentTimeMillis());
+            stringRedisTemplate.expire(historyKey(user), 24, TimeUnit.HOURS);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("序列化自动入库任务失败", e);
         }
@@ -125,6 +137,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         task.setEntryDate(entryDate);
         task.setSide(resolveSide(item));
         task.setRawBlock(item.getRawBlock());
+        task.setSourceText(req.getRawText());
 
         List<String> reasons = new ArrayList<>();
         List<String> remarks = new ArrayList<>();
@@ -214,6 +227,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         task.setEntryDate(entryDate);
         task.setSide(resolveSide(item));
         task.setRawBlock(item.getRawBlock());
+        task.setSourceText(req.getRawText());
 
         List<String> reasons = new ArrayList<>();
         List<String> remarks = new ArrayList<>();
@@ -284,117 +298,126 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
         }
         task.setHasAssay(hasAssay);
 
-        // === sources → 建议 semiRecords（不再做本地匹配，只做“提示用”） ===
-        List<SemiRecordDTO> semiRecords = buildSuggestedSemiRecords(item.getSources(), reasons, remarks);
-        task.setSuggestedSemiRecords(semiRecords);
+        List<ProductionConsumptionItem> consumptionItems = buildProductionConsumptionItems(item.getSources(), warnings);
+        task.setProductionConsumptionItems(consumptionItems);
+        task.setUnmatchedNames(resolveUnmatchedNames(consumptionItems));
+        task.setConsumptionRemark(buildConsumptionRemark(consumptionItems, task.getUnmatchedNames()));
+        if (!consumptionItems.isEmpty()) {
+            warnings.add("生产消耗信息将在成品入库成功后优先扣减备料池余额；未匹配或余额不足的部分仅留档");
+        }
 
         refreshTaskValidation(task, missingFields, warnings, reasons);
         task.setRemark(String.join("；", remarks));
         return task;
     }
 
-    /**
-     * 成品里的 sources，仅作为“建议用半成品记录”
-     * 每个 source 拆成多条 SemiRecordDTO（板一条、件一条）。
-     */
-    private List<SemiRecordDTO> buildSuggestedSemiRecords(List<ParsedSemiSource> sources,
-                                                          List<String> reasons,
-                                                          List<String> remarks) {
+    private List<ProductionConsumptionItem> buildProductionConsumptionItems(List<ParsedSemiSource> sources,
+                                                                            List<String> warnings) {
         if (sources == null || sources.isEmpty()) {
             return Collections.emptyList();
         }
 
-        List<SemiRecordDTO> result = new ArrayList<>();
-
+        List<ProductionConsumptionItem> result = new ArrayList<>();
         for (ParsedSemiSource src : sources) {
-            // ---------- 公共字段：名称、日期 ----------
-
-            String productName = src.getProductName();
-            if (productName == null || productName.isBlank()) {
-                productName = src.getProductName(); // 兜底用规范名
-            }
-
-            Integer semiProductId = src.getSemiProductId();
-            if (semiProductId == null) {
-                reasons.add("半成品 " + productName + " 未匹配到产品ID");
-            }
-
-            LocalDate prodDate = null;
-            if (notBlank(src.getProductionDate())) {
-                try {
-                    prodDate = LocalDate.parse(src.getProductionDate());
-                } catch (Exception e) {
-                    reasons.add("半成品生产日期格式无法解析：" + src.getProductionDate());
-                }
-            } else {
-                reasons.add("半成品生产日期缺失：" + productName);
-            }
-
-            // 仓位提示、备注、批号只追加一次到 remark 列表
-            if (notBlank(src.getWarehouseHint())) {
-                remarks.add("半成品仓位提示：" + src.getWarehouseHint());
-            }
-            if (notBlank(src.getRemark())) {
-                remarks.add("半成品备注：" + src.getRemark());
-            }
-            if (notBlank(src.getBatchNo())) {
-                remarks.add("半成品批号：" + src.getBatchNo());
-            }
-
+            String productName = firstNonBlank(src.getProductName(), src.getProductNameRaw());
+            LocalDate productionDate = parseSourceDate(src.getProductionDate(), productName, warnings);
             Integer boardCount = src.getBoardCount();
             Integer pieceCount = src.getPieceCount();
-
             boolean hasBoard = boardCount != null && boardCount > 0;
             boolean hasPiece = pieceCount != null && pieceCount > 0;
 
-            // ---------- A. 有板数 -> 生成一条“板”的记录 ----------
-            if (hasBoard) {
-                SemiRecordDTO boardDto = new SemiRecordDTO();
-                boardDto.setSemiProductId(src.getSemiProductId());
-                boardDto.setProductName(productName);
-                boardDto.setProductionDate(prodDate);
-                boardDto.setWarehouseId(null);   // 库位同样交给前端选
-                boardDto.setQuantity(boardCount);
-                boardDto.setUnit("0");           // 0 = 板
-                boardDto.setUseAssay(false);
-
-                result.add(boardDto);
-            }
-
-            // ---------- B. 有件数 -> 生成一条“件”的记录 ----------
-            if (hasPiece) {
-                SemiRecordDTO pieceDto = new SemiRecordDTO();
-                // 同样只先填名称
-                pieceDto.setProductName(productName);
-                pieceDto.setSemiProductId(semiProductId);
-                pieceDto.setProductionDate(prodDate);
-                pieceDto.setWarehouseId(null);
-                pieceDto.setQuantity(pieceCount);
-                pieceDto.setUnit("1");           // 1 = 件
-                pieceDto.setUseAssay(false);
-
-                result.add(pieceDto);
-            }
-
-            // ---------- C. 板/件都没有识别到 ----------
             if (!hasBoard && !hasPiece) {
-                reasons.add("半成品 " + productName +
-                        " 的板数和件数均无法识别，请人工补录数量");
-
-                SemiRecordDTO emptyDto = new SemiRecordDTO();
-                emptyDto.setSemiProductId(semiProductId);
-                emptyDto.setProductName(productName);
-                emptyDto.setProductionDate(prodDate);
-                emptyDto.setWarehouseId(null);
-                emptyDto.setQuantity(null);
-                emptyDto.setUnit("1");   // 默认件
-                emptyDto.setUseAssay(false);
-
-                result.add(emptyDto);
+                warnings.add("生产消耗 " + safe(productName) + " 的板数和件数均未识别，仅按原文留档");
             }
+
+            ProductionConsumptionEntry entry = new ProductionConsumptionEntry();
+            entry.setProductionDate(productionDate);
+            entry.setBoardCount(hasBoard ? boardCount : 0);
+            entry.setPieceCount(hasPiece ? pieceCount : 0);
+            entry.setQuantityText(formatQuantityText(entry.getBoardCount(), entry.getPieceCount()));
+
+            ProductionConsumptionItem item = new ProductionConsumptionItem();
+            item.setMaterialNameRaw(firstNonBlank(src.getProductNameRaw(), productName));
+            item.setProductId(src.getSemiProductId());
+            item.setProductName(productName);
+            item.setSourceType(src.getSourceType());
+            item.setWarehouseHint(src.getWarehouseHint());
+            item.setBatchNo(src.getBatchNo());
+            item.setRemark(src.getRemark());
+            item.setMatchedProduct(src.getSemiProductId() != null);
+            item.setItems(List.of(entry));
+            result.add(item);
         }
 
         return result;
+    }
+
+    private LocalDate parseSourceDate(String rawDate, String productName, List<String> warnings) {
+        if (!notBlank(rawDate)) {
+            warnings.add("生产消耗生产日期缺失：" + safe(productName));
+            return null;
+        }
+        try {
+            return LocalDate.parse(rawDate);
+        } catch (Exception e) {
+            warnings.add("生产消耗生产日期格式无法解析：" + rawDate);
+            return null;
+        }
+    }
+
+    private List<String> resolveUnmatchedNames(List<ProductionConsumptionItem> consumptionItems) {
+        if (consumptionItems == null || consumptionItems.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return consumptionItems.stream()
+                .filter(item -> !Boolean.TRUE.equals(item.getMatchedProduct()))
+                .map(item -> firstNonBlank(item.getMaterialNameRaw(), item.getProductName()))
+                .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private String buildConsumptionRemark(List<ProductionConsumptionItem> consumptionItems, List<String> unmatchedNames) {
+        if ((consumptionItems == null || consumptionItems.isEmpty())
+                && (unmatchedNames == null || unmatchedNames.isEmpty())) {
+            return null;
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("生产消耗备注（优先扣减备料池余额；未匹配或余额不足的部分仅留档）");
+        if (consumptionItems != null) {
+            for (ProductionConsumptionItem item : consumptionItems) {
+                String material = firstNonBlank(item.getMaterialNameRaw(), item.getProductName());
+                if (item.getItems() == null || item.getItems().isEmpty()) {
+                    lines.add(material + "：数量未识别");
+                    continue;
+                }
+                for (ProductionConsumptionEntry entry : item.getItems()) {
+                    String dateText = entry.getProductionDate() == null ? "日期未识别" : entry.getProductionDate().toString();
+                    lines.add(material + "：" + dateText + " " + entry.getQuantityText());
+                }
+            }
+        }
+        if (unmatchedNames != null && !unmatchedNames.isEmpty()) {
+            lines.add("未匹配产品：" + String.join("、", unmatchedNames));
+        }
+        return String.join("；", lines);
+    }
+
+    private String formatQuantityText(Integer boards, Integer pieces) {
+        int boardCount = boards == null ? 0 : boards;
+        int pieceCount = pieces == null ? 0 : pieces;
+        if (boardCount <= 0 && pieceCount <= 0) {
+            return "数量未识别";
+        }
+        List<String> parts = new ArrayList<>();
+        if (boardCount > 0) {
+            parts.add(boardCount + "板");
+        }
+        if (pieceCount > 0) {
+            parts.add(pieceCount + "件");
+        }
+        return String.join("", parts);
     }
 
     private void refreshTaskValidation(AutoInboundTask task, List<String> missingFields,
@@ -448,6 +471,69 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
             task.setRiskLevel(AutoInboundRiskLevel.GREEN);
             task.setCanAutoStockIn(true);
         }
+    }
+
+    @Override
+    public List<AutoInboundBatchOptionVO> listBatches(User user) {
+        Set<ZSetOperations.TypedTuple<String>> tuples = stringRedisTemplate.opsForZSet()
+                .reverseRangeWithScores(historyKey(user), 0, HISTORY_LIMIT - 1);
+        if (tuples == null || tuples.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<AutoInboundBatchOptionVO> result = new ArrayList<>();
+        for (ZSetOperations.TypedTuple<String> tuple : tuples) {
+            String batchId = tuple.getValue();
+            if (batchId == null) {
+                continue;
+            }
+            String json = stringRedisTemplate.opsForValue().get(REDIS_PREFIX + batchId);
+            if (json == null) {
+                stringRedisTemplate.opsForZSet().remove(historyKey(user), batchId);
+                continue;
+            }
+            List<AutoInboundTask> tasks = readTasks(json);
+            long timestamp = tuple.getScore() == null ? 0L : tuple.getScore().longValue();
+            String parseTime = formatHistoryTime(timestamp);
+
+            AutoInboundBatchOptionVO option = new AutoInboundBatchOptionVO();
+            option.setBatchId(batchId);
+            option.setParseTime(parseTime);
+            option.setDisplayName(parseTime);
+            option.setTaskCount(tasks.size());
+            option.setStatus(resolveBatchStatus(tasks));
+            result.add(option);
+        }
+        return result;
+    }
+
+    private List<AutoInboundTask> readTasks(String json) {
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<AutoInboundTask>>() {});
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("反序列化自动入库任务失败", e);
+        }
+    }
+
+    private String resolveBatchStatus(List<AutoInboundTask> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return "EMPTY";
+        }
+        boolean allCommitted = tasks.stream().allMatch(t -> "COMMITTED".equalsIgnoreCase(t.getStatus()));
+        return allCommitted ? "COMMITTED" : "DRAFT";
+    }
+
+    private String formatHistoryTime(long timestamp) {
+        if (timestamp <= 0) {
+            return "未知时间";
+        }
+        LocalDateTime time = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
+        return HISTORY_TIME_FORMATTER.format(time);
+    }
+
+    private String historyKey(User user) {
+        Integer userId = user == null ? null : user.getId();
+        return HISTORY_PREFIX + (userId == null ? "anonymous" : userId);
     }
 
     private Product resolveTaskProduct(AutoInboundTask task) {
@@ -512,6 +598,16 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
 
     private static String safe(String s) {
         return s == null ? "" : s;
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        if (second != null && !second.isBlank()) {
+            return second;
+        }
+        return null;
     }
 
     private static boolean notBlank(String s) {

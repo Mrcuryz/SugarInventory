@@ -25,8 +25,8 @@ export function validateQuantity({ unit, quantity, product, fallbackLimit = 0 })
   }
 
   const limit = getPiecesLimit(product) || fallbackLimit;
-  if (limit > 0 && numeric > limit) {
-    return { valid: false, message: `件数不能超过每板件数 ${limit}` };
+  if (limit > 0 && numeric >= limit) {
+    return { valid: false, message: `件数必须少于每板件数 ${limit}；整板请使用 1 板` };
   }
 
   return { valid: true, value: numeric };

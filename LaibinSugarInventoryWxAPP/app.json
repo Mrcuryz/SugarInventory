@@ -4,6 +4,8 @@
     "pages/workbench/index/index",
     "pages/tasks/index/index",
     "pages/scan/index/index",
+    "pages/production/orders/index",
+    "pages/production/detail/index",
     "pages/query/index/index",
     "pages/query/inventory/index",
     "pages/query/assay/index",

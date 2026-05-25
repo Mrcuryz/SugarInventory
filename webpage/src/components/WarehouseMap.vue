@@ -12,7 +12,7 @@
         <el-form-item label="产品名称">
           <el-input v-model="searchForm.productName" placeholder="请输入产品名称" clearable style="width: 200px"/>
         </el-form-item>
-        <el-form-item label="托盘码">
+        <el-form-item label="二维码">
           <el-input v-model="searchForm.palletCodes" placeholder="多个用逗号/空格/顿号分隔" clearable style="width: 240px"/>
         </el-form-item>
         <el-form-item label="标准名称">
@@ -172,9 +172,8 @@
             <div v-for="item in detailRecords" :key="`${item.inventoryId}-${item.productId}-${item.sampleDate}-${item.productStatus}`" class="product-card">
               <div class="product-title">{{ item.productName || '-' }}</div>
               <div class="product-meta">
-                <span>生产日期：{{ item.sampleDate || '-' }}</span>
-                <span>筛网：{{ item.meshName || '-' }}</span>
-                <span>库存：{{ formatInventoryQuantity(item) }}</span>
+                <span>库存：{{ formatProductSummaryQuantity(item) }}</span>
+                <span>最早生产日期：{{ item.sampleDate || '-' }}</span>
               </div>
             </div>
             <el-pagination
@@ -210,9 +209,22 @@
             <div>
               <div class="section-title">库位详细平面图</div>
             </div>
-            <el-radio-group v-model="detailActiveLayer" size="small">
-              <el-radio-button v-for="layer in detailLayers" :key="layer" :value="layer">{{ layer }}层</el-radio-button>
-            </el-radio-group>
+            <div class="dialog-map-actions">
+              <el-button
+                  class="loose-piece-button"
+                  :class="{active: loosePieceHighlightMode}"
+                  circle
+                  size="small"
+                  aria-label="查看散件"
+                  :title="loosePieceHighlightMode ? '取消散件高亮' : '查看散件'"
+                  @click="toggleLoosePieceHighlight"
+              >
+                散
+              </el-button>
+              <el-radio-group v-model="detailActiveLayer" size="small">
+                <el-radio-button v-for="layer in detailLayers" :key="layer" :value="layer">{{ layer }}层</el-radio-button>
+              </el-radio-group>
+            </div>
           </div>
 
           <div class="slot-vertical-map">
@@ -223,7 +235,7 @@
                     v-for="row in detailRows"
                     :key="`${side}-${detailActiveLayer}-${row}`"
                     class="slot-row-cell"
-                    :class="[getSlotState(side, detailActiveLayer, row), {selected: isSelectedSlot(side, detailActiveLayer, row)}]"
+                    :class="[getSlotState(side, detailActiveLayer, row), {selected: isSelectedSlot(side, detailActiveLayer, row) || isLoosePieceSlotHighlighted(side, detailActiveLayer, row)}]"
                     type="button"
                     :title="getSlotTitle(side, detailActiveLayer, row)"
                     @click="handleSelectSlot(side, detailActiveLayer, row)"
@@ -249,16 +261,16 @@
             <div class="section-title">{{ selectedSlot.record ? '单板详情' : '空位置操作' }}</div>
             <template v-if="selectedSlot.record">
               <div class="slot-detail-row">
-                <span>托盘码</span>
+                <span>二维码</span>
                 <el-link type="primary" @click="goPalletCode(selectedSlot.record.palletCode)">{{ selectedSlot.record.palletCode || '-' }}</el-link>
               </div>
               <div class="slot-detail-row"><span>产品</span><strong>{{ selectedSlot.record.productName || '-' }}</strong></div>
               <div class="slot-detail-row"><span>生产日期</span><strong>{{ selectedSlot.record.sampleDate || '-' }}</strong></div>
+              <div class="slot-detail-row"><span>数量</span><strong>{{ formatInventoryQuantity(selectedSlot.record) }}</strong></div>
               <div class="slot-detail-row"><span>当前位置</span><strong>{{ formatInventoryPosition(selectedSlot.record) }}</strong></div>
               <div class="slot-action-row">
                 <el-button size="small" @click="showAssay(selectedSlot.record)">查看化验</el-button>
                 <el-button size="small" type="primary" @click="submitSingleOut(selectedSlot.record)">出库</el-button>
-                <el-button v-if="isSemiProductSlot(selectedSlot.record)" size="small" type="success" @click="submitSinglePrepare(selectedSlot.record)">转入备料池</el-button>
                 <el-button size="small" type="warning" @click="prepareSingleTransfer(selectedSlot.record)">调拨</el-button>
               </div>
             </template>
@@ -295,7 +307,7 @@
             <el-empty v-if="!detailAllPositions.length" description="暂无库存位置" :image-size="70"/>
             <div v-for="item in detailAllPositions.slice(0, 8)" :key="item.inventoryId || `${item.side}-${item.layer}-${item.rowNumber}-${item.productName}`" class="dialog-product-row">
               <div>{{ item.productName || '-' }}</div>
-              <span>{{ formatInventoryPosition(item) }} · {{ item.sampleDate || '-' }} · {{ item.palletCode || '无托盘码' }} · {{ formatInventoryQuantity(item) }}</span>
+              <span>{{ formatInventoryPosition(item) }} · {{ item.sampleDate || '-' }} · {{ item.palletCode || '无二维码' }} · {{ formatInventoryQuantity(item) }}</span>
             </div>
           </div>
         </aside>
@@ -367,8 +379,8 @@
         <el-form-item label="目标位置">
           <strong>{{ formatSlotPosition(slotInboundTarget) }}</strong>
         </el-form-item>
-        <el-form-item label="托盘码" prop="code">
-          <el-input v-model="slotInboundForm.code" clearable placeholder="请输入托盘码"/>
+        <el-form-item label="二维码" prop="code">
+          <el-input v-model="slotInboundForm.code" clearable placeholder="请输入二维码"/>
         </el-form-item>
         <el-form-item label="产品" prop="productId">
           <el-cascader
@@ -397,7 +409,7 @@
 
     <el-dialog v-model="assayDialogVisible" title="化验记录" width="560px">
       <div class="assay-detail" v-loading="assayLoading">
-        <div><span>当前托盘</span><strong>{{ selectedSlot?.record?.palletCode || '-' }}</strong></div>
+        <div><span>当前二维码</span><strong>{{ selectedSlot?.record?.palletCode || '-' }}</strong></div>
         <div><span>产品</span><strong>{{ assayDetail?.productName || selectedSlot?.record?.productName || '-' }}</strong></div>
         <div><span>检测日期</span><strong>{{ assayDetail?.sampleDate || selectedSlot?.record?.sampleDate || '-' }}</strong></div>
         <div><span>是否合格</span><strong>{{ assayDetail?.isQualified || '-' }}</strong></div>
@@ -475,6 +487,7 @@ const detailActiveLayer = ref(1)
 const detailSides = ['左', '右']
 const detailLayers = [1, 2]
 const selectedSlot = ref(null)
+const loosePieceHighlightMode = ref(false)
 const batchDialogVisible = ref(false)
 const batchSubmitting = ref(false)
 const slotInboundDialogVisible = ref(false)
@@ -509,7 +522,7 @@ const batchForm = ref({
   remark: ''
 })
 const slotInboundRules = {
-  code: [{required: true, message: '请输入托盘码', trigger: 'blur'}],
+  code: [{required: true, message: '请输入二维码', trigger: 'blur'}],
   productId: [{required: true, message: '请选择产品', trigger: 'change'}],
   productionDate: [{required: true, message: '请选择生产日期', trigger: 'change'}]
 }
@@ -614,12 +627,23 @@ const formatInventoryQuantity = (item) => {
   if (quantity > 0) return `${quantity}板`
   return '0'
 }
+const formatProductSummaryQuantity = (item) => {
+  if (!item) return '-'
+  const quantity = Number(item.quantity || 0)
+  const pieces = Number(item.pieces || 0)
+  if (quantity > 0 && pieces > 0) return `${quantity}板${pieces}件`
+  if (quantity > 0) return `${quantity}板`
+  if (pieces > 0) return `${pieces}件`
+  return '0'
+}
 const detailMaxRowsSafe = computed(() => Math.max(detailMaxRows.value, 1))
 const detailRows = computed(() => Array.from({length: detailMaxRowsSafe.value}, (_, index) => index + 1))
 const occupiedPositionSet = computed(() => buildPositionSet(detailAllPositions.value))
 const matchedPositionSet = computed(() => buildPositionSet(detailMatchedPositions.value))
+const loosePiecePositionSet = computed(() => buildPositionSet(detailAllPositions.value.filter(isLoosePieceInventory)))
 const occupiedPositionCount = computed(() => occupiedPositionSet.value.size)
 const matchedPositionCount = computed(() => matchedPositionSet.value.size)
+const loosePiecePositionCount = computed(() => loosePiecePositionSet.value.size)
 const targetWarehouseOptions = computed(() => capacityList.value
     .filter(item => item.warehouseId !== selectedLocation.value?.id)
     .slice()
@@ -628,7 +652,6 @@ const batchMaxQuantity = computed(() => detailAllPositions.value.filter(item => 
 const batchInputMax = computed(() => Math.max(batchMaxQuantity.value, 1))
 const batchDialogTitle = computed(() => {
   if (batchForm.value.operationType === 'TRANSFER') return '调拨出库'
-  if (batchForm.value.operationType === 'PREPARE') return '转入备料池'
   return '新增出库'
 })
 const taskResultItems = computed(() => taskResult.value?.items || [])
@@ -652,6 +675,7 @@ const buildPositionSet = (records) => new Set((records || [])
     .filter(item => item.side && item.rowNumber)
     .map(item => buildPositionKey(item.side, item.layer || 1, item.rowNumber))
 )
+const isLoosePieceInventory = (item) => Number(item?.pieces || 0) > 0
 const getPositionRecord = (records, side, layer, rowNumber) => (records || [])
     .find(item => buildPositionKey(item.side, item.layer || 1, item.rowNumber) === buildPositionKey(side, layer, rowNumber))
 const getSlotState = (side, layer, rowNumber) => {
@@ -666,6 +690,16 @@ const isSelectedSlot = (side, layer, rowNumber) => {
       && selectedSlot.value.layer === layer
       && selectedSlot.value.rowNumber === rowNumber
 }
+const isLoosePieceSlotHighlighted = (side, layer, rowNumber) => loosePieceHighlightMode.value
+    && loosePiecePositionSet.value.has(buildPositionKey(side, layer, rowNumber))
+const toggleLoosePieceHighlight = () => {
+  if (!loosePiecePositionCount.value) {
+    ElMessage.info('当前库位暂无散件板位')
+    loosePieceHighlightMode.value = false
+    return
+  }
+  loosePieceHighlightMode.value = !loosePieceHighlightMode.value
+}
 const getSlotStateLabel = (side, layer, rowNumber) => {
   const state = getSlotState(side, layer, rowNumber)
   if (state === 'matched') return '命中'
@@ -678,7 +712,7 @@ const getSlotTitle = (side, layer, rowNumber) => {
   const record = matchedRecord || occupiedRecord
   const stateText = matchedRecord ? '有货且命中' : occupiedRecord ? '有货未命中' : '空置'
   if (!record) return `${side}侧 ${layer}层 ${rowNumber}排 / ${stateText}`
-  return `${side}侧 ${layer}层 ${rowNumber}排 / ${stateText} / ${record.productName || '-'} / ${record.palletCode || '无托盘码'} / ${record.sampleDate || '-'}`
+  return `${side}侧 ${layer}层 ${rowNumber}排 / ${stateText} / ${record.productName || '-'} / ${record.palletCode || '无二维码'} / ${record.sampleDate || '-'}`
 }
 const handleSelectSlot = (side, layer, rowNumber) => {
   selectedSlot.value = {
@@ -863,6 +897,7 @@ const clearSelection = () => {
   detailAllPositions.value = []
   detailMatchedPositions.value = []
   selectedSlot.value = null
+  loosePieceHighlightMode.value = false
 }
 const fetchDetailPositions = async (location) => {
   const params = buildFilterParams()
@@ -881,6 +916,7 @@ const fetchDetailPositions = async (location) => {
   detailAllPositions.value = allRes.data || []
   detailMatchedPositions.value = matchedRes.data || []
   selectedSlot.value = null
+  loosePieceHighlightMode.value = false
   detailMaxRows.value = warehouseRes?.data?.maxRows
       || Math.max(...detailAllPositions.value.map(item => item.rowNumber || 0), 1)
 }
@@ -894,6 +930,7 @@ const openLocationDetailDialog = async () => {
     detailAllPositions.value = []
     detailMatchedPositions.value = []
     selectedSlot.value = null
+    loosePieceHighlightMode.value = false
     detailMaxRows.value = 0
     return
   }
@@ -901,6 +938,7 @@ const openLocationDetailDialog = async () => {
   detailAllPositions.value = []
   detailMatchedPositions.value = []
   selectedSlot.value = null
+  loosePieceHighlightMode.value = false
   detailMaxRows.value = 0
   try {
     await fetchDetailPositions(selectedLocation.value)
@@ -922,6 +960,10 @@ const openBatchDialog = (operationType) => {
     ElMessage.warning('请先选择库位')
     return
   }
+  if (operationType === 'PREPARE') {
+    ElMessage.warning('半成品进入生产请在生产订单中领用')
+    return
+  }
   batchForm.value.operationType = operationType
   batchForm.value.codes = []
   batchForm.value.quantity = Math.min(Math.max(batchMaxQuantity.value, 1), batchForm.value.quantity || 1)
@@ -939,11 +981,11 @@ const submitBatchOperation = async () => {
   }
   const hasExplicitCodes = batchForm.value.codes.length > 0
   if (!hasExplicitCodes && batchMaxQuantity.value <= 0) {
-    ElMessage.warning('当前侧没有可操作托盘')
+    ElMessage.warning('当前侧没有可操作板位')
     return
   }
   if (!hasExplicitCodes && batchForm.value.quantity > batchMaxQuantity.value) {
-    ElMessage.warning('操作数量不能超过当前侧可操作托盘数')
+    ElMessage.warning('操作数量不能超过当前侧可操作板位数')
     return
   }
   if (batchForm.value.operationType === 'TRANSFER' && !batchForm.value.targetWarehouseName) {
@@ -980,7 +1022,7 @@ const submitBatchOperation = async () => {
 }
 const submitSingleOut = async (record) => {
   if (!record?.palletCode) {
-    ElMessage.warning('当前格子缺少托盘码')
+    ElMessage.warning('当前格子缺少二维码')
     return
   }
   batchSubmitting.value = true
@@ -1001,39 +1043,6 @@ const submitSingleOut = async (record) => {
     }
   } catch (error) {
     ElMessage.error(error?.message || '创建出库任务失败')
-  } finally {
-    batchSubmitting.value = false
-  }
-}
-const submitSinglePrepare = async (record) => {
-  if (!record?.palletCode) {
-    ElMessage.warning('当前格子缺少托盘码')
-    return
-  }
-  if (!isSemiProductSlot(record)) {
-    ElMessage.warning('仅半成品托盘支持转入备料池')
-    return
-  }
-  batchSubmitting.value = true
-  try {
-    const res = await createWarehouseMapTasks({
-      operationType: 'PREPARE',
-      warehouseId: detailDialogLocation.value.id,
-      side: record.side,
-      rowNumber: record.rowNumber,
-      layer: record.layer,
-      quantity: 1,
-      codes: [record.palletCode],
-      remark: `格子级转入备料池：${formatInventoryPosition(record)}`
-    })
-    if (res.code === 200) {
-      taskResult.value = res.data
-      taskResultVisible.value = true
-    } else {
-      ElMessage.error(res.msg || '创建转入备料池任务失败')
-    }
-  } catch (error) {
-    ElMessage.error(error?.message || '创建转入备料池任务失败')
   } finally {
     batchSubmitting.value = false
   }
@@ -1093,13 +1102,13 @@ const prepareSingleTransfer = (record) => {
   batchForm.value.side = record.side || '左'
   batchForm.value.quantity = 1
   batchForm.value.codes = record.palletCode ? [record.palletCode] : []
-  batchForm.value.remark = `板级调拨：${formatInventoryPosition(record)}，托盘${record.palletCode || ''}`
+  batchForm.value.remark = `板级调拨：${formatInventoryPosition(record)}，二维码${record.palletCode || ''}`
   batchDialogVisible.value = true
 }
 const isSemiProductSlot = (record) => record?.productStatus === '半成品'
 const openUnsupportedInbound = (actionName, slot) => {
   const position = slot ? `，目标位置：${formatSlotPosition(slot)}` : ''
-  ElMessage.warning(`${actionName}需要先扫码绑定托盘和产品信息${position}，当前页面仅预留入口，暂不直接创建空位入库任务`)
+  ElMessage.warning(`${actionName}需要先扫码绑定二维码和产品信息${position}，当前页面仅预留入口，暂不直接创建空位入库任务`)
 }
 const goPalletCode = (code) => {
   if (!code) return
@@ -1124,7 +1133,7 @@ const showAssay = async (record) => {
   }
 }
 const buildResultText = (item) => {
-  const typeName = item.taskType === 'TRANSFER' ? '调拨任务' : (item.taskType === 'PREPARE' ? '转入备料池任务' : '出库任务')
+  const typeName = item.taskType === 'TRANSFER' ? '调拨任务' : (item.taskType === 'PREPARE' ? '旧版生产领用任务' : '出库任务')
   return `创建了 ${item.count} 条${item.productStatus}${typeName}`
 }
 
@@ -1458,6 +1467,25 @@ watch(() => [route.query.palletCode, route.query.code], async ([palletCode, code
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.dialog-map-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.loose-piece-button {
+  flex: none;
+  border-color: #f97316;
+  color: #c2410c;
+  font-weight: 800;
+}
+
+.loose-piece-button.active {
+  border-color: #ea580c;
+  background: #ea580c;
+  color: #ffffff;
 }
 
 .slot-vertical-map {

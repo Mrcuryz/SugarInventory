@@ -3,6 +3,7 @@ import {
   Document,
   Finished,
   Filter,
+  Goods,
   Histogram,
   House,
   List,
@@ -25,7 +26,7 @@ export const menuList = [
     icon: Box,
     children: [
       { path: '/productStock', title: '库存汇总', icon: ShoppingCart, permCode: 'inventory:view' },
-      { path: '/auto-inbound', title: '智能报数入库', icon: Promotion, permCode: 'inventory:view' },
+      { path: '/auto-inbound', title: '智能报数处理', icon: Promotion, permCode: 'inventory:view' },
       { path: '/warehouse', title: '库位管理', icon: Box, permCode: 'warehouse:view' },
       { path: '/warehouse-map', title: '仓库平面图', icon: Location, permCode: 'warehouse_map:view' }
     ]
@@ -64,6 +65,17 @@ export const menuList = [
         ]
       },
       { path: '/pallet-task/transfer', title: '调拨任务', icon: Switch, permCode: 'task:view' }
+    ]
+  },
+  {
+    path: '/production',
+    title: '生产管理',
+    icon: Goods,
+    permCode: 'production:order:view',
+    children: [
+      { path: '/production/orders', title: '生产订单', icon: List, permCode: 'production:order:view' },
+      { path: '/production/material-pick', title: '半成品领用', icon: Box, permCode: 'production:material:view' },
+      { path: '/production/output-bind', title: '产出贴码', icon: Tickets, permCode: 'production:output:view' }
     ]
   },
   { path: '/screenMesh', title: '筛网管理', icon: Filter, permCode: 'screen_mesh:view' },
@@ -127,6 +139,9 @@ export const filterMenuByPermissions = (items, permissionCodes = []) => {
     .filter(item => {
       if (item.children?.length) {
         return canVisit(item) || item.children.length > 0
+      }
+      if (Array.isArray(item.children)) {
+        return false
       }
       return canVisit(item)
     })

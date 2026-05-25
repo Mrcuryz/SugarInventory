@@ -25,7 +25,7 @@ public class EmployeeRosterController {
     private EmployeeService employeeService;
 
     @Operation(summary = "导入员工名册")
-    @PreAuthorize("hasAuthority('user:create')")
+    @PreAuthorize("hasAnyAuthority('employee:create','user:create')")
     @PostMapping("/import")
     public Result<String> importEmployeeRoster(
             @Parameter(description = "员工名册EXCEL文件")
@@ -39,7 +39,7 @@ public class EmployeeRosterController {
     }
 
     @Operation(summary = "新增员工")
-    @PreAuthorize("hasAuthority('user:create')")
+    @PreAuthorize("hasAnyAuthority('employee:create','user:create')")
     @PostMapping("/add")
     public Result<String> addEmployee(@Validated @RequestBody EmployeeRoster employeeRoster) {
         try {
@@ -60,7 +60,7 @@ public class EmployeeRosterController {
 
     @PutMapping("/update")
     @Operation(summary = "更新员工信息", description = "根据ID修改员工信息，可选更新姓名、手机号、部门、职位、状态、角色等")
-    @PreAuthorize("hasAuthority('user:update')")
+    @PreAuthorize("hasAnyAuthority('employee:update','user:update')")
     @LogOperation(value = "员工名册", type = OperationType.UPDATE)
     public Result<EmployeeRoster> updateEmployee(@Validated @RequestBody EmployeeUpdateDTO dto) {
         try {
@@ -72,7 +72,7 @@ public class EmployeeRosterController {
 
     @DeleteMapping("/clearResigned")
     @Operation(summary = "清理离职员工", description = "删除所有状态为“离职”的员工记录")
-    @PreAuthorize("hasAuthority('user:delete')")
+    @PreAuthorize("hasAnyAuthority('employee:delete','user:delete')")
     @LogOperation(value = "员工名册", type = OperationType.DELETE)
     public Result<String> clearResignedEmployees() {
         try {

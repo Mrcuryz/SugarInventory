@@ -12,6 +12,11 @@ export function getAutoInboundBatch(batchId) {
     return request.get(`/auto-inbound/${batchId}`)
 }
 
+// 3. 查询当前缓存的历史解析批次
+export function listAutoInboundHistory() {
+    return request.get('/auto-inbound/history')
+}
+
 // 3. 确认入库
 // AutoInboundConfirmRequest: { operatorId, confirmedTaskIds, updatedTasks }
 export function confirmAutoInbound(batchId, data) {

@@ -7,6 +7,7 @@ import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockBatchQueryDTO;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
+import com.Laibin.SugarInventory.domain.vo.SemiPreparePoolBalanceVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
 import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
@@ -18,6 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/inventory")
@@ -58,6 +60,26 @@ public class InventoryController {
             productStatus = null;
         }
         return Result.success(inventoryService.pageProductStock(productStatus, productName, page, size));
+    }
+
+    @Operation(summary = "备料池库存分页", description = "查询已生产领用但尚未被成品生产消耗的半成品余额")
+    @GetMapping("/prepare-pool-balance")
+    public Result<PageResult<SemiPreparePoolBalanceVO>> pagePreparePoolBalance(
+            @RequestParam(required = false) String productName,
+            @RequestParam(required = false) String productType,
+            @RequestParam(required = false) Integer screenMeshId,
+            @RequestParam(required = false) LocalDate productionDateStart,
+            @RequestParam(required = false) LocalDate productionDateEnd,
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "10") Integer size) {
+        if (productName != null) {
+            productName = productName.trim();
+        }
+        if (productType != null) {
+            productType = productType.trim();
+        }
+        return Result.success(inventoryService.pagePreparePoolBalance(productName, productType, screenMeshId,
+                productionDateStart, productionDateEnd, page, size));
     }
 
     @PreAuthorize("hasAuthority('record:query')")

@@ -15,6 +15,9 @@
         <el-form-item label="产品名称">
           <el-input v-model="searchForm.productName" clearable placeholder="请输入产品名称" style="width: 200px" />
         </el-form-item>
+        <el-form-item label="二维码">
+          <el-input v-model="searchForm.codes" clearable placeholder="可输入多个二维码" style="width: 220px" />
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" clearable placeholder="全部状态" style="width: 160px">
             <el-option
@@ -195,7 +198,8 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import LocalPrinterSettingsDialog from '@/components/LocalPrinterSettingsDialog.vue'
 import { getProductList } from '@/api/product'
@@ -210,6 +214,8 @@ import {
 import { formatDateTime } from '@/utils/dateTime'
 import { PALLET_STATUS_MAP, getDictLabel, getDictType } from '@/utils/palletCodeDict'
 
+const route = useRoute()
+
 const createToday = () => {
   const now = new Date()
   const year = now.getFullYear()
@@ -221,6 +227,7 @@ const createToday = () => {
 const searchForm = ref({
   productId: undefined,
   productName: '',
+  codes: '',
   status: '',
   freeOnly: true
 })
@@ -264,6 +271,7 @@ const palletStatusOptions = Object.entries(PALLET_STATUS_MAP).map(([value, item]
 const buildQuery = () => ({
   productId: searchForm.value.productId,
   productName: searchForm.value.productName || undefined,
+  codes: normalizeCodesText(searchForm.value.codes) || undefined,
   status: searchForm.value.status || undefined,
   freeOnly: searchForm.value.freeOnly,
   page: currentPage.value,
@@ -271,6 +279,11 @@ const buildQuery = () => ({
 })
 
 const normalizeCode = code => String(code || '').trim().toUpperCase()
+const normalizeCodesText = value => String(value || '')
+  .split(/[\s,，;；]+/)
+  .map(normalizeCode)
+  .filter(Boolean)
+  .join(',')
 
 const buildLabelsByCodes = codes => {
   const rowMap = new Map(resultList.value.map(item => [normalizeCode(item.code), item]))
@@ -323,6 +336,7 @@ const handleReset = () => {
   searchForm.value = {
     productId: undefined,
     productName: '',
+    codes: '',
     status: '',
     freeOnly: true
   }
@@ -510,8 +524,27 @@ const handlePreview = async row => {
   }
 }
 
+const applyRouteQuery = () => {
+  const codes = route.query.codes
+  if (!codes) {
+    return false
+  }
+  searchForm.value.codes = normalizeCodesText(Array.isArray(codes) ? codes.join(',') : codes)
+  searchForm.value.freeOnly = route.query.freeOnly === 'false' ? false : searchForm.value.freeOnly
+  return true
+}
+
 onMounted(async () => {
   await loadProducts()
+  applyRouteQuery()
+  await handleSearch(1)
+})
+
+watch(() => route.query.codes, async value => {
+  if (!value) {
+    return
+  }
+  applyRouteQuery()
   await handleSearch(1)
 })
 

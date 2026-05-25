@@ -13,6 +13,9 @@ public class FixedProductPoolQueryDTO {
     @Schema(description = "产品名称")
     private String productName;
 
+    @Schema(description = "二维码，多个使用英文逗号分隔")
+    private String codes;
+
     @Schema(description = "二维码状态")
     private String status;
 

@@ -394,7 +394,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| operationType | String | 是 | `OUT` / `TRANSFER` / `PREPARE`；`PREPARE` 表示半成品转入备料池任务 |
+| operationType | String | 是 | `OUT` / `TRANSFER` / `PREPARE`；`PREPARE` 表示半成品生产领用任务 |
 | warehouseId | Integer | 是 | 来源库位 ID |
 | side | String | 是 | 来源侧：左 / 右 |
 | quantity | Integer | 是 | 前 N 板；传入 `codes` 时按 `codes.size()` 为准 |

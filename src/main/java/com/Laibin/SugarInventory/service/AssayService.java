@@ -14,6 +14,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.time.LocalDate;
 
 /**
  * <p>
@@ -34,6 +35,8 @@ public interface AssayService extends IService<Assay> {
     AssayVO updateAssay(Integer id, AssaySubmitDTO dto, User operator) throws JsonProcessingException;
 
     AssayVO getAssayById(Integer id);
+
+    AssayVO getLatestByProductIdAndDate(Integer productId, LocalDate productionDate);
 
     void deleteAssay(Integer id);
 

@@ -1,27 +1,31 @@
 package com.Laibin.SugarInventory.domain.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
 /**
- * 成品任务使用的单条半成品明细，语义与 in_stock_item 对应。
+ * 成品任务登记的半成品用量，按备料池余额批次扣减。
  */
 public class TaskSemiItemDTO {
-    @NotBlank
-    @Schema(description = "半成品托盘码")
+    @Schema(description = "旧版半成品托盘码，已停用，仅保留兼容")
     private String semiPalletCode;
 
-    @NotNull
-    @Schema(description = "数量")
+    @Schema(description = "备料池余额ID")
+    private Long prepareBalanceId;
+
+    @Schema(description = "板数")
+    private Integer boardCount;
+
+    @Schema(description = "件数")
+    private Integer pieceCount;
+
+    @Schema(description = "旧版数量，已停用")
     private Integer quantity;
 
-    @NotBlank
-    @Schema(description = "单位：0板，1件")
+    @Schema(description = "旧版单位：0板，1件，已停用")
     private String unit;
 
-    @Schema(description = "是否套用化验数据")
+    @Schema(description = "旧版是否套用化验数据，已停用")
     private Boolean useAssay = Boolean.FALSE;
 }

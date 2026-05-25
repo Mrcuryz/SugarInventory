@@ -135,6 +135,12 @@ function buildBaseFields(pallet, inventory, productCatalog) {
 
 function buildAssayMetrics(assay) {
   if (!assay) return [];
+  const hasAppliedStandard = Boolean(
+    assay.appliedStandardId
+    || assay.appliedStandardName
+    || (assay.appliedStandard && assay.appliedStandard.standardName)
+    || (assay.standardSnapshot && assay.standardSnapshot.items && assay.standardSnapshot.items.length)
+  );
   const failedMap = (assay.failedMetrics || []).reduce((result, item) => {
     result[item.metricCode] = item;
     return result;
@@ -165,14 +171,17 @@ function buildAssayMetrics(assay) {
     const valueField = valueFieldMap[item.metricCode];
     const value = valueField ? assay[valueField] : null;
     const failed = failedMap[item.metricCode];
+    const hasValue = value !== null && value !== undefined && value !== '';
+    const hasStandardRange = item.minValue != null || item.maxValue != null;
+    const unavailable = !hasValue || !hasAppliedStandard || !hasStandardRange;
     return {
       key: item.metricCode,
       label: item.metricName,
       valueText: value == null || value === '' ? '-' : `${value}${item.unit || ''}`,
       standardText: item.minValue != null || item.maxValue != null ? formatMetricRange(item) : (assay.appliedStandardText || assay.standardText || '未配置标准区间'),
-      statusText: failed ? '未达标' : '达标',
-      statusType: failed ? 'danger' : 'success',
-      reasonText: failed ? failed.reason : ''
+      statusText: unavailable ? '暂无' : (failed ? '未达标' : '达标'),
+      statusType: unavailable ? 'info' : (failed ? 'danger' : 'success'),
+      reasonText: unavailable ? '' : (failed ? failed.reason : '')
     };
   });
 }
@@ -242,7 +251,7 @@ function buildFlowLocation(flow) {
   }
 
   if (flow.operationType === 'PREPARE_CONSUMED') {
-    const route = buildLocationRoute('from', '转入', fromText, '原位置未记录', '备料池');
+    const route = buildLocationRoute('from', '旧版生产领用', fromText, '原位置未记录', '');
     return {
       hasLocation: true,
       mode: 'single',
@@ -319,6 +328,15 @@ function getFlowIconSrc(operationType) {
   return map[operationType] || '/assets/icons-line/icon-task.svg';
 }
 
+function normalizeOperationLabel(operationType, operationName, fallbackLabel) {
+  if (operationType === 'TRANSFER') return '调拨';
+  if (!operationName) return fallbackLabel;
+  return String(operationName)
+    .replace(/托盘调拨/g, '调拨')
+    .replace(/托盘码/g, '二维码')
+    .replace(/托盘/g, '');
+}
+
 function buildFlowGroups(rows, palletCode) {
   const sorted = [...(rows || [])].sort((a, b) => {
     const at = new Date(a.operationTime || 0).getTime();
@@ -333,7 +351,7 @@ function buildFlowGroups(rows, palletCode) {
     const location = buildFlowLocation(item);
     const normalized = {
       ...item,
-      operationLabel: item.operationName || operation.label,
+      operationLabel: normalizeOperationLabel(item.operationType, item.operationName, operation.label),
       operationTypeTag: operation.type,
       operationDateText: date,
       operationTimeText: formatTime(item.operationTime),
@@ -366,7 +384,7 @@ function inferBusinessStage(pallet, flows) {
   const hasConsumed = sorted.some(item => item.operationType === 'CONSUMED') || pallet.status === 'CONSUMED';
   const isSemi = pallet.productStatus === '半成品';
   if (hasConsumed) return { key: 'consumed', label: '已消耗', type: 'info', readonly: true };
-  if (isSemi && pallet.status === 'INSTOCK' && hasPrepare) return { key: 'prepare', label: '备料中', type: 'warning', readonly: true };
+  if (isSemi && pallet.status === 'INSTOCK' && hasPrepare) return { key: 'prepare', label: '旧版生产领用中', type: 'warning', readonly: true };
   if (pallet.status === 'FREE') return { key: 'free', label: '空闲 / 未绑定', type: 'success', readonly: false };
   if (pallet.status === 'PENDING' || pallet.status === 'PENDING_IN') return { key: 'pending', label: '待入库', type: 'warning', readonly: false };
   if (pallet.status === 'INSTOCK') return { key: 'instock', label: '在库', type: 'primary', readonly: false };
@@ -543,7 +561,7 @@ Page({
         flowGroups,
         actions,
         readonlyStageNotice: businessStage.readonly ? (businessStage.key === 'prepare'
-          ? '当前二维码已转入备料池，等待成品绑定并消耗，不再执行普通出库或调拨。'
+          ? '当前二维码已由旧流程生产领用，已离开仓库主库存。'
           : '当前二维码处于只读阶段，不再执行普通现场任务。') : '',
         summary: this.buildSummary(displayPallet, inventory, pendingTasks, actions, businessStage),
         confirmTargets: [],
@@ -558,19 +576,19 @@ Page({
 
   buildSummary(pallet, inventory, pendingTasks, actions, businessStage) {
     const noLocationHint = businessStage.key === 'prepare'
-      ? '已转入备料池'
+      ? '已由旧流程生产领用'
       : businessStage.key === 'consumed'
-        ? '已被成品绑定消耗'
+        ? '已被成品生产消耗'
         : businessStage.key === 'free'
           ? '未入库，暂无库位信息'
-          : '可能处于未入库、已出库、已转入备料池或已释放状态';
+          : '可能处于未入库、已出库、旧版生产领用或已释放状态';
     return {
       locationText: formatLocationText(inventory),
       locationHint: inventory && inventory.inStockTime
         ? `入库时间 ${formatDateTime(inventory.inStockTime)}`
         : noLocationHint,
       taskText: businessStage.readonly ? businessStage.label : (pendingTasks.length ? `待处理 ${pendingTasks.length} 条任务` : '当前无待处理任务'),
-      actionText: businessStage.key === 'prepare' ? '等待成品绑定消耗' : (actions[0] ? actions[0].label : '查看二维码信息')
+      actionText: businessStage.key === 'prepare' ? '已离开仓库主库存' : (actions[0] ? actions[0].label : '查看二维码信息')
     };
   },
 
@@ -598,9 +616,6 @@ Page({
         { key: 'createOut', label: '创建出库', type: 'primary' },
         { key: 'createTransfer', label: '创建调拨', type: 'plain' }
       ];
-      if (pallet.productStatus === '半成品') {
-        actions.push({ key: 'createPrepare', label: '转入备料池', type: 'plain' });
-      }
       return actions;
     }
 
@@ -629,13 +644,18 @@ Page({
     if (key === 'createIn') this.goScanMode('in');
     if (key === 'createOut') this.goScanMode('out');
     if (key === 'createTransfer') this.goScanMode('transfer');
-    if (key === 'createPrepare') this.goScanMode('prepare');
     if (key === 'processPending') this.processPendingTasks(this.data.pendingTasks);
     if (key === 'cancelPending') this.cancelPendingTasks(this.data.pendingTasks);
   },
 
   goScanMode(mode) {
     wx.setStorageSync('preferredScanMode', mode);
+    wx.setStorageSync('pendingScanCodeAction', {
+      mode,
+      code: this.data.code,
+      from: 'pallet-detail',
+      createdAt: Date.now()
+    });
     wx.switchTab({ url: '/pages/scan/index/index' });
   },
 

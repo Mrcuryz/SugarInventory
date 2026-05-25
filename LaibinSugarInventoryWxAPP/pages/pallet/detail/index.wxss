@@ -208,7 +208,20 @@
   color: #246bfe;
 }
 
+.timeline-card {
+  --timeline-rail-width: 48rpx;
+  --timeline-icon-size: 38rpx;
+  --timeline-icon-offset: 2rpx;
+  --timeline-item-gap: 10rpx;
+  --timeline-line-width: 2rpx;
+  --timeline-line-left: 23rpx;
+  --timeline-line-start: 40rpx;
+  --timeline-line-end: -12rpx;
+}
+
+.timeline-item,
 .flow-item {
+  position: relative;
   display: flex;
   gap: 18rpx;
 }
@@ -225,20 +238,45 @@
 }
 
 .flow-item + .flow-item {
-  margin-top: 10rpx;
+  margin-top: var(--timeline-item-gap);
 }
 
 .flow-rail {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 var(--timeline-rail-width);
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 24rpx;
+  justify-content: flex-start;
+  width: var(--timeline-rail-width);
+  min-width: var(--timeline-rail-width);
+  max-width: var(--timeline-rail-width);
+}
+
+.timeline-item.not-last::after {
+  content: '';
+  position: absolute;
+  top: var(--timeline-line-start);
+  bottom: var(--timeline-line-end);
+  left: var(--timeline-line-left);
+  width: var(--timeline-line-width);
+  background: #dbe4ef;
+  border-radius: 999rpx;
 }
 
 .flow-icon {
-  width: 38rpx;
-  height: 38rpx;
-  margin-top: 2rpx;
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: var(--timeline-icon-size);
+  height: var(--timeline-icon-size);
+  min-width: var(--timeline-icon-size);
+  min-height: var(--timeline-icon-size);
+  max-width: var(--timeline-icon-size);
+  max-height: var(--timeline-icon-size);
+  margin-top: var(--timeline-icon-offset);
+  overflow: hidden;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -247,8 +285,14 @@
 }
 
 .flow-icon-img {
+  display: block;
+  flex: none;
   width: 24rpx;
   height: 24rpx;
+  min-width: 24rpx;
+  min-height: 24rpx;
+  max-width: 24rpx;
+  max-height: 24rpx;
 }
 
 .flow-icon.primary {
@@ -296,14 +340,9 @@
   background: #7a869a;
 }
 
-.line {
-  width: 2rpx;
-  flex: 1;
-  margin-top: 8rpx;
-  background: #dbe4ef;
-}
-
 .flow-card {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
   padding: 22rpx;

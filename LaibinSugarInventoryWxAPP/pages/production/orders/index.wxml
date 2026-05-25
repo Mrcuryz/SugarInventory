@@ -1,0 +1,56 @@
+<page-shell safeBottom="{{true}}">
+  <page-header title="生产作业" subtitle="查看生产订单，现场扫码领用半成品。" />
+
+  <view class="filter-card">
+    <view class="field-row">
+      <input class="search-input" placeholder="输入订单号搜索" value="{{orderNo}}" bindinput="onOrderNoInput" confirm-type="search" bindconfirm="search" />
+      <button class="search-btn" loading="{{loading}}" bindtap="search">查询</button>
+    </view>
+    <view class="status-tabs">
+      <view wx:for="{{statusTabs}}" wx:key="key" class="status-tab {{status === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onStatusTap">{{item.label}}</view>
+    </view>
+    <view class="filter-actions">
+      <button class="toggle-btn {{todayOnly ? 'active' : ''}}" bindtap="toggleToday">今日订单</button>
+      <button class="plain-btn" bindtap="resetSearch">重置</button>
+    </view>
+  </view>
+
+  <view class="summary-line">共 {{total}} 条生产订单</view>
+
+  <view wx:if="{{orders.length}}" class="order-list">
+    <view wx:for="{{orders}}" wx:key="id" class="order-card" data-id="{{item.id}}" bindtap="openOrder">
+      <view class="order-head">
+        <view>
+          <view class="order-no">{{item.orderNo}}</view>
+          <view class="order-meta">{{item.orderTypeText}} · {{item.productionDate}}</view>
+        </view>
+        <status-tag label="{{item.statusLabel}}" type="{{item.statusType}}" />
+      </view>
+      <view class="order-grid">
+        <view class="order-item">
+          <text>计划领用</text>
+          <strong>{{item.plannedMaterialText}}</strong>
+        </view>
+        <view class="order-item">
+          <text>计划产出</text>
+          <strong>{{item.plannedOutputText}}</strong>
+        </view>
+        <view class="order-item">
+          <text>实际领用</text>
+          <strong>{{item.actualMaterialText}}</strong>
+        </view>
+        <view class="order-item">
+          <text>实际产出</text>
+          <strong>{{item.outputText}}</strong>
+        </view>
+      </view>
+      <view class="order-footer">
+        <text>入库进度 {{item.inboundProgressText}}</text>
+        <text>查看 ›</text>
+      </view>
+    </view>
+  </view>
+
+  <empty-state wx:else icon="/assets/icons-line/icon-task.svg" title="暂无生产订单" description="可切换状态或关闭今日订单筛选后再查询。" />
+  <view wx:if="{{loading && orders.length}}" class="loading-more">正在加载...</view>
+</page-shell>

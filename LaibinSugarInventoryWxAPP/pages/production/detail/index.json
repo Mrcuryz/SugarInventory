@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "生产订单详情",
+  "usingComponents": {
+    "page-shell": "/components/page-shell/page-shell",
+    "page-header": "/components/page-header/page-header",
+    "empty-state": "/components/empty-state/empty-state",
+    "status-tag": "/components/status-tag/status-tag"
+  }
+}

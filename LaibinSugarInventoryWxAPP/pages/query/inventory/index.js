@@ -1,4 +1,4 @@
-import { pageProductStock, pagePalletCodes } from '../../../api/query';
+import { pageProductStock, pagePalletCodes, pageProductionInProcessMaterials } from '../../../api/query';
 import { getPalletInventory } from '../../../api/pallet';
 import { requireLogin } from '../../../utils/auth';
 import { getDictItem, PALLET_STATUS, formatDateTime } from '../../../utils/dict';
@@ -24,6 +24,11 @@ function normalizeLocation(inventory) {
 
 Page({
   data: {
+    activeTab: 'stock',
+    tabs: [
+      { key: 'stock', label: '产品库存' },
+      { key: 'prepare', label: '生产中半成品' }
+    ],
     productName: '',
     statusOptions: STATUS_OPTIONS,
     statusIndex: 0,
@@ -39,7 +44,13 @@ Page({
     palletSize: 10,
     palletTotal: 0,
     palletLoading: false,
-    palletList: []
+    palletList: [],
+    preparePage: 1,
+    prepareSize: 10,
+    prepareTotal: 0,
+    prepareLoading: false,
+    prepareError: false,
+    prepareList: []
   },
 
   onLoad() {
@@ -59,21 +70,45 @@ Page({
     this.setData({ statusIndex: Number(e.detail.value) });
   },
 
+  onTabTap(e) {
+    const activeTab = e.currentTarget.dataset.key;
+    if (!activeTab || activeTab === this.data.activeTab) return;
+    this.setData({
+      activeTab,
+      detailMode: false,
+      currentStock: null,
+      palletList: []
+    });
+    if (activeTab === 'prepare' && !this.data.prepareList.length) {
+      this.loadPreparePool();
+    }
+  },
+
   resetSearch() {
     this.setData({
       productName: '',
       statusIndex: 0,
       page: 1,
+      preparePage: 1,
       detailMode: false,
       currentStock: null,
-      palletList: []
+      palletList: [],
+      prepareList: []
     });
-    this.loadStock();
+    if (this.data.activeTab === 'prepare') {
+      this.loadPreparePool();
+    } else {
+      this.loadStock();
+    }
   },
 
   search() {
-    this.setData({ page: 1, detailMode: false, currentStock: null, palletList: [] });
-    this.loadStock();
+    this.setData({ page: 1, preparePage: 1, detailMode: false, currentStock: null, palletList: [], prepareList: [] });
+    if (this.data.activeTab === 'prepare') {
+      this.loadPreparePool();
+    } else {
+      this.loadStock();
+    }
   },
 
   async loadStock() {
@@ -105,6 +140,39 @@ Page({
       showError(error, '库存查询失败');
     } finally {
       this.setData({ loading: false });
+    }
+  },
+
+  async loadPreparePool() {
+    this.setData({ prepareLoading: true, prepareError: false });
+    try {
+      const productName = this.data.productName.trim();
+      const res = await pageProductionInProcessMaterials({
+        page: this.data.preparePage,
+        size: this.data.prepareSize,
+        productName: productName || undefined
+      });
+      const prepareList = (res.records || []).map(item => ({
+        ...item,
+        productNameText: item.productName || '-',
+        orderNoText: item.orderNo || '-',
+        productionDateText: item.productionDate || '-',
+        quantityText: item.unit === '1' ? `${item.quantity || item.pieces || 0}件` : `${item.quantity || 0}板`,
+        sourceLocationText: [item.warehouseName, item.side ? `${item.side}侧` : '', item.rowNumber ? `第${item.rowNumber}排` : '', item.layer ? `${item.layer}层` : ''].filter(Boolean).join(' · ') || '-',
+        pickedAtText: formatDateTime(item.pickedAt),
+        pickedByText: item.pickedByName || '-',
+        statusLabel: item.status === 'PICKED' ? '生产中' : item.status || '-',
+        statusType: 'warning'
+      }));
+      this.setData({
+        prepareList,
+        prepareTotal: res.total || 0
+      });
+    } catch (error) {
+      this.setData({ prepareError: true });
+      showError(error, '生产中半成品查询失败');
+    } finally {
+      this.setData({ prepareLoading: false });
     }
   },
 
@@ -163,6 +231,11 @@ Page({
     this.loadStock();
   },
 
+  onPreparePageChange(e) {
+    this.setData({ preparePage: e.detail.page });
+    this.loadPreparePool();
+  },
+
   onPalletPageChange(e) {
     this.setData({ palletPage: e.detail.page });
     this.loadPallets();
@@ -183,6 +256,19 @@ Page({
     const item = this.data.stockList[index];
     const productName = item && item.productName ? item.productName : '';
     wx.navigateTo({ url: `/pages/query/assay/index?productName=${encodeURIComponent(productName)}` });
+  },
+
+  openPrepareAssay(e) {
+    const index = e.currentTarget.dataset.index;
+    const item = this.data.prepareList[index];
+    const productName = item && item.productName ? item.productName : '';
+    const date = item && item.productionDate ? item.productionDate : '';
+    const query = [`productName=${encodeURIComponent(productName)}`];
+    if (date) {
+      query.push(`startDate=${encodeURIComponent(date)}`);
+      query.push(`endDate=${encodeURIComponent(date)}`);
+    }
+    wx.navigateTo({ url: `/pages/query/assay/index?${query.join('&')}` });
   },
 
   showLocationHint() {

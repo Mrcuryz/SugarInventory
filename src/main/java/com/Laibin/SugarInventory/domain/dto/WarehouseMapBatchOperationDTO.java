@@ -11,7 +11,7 @@ import java.util.List;
 @Schema(description = "仓库平面图批量创建任务请求")
 public class WarehouseMapBatchOperationDTO {
     @NotBlank
-    @Schema(description = "操作类型：OUT/TRANSFER/PREPARE；PREPARE 表示半成品转入备料池任务")
+    @Schema(description = "操作类型：OUT/TRANSFER/PREPARE；PREPARE 表示半成品生产领用任务")
     private String operationType;
 
     @NotNull

@@ -8,8 +8,8 @@
         </div>
       </div>
       <el-form :model="searchForm" inline>
-        <el-form-item v-if="hasSearchField('code')" label="托盘码">
-          <el-input v-model="searchForm.code" clearable placeholder="请输入托盘码" style="width: 170px"/>
+        <el-form-item v-if="hasSearchField('code')" label="二维码">
+          <el-input v-model="searchForm.code" clearable placeholder="请输入二维码，可多个" style="width: 210px"/>
         </el-form-item>
         <el-form-item v-if="hasSearchField('taskType')" label="任务类型">
           <el-select v-model="searchForm.taskType" clearable placeholder="请选择" style="width: 160px">
@@ -67,14 +67,12 @@
             <el-tab-pane v-for="tab in bizSceneTabs" :key="tab.value" :label="tab.label" :name="tab.value"/>
           </el-tabs>
           <div class="action-groups">
-            <el-button v-if="hasTopAction('bindPallet')" type="primary" size="small" @click="goBindPallet">绑定托盘</el-button>
+            <el-button v-if="hasTopAction('bindPallet')" type="primary" size="small" @click="goBindPallet">绑定二维码</el-button>
             <el-button v-if="hasTopAction('semiOutCreate')" type="primary" size="small" @click="openCommonDialog('semiOutCreate')">{{ getActionLabel('semiOutCreate', '创建普通出库任务') }}</el-button>
-            <el-button v-if="hasTopAction('semiPrepareCreate')" type="primary" size="small" @click="openCommonDialog('semiPrepareCreate')">{{ getActionLabel('semiPrepareCreate', '创建转入备料池任务') }}</el-button>
             <el-button v-if="hasTopAction('finishOutCreate')" type="primary" size="small" @click="openCommonDialog('finishOutCreate')">创建成品出库任务</el-button>
             <el-button v-if="hasTopAction('transferCreate')" type="primary" size="small" @click="openCommonDialog('transferCreate')">创建调拨任务</el-button>
             <el-button v-if="hasBatchAction('confirmIn')" type="success" size="small" @click="openBatchConfirmInDialog">批量确认入库</el-button>
             <el-button v-if="hasBatchAction('semiOutConfirm')" type="success" size="small" @click="openBatchCodeDialog('semiOutConfirm')">{{ getActionLabel('semiOutConfirm', '批量确认普通出库') }}</el-button>
-            <el-button v-if="hasBatchAction('semiPrepareConfirm')" type="success" size="small" @click="openBatchCodeDialog('semiPrepareConfirm')">{{ getActionLabel('semiPrepareConfirm', '批量确认转入备料池') }}</el-button>
             <el-button v-if="hasBatchAction('finishOutConfirm')" type="success" size="small" @click="openBatchCodeDialog('finishOutConfirm')">批量确认成品出库</el-button>
             <el-button v-if="hasBatchAction('transferConfirm')" type="success" size="small" @click="openBatchCodeDialog('transferConfirm')">批量确认调拨</el-button>
             <el-button v-if="hasBatchAction('cancel')" type="danger" size="small" @click="batchCancelTasks">{{ getActionLabel('cancel', '批量取消任务') }}</el-button>
@@ -83,7 +81,7 @@
       </div>
       <el-table :data="resultList" style="width: 100%" height="580" stripe v-loading="loading" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45"/>
-        <el-table-column prop="code" label="托盘码" width="130" fixed="left"/>
+        <el-table-column prop="code" label="二维码" width="130" fixed="left"/>
         <el-table-column v-if="hasColumn('taskType')" prop="taskType" label="任务类型" width="120">
           <template #default="{ row }">
             <el-tag :type="getDictType(TASK_TYPE_MAP, row.taskType)">
@@ -113,7 +111,7 @@
         <el-table-column v-if="hasColumn('targetWarehouse')" prop="targetWarehouseName" label="目标库位" width="130"/>
         <el-table-column v-if="hasColumn('targetWarehouse')" prop="targetSide" label="目标侧" width="80"/>
         <el-table-column v-if="hasColumn('semiItemCount')" prop="semiItemCount" label="半成品数" width="100"/>
-        <el-table-column v-if="hasColumn('hasSemiItems')" label="已绑定半成品" width="120">
+        <el-table-column v-if="hasColumn('hasSemiItems')" label="已登记用量" width="120">
           <template #default="{ row }">
             <el-tag :type="row.semiItemCount > 0 ? 'success' : 'info'">
               {{ row.semiItemCount > 0 ? '是' : '否' }}
@@ -130,10 +128,8 @@
         </el-table-column>
         <el-table-column v-if="rowActions.length" label="操作" :width="actionColumnWidth" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="canBindSemi(row)" type="primary" size="small" @click="openSemiBindDialog(row)">绑定半成品</el-button>
             <el-button v-if="canConfirmIn(row)" type="success" size="small" @click="openConfirmInDialog(row)">确认入库</el-button>
             <el-button v-if="canConfirmSemiDirectOut(row)" type="success" size="small" @click="confirmRowCodes(row, 'semiOutConfirm')">确认普通出库</el-button>
-            <el-button v-if="canConfirmSemiPrepare(row)" type="success" size="small" @click="confirmRowCodes(row, 'semiPrepareConfirm')">确认备料池</el-button>
             <el-button v-if="canConfirmFinishOut(row)" type="success" size="small" @click="confirmRowCodes(row, 'finishOutConfirm')">确认成品出库</el-button>
             <el-button v-if="canConfirmTransfer(row)" type="success" size="small" @click="confirmRowCodes(row, 'transferConfirm')">确认调拨</el-button>
             <el-button v-if="canCancel(row)" type="danger" size="small" @click="cancelRowTask(row)">取消任务</el-button>
@@ -153,64 +149,9 @@
       </div>
     </el-card>
 
-    <el-dialog title="绑定半成品" v-model="semiBindDialogVisible" width="760px" :before-close="closeSemiBindDialog">
-      <el-form :model="semiBindForm" label-width="110px">
-        <el-form-item label="成品托盘码">
-          <el-input v-model="semiBindForm.code" disabled/>
-        </el-form-item>
-        <el-table :data="semiBindForm.items" border>
-          <el-table-column label="半成品托盘码" min-width="170">
-            <template #default="{ row }">
-              <el-input v-model="row.semiPalletCode" placeholder="请输入半成品托盘码" @blur="resolveSemiItemProduct(row)"/>
-            </template>
-          </el-table-column>
-          <el-table-column label="数量" width="120">
-            <template #default="{ row }">
-              <el-input-number
-                  v-model="row.quantity"
-                  :min="1"
-                  :max="getSemiItemQuantityMax(row)"
-                  :disabled="!canEditQuantity(row)"
-                  controls-position="right"
-                  style="width: 100%"
-                  @change="normalizeSemiItemQuantity(row)"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="单位" width="100">
-            <template #default="{ row }">
-              <el-select v-model="row.unit" @change="normalizeSemiItemQuantity(row)">
-                <el-option v-for="item in UNIT_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="每板上限" width="100">
-            <template #default="{ row }">
-              {{ getSemiItemPiecesLimit(row) || '-' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="套用化验" width="110">
-            <template #default="{ row }">
-              <el-switch v-model="row.useAssay"/>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="90">
-            <template #default="{ $index }">
-              <el-button type="danger" size="small" @click="removeSemiItem($index)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-button class="table-add-btn" type="primary" plain @click="addSemiItem">新增半成品</el-button>
-      </el-form>
-      <template #footer>
-        <el-button @click="closeSemiBindDialog">取消</el-button>
-        <el-button type="primary" @click="submitSemiBind">确定</el-button>
-      </template>
-    </el-dialog>
-
     <el-dialog title="确认入库" v-model="confirmInDialogVisible" width="560px" :before-close="closeConfirmInDialog">
       <el-form ref="confirmInFormRef" :model="confirmInForm" :rules="confirmInRules" label-width="110px">
-        <el-form-item label="托盘码" prop="code">
+        <el-form-item label="二维码" prop="code">
           <el-input v-model="confirmInForm.code" disabled/>
         </el-form-item>
         <el-form-item label="入库库位" prop="warehouseName">
@@ -252,7 +193,7 @@
 
     <el-dialog title="批量确认入库" v-model="batchConfirmInDialogVisible" width="1180px" :before-close="closeBatchConfirmInDialog">
       <el-table :data="batchConfirmInRows" border max-height="520">
-        <el-table-column prop="code" label="托盘码" width="150" fixed="left"/>
+        <el-table-column prop="code" label="二维码" width="150" fixed="left"/>
         <el-table-column prop="productName" label="产品" min-width="150"/>
         <el-table-column label="入库库位" min-width="170">
           <template #default="{ row }">
@@ -312,7 +253,7 @@
 
     <el-dialog :title="batchCodeOperation?.title" v-model="batchCodeDialogVisible" width="720px" :before-close="closeBatchCodeDialog">
       <el-table :data="batchCodeRows" border max-height="360">
-        <el-table-column prop="code" label="托盘码" width="160"/>
+        <el-table-column prop="code" label="二维码" width="160"/>
         <el-table-column prop="productName" label="产品" min-width="150"/>
         <el-table-column prop="bizScene" label="业务场景" width="150">
           <template #default="{ row }">
@@ -339,12 +280,12 @@
     <el-dialog :title="commonOperation?.title" v-model="commonDialogVisible" width="720px" :before-close="closeCommonDialog">
       <template v-if="commonOperation?.mode === 'codes'">
         <el-form :model="commonForm" label-width="110px">
-          <el-form-item label="托盘码" required>
+          <el-form-item label="二维码" required>
             <el-input
                 v-model="commonForm.codesText"
                 type="textarea"
                 :rows="6"
-                placeholder="支持换行、逗号或空格分隔多个托盘码"
+                placeholder="支持换行、逗号或空格分隔多个二维码"
             />
           </el-form-item>
           <el-form-item label="备注">
@@ -354,9 +295,9 @@
       </template>
       <template v-else>
         <el-table :data="transferForm.items" border>
-          <el-table-column label="托盘码" min-width="150">
+          <el-table-column label="二维码" min-width="150">
             <template #default="{ row }">
-              <el-input v-model="row.code" placeholder="托盘码"/>
+              <el-input v-model="row.code" placeholder="二维码"/>
             </template>
           </el-table-column>
           <el-table-column label="目标库位" min-width="150">
@@ -384,7 +325,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-button class="table-add-btn" type="primary" plain @click="addTransferItem">新增调拨托盘</el-button>
+        <el-button class="table-add-btn" type="primary" plain @click="addTransferItem">新增调拨二维码</el-button>
       </template>
       <template #footer>
         <el-button @click="closeCommonDialog">取消</el-button>
@@ -403,19 +344,15 @@ import {getProductList} from '@/api/product'
 import {getWarehouse} from '@/api/warehouse'
 import {formatDateTime} from '@/utils/dateTime'
 import {
-  bindSemiItemsToTask,
   cancelPalletTasks,
   confirmFinishOutTasks,
   confirmPalletInBatch,
   confirmSemiOutTasks,
-  confirmSemiPrepareTasks,
   confirmTransferTasks,
   createFinishOutTasks,
   createSemiOutTasks,
-  createSemiPrepareTasks,
   createTransferTasks,
-  pagePalletTasks,
-  parsePalletCode
+  pagePalletTasks
 } from '@/api/palletCode'
 import {
   BIZ_SCENE_MAP,
@@ -435,7 +372,7 @@ import {
 const props = defineProps({
   title: {
     type: String,
-    default: '托盘任务中心'
+    default: '二维码任务中心'
   },
   description: {
     type: String,
@@ -477,7 +414,7 @@ const props = defineProps({
 
 const router = useRouter()
 const route = useRoute()
-const activeBizScene = ref(props.bizSceneTabs[0]?.value || props.defaultQuery.bizScene || '')
+const activeBizScene = ref(resolveRouteQueryValue(route.query.bizScene) || props.bizSceneTabs[0]?.value || props.defaultQuery.bizScene || '')
 const title = computed(() => props.title)
 const description = computed(() => props.description)
 const activeTabActionConfig = computed(() => props.tabActionMap[activeBizScene.value] || {})
@@ -500,9 +437,6 @@ const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
-
-const semiBindDialogVisible = ref(false)
-const semiBindForm = ref({code: '', items: [defaultSemiItem()]})
 
 const confirmInDialogVisible = ref(false)
 const confirmInFormRef = ref(null)
@@ -534,8 +468,6 @@ const transferForm = ref({items: [defaultTransferItem()]})
 const commonOperations = {
   semiOutCreate: {title: '创建半成品普通出库任务', mode: 'codes', api: createSemiOutTasks},
   semiOutConfirm: {title: '确认半成品普通出库', mode: 'codes', api: confirmSemiOutTasks},
-  semiPrepareCreate: {title: '创建转入备料池任务', mode: 'codes', api: createSemiPrepareTasks},
-  semiPrepareConfirm: {title: '确认转入备料池', mode: 'codes', api: confirmSemiPrepareTasks},
   finishOutCreate: {title: '创建成品出库任务', mode: 'codes', api: createFinishOutTasks},
   finishOutConfirm: {title: '确认成品出库', mode: 'codes', api: confirmFinishOutTasks},
   transferCreate: {title: '创建调拨任务', mode: 'transfer', api: createTransferTasks},
@@ -554,11 +486,12 @@ const batchCodeOperation = computed(() => commonOperations[batchCodeOperationKey
 
 function defaultSearchForm() {
   return {
-    code: resolveRouteQueryValue(route.query.code) || '',
+    code: normalizeCodesText(route.query.codes) || resolveRouteQueryValue(route.query.code) || '',
     taskType: props.defaultQuery.taskType || '',
-    bizScene: props.defaultQuery.bizScene || '',
+    bizScene: resolveRouteQueryValue(route.query.bizScene) || props.defaultQuery.bizScene || '',
     status: resolveRouteQueryValue(route.query.status) || '',
-    productName: '',
+    productName: resolveRouteQueryValue(route.query.productNameExact) || resolveRouteQueryValue(route.query.productName) || '',
+    productNameExact: resolveRouteQueryValue(route.query.productNameExact) || '',
     targetWarehouseName: '',
     productType: '',
     productStatus: props.defaultQuery.productStatus || '',
@@ -570,15 +503,12 @@ function resolveRouteQueryValue(value) {
   return Array.isArray(value) ? (value[0] || '') : (value || '')
 }
 
-function defaultSemiItem() {
-  return {
-    semiPalletCode: '',
-    semiProductId: null,
-    semiProductName: '',
-    quantity: 1,
-    unit: '0',
-    useAssay: false
-  }
+function normalizeCodesText(value) {
+  return String(resolveRouteQueryValue(value))
+      .split(/[\s,，;；]+/)
+      .map(item => item.trim().toUpperCase())
+      .filter(Boolean)
+      .join(',')
 }
 
 function defaultConfirmInForm() {
@@ -609,10 +539,23 @@ const buildQuery = () => {
     pageSize: pageSize.value
   }
   Object.entries(searchForm.value).forEach(([key, value]) => {
-    if (key !== 'productionDateRange' && value !== '' && value != null) {
+    if (key !== 'productionDateRange' && key !== 'productNameExact' && value !== '' && value != null) {
       params[key] = value
     }
   })
+  if (searchForm.value.productNameExact && searchForm.value.productName === searchForm.value.productNameExact) {
+    params.productNameExact = searchForm.value.productNameExact
+  }
+  const normalizedCodes = normalizeCodesText(searchForm.value.code)
+  if (normalizedCodes) {
+    if (normalizedCodes.includes(',')) {
+      params.codes = normalizedCodes
+      delete params.code
+    } else {
+      params.code = normalizedCodes
+      delete params.codes
+    }
+  }
   if (searchForm.value.productionDateRange?.length === 2) {
     params.productionDateStart = searchForm.value.productionDateRange[0]
     params.productionDateEnd = searchForm.value.productionDateRange[1]
@@ -728,155 +671,11 @@ const validateQuantityRows = (rows, label = '任务') => {
 }
 
 const isPending = (row) => row.taskStatus === 'PENDING'
-const canBindSemi = (row) => hasRowAction('bindSemi') && row.taskType === 'FINISH_IN' && isPending(row)
 const canConfirmIn = (row) => hasRowAction('confirmIn') && ['SEMI_IN', 'FINISH_IN'].includes(row.taskType) && isPending(row)
 const canCancel = (row) => hasRowAction('cancel') && isPending(row)
 const canConfirmSemiDirectOut = (row) => hasRowAction('semiOutConfirm') && row.taskType === 'OUT' && row.bizScene === 'DIRECT_OUT' && isPending(row)
-const canConfirmSemiPrepare = (row) => hasRowAction('semiPrepareConfirm') && row.taskType === 'OUT' && row.bizScene === 'PREPARE_CONSUMED' && isPending(row)
 const canConfirmFinishOut = (row) => hasRowAction('finishOutConfirm') && row.taskType === 'OUT' && row.bizScene === 'FINISH_OUT' && isPending(row)
 const canConfirmTransfer = (row) => hasRowAction('transferConfirm') && row.taskType === 'TRANSFER' && isPending(row)
-
-const openSemiBindDialog = (row) => {
-  semiBindForm.value = {
-    code: row.code,
-    items: row.semiItems?.length
-        ? row.semiItems.map(item => ({
-          semiPalletCode: item.semiPalletCode,
-          semiProductId: item.semiProductId || null,
-          semiProductName: item.semiProductName || '',
-          quantity: item.quantity || 1,
-          unit: item.unit || '0',
-          useAssay: !!item.useAssay
-        }))
-        : [defaultSemiItem()]
-  }
-  semiBindDialogVisible.value = true
-}
-
-const closeSemiBindDialog = () => {
-  semiBindDialogVisible.value = false
-  semiBindForm.value = {code: '', items: [defaultSemiItem()]}
-}
-
-const addSemiItem = () => {
-  semiBindForm.value.items.push(defaultSemiItem())
-}
-
-const removeSemiItem = (index) => {
-  if (semiBindForm.value.items.length === 1) {
-    ElMessage.warning('至少保留一条半成品明细')
-    return
-  }
-  semiBindForm.value.items.splice(index, 1)
-}
-
-const findProductByParsedPallet = (info) => {
-  if (info?.productId && productMap.value[info.productId]) {
-    return productMap.value[info.productId]
-  }
-  return productList.value.find(item => {
-    const sameName = item.productName === info?.productName
-    const sameStatus = !info?.productStatus || item.status === info.productStatus
-    return sameName && sameStatus
-  }) || null
-}
-
-const resolveSemiItemProduct = async (row) => {
-  if (!row.semiPalletCode || row.semiProductId) {
-    normalizeSemiItemQuantity(row)
-    return
-  }
-  try {
-    const res = await parsePalletCode(row.semiPalletCode)
-    const product = findProductByParsedPallet(res.data || {})
-    if (product) {
-      row.semiProductId = product.id
-      row.semiProductName = product.productName
-    }
-  } catch {
-    row.semiProductId = null
-    row.semiProductName = ''
-  }
-  normalizeSemiItemQuantity(row)
-}
-
-const resolveSemiItems = async (items) => {
-  for (const item of items) {
-    await resolveSemiItemProduct(item)
-  }
-}
-
-const getSemiItemPiecesLimit = (row) => getPiecesLimitByProductId(row.semiProductId)
-
-const getSemiItemQuantityMax = (row) => {
-  if (row.unit === '0') {
-    return 1
-  }
-  const limit = getSemiItemPiecesLimit(row)
-  if (!limit) {
-    return undefined
-  }
-  return Math.max(limit - 1, 1)
-}
-
-const normalizeSemiItemQuantity = (row) => {
-  if (row.unit === '0') {
-    row.quantity = 1
-    return
-  }
-  if (!row.quantity || row.quantity < 1) {
-    row.quantity = 1
-  }
-  const limit = getSemiItemPiecesLimit(row)
-  if (limit && row.quantity >= limit) {
-    row.quantity = Math.max(limit - 1, 1)
-  }
-}
-
-const validateSemiBindItems = (items) => {
-  for (const item of items) {
-    if (item.unit === '0') {
-      item.quantity = 1
-      continue
-    }
-    const limit = getSemiItemPiecesLimit(item)
-    if (!limit) {
-      ElMessage.error(`半成品 ${item.semiPalletCode} 未找到每板件数配置，不能按件绑定`)
-      return false
-    }
-    if (!item.quantity || item.quantity < 1) {
-      ElMessage.error(`半成品 ${item.semiPalletCode} 件数必须大于 0`)
-      return false
-    }
-    if (item.quantity >= limit) {
-      ElMessage.error(`半成品 ${item.semiPalletCode} 件数必须少于每板件数 ${limit}；整板请使用 1 板`)
-      return false
-    }
-  }
-  return true
-}
-
-const submitSemiBind = async () => {
-  const items = semiBindForm.value.items.filter(item => item.semiPalletCode)
-  if (!items.length) {
-    ElMessage.warning('请填写半成品托盘码')
-    return
-  }
-  await resolveSemiItems(items)
-  if (!validateSemiBindItems(items)) {
-    return
-  }
-  const payloadItems = items.map(item => ({
-    semiPalletCode: item.semiPalletCode,
-    quantity: item.quantity,
-    unit: item.unit,
-    useAssay: item.useAssay
-  }))
-  await bindSemiItemsToTask({code: semiBindForm.value.code, items: payloadItems})
-  ElMessage.success('绑定成功')
-  closeSemiBindDialog()
-  await handleSearch()
-}
 
 const openConfirmInDialog = (row) => {
   confirmInProduct.value = productMap.value[row.productId] || null
@@ -1001,13 +800,11 @@ const submitBatchConfirmIn = async () => {
 const validateBatchCodeRows = (key) => {
   const validators = {
     semiOutConfirm: row => row.taskType === 'OUT' && row.bizScene === 'DIRECT_OUT' && isPending(row),
-    semiPrepareConfirm: row => row.taskType === 'OUT' && row.bizScene === 'PREPARE_CONSUMED' && isPending(row),
     finishOutConfirm: row => row.taskType === 'OUT' && row.bizScene === 'FINISH_OUT' && isPending(row),
     transferConfirm: row => row.taskType === 'TRANSFER' && isPending(row)
   }
   const messages = {
     semiOutConfirm: '请选择待处理的半成品普通出库任务',
-    semiPrepareConfirm: '请选择待处理的转入备料池任务',
     finishOutConfirm: '请选择待处理的成品出库任务',
     transferConfirm: '请选择待处理的调拨任务'
   }
@@ -1117,14 +914,14 @@ const submitCommonOperation = async () => {
   if (operation.mode === 'codes') {
     const codes = parseCodes(commonForm.value.codesText)
     if (!codes.length) {
-      ElMessage.warning('请填写托盘码')
+      ElMessage.warning('请填写二维码')
       return
     }
     payload = {codes, remark: commonForm.value.remark}
   } else {
     const items = transferForm.value.items.filter(item => item.code && item.targetWarehouseName)
     if (!items.length) {
-      ElMessage.warning('请填写调拨托盘和目标库位')
+      ElMessage.warning('请填写调拨二维码和目标库位')
       return
     }
     payload = {items}
@@ -1140,7 +937,7 @@ const confirmRowCodes = async (row, key) => {
 }
 
 const cancelRowTask = async (row) => {
-  await ElMessageBox.confirm(`确认取消托盘 ${row.code} 的待处理任务吗？`, '温馨提示', {type: 'warning'})
+  await ElMessageBox.confirm(`确认取消二维码 ${row.code} 的待处理任务吗？`, '温馨提示', {type: 'warning'})
   await cancelPalletTasks({codes: [row.code], remark: 'Web管理端取消任务'})
   ElMessage.success('取消成功')
   await handleSearch()
@@ -1166,10 +963,14 @@ onMounted(async () => {
 })
 
 watch(
-    () => [route.query.code, route.query.status],
-    ([code, status]) => {
-      searchForm.value.code = resolveRouteQueryValue(code)
+    () => [route.query.code, route.query.codes, route.query.status, route.query.bizScene, route.query.productName, route.query.productNameExact],
+    ([code, codes, status, bizScene, productName, productNameExact]) => {
+      searchForm.value.code = normalizeCodesText(codes) || resolveRouteQueryValue(code)
       searchForm.value.status = resolveRouteQueryValue(status)
+      searchForm.value.bizScene = resolveRouteQueryValue(bizScene)
+      searchForm.value.productNameExact = resolveRouteQueryValue(productNameExact)
+      searchForm.value.productName = resolveRouteQueryValue(productNameExact) || resolveRouteQueryValue(productName)
+      activeBizScene.value = resolveRouteQueryValue(bizScene) || props.bizSceneTabs[0]?.value || props.defaultQuery.bizScene || ''
       currentPage.value = 1
       handleSearch()
     }

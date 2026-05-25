@@ -55,7 +55,7 @@ const SECTION_DEFINITIONS = [
     key: 'scan',
     shortTitle: '扫码',
     title: '扫码作业',
-    description: '用于现场快速处理入库、出库、转入备料池和调拨。',
+    description: '用于现场快速处理入库、出库和调拨；半成品进入生产请走管理端生产订单领用。',
     summary: '扫码页以连续扫码为主，扫到的二维码会统一进入本次任务池，再集中确认或取消。',
     steps: [
       '先确认当前作业模式是否正确。',

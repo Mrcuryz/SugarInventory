@@ -1,0 +1,154 @@
+.filter-card,
+.order-card {
+  margin-bottom: 22rpx;
+  padding: 24rpx;
+  border: 1rpx solid #e4eaf3;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 12rpx 30rpx rgba(23, 32, 51, 0.06);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 144rpx;
+  gap: 14rpx;
+}
+
+.search-input {
+  height: 72rpx;
+  padding: 0 22rpx;
+  border-radius: 16rpx;
+  background: #f5f7fb;
+  font-size: 26rpx;
+  color: #172033;
+}
+
+.search-btn,
+.plain-btn,
+.toggle-btn {
+  height: 72rpx;
+  line-height: 72rpx;
+  margin: 0;
+  border-radius: 16rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.search-btn::after,
+.plain-btn::after,
+.toggle-btn::after {
+  border: 0;
+}
+
+.search-btn {
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.plain-btn,
+.toggle-btn {
+  color: #246bfe;
+  background: #eaf1ff;
+}
+
+.toggle-btn.active {
+  color: #ffffff;
+  background: #172033;
+}
+
+.status-tabs {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 18rpx;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.status-tab {
+  flex: 0 0 auto;
+  padding: 14rpx 20rpx;
+  border-radius: 999rpx;
+  background: #f1f4f8;
+  color: #5f6c82;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.status-tab.active {
+  color: #ffffff;
+  background: #246bfe;
+}
+
+.filter-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14rpx;
+  margin-top: 18rpx;
+}
+
+.summary-line {
+  margin: 8rpx 4rpx 18rpx;
+  color: #69758a;
+  font-size: 24rpx;
+}
+
+.order-card {
+  padding: 26rpx;
+}
+
+.order-head,
+.order-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.order-no {
+  font-size: 34rpx;
+  font-weight: 850;
+  color: #172033;
+}
+
+.order-meta,
+.order-footer {
+  margin-top: 8rpx;
+  color: #657087;
+  font-size: 24rpx;
+}
+
+.order-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.order-item {
+  min-width: 0;
+  padding: 16rpx;
+  border-radius: 16rpx;
+  background: #f7f9fc;
+}
+
+.order-item text {
+  display: block;
+  color: #7b8799;
+  font-size: 22rpx;
+}
+
+.order-item strong {
+  display: block;
+  margin-top: 8rpx;
+  color: #233047;
+  font-size: 25rpx;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.loading-more {
+  padding: 28rpx 0;
+  text-align: center;
+  color: #7b8799;
+  font-size: 24rpx;
+}

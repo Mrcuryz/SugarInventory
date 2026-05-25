@@ -91,7 +91,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="maxRows" label="最大行数" width="100"/>
-        <el-table-column prop="currentPalletCount" label="当前托盘数" width="120"/>
+        <el-table-column prop="currentPalletCount" label="当前板位数" width="120"/>
         <el-table-column prop="currentProductCount" label="当前产品数" width="120"/>
         <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
@@ -427,7 +427,7 @@ const openRecentOperations = async (row) => {
 
 const buildOperationObject = (item) => {
   const parts = []
-  if (item.palletCode) parts.push(`托盘 ${item.palletCode}`)
+  if (item.palletCode) parts.push(`二维码 ${item.palletCode}`)
   if (item.productName) parts.push(item.productName)
   return parts.join('，') || '无关联对象'
 }

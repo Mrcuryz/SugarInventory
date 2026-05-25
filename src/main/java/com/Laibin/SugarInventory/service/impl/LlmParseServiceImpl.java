@@ -159,9 +159,9 @@ public class LlmParseServiceImpl implements LlmParseService {
        
                1. 先按语义，把原始文本分成若干条“入库项”，每条对应一种产品的一次报数。对于每种产品，首先应区分是成品或半成品。
                   用户提示中会提供一行：`解析类型：{parseType}`，其中 parseType ∈ {SEMI_PRODUCT, FINISHED_PRODUCT, MIXED}。
-                  你必须根据 parseType 决定哪些内容可以作为顶层入库项 items，哪些只能作为成品的用料 sources。
+                  你必须根据 parseType 决定哪些内容可以作为顶层入库项 items，哪些只能作为成品的生产消耗 sources。
                   当 parseType = "SEMI_PRODUCT" 时，仅根据 productCatalog 中的半成品生成items，包含半成品信息，sources 为空；
-                  当 parseType = "FINISHED_PRODUCT" 时，每一条入库项必须为成品，关联的半成品写入 sources；如果能判断属于某个成品，则必须挂在该成品 item 的 `sources` 中
+                  当 parseType = "FINISHED_PRODUCT" 时，每一条入库项必须为成品，生产消耗/用料信息写入 sources；如果能判断属于某个成品，则必须挂在该成品 item 的 `sources` 中。sources 仅用于备注留档，不代表二维码绑定，也不会自动扣库存。
                   详细的规则见下面的解析要求。
                   - 班组、人员、计时等信息不单独生成入库项，可以合并到备注里。
                2. 对每一条入库项，抽取：
@@ -188,13 +188,14 @@ public class LlmParseServiceImpl implements LlmParseService {
                     - 如果这一条中没有单独的日期，使用整体入库日期 `entryDate`（由用户传入），否则必须使用所在行的日期，
                       比如“2025年11月28日\\n机破正中11月26号18板(6号库)”，则实际日期为2025-11-26。
                     - 输出到 `production_date` 字段，例如 `"2025-11-25"`。
-                  - 半成品关联：
+                  - 生产消耗留档：
                     - 当 `type` 为 `"FINISHED_PRODUCT_IN"` 且 parseType = "FINISHED_PRODUCT" 时，
                       - 当前 item 一定是成品；
-                      - 当前成品后面出现的半成品用量信息，必须解析为当前 item 的 `sources`。
-                    - 一种成品可能对应多个半成品，可以生成多个 sources 条目。
+                      - 当前成品后面出现的半成品/原料用量信息，必须解析为当前 item 的 `sources`。
+                    - 一种成品可能对应多个半成品/原料，可以生成多个 sources 条目。
+                    - sources 只作为生产消耗备注保存，不用于 WMS 半成品二维码绑定，不自动扣减库存。
                       - 在成品的原始文本块之后，遇到所有“带数量的半成品/用料描述”，都解析为 `sources`，直到遇到下一条成品描述或文本结束
-                    - 文本可能包含所使用的半成品信息，如"用50kg白砂糖57件",解析后填入 `sources`,包含：
+                    - 文本可能包含所使用的半成品或原料信息，如"用50kg白砂糖57件",解析后填入 `sources`,包含：
                       -   产品类型 `sourceType` 即SEMI_PRODUCT_IN;
                       -   品名原文 `productNameRaw`;
                       -   产品 ID `semiProductId`；（必须从 productCatalog 中选择）

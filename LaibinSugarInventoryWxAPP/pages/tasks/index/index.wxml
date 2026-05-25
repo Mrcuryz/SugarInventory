@@ -53,34 +53,36 @@
     <view class="modal-card" catchtouchmove="noop">
       <view class="modal-title">确认入库</view>
       <view class="modal-code">已选 {{selectedCodes.length}} 个二维码</view>
-      <view class="field">
-        <text class="label">入库库位</text>
-        <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />
-      </view>
-      <view class="field">
-        <text class="label">入库日期</text>
-        <picker mode="date" value="{{confirmForm.entryDate}}" data-field="entryDate" bindchange="onConfirmInput">
-          <view class="picker">{{confirmForm.entryDate}}</view>
-        </picker>
-      </view>
-      <view class="field two">
-        <view>
-          <text class="label">优先侧</text>
-          <picker mode="selector" range="{{['左', '右']}}" bindchange="onSideChange">
-            <view class="picker">{{confirmForm.side}}</view>
+      <scroll-view class="modal-scroll" scroll-y="true">
+        <view class="field">
+          <text class="label">入库库位</text>
+          <input class="input" placeholder="请输入库位名称" value="{{confirmForm.warehouseName}}" data-field="warehouseName" bindinput="onConfirmInput" />
+        </view>
+        <view class="field">
+          <text class="label">入库日期</text>
+          <picker mode="date" value="{{confirmForm.entryDate}}" data-field="entryDate" bindchange="onConfirmInput">
+            <view class="picker">{{confirmForm.entryDate}}</view>
           </picker>
         </view>
-        <view>
-          <text class="label">单位</text>
-          <picker mode="selector" range="{{['板', '件']}}" bindchange="onUnitChange">
-            <view class="picker">{{confirmForm.unit === '1' ? '件' : '板'}}</view>
-          </picker>
+        <view class="field two">
+          <view>
+            <text class="label">优先侧</text>
+            <picker mode="selector" range="{{['左', '右']}}" bindchange="onSideChange">
+              <view class="picker">{{confirmForm.side}}</view>
+            </picker>
+          </view>
+          <view>
+            <text class="label">单位</text>
+            <picker mode="selector" range="{{['板', '件']}}" bindchange="onUnitChange">
+              <view class="picker">{{confirmForm.unit === '1' ? '件' : '板'}}</view>
+            </picker>
+          </view>
         </view>
-      </view>
-      <view class="field">
-        <text class="label">数量</text>
-        <input class="input {{confirmForm.unit === '0' ? 'disabled-input' : ''}}" type="number" value="{{confirmForm.quantity}}" data-field="quantity" bindinput="onConfirmInput" disabled="{{confirmForm.unit === '0'}}" />
-      </view>
+        <view class="field">
+          <text class="label">数量</text>
+          <input class="input {{confirmForm.unit === '0' ? 'disabled-input' : ''}}" type="number" value="{{confirmForm.quantity}}" data-field="quantity" bindinput="onConfirmInput" disabled="{{confirmForm.unit === '0'}}" />
+        </view>
+      </scroll-view>
       <view class="modal-actions">
         <button class="plain" bindtap="closeConfirm">取消</button>
         <button class="primary" bindtap="submitConfirmIn">确认入库</button>

@@ -34,4 +34,13 @@ public class PalletTaskPageVO {
     private LocalDateTime confirmedAt;
     private String remark;
     private String operationBatchNo;
+    private Long productionOrderId;
+    private String productionOrderNo;
+    private String productionOrderType;
+    private String productionOrderStatus;
+    private Long productionOutputCodeId;
+    private Integer productionOutputQuantity;
+    private String productionOutputUnit;
+    private Integer productionOutputPieces;
+    private String productionLabelBatchNo;
 }

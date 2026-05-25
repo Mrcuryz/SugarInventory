@@ -9,7 +9,7 @@ export function bindPalletTask(params) {
 }
 
 export function bindSemiItemsToTask(params) {
-  return request('/api/pallet-codes/tasks/semi-bind', 'POST', params);
+  return Promise.reject(new Error('成品与半成品追溯请通过生产订单关联'));
 }
 
 export function confirmPalletInBatch(items) {
@@ -28,14 +28,15 @@ export function confirmSemiOutTasks(codes, remark = '小程序确认半成品出
   return request('/api/pallet-codes/semi/out/confirm', 'POST', { codes, remark });
 }
 
-export function createSemiPrepareTasks(codes, remark = '小程序创建备料任务') {
-  return request('/api/pallet-codes/semi/prepare/create', 'POST', { codes, remark });
+export function createSemiPrepareTasks(codes, remark = '小程序创建旧版生产领用任务') {
+  return Promise.reject(new Error('半成品进入生产请在管理端通过生产订单领用'));
 }
 
-export function confirmSemiPrepareTasks(codes, remark = '小程序确认备料') {
+export function confirmSemiPrepareTasks(codes, remark = '小程序确认旧版生产领用') {
   return request('/api/pallet-codes/semi/prepare/confirm', 'POST', { codes, remark });
 }
 
+// 旧版接口保留兼容，不作为新版成品消耗入口；新版通过生产订单关联追溯。
 export function confirmSemiConsume(codes, remark = '小程序确认消耗') {
   return request('/api/pallet-codes/semi/consume/confirm', 'POST', { codes, remark });
 }
@@ -55,4 +56,3 @@ export function createTransferTasks(items) {
 export function confirmTransferTasks(codes, remark = '小程序确认调拨') {
   return request('/api/pallet-codes/transfer/confirm', 'POST', { codes, remark });
 }
-

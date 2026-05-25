@@ -1,6 +1,7 @@
 .filter-card,
 .stock-card,
 .pallet-card,
+.prepare-card,
 .state-card {
   padding: 26rpx;
   border: 1rpx solid #e7edf5;
@@ -11,6 +12,28 @@
 
 .filter-card {
   margin-bottom: 28rpx;
+}
+
+.inventory-tabs {
+  display: flex;
+  margin-bottom: 20rpx;
+}
+
+.inventory-tab {
+  flex: 1;
+  height: 66rpx;
+  line-height: 66rpx;
+  text-align: center;
+  border-radius: 16rpx;
+  color: #526072;
+  font-size: 25rpx;
+  font-weight: 800;
+}
+
+.inventory-tab.active {
+  color: #246bfe;
+  background: #ffffff;
+  box-shadow: 0 8rpx 18rpx rgba(23, 32, 51, 0.08);
 }
 
 .filter-row {
@@ -109,6 +132,10 @@
   color: #246bfe;
 }
 
+.prepare-metrics .metric-value {
+  font-size: 25rpx;
+}
+
 .metric-label {
   margin-top: 8rpx;
   font-size: 22rpx;
@@ -119,6 +146,21 @@
   margin-top: 18rpx;
   font-size: 24rpx;
   color: #647089;
+}
+
+.prepare-subtitle {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #647089;
+}
+
+.prepare-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-top: 18rpx;
+  font-size: 23rpx;
+  color: #7a869a;
 }
 
 .card-actions {

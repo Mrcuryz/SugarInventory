@@ -11,6 +11,9 @@ public class PalletTaskQueryDTO {
     @Schema(description = "托盘码（精确匹配）")
     private String code;
 
+    @Schema(description = "托盘码列表，多个使用英文逗号分隔")
+    private String codes;
+
     @Schema(description = "任务类型：SEMI_IN / FINISH_IN / IN / OUT / TRANSFER，可选；IN 表示聚合 SEMI_IN 和 FINISH_IN")
     private String taskType;
 
@@ -22,6 +25,9 @@ public class PalletTaskQueryDTO {
 
     @Schema(description = "产品名称（模糊）")
     private String productName;
+
+    @Schema(description = "产品名称（精确）")
+    private String productNameExact;
 
     @Schema(description = "产品类型（黄/白冰糖等），可选")
     private String productType;

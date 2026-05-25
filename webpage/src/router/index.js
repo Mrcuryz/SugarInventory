@@ -21,7 +21,7 @@ const routes = [
       },
       { path: 'product', name: 'Product', meta: { title: '产品管理', keepAlive: true, permCode: 'product:view' }, component: () => import('@/components/Product.vue') },
       { path: 'productStock', name: 'ProductStock', meta: { title: '库存汇总', keepAlive: true, permCode: 'inventory:view' }, component: () => import('@/components/ProductStock.vue') },
-      { path: 'auto-inbound', name: 'AutoInbound', meta: { title: '智能报数入库', keepAlive: true, permCode: 'inventory:view' }, component: () => import('@/components/AutoInbound.vue') },
+      { path: 'auto-inbound', name: 'AutoInbound', meta: { title: '智能报数处理', keepAlive: true, permCode: 'inventory:view' }, component: () => import('@/components/AutoInbound.vue') },
       { path: 'warehouse', name: 'Warehouse', meta: { title: '库位管理', keepAlive: true, permCode: 'warehouse:view' }, component: () => import('@/components/WareHouse.vue') },
       { path: 'warehouse-map', name: 'WarehouseMap', meta: { title: '仓库平面图', keepAlive: true, permCode: 'warehouse_map:view' }, component: () => import('@/components/WarehouseMap.vue') },
       { path: 'pallet-code/list', name: 'PalletCodeList', meta: { title: '二维码管理', keepAlive: true, permCode: 'qrcode:view' }, component: () => import('@/components/PalletCodeList.vue') },
@@ -33,6 +33,9 @@ const routes = [
       { path: 'pallet-task/finish/in', name: 'FinishInTaskPage', meta: { title: '成品入库任务', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/FinishInTaskPage.vue') },
       { path: 'pallet-task/finish/out', name: 'FinishOutTaskPage', meta: { title: '成品出库任务', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/FinishOutTaskPage.vue') },
       { path: 'pallet-task/transfer', name: 'TransferTaskPage', meta: { title: '调拨任务', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/TransferTaskPage.vue') },
+      { path: 'production/orders', name: 'ProductionOrders', meta: { title: '生产订单', keepAlive: true, permCode: 'production:order:view' }, component: () => import('@/components/ProductionOrders.vue') },
+      { path: 'production/material-pick', name: 'ProductionMaterialPick', meta: { title: '半成品领用', keepAlive: true, permCode: 'production:material:view' }, component: () => import('@/components/ProductionMaterialPick.vue') },
+      { path: 'production/output-bind', name: 'ProductionOutputBind', meta: { title: '产出贴码', keepAlive: true, permCode: 'production:output:view' }, component: () => import('@/components/ProductionOutputBind.vue') },
       { path: 'screenMesh', name: 'ScreenMesh', meta: { title: '筛网管理', permCode: 'screen_mesh:view' }, component: () => import('@/components/ScreenMesh.vue') },
       { path: 'assay', name: 'Assay', meta: { title: '化验管理', keepAlive: true, permCode: 'assay:view' }, component: () => import('@/components/Assay.vue') },
       { path: 'assayGroup', name: 'AssayGroup', meta: { title: '批量化验组', keepAlive: true, permCode: 'assay_group:view' }, component: () => import('@/components/AssayGroup.vue') },
@@ -46,7 +49,7 @@ const routes = [
         props: {
           productStatusFilter: '半成品',
           pageTitle: '半成品单据',
-          pageDescription: '仅展示半成品相关的入库、出库、转入备料池和调拨台账。'
+          pageDescription: '仅展示半成品相关的入库、出库和调拨台账；进入生产请通过生产订单领用。'
         }
       },
       {

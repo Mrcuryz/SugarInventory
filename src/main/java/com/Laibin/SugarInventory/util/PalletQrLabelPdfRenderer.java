@@ -52,7 +52,10 @@ public final class PalletQrLabelPdfRenderer {
     private PalletQrLabelPdfRenderer() {
     }
 
-    public record LabelPayload(String code, String title) {
+    public record LabelPayload(String code, String title, String displayText) {
+        public LabelPayload(String code, String title) {
+            this(code, title, code);
+        }
     }
 
     public static byte[] renderA4Labels(List<String> codes) throws IOException {
@@ -155,7 +158,7 @@ public final class PalletQrLabelPdfRenderer {
         for (int i = 0; i < labels.size(); i++) {
             LabelPayload label = labels.get(i);
             int imageObjectId = document.nextObjectId();
-            BufferedImage labelImage = createLabelImage(label.code(), label.title());
+            BufferedImage labelImage = createLabelImage(label.code(), label.title(), label.displayText());
             document.putObject(imageObjectId, buildImageObject(labelImage));
             images.add(new ImageRef(imageObjectId, "/Im" + imageObjectId));
 
@@ -185,10 +188,10 @@ public final class PalletQrLabelPdfRenderer {
     }
 
     public static BufferedImage renderLabelImage(String code, String title) {
-        return createLabelImage(code, title);
+        return createLabelImage(code, title, code);
     }
 
-    private static BufferedImage createLabelImage(String code, String title) {
+    private static BufferedImage createLabelImage(String code, String title, String displayText) {
         BufferedImage canvas = new BufferedImage(LABEL_IMAGE_WIDTH, LABEL_IMAGE_HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = canvas.createGraphics();
         try {
@@ -212,7 +215,7 @@ public final class PalletQrLabelPdfRenderer {
             int qrY = 120;
             graphics.drawImage(qrImage, qrX, qrY, null);
 
-            drawCenteredText(graphics, code, codeFont, LABEL_IMAGE_HEIGHT - 58);
+            drawCenteredText(graphics, displayText == null || displayText.isBlank() ? code : displayText, codeFont, LABEL_IMAGE_HEIGHT - 58);
         } finally {
             graphics.dispose();
         }

@@ -12,7 +12,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@MapperScan("com.Laibin.SugarInventory.mapper")
+@MapperScan({"com.Laibin.SugarInventory.mapper", "com.Laibin.SugarInventory.production.mapper"})
 @EnableAspectJAutoProxy(proxyTargetClass = true)
 @EnableScheduling
 @SpringBootApplication

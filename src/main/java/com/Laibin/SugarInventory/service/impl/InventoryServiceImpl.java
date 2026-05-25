@@ -7,6 +7,7 @@ import com.Laibin.SugarInventory.domain.dto.OutStockBatchQueryDTO;
 import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
+import com.Laibin.SugarInventory.domain.vo.SemiPreparePoolBalanceVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
 import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
@@ -14,6 +15,7 @@ import com.Laibin.SugarInventory.mapper.InventoryMapper;
 import com.Laibin.SugarInventory.mapper.InventorySummaryMapper;
 import com.Laibin.SugarInventory.mapper.PalletFlowRecordMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
+import com.Laibin.SugarInventory.mapper.SemiPreparePoolBalanceMapper;
 import com.Laibin.SugarInventory.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -37,6 +40,8 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Autowired
     private PalletFlowRecordMapper palletFlowRecordMapper;
+    @Autowired
+    private SemiPreparePoolBalanceMapper semiPreparePoolBalanceMapper;
 
     @Override
     public PageResult<VInventorySummary> getInventorySummary(InventoryQueryDTO query) {
@@ -142,6 +147,20 @@ public class InventoryServiceImpl implements InventoryService {
         int offset = (effectivePage - 1) * effectiveSize;
         List<VInventorySummary> records = summaryMapper.selectProductTotalStockPage(productStatus, productName, offset, effectiveSize);
         Long total = summaryMapper.countProductTotalStock(productStatus, productName);
+        return new PageResult<>(total, records);
+    }
+
+    @Override
+    public PageResult<SemiPreparePoolBalanceVO> pagePreparePoolBalance(String productName, String productType,
+                                                                       Integer screenMeshId, LocalDate productionDateStart,
+                                                                       LocalDate productionDateEnd, Integer page, Integer size) {
+        int effectivePage = page == null || page < 1 ? 1 : page;
+        int effectiveSize = size == null || size < 1 ? 10 : size;
+        long offset = (long) (effectivePage - 1) * effectiveSize;
+        List<SemiPreparePoolBalanceVO> records = semiPreparePoolBalanceMapper.pageActiveBalances(
+                productName, productType, screenMeshId, productionDateStart, productionDateEnd, offset, effectiveSize);
+        Long total = semiPreparePoolBalanceMapper.countActiveBalances(
+                productName, productType, screenMeshId, productionDateStart, productionDateEnd);
         return new PageResult<>(total, records);
     }
 

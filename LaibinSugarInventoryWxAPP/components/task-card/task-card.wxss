@@ -70,11 +70,19 @@
 }
 
 .meta,
-.message {
+.message,
+.production-context {
   margin-top: 10rpx;
   font-size: 24rpx;
   line-height: 1.45;
   color: #647089;
+}
+
+.production-context {
+  padding: 14rpx 16rpx;
+  border-radius: 14rpx;
+  background: #f4f7fc;
+  color: #2d3b54;
 }
 
 .message {

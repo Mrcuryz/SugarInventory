@@ -12,6 +12,11 @@
         <text wx:if="{{task.targetWarehouseName}}"> · {{task.targetWarehouseName}}</text>
         <text wx:if="{{task.createdAtText}}"> · {{task.createdAtText}}</text>
       </view>
+      <view wx:if="{{task.productionOrderNo}}" class="production-context">
+        <view>生产订单：{{task.productionOrderNo}} {{task.productionOrderTypeText ? '· ' + task.productionOrderTypeText : ''}}</view>
+        <view wx:if="{{task.productionQuantityText}}">数量：{{task.productionQuantityText}}</view>
+        <view wx:if="{{task.productionLabelBatchNo}}">批次：{{task.productionLabelBatchNo}}</view>
+      </view>
       <view wx:if="{{task.message}}" class="message">{{task.message}}</view>
     </view>
   </view>

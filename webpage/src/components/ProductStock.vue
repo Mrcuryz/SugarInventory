@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <div class="page-title">库存总览中心</div>
-        <div class="page-subtitle">按产品、托盘、备料池三个维度查看库存，并联动托盘码、仓库平面图、化验和流转记录。</div>
+          <div class="page-subtitle">按产品、二维码、生产中半成品三个维度查看库存与生产占用，并联动二维码、仓库平面图、化验和流转记录。</div>
       </div>
     </div>
 
@@ -54,14 +54,14 @@
         <div class="table-toolbar-right">
           <el-button @click="handleExport">导出当前表格</el-button>
           <el-button @click="router.push('/warehouse-map')">仓库平面图</el-button>
-          <el-button @click="router.push('/pallet-code/list')">托盘码管理</el-button>
+          <el-button @click="router.push('/pallet-code/list')">二维码管理</el-button>
         </div>
       </div>
 
       <el-tabs v-model="activeTab" class="inventory-tabs" @tab-change="handleTabChange">
         <el-tab-pane label="产品汇总库存" name="product"/>
-        <el-tab-pane label="托盘库存" name="pallet"/>
-        <el-tab-pane label="备料池库存" name="prepare"/>
+        <el-tab-pane label="二维码库存" name="pallet"/>
+        <el-tab-pane label="生产中半成品" name="inProcess"/>
       </el-tabs>
 
       <el-table
@@ -81,13 +81,13 @@
         <el-table-column prop="totalQuantity" label="总板数" width="110"/>
         <el-table-column prop="totalPieces" label="件数" width="110"/>
         <el-table-column prop="totalWeight" label="总重量" width="120">
-          <template #default="{ row }">{{ formatNumber(row.totalWeight) }}</template>
+          <template #default="{ row }">{{ formatWeight(row.totalWeight) }}</template>
         </el-table-column>
-        <el-table-column prop="palletCount" label="涉及托盘数" width="120"/>
+        <el-table-column prop="palletCount" label="涉及二维码数" width="120"/>
         <el-table-column prop="warehouseCount" label="涉及库位数" width="120"/>
         <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="switchToPallet(row)">看托盘</el-button>
+            <el-button link type="primary" @click="switchToPallet(row)">看二维码</el-button>
             <el-button link type="primary" @click="router.push('/warehouse-map')">平面图</el-button>
             <el-button link type="primary" @click="router.push({path: '/assay', query: {productName: row.productName}})">化验</el-button>
           </template>
@@ -101,7 +101,7 @@
           stripe
           v-loading="loading"
       >
-        <el-table-column prop="code" label="托盘码" width="140" fixed="left" show-overflow-tooltip/>
+        <el-table-column prop="code" label="二维码" width="140" fixed="left" show-overflow-tooltip/>
         <el-table-column prop="productName" label="产品名称" min-width="150" show-overflow-tooltip/>
         <el-table-column prop="productStatus" label="产品状态" width="100"/>
         <el-table-column prop="productionDate" label="生产日期" width="120"/>
@@ -121,7 +121,7 @@
         </el-table-column>
         <el-table-column label="操作" width="310" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openPallet(row)">托盘</el-button>
+            <el-button link type="primary" @click="openPallet(row)">二维码</el-button>
             <el-button link type="primary" @click="openWarehouseMap(row)">平面图</el-button>
             <el-button link type="primary" @click="openAssay(row)">化验</el-button>
             <el-button link type="primary" @click="openFlowDrawer(row)">流转</el-button>
@@ -131,33 +131,37 @@
 
       <el-table
           v-else
-          :data="prepareRows"
+          :data="inProcessRows"
           height="560"
           stripe
           v-loading="loading"
       >
-        <el-table-column prop="productName" label="半成品产品名称" min-width="170" fixed="left" show-overflow-tooltip/>
-        <el-table-column prop="code" label="托盘码" width="140" show-overflow-tooltip/>
+        <el-table-column prop="productName" label="半成品名称" min-width="170" fixed="left" show-overflow-tooltip/>
+        <el-table-column prop="orderNo" label="生产订单" width="150" show-overflow-tooltip/>
         <el-table-column prop="productionDate" label="生产日期" width="120"/>
-        <el-table-column prop="taskStatus" label="当前状态" width="110">
+        <el-table-column label="领用数量" width="130">
+          <template #default="{ row }">{{ formatMaterialQuantity(row) }}</template>
+        </el-table-column>
+        <el-table-column label="来源库位" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ formatMaterialLocation(row) }}</template>
+        </el-table-column>
+        <el-table-column label="领用时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.pickedAt) }}</template>
+        </el-table-column>
+        <el-table-column prop="pickedByName" label="领用人" width="100"/>
+        <el-table-column label="订单状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="getDictType(TASK_STATUS_MAP, row.taskStatus)">
-              {{ getDictLabel(TASK_STATUS_MAP, row.taskStatus) }}
-            </el-tag>
+            <el-tag>{{ orderStatusLabel(row.orderStatus) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="所属备料池状态" width="140">
+        <el-table-column prop="status" label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="getPreparePoolTag(row)">{{ getPreparePoolStatus(row) }}</el-tag>
+            <el-tag type="warning">{{ row.status === 'PICKED' ? '生产中' : row.status || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="confirmedAt" label="最近更新时间" width="170">
-          <template #default="{ row }">{{ formatDateTime(row.confirmedAt || row.createdAt) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openPallet(row)">托盘</el-button>
-            <el-button link type="primary" @click="router.push('/pallet-task/semi/out')">备料任务</el-button>
+            <el-button link type="primary" @click="openProductionOrder(row)">生产订单</el-button>
             <el-button link type="primary" @click="openAssay(row)">化验</el-button>
           </template>
         </el-table-column>
@@ -176,7 +180,7 @@
       </div>
     </el-card>
 
-    <el-dialog title="托盘化验数据" v-model="assayDialogVisible" width="560px">
+    <el-dialog title="化验数据" v-model="assayDialogVisible" width="560px">
       <el-descriptions v-if="assayInfo" :column="1" border>
         <el-descriptions-item label="产品名称">{{ assayInfo.productName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="采样日期">{{ assayInfo.sampleDate || '-' }}</el-descriptions-item>
@@ -190,10 +194,10 @@
         <el-descriptions-item label="化验员">{{ assayInfo.testerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="是否合格">{{ assayInfo.isQualified || '-' }}</el-descriptions-item>
       </el-descriptions>
-      <el-empty v-else description="暂无化验数据"/>
+      <el-empty v-else description="暂无化验记录"/>
     </el-dialog>
 
-    <el-drawer v-model="flowDrawerVisible" title="托盘流转记录" size="70%" :before-close="closeFlowDrawer">
+    <el-drawer v-model="flowDrawerVisible" title="二维码流转记录" size="70%" :before-close="closeFlowDrawer">
       <div class="flow-drawer">
         <div class="cycle-panel">
           <div class="panel-title">{{ currentCode }} 的循环轮次</div>
@@ -259,19 +263,17 @@ import {
   getPalletInventory,
   listPalletFlowsByCycle,
   pagePalletCodes,
-  pagePalletFlowCycles,
-  pagePalletTasks
+  pagePalletFlowCycles
 } from '@/api/palletCode'
 import {getProductStock} from '@/api/warehouseinfo'
+import {pageProductionInProcessMaterials} from '@/api/production'
 import {getProductList} from '@/api/product'
 import {getMesh} from '@/api/mesh'
+import {getAssayByProductDate} from '@/api/assay'
 import {formatDateTime} from '@/utils/dateTime'
 import {
   PRODUCT_STATUS_OPTIONS,
-  PRODUCT_TYPE_OPTIONS,
-  TASK_STATUS_MAP,
-  getDictLabel,
-  getDictType
+  PRODUCT_TYPE_OPTIONS
 } from '@/utils/palletCodeDict'
 
 const router = useRouter()
@@ -283,8 +285,8 @@ const productRows = ref([])
 const productTotal = ref(0)
 const palletRows = ref([])
 const palletTotal = ref(0)
-const prepareRows = ref([])
-const prepareTotal = ref(0)
+const inProcessRows = ref([])
+const inProcessTotal = ref(0)
 const productList = ref([])
 const meshList = ref([])
 const inventoryCache = ref({})
@@ -309,7 +311,7 @@ const meshMap = computed(() => new Map(meshList.value.map(item => [item.id, item
 const activeTotal = computed(() => {
   if (activeTab.value === 'product') return productTotal.value
   if (activeTab.value === 'pallet') return palletTotal.value
-  return prepareTotal.value
+  return inProcessTotal.value
 })
 const pagedProductRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -318,16 +320,16 @@ const pagedProductRows = computed(() => {
 const activeTabTitle = computed(() => {
   const map = {
     product: '产品汇总库存',
-    pallet: '托盘库存',
-    prepare: '备料池库存'
+    pallet: '二维码库存',
+    inProcess: '生产中半成品'
   }
   return map[activeTab.value]
 })
 const activeTabDescription = computed(() => {
   const map = {
-    product: '按产品聚合当前库存，展示总板数、总件数、重量以及涉及托盘和库位。',
-    pallet: '按二维码托盘查看当前在库托盘，并可联动托盘详情、库位、化验和流转。',
-    prepare: '查看转入备料池相关半成品托盘和任务状态。'
+    product: '按产品聚合当前库存，展示总板数、总件数、重量以及涉及二维码和库位。',
+    pallet: '按二维码查看当前在库占位，并可联动二维码详情、库位、化验和流转。',
+    inProcess: '展示已被生产订单领用、仍处于生产过程中的半成品材料记录。'
   }
   return map[activeTab.value]
 })
@@ -354,7 +356,7 @@ const handleSearch = async () => {
   } else if (activeTab.value === 'pallet') {
     await loadPalletInventory()
   } else {
-    await loadPrepareInventory()
+    await loadInProcessMaterials()
   }
 }
 
@@ -454,27 +456,25 @@ const loadPalletInventory = async () => {
   }
 }
 
-const loadPrepareInventory = async () => {
+const loadInProcessMaterials = async () => {
   if (searchForm.value.productStatus && searchForm.value.productStatus !== '半成品') {
-    prepareRows.value = []
-    prepareTotal.value = 0
+    inProcessRows.value = []
+    inProcessTotal.value = 0
     return
   }
   loading.value = true
   try {
-    const res = await pagePalletTasks({
-      pageNum: currentPage.value,
-      pageSize: pageSize.value,
-      taskType: 'OUT',
-      bizScene: 'PREPARE_CONSUMED',
-      productStatus: '半成品',
+    const res = await pageProductionInProcessMaterials({
+      page: currentPage.value,
+      size: pageSize.value,
       productName: searchForm.value.productName || undefined,
       productType: searchForm.value.productType || undefined,
+      screenMeshId: searchForm.value.screenMeshId || undefined,
       productionDateStart: searchForm.value.dateRange?.[0],
       productionDateEnd: searchForm.value.dateRange?.[1]
     })
-    prepareRows.value = (res.data?.records || []).filter(matchScreenMeshFilter)
-    prepareTotal.value = searchForm.value.screenMeshId ? prepareRows.value.length : (res.data?.total || 0)
+    inProcessRows.value = res.data?.records || []
+    inProcessTotal.value = res.data?.total || 0
   } finally {
     loading.value = false
   }
@@ -524,12 +524,38 @@ const formatNumber = (value) => {
   const number = Number(value || 0)
   return Number.isInteger(number) ? number : number.toFixed(2)
 }
+const formatWeight = (value) => `${formatNumber(value)} kg`
 const formatInventoryLocation = (info) => {
   if (!info) return '-'
   const position = [info.side && `${info.side}侧`, info.rowNumber != null && `${info.rowNumber}排`, info.layer != null && `${info.layer}层`]
       .filter(Boolean)
       .join(' ')
   return `${info.warehouseName || '-'}${position ? ` ${position}` : ''}`
+}
+const formatMaterialLocation = (row) => {
+  const position = [row.side && `${row.side}侧`, row.rowNumber != null && `${row.rowNumber}排`, row.layer != null && `${row.layer}层`]
+      .filter(Boolean)
+      .join(' ')
+  return `${row.warehouseName || '-'}${position ? ` ${position}` : ''}`
+}
+const formatMaterialQuantity = (row) => {
+  if (row.unit === '1') {
+    return `${row.quantity || row.pieces || 0}件`
+  }
+  return `${row.quantity || 0}板`
+}
+const orderStatusLabel = (status) => {
+  const map = {
+    ISSUED: '已下发',
+    MATERIALING: '领料中',
+    MATERIALED: '已领料',
+    OUTPUT_BINDING: '产出中',
+    WAIT_INBOUND: '待入库',
+    PART_INBOUND: '部分入库',
+    COMPLETED: '已完成',
+    CANCELED: '已取消'
+  }
+  return map[status] || status || '-'
 }
 
 const handleExport = () => {
@@ -553,14 +579,14 @@ const buildExportRows = () => {
       产品状态: row.productStatus || '',
       总板数: row.totalQuantity || 0,
       件数: row.totalPieces || 0,
-      总重量: formatNumber(row.totalWeight),
-      涉及托盘数: row.palletCount || 0,
+      总重量: formatWeight(row.totalWeight),
+      涉及二维码数: row.palletCount || 0,
       涉及库位数: row.warehouseCount || 0
     }))
   }
   if (activeTab.value === 'pallet') {
     return palletRows.value.map(row => ({
-      托盘码: row.code || '',
+      二维码: row.code || '',
       产品名称: row.productName || '',
       产品状态: row.productStatus || '',
       生产日期: row.productionDate || '',
@@ -570,13 +596,16 @@ const buildExportRows = () => {
       最近更新时间: formatDateTime(row.updatedAt || row.createdAt)
     }))
   }
-  return prepareRows.value.map(row => ({
+  return inProcessRows.value.map(row => ({
+    生产订单: row.orderNo || '',
     半成品产品名称: row.productName || '',
-    托盘码: row.code || '',
     生产日期: row.productionDate || '',
-    当前状态: getDictLabel(TASK_STATUS_MAP, row.taskStatus),
-    所属备料池状态: getPreparePoolStatus(row),
-    最近更新时间: formatDateTime(row.confirmedAt || row.createdAt)
+    领用数量: formatMaterialQuantity(row),
+    来源库位: formatMaterialLocation(row),
+    领用时间: formatDateTime(row.pickedAt),
+    领用人: row.pickedByName || '',
+    订单状态: orderStatusLabel(row.orderStatus),
+    状态: row.status === 'PICKED' ? '生产中' : row.status || ''
   }))
 }
 
@@ -598,9 +627,28 @@ const openWarehouseMap = (row) => {
   router.push({path: '/warehouse-map', query: warehouseId ? {warehouseId} : {}})
 }
 
+const openProductionOrder = (row) => {
+  router.push({
+    path: '/production/orders',
+    query: {
+      orderNo: row.orderNo
+    }
+  })
+}
+
 const openAssay = async (row) => {
   if (!row.code) {
-    router.push({path: '/assay', query: {productName: row.productName}})
+    if (!row.productId || !row.productionDate) {
+      assayInfo.value = null
+      assayDialogVisible.value = true
+      return
+    }
+    const res = await getAssayByProductDate({
+      productId: row.productId,
+      productionDate: row.productionDate
+    })
+    assayInfo.value = res.data || null
+    assayDialogVisible.value = true
     return
   }
   const res = await getPalletAssay(row.code)
@@ -608,18 +656,13 @@ const openAssay = async (row) => {
   assayDialogVisible.value = true
 }
 
-const getPreparePoolStatus = (row) => {
-  if (row.taskStatus === 'CONFIRMED') return '已入备料池'
-  if (row.taskStatus === 'PENDING') return '待转入'
-  if (row.taskStatus === 'CANCELED') return '已取消'
-  return '-'
-}
-
-const getPreparePoolTag = (row) => {
-  if (row.taskStatus === 'CONFIRMED') return 'success'
-  if (row.taskStatus === 'PENDING') return 'warning'
-  if (row.taskStatus === 'CANCELED') return 'info'
-  return 'info'
+const formatBoardPiece = (pieces, piecesPerPallet) => {
+  const total = Number(pieces || 0)
+  const perPallet = Number(piecesPerPallet || 0)
+  if (perPallet <= 0) return `${total}件`
+  const boards = Math.floor(total / perPallet)
+  const rest = total % perPallet
+  return `${boards}板${rest}件`
 }
 
 const openFlowDrawer = async (row) => {

@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.AutoInboundConfirmRequest;
 import com.Laibin.SugarInventory.domain.dto.AutoInboundParseRequest;
+import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchOptionVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse;
 import com.Laibin.SugarInventory.service.AutoInboundConfirmService;
 import com.Laibin.SugarInventory.service.AutoInboundParseService;
@@ -13,6 +14,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @Tag(name = "AI解析自动入库")
@@ -32,6 +35,16 @@ public class AutoInboundController {
             return Result.success(resp);
         } catch (BusinessException e) {
             return Result.error(500, "自动入库解析失败：" + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "查询当前缓存的自动入库批次")
+    @GetMapping("/history")
+    public Result<List<AutoInboundBatchOptionVO>> listHistory(@AuthenticationPrincipal LoginUser loginUser) {
+        try {
+            return Result.success(autoInboundParseService.listBatches(loginUser.getUser()));
+        } catch (BusinessException e) {
+            return Result.error(500, "查询自动入库历史失败：" + e.getMessage());
         }
     }
 

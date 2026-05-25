@@ -184,6 +184,12 @@ Page({
     if (options.productName) {
       this.setData({ productName: decodeURIComponent(options.productName) });
     }
+    if (options.startDate || options.endDate) {
+      this.setData({
+        startDate: options.startDate ? decodeURIComponent(options.startDate) : '',
+        endDate: options.endDate ? decodeURIComponent(options.endDate) : ''
+      });
+    }
     this.initPage();
   },
 

@@ -25,7 +25,7 @@ public class SemiRecordDTO {
     @Schema(description = "库位", example = "1")
     private Integer warehouseId;
 
-    @Schema(description = "是否来自备料池", example = "false")
+    @Schema(description = "是否来自旧版生产领用流程", example = "false")
     private Boolean fromPreparePool = false;
 
     @Schema(description = "半成品来源循环号", example = "1")

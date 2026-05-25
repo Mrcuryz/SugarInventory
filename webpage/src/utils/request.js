@@ -72,6 +72,10 @@ instance.interceptors.response.use(
             tokenStore.removeToken()
             ElMessage.error(err.response.data || '登录状态已失效，请重新登录')
             redirectToLogin()
+        } else if (err?.response?.status) {
+            const data = err.response.data
+            const message = data?.msg || data?.message || data || `请求失败：${err.response.status}`
+            ElMessage.error(message)
         }
         return Promise.reject(err);//异步的状态转化成失败的状态
     }

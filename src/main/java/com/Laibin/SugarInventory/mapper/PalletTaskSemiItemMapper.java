@@ -18,9 +18,9 @@ public interface PalletTaskSemiItemMapper extends BaseMapper<PalletTaskSemiItem>
 
     @Insert({
             "<script>",
-            "INSERT INTO pallet_task_semi_item (pallet_task_id, semi_pallet_code_id, semi_product_id, production_date, quantity, unit, use_assay) VALUES ",
+            "INSERT INTO pallet_task_semi_item (pallet_task_id, semi_pallet_code_id, prepare_balance_id, semi_product_id, production_date, quantity, unit, board_count, piece_count, total_pieces, use_assay) VALUES ",
             "<foreach collection='items' item='item' separator=','>",
-            "(#{item.palletTaskId}, #{item.semiPalletCodeId}, #{item.semiProductId}, #{item.productionDate}, #{item.quantity}, #{item.unit}, #{item.useAssay})",
+            "(#{item.palletTaskId}, #{item.semiPalletCodeId}, #{item.prepareBalanceId}, #{item.semiProductId}, #{item.productionDate}, #{item.quantity}, #{item.unit}, #{item.boardCount}, #{item.pieceCount}, #{item.totalPieces}, #{item.useAssay})",
             "</foreach>",
             "</script>"
     })

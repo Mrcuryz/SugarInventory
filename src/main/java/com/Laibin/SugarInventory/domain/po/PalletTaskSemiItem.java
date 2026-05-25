@@ -24,6 +24,9 @@ public class PalletTaskSemiItem implements Serializable {
     @TableField("semi_pallet_code_id")
     private Integer semiPalletCodeId;
 
+    @TableField("prepare_balance_id")
+    private Long prepareBalanceId;
+
     @TableField("semi_product_id")
     private Integer semiProductId;
 
@@ -35,6 +38,15 @@ public class PalletTaskSemiItem implements Serializable {
 
     @TableField("unit")
     private String unit;
+
+    @TableField("board_count")
+    private Integer boardCount;
+
+    @TableField("piece_count")
+    private Integer pieceCount;
+
+    @TableField("total_pieces")
+    private Integer totalPieces;
 
     @TableField("use_assay")
     private Boolean useAssay;

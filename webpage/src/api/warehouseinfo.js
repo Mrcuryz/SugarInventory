@@ -39,6 +39,10 @@ export const getProductStock = (params) => {
     return request.get('/inventory/stock', {params: params})
 }
 
+export const pagePreparePoolBalance = (params) => {
+    return request.get('/inventory/prepare-pool-balance', {params: params})
+}
+
 //根据id查询仓库最大行数
 export const getMaxRowNum = (id) => {
     return request.get('/warehouse/' + id)

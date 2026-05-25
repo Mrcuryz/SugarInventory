@@ -52,6 +52,7 @@ Page({
       unit: '0',
       remark: ''
     },
+    hasFinishInConfirm: false,
     bottomActions: []
   },
 
@@ -207,7 +208,7 @@ Page({
     const tasks = this.getSelectedTasks();
     if (!tasks.length) return;
     if (tasks.some(item => item.taskType === 'SEMI_IN' || item.taskType === 'FINISH_IN' || item.taskType === 'IN')) {
-      this.setData({ confirmVisible: true });
+      await this.openConfirmInModal(tasks);
       return;
     }
     const ok = await confirm(`确认处理 ${tasks.length} 个任务？`, '确认任务');
@@ -227,6 +228,13 @@ Page({
     } catch (error) {
       showError(error, '确认失败');
     }
+  },
+
+  async openConfirmInModal(tasks) {
+    this.setData({
+      confirmVisible: true,
+      hasFinishInConfirm: false,
+    });
   },
 
   async submitConfirmIn() {
@@ -267,7 +275,7 @@ Page({
         entryDate
       });
       showToast('入库确认完成', 'success');
-      this.setData({ selectedCodes: [], confirmVisible: false });
+      this.setData({ selectedCodes: [], confirmVisible: false, hasFinishInConfirm: false });
       this.loadTasks();
     } catch (error) {
       showError(error, '入库确认失败');
@@ -295,7 +303,7 @@ Page({
   },
 
   closeConfirm() {
-    this.setData({ confirmVisible: false });
+    this.setData({ confirmVisible: false, hasFinishInConfirm: false });
   },
 
   noop() {

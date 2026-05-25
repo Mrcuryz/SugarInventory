@@ -10,7 +10,7 @@ import java.util.List;
 
 @Data
 /**
- * 为成品入库任务绑定半成品明细（全量覆盖）。
+ * 为成品入库任务登记备料池半成品用量（全量覆盖）。
  */
 public class BindTaskSemiItemsDTO {
     @NotBlank
@@ -19,6 +19,6 @@ public class BindTaskSemiItemsDTO {
 
     @NotEmpty
     @Valid
-    @Schema(description = "半成品明细列表（全量覆盖）")
+    @Schema(description = "备料池半成品用量明细列表（全量覆盖）")
     private List<TaskSemiItemDTO> items;
 }

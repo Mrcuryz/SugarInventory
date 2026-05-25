@@ -25,6 +25,22 @@ export const permissionGroupCatalog = [
     permissions: ['task:view', 'task:create', 'task:confirm', 'task:cancel']
   },
   {
+    key: 'production',
+    title: '生产管理',
+    permissions: [
+      'production:order:view',
+      'production:order:create',
+      'production:order:update',
+      'production:order:cancel',
+      'production:material:view',
+      'production:material:pick',
+      'production:output:view',
+      'production:output:create',
+      'production:output:bindQr',
+      'production:output:print'
+    ]
+  },
+  {
     key: 'assay',
     title: '化验管理',
     permissions: ['assay:view', 'assay:create', 'assay:update', 'assay:delete', 'assay:query', 'assay:copy', 'quality:test']
@@ -80,6 +96,16 @@ const permissionMeta = {
   'task:create': '任务创建',
   'task:confirm': '任务确认',
   'task:cancel': '任务取消',
+  'production:order:view': '生产订单查看',
+  'production:order:create': '生产订单创建',
+  'production:order:update': '生产订单更新',
+  'production:order:cancel': '生产订单取消',
+  'production:material:view': '半成品领用查看',
+  'production:material:pick': '半成品领用',
+  'production:output:view': '产出贴码查看',
+  'production:output:create': '添加产出',
+  'production:output:bindQr': '产出绑定二维码',
+  'production:output:print': '产出二维码打印',
   'screen_mesh:view': '筛网查看',
   'assay:view': '化验查看',
   'assay:create': '化验新增',

@@ -121,10 +121,20 @@
           <div class="drawer-title">{{ activeRole?.roleName || '-' }}</div>
           <div class="drawer-subtitle">{{ activeRole?.roleCode || '-' }}</div>
         </div>
+        <div class="permission-toolbar">
+          <el-button size="small" @click="toggleAllPermissions">
+            {{ allPermissionsSelected ? '清空' : '全选' }}
+          </el-button>
+        </div>
         <el-scrollbar height="calc(100vh - 220px)">
           <div class="permission-group-list">
             <div v-for="group in permissionGroups" :key="group.key" class="permission-group-card">
-              <div class="permission-group-title">{{ group.title }}</div>
+              <div class="permission-group-header">
+                <div class="permission-group-title">{{ group.title }}</div>
+                <el-button size="small" text type="primary" @click="toggleGroupPermissions(group)">
+                  {{ isGroupFullySelected(group) ? '清空' : '全选' }}
+                </el-button>
+              </div>
               <el-checkbox-group v-model="selectedPermissionIds">
                 <div class="permission-items">
                   <el-checkbox
@@ -191,7 +201,7 @@ const searchForm = reactive({
 })
 
 const createEmptyRoleForm = () => ({
-  id: '',
+  id: null,
   roleName: '',
   roleCode: '',
   status: 'ENABLED',
@@ -206,6 +216,13 @@ const rules = {
 }
 
 const permissionGroups = computed(() => buildPermissionGroups(permissionList.value))
+const allPermissionIds = computed(() => permissionGroups.value.flatMap(group => group.items.map(item => item.id)))
+const allPermissionsSelected = computed(() => {
+  const allIds = allPermissionIds.value
+  if (!allIds.length) return false
+  const selectedIds = new Set(selectedPermissionIds.value)
+  return allIds.every(id => selectedIds.has(id))
+})
 
 const loadPermissions = async () => {
   const res = await getPermissionList()
@@ -255,6 +272,10 @@ const closeDialog = () => {
   dialogVisible.value = false
 }
 
+const refreshAuthSilently = async () => {
+  await authStore.ensureLoaded(true).catch(() => {})
+}
+
 const openCreateDialog = () => {
   dialogTitle.value = '新增角色'
   submitForm.value = createEmptyRoleForm()
@@ -281,9 +302,11 @@ const submitRole = async () => {
     await updateRole(submitForm.value.id, submitForm.value)
     ElMessage.success('角色已更新')
   } else {
-    await createRole(submitForm.value)
+    const { id, ...payload } = submitForm.value
+    await createRole(payload)
     ElMessage.success('角色已新增')
   }
+  await refreshAuthSilently()
   dialogVisible.value = false
   submitForm.value = createEmptyRoleForm()
   await loadRolePage()
@@ -303,14 +326,48 @@ const submitPermissions = async () => {
     permissionIds: selectedPermissionIds.value
   })
   ElMessage.success('权限已保存')
+  await refreshAuthSilently()
   permissionDrawerVisible.value = false
   await loadRolePage()
 }
 
+const toggleAllPermissions = () => {
+  if (allPermissionsSelected.value) {
+    selectedPermissionIds.value = []
+    return
+  }
+  selectedPermissionIds.value = [...new Set(allPermissionIds.value)]
+}
+
+const isGroupFullySelected = group => {
+  if (!group?.items?.length) return false
+  const selectedIds = new Set(selectedPermissionIds.value)
+  return group.items.every(item => selectedIds.has(item.id))
+}
+
+const toggleGroupPermissions = group => {
+  if (!group?.items?.length) return
+  const groupIds = group.items.map(item => item.id)
+  const selectedIds = new Set(selectedPermissionIds.value)
+  if (isGroupFullySelected(group)) {
+    groupIds.forEach(id => selectedIds.delete(id))
+  } else {
+    groupIds.forEach(id => selectedIds.add(id))
+  }
+  selectedPermissionIds.value = [...selectedIds]
+}
+
 const toggleRoleStatus = async row => {
   const nextStatus = row.status === 'ENABLED' ? 'DISABLED' : 'ENABLED'
+  const actionText = nextStatus === 'ENABLED' ? '启用' : '停用'
+  await ElMessageBox.confirm(`确认${actionText}角色“${row.roleName}”吗？`, `${actionText}角色`, {
+    type: 'warning',
+    confirmButtonText: '确认',
+    cancelButtonText: '取消'
+  })
   await updateRoleStatus(row.id, { status: nextStatus })
   ElMessage.success(nextStatus === 'ENABLED' ? '角色已启用' : '角色已停用')
+  await refreshAuthSilently()
   await loadRolePage()
 }
 
@@ -322,6 +379,7 @@ const handleDelete = async row => {
   })
   await deleteRole(row.id)
   ElMessage.success('删除成功')
+  await refreshAuthSilently()
   await loadRolePage()
 }
 
@@ -386,6 +444,12 @@ onMounted(async () => {
   color: var(--app-text-secondary);
 }
 
+.permission-toolbar {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: flex-start;
+}
+
 .permission-group-list {
   display: flex;
   flex-direction: column;
@@ -399,8 +463,15 @@ onMounted(async () => {
   background: #fff;
 }
 
-.permission-group-title {
+.permission-group-header {
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.permission-group-title {
   font-weight: 600;
   color: var(--app-text);
 }

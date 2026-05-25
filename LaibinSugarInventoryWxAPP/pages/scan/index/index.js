@@ -6,15 +6,13 @@ import {
   confirmFinishOutTasks,
   confirmPalletInBatch,
   confirmSemiOutTasks,
-  confirmSemiPrepareTasks,
   confirmTransferTasks,
   createFinishOutTasks,
   createSemiOutTasks,
-  createSemiPrepareTasks,
   createTransferTasks,
   getTaskList
 } from '../../../api/task';
-import { enrichPallet } from '../../../utils/dict';
+import { enrichPallet, enrichTask } from '../../../utils/dict';
 import { requireLogin } from '../../../utils/auth';
 import { normalizeQuantityByUnit, validateQuantity } from '../../../utils/quantity';
 import { scanCode } from '../../../utils/scan';
@@ -25,9 +23,9 @@ import { confirm, showError, showToast } from '../../../utils/toast';
 const MODES = [
   { key: 'in', label: '入库', desc: '扫码创建待入库任务。固定产品二维码请先在后台打印并启用。' },
   { key: 'out', label: '出库', desc: '扫码在库二维码，创建出库任务。' },
-  { key: 'prepare', label: '转入备料池', desc: '扫码半成品二维码，创建转入备料池任务。' },
   { key: 'transfer', label: '调拨', desc: '扫码在库二维码，指定目标库位创建调拨任务。' }
 ];
+const PENDING_SCAN_ACTION_KEY = 'pendingScanCodeAction';
 
 function today() {
   const date = new Date();
@@ -105,17 +103,19 @@ Page({
       unit: '0',
       remark: ''
     },
+    hasFinishInConfirm: false,
     bottomActions: [],
     activePoolItemId: ''
   },
 
   async onLoad() {
     this.resetDateDefaults();
-    await this.loadProductCatalog();
+    this.productCatalogReady = this.loadProductCatalog();
+    await this.productCatalogReady;
     this.refreshActions();
   },
 
-  onShow() {
+  async onShow() {
     if (!requireLogin()) return;
     this.resetDateDefaults();
     const preferred = wx.getStorageSync('preferredScanMode');
@@ -123,6 +123,10 @@ Page({
       wx.removeStorageSync('preferredScanMode');
       this.setMode(preferred);
     }
+    if (this.productCatalogReady) {
+      await this.productCatalogReady;
+    }
+    this.consumePendingScanCodeAction();
   },
 
   resetDateDefaults() {
@@ -198,10 +202,10 @@ Page({
   async validatePalletForMode(pallet) {
     const mode = this.data.currentMode;
     const code = pallet.code;
-    let hasPending = false;
+    let pendingTask = null;
     try {
       const tasksRes = await getTaskList({ code, status: 'PENDING', pageNum: 1, pageSize: 1 });
-      hasPending = Boolean(tasksRes && tasksRes.records && tasksRes.records.length);
+      pendingTask = tasksRes && tasksRes.records && tasksRes.records[0] ? enrichTask(tasksRes.records[0]) : null;
     } catch (error) {
       return { valid: false, message: getErrorMessage(error, '二维码状态校验失败，请稍后重试') };
     }
@@ -211,16 +215,19 @@ Page({
       if (fixedModeEnabled && pallet.status === 'FREE') {
         return { valid: false, message: '当前码属于固定产品模式，无需绑定产品，请先在后台打印并启用' };
       }
-      if (fixedModeEnabled && (hasPending || pallet.status === 'PENDING')) {
-        return { valid: false, message: '当前码已由后台启用并创建任务，无需重复创建' };
+      if (pendingTask && ['SEMI_IN', 'FINISH_IN', 'IN'].includes(pendingTask.taskType)) {
+        return { valid: true, existingTask: pendingTask };
       }
     }
-    if (hasPending) {
+    if (pendingTask) {
       return { valid: false, message: '该码已有待处理任务' };
     }
 
     if (pallet.status === 'INVALID') {
       return { valid: false, message: '该码已作废，不能继续操作' };
+    }
+    if (pallet.status === 'ORDER_RESERVED') {
+      return { valid: false, message: '该码是订单预打印标签，需先由生产管理确认生产结束' };
     }
 
     if (mode === 'in') {
@@ -243,14 +250,7 @@ Page({
       ? await this.isActivePreparePallet(code)
       : false;
     if (activePrepare) {
-      return { valid: false, message: mode === 'prepare' ? '该码已转入备料池' : '该码已转入备料池，不属于普通可操作库存' };
-    }
-
-    if (mode === 'prepare') {
-      if (pallet.productStatus !== '半成品') {
-        return { valid: false, message: '该码不是可转入备料池的半成品' };
-      }
-      return { valid: true };
+      return { valid: false, message: '该码已被旧流程生产领用，不属于普通可操作库存' };
     }
 
     if (mode === 'out' || mode === 'transfer') {
@@ -279,54 +279,7 @@ Page({
     this.setData({ scanning: true });
     try {
       const code = await scanCode();
-      this.updateSummary({ total: 1 });
-      if (this.data.pool.some(item => item.code === code)) {
-        this.updateSummary({ duplicate: 1 });
-        this.createFeedback('warning', `${code} 已在本次作业中，无需重复扫码`);
-        showToast('本次作业已扫描该二维码');
-        vibrate();
-        return;
-      }
-
-      const pallet = enrichPallet(await parseCode(code));
-      const validation = await this.validatePalletForMode(pallet);
-      if (!validation.valid) {
-        this.updateSummary({ error: 1 });
-        this.createFeedback('danger', validation.message);
-        showToast(validation.message);
-        return;
-      }
-
-      pushRecentScan({ code, mode: this.data.currentMode, modeLabel: this.data.currentModeInfo.label });
-
-      if (this.data.currentMode === 'in') {
-        this.openBindModal(pallet);
-        this.createFeedback('info', `${code} 已识别，请补充入库信息`);
-        return;
-      }
-
-      if (this.data.currentMode === 'transfer') {
-        this.openTransferModal(pallet);
-        this.createFeedback('info', `${code} 已识别，请填写目标库位`);
-        return;
-      }
-
-      if (this.data.currentMode === 'prepare') {
-        await createSemiPrepareTasks([code]);
-        this.addSuccessToPool({
-          code,
-          pallet,
-          taskTypeLabel: '转入备料池',
-          taskStatusLabel: '待处理',
-          message: '备料任务已创建',
-          actionMode: 'prepare'
-        });
-        vibrate();
-        return;
-      }
-
-      await this.createOutTask(code, pallet);
-      vibrate();
+      await this.handleScannedCode(code);
     } catch (error) {
       if (isScanCancel(error)) return;
       const message = getErrorMessage(error);
@@ -336,6 +289,90 @@ Page({
     } finally {
       this.setData({ scanning: false });
     }
+  },
+
+  consumePendingScanCodeAction() {
+    const pending = wx.getStorageSync(PENDING_SCAN_ACTION_KEY);
+    if (!pending || !pending.code || this.data.scanning) return;
+    wx.removeStorageSync(PENDING_SCAN_ACTION_KEY);
+    if (pending.createdAt && Date.now() - Number(pending.createdAt) > 5 * 60 * 1000) {
+      return;
+    }
+    if (pending.mode) {
+      this.setMode(pending.mode);
+    }
+    this.setData({ scanning: true });
+    this.handleScannedCode(pending.code, { auto: true })
+      .catch(error => {
+        const message = getErrorMessage(error);
+        this.updateSummary({ error: 1 });
+        this.createFeedback('danger', message);
+        showError({ ...error, msg: message }, '处理当前二维码失败');
+      })
+      .finally(() => {
+        this.setData({ scanning: false });
+      });
+  },
+
+  async handleScannedCode(code, options = {}) {
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    if (!normalizedCode) {
+      showToast('二维码编号为空');
+      return;
+    }
+    this.updateSummary({ total: 1 });
+    if (this.data.pool.some(item => item.code === normalizedCode)) {
+      this.updateSummary({ duplicate: 1 });
+      this.createFeedback('warning', `${normalizedCode} 已在本次作业中，无需重复扫码`);
+      showToast('本次作业已扫描该二维码');
+      vibrate();
+      return;
+    }
+
+    const pallet = enrichPallet(await parseCode(normalizedCode));
+    const validation = await this.validatePalletForMode(pallet);
+    if (!validation.valid) {
+      this.updateSummary({ error: 1 });
+      this.createFeedback('danger', validation.message);
+      showToast(validation.message);
+      return;
+    }
+
+    pushRecentScan({ code: normalizedCode, mode: this.data.currentMode, modeLabel: this.data.currentModeInfo.label });
+
+    if (this.data.currentMode === 'in' && validation.existingTask) {
+      const task = validation.existingTask;
+      this.addSuccessToPool({
+        code: normalizedCode,
+        pallet,
+        task,
+        productName: task.productName,
+        productStatus: task.productStatus,
+        taskTypeLabel: task.taskTypeLabel,
+        taskStatusLabel: task.taskStatusLabel,
+        message: task.productionOrderNo ? '生产订单入库任务已加入确认池' : '待入库任务已加入确认池',
+        actionMode: 'in'
+      });
+      vibrate();
+      return;
+    }
+
+    if (this.data.currentMode === 'in') {
+      this.openBindModal(pallet);
+      this.createFeedback('info', `${normalizedCode} 已识别，请补充入库信息`);
+      if (options.auto) showToast('已带入当前二维码');
+      return;
+    }
+
+    if (this.data.currentMode === 'transfer') {
+      this.openTransferModal(pallet);
+      this.createFeedback('info', `${normalizedCode} 已识别，请填写目标库位`);
+      if (options.auto) showToast('已带入当前二维码');
+      return;
+    }
+
+    await this.createOutTask(normalizedCode, pallet);
+    vibrate();
   },
 
   openBindModal(pallet) {
@@ -432,11 +469,15 @@ Page({
       task: task.task
     });
     item.productName = task.pallet && task.pallet.productName;
-    item.productStatus = task.pallet && task.pallet.productStatus;
+    item.productName = task.productName || item.productName;
+    item.productStatus = task.productStatus || (task.pallet && task.pallet.productStatus);
     item.taskTypeLabel = task.taskTypeLabel;
     item.taskStatusLabel = task.taskStatusLabel;
     item.taskStatusTagType = 'warning';
-    item.targetWarehouseName = task.targetWarehouseName || '';
+    if (task.task) {
+      Object.assign(item, task.task);
+    }
+    item.targetWarehouseName = task.targetWarehouseName || item.targetWarehouseName || '';
     item.canConfirm = false;
     item.canCancel = false;
     item.canRemove = true;
@@ -511,16 +552,6 @@ Page({
           message: '出库任务已创建',
           actionMode: 'out'
         });
-      } else if (task.retryMode === 'prepare') {
-        await createSemiPrepareTasks([task.code]);
-        this.addSuccessToPool({
-          code: task.code,
-          pallet,
-          taskTypeLabel: '转入备料池',
-          taskStatusLabel: '待处理',
-          message: '备料任务已创建',
-          actionMode: 'prepare'
-        });
       } else if (task.retryMode === 'transfer') {
         await createTransferTasks([{
           code: task.code,
@@ -578,7 +609,7 @@ Page({
     const codes = successfulCodes(this.data.pool);
     if (!codes.length) return;
     if (this.data.currentMode === 'in') {
-      this.setData({ confirmVisible: true });
+      await this.openConfirmInModal();
       return;
     }
 
@@ -587,8 +618,6 @@ Page({
     try {
       if (this.data.currentMode === 'transfer') {
         await confirmTransferTasks(codes);
-      } else if (this.data.currentMode === 'prepare') {
-        await confirmSemiPrepareTasks(codes);
       } else {
         const semiCodes = this.data.pool.filter(item => item.status === 'success' && item.productStatus === '半成品').map(item => item.code);
         const finishCodes = this.data.pool.filter(item => item.status === 'success' && item.productStatus !== '半成品').map(item => item.code);
@@ -601,6 +630,13 @@ Page({
     } catch (error) {
       showError(error, '确认失败');
     }
+  },
+
+  async openConfirmInModal() {
+    this.setData({
+      confirmVisible: true,
+      hasFinishInConfirm: false
+    });
   },
 
   async submitBind() {
@@ -726,7 +762,7 @@ Page({
         entryDate
       });
       showToast('入库确认完成', 'success');
-      this.setData({ pool: [], confirmVisible: false, activePoolItemId: '' });
+      this.setData({ pool: [], confirmVisible: false, activePoolItemId: '', hasFinishInConfirm: false });
       this.refreshActions();
     } catch (error) {
       showError(error, '入库确认失败');
@@ -798,7 +834,7 @@ Page({
   },
 
   closeConfirm() {
-    this.setData({ confirmVisible: false });
+    this.setData({ confirmVisible: false, hasFinishInConfirm: false });
   },
 
   openWarehouseQuery() {

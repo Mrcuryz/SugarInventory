@@ -8,8 +8,10 @@ import com.Laibin.SugarInventory.domain.vo.OutProductVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
+import com.Laibin.SugarInventory.domain.vo.SemiPreparePoolBalanceVO;
 import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface InventoryService {
@@ -39,6 +41,10 @@ public interface InventoryService {
     List<VInventorySummary> getProductStock(String productStatus, String productName);
 
     PageResult<VInventorySummary> pageProductStock(String productStatus, String productName, Integer page, Integer size);
+
+    PageResult<SemiPreparePoolBalanceVO> pagePreparePoolBalance(String productName, String productType,
+                                                                Integer screenMeshId, LocalDate productionDateStart,
+                                                                LocalDate productionDateEnd, Integer page, Integer size);
 
     List<WarehouseRecentOperationVO> listWarehouseRecentOperations(Integer warehouseId, Integer limit);
 }

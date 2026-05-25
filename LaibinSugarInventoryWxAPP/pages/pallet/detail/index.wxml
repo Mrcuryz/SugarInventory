@@ -143,12 +143,11 @@
       <view wx:if="{{flowGroups.length}}" class="timeline-card">
         <view wx:for="{{flowGroups}}" wx:key="date" wx:for-item="group" class="flow-date-group">
           <view class="flow-date">{{group.date}}</view>
-          <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item" class="flow-item">
+          <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item" class="timeline-item flow-item {{item.isLast ? 'is-last' : 'not-last'}}">
             <view class="flow-rail">
               <view class="flow-icon {{item.operationTypeTag}}">
                 <image class="flow-icon-img" src="{{item.iconSrc}}" mode="aspectFit"></image>
               </view>
-              <view wx:if="{{!item.isLast}}" class="line"></view>
             </view>
             <view class="flow-card">
               <view class="flow-head">

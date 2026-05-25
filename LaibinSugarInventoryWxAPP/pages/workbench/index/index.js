@@ -22,7 +22,7 @@ Page({
     actions: [
       { key: 'in', title: '扫码入库', desc: '绑定二维码并创建入库任务', mode: 'in', icon: '/assets/icons-v2/action-in.png', primary: true },
       { key: 'out', title: '扫码出库', desc: '按二维码创建出库任务', mode: 'out', icon: '/assets/icons-v2/action-out.png' },
-      { key: 'prepare', title: '转入备料池', desc: '半成品二维码进入备料任务', mode: 'prepare', icon: '/assets/icons-v2/action-prepare.png' },
+      { key: 'production', title: '生产作业', desc: '查看订单并扫码领用半成品', route: 'production', icon: '/assets/icons-v2/action-query.png' },
       { key: 'transfer', title: '扫码调拨', desc: '指定目标库位创建调拨任务', mode: 'transfer', icon: '/assets/icons-v2/action-out.png' },
       { key: 'query', title: '单码查询', desc: '手输或扫码查看二维码详情', route: 'query', icon: '/assets/icons-v2/action-query.png' }
     ]
@@ -74,6 +74,10 @@ Page({
     const route = e.currentTarget.dataset.route;
     if (route === 'query') {
       wx.switchTab({ url: '/pages/query/index/index' });
+      return;
+    }
+    if (route === 'production') {
+      wx.navigateTo({ url: '/pages/production/orders/index' });
       return;
     }
     wx.setStorageSync('preferredScanMode', mode);

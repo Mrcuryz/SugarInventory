@@ -11,10 +11,15 @@ import java.time.LocalDate;
 public class TaskSemiItemVO {
     private Integer id;
     private String semiPalletCode;
+    private Long prepareBalanceId;
     private Integer semiProductId;
     private String semiProductName;
     private LocalDate productionDate;
     private Integer quantity;
     private String unit;
+    private Integer boardCount;
+    private Integer pieceCount;
+    private Integer totalPieces;
+    private Integer remainingPieces;
     private Boolean useAssay;
 }

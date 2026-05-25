@@ -89,9 +89,9 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
         // 婵犲痉鏉库偓妤佹叏閹绢喗鍎楀〒姘ｅ亾闁诡垯鐒﹀鍕箛椤掑偆鏀ㄥ┑鐘垫暩婵挳宕锔藉€堕柛銉墯閻撴洘绻濋棃娑欏櫤缂佷胶澧楅妵鍕棘閹稿海鈹涢梺闈涙处閸旀瑥顕ｉ弶鎴僵闁告劖褰冪粻?useAssay 婵?true 闂傚倷鐒﹂惇褰掑礉瀹€鈧埀顒佸嚬閸ㄥ爼銆佸▎鎾崇倞妞ゅ繐鍊峰Ч妤呮⒑閸濆嫭宸濋柛鐘冲姇閳绘捇宕奸弴鐔叉嫼?
-        List<SemiRecordDTO> semiRecords = dto.getSemiRecords();
+        List<SemiRecordDTO> semiRecords = dto.getSemiRecords() == null ? new ArrayList<>() : dto.getSemiRecords();
         long useAssayCount = semiRecords.stream()
-                .filter(SemiRecordDTO::getUseAssay)
+                .filter(record -> Boolean.TRUE.equals(record.getUseAssay()))
                 .count();
 
         if (useAssayCount > 1) {
@@ -99,58 +99,61 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         }
         // 闂傚倷绀侀幉锛勬暜閸ヮ剙纾归柡宥庡幖閽冪喖鏌涢妷锝呭闁稿海鍠栭弻鐔煎箚瑜忛敍宥夋煙閻ｅ苯鈻堥柡宀嬬節瀹曠喖妫冨☉姘摋闂備浇顕栭崹顖滄濮橆剛鏆︽俊銈呮噹瀹告繈鏌℃径濠勪虎闁? 濠德板€楁慨鐑藉磻閻愯鑰块柛锔诲幘缁犳棃鏌″搴″箹缂佺姰鍎甸弻銊モ攽閸℃ê娅ｅ┑鐐叉噷閸婃繈寮诲☉妯滄棃鍩€椤掑嫭鏅濋柕澶嗘櫅閸ㄥ倹鎱ㄥΟ鎸庣【濞磋偐濮撮湁闁挎繂鐗滃鎰箾閸繄鍩ｆ慨?
         //returnInStockFlag缂傚倸鍊烽悞锔剧矙閹次诲洭顢欓幑鎰?闂傚倷绀侀幖顐﹀疮椤栨熬鑰块柛锔诲幗鐎氬鏌ｉ弬鍨倯闁绘帒顭烽弻宥堫檨闁告挻鐩獮蹇曟兜閸滀焦些闂備礁鎲￠悷銉ノ涘▎鎾崇畾闁哄啫鐗嗙粻濂告煕閺囥劌骞樻い锔诲枟缁绘盯骞嬮悙鏉戠缂備礁顦紞濠囧箖閺夊簱鏋庨柟瀵稿仜閻濈増绻涙潏鍓у埌闁硅绱曢埀顒佺閻擄繝寮婚悢鍝勬瀳濠㈣泛鑻崺宀勬⒑闂堚晝鎮奸柛搴涘€濋獮鍡涘籍閸繄顔掗悗瑙勬礀濞诧箓骞?
-        if (!dto.getReturnInStockFlag().equals("1")) {
+        if (!"1".equals(dto.getReturnInStockFlag())) {
             this.judgeInventory(semiRecords, operatorId);
             // 闂備礁鎼ˇ顐﹀疾濠婂牊鍋￠柍鍝勬噹闂傤垰顪冪€ｎ亜顒㈤柛鐔锋惈闇夐柨婵嗘祩閻掗箖鏌￠崨顔炬噰闁哄瞼鍠庨悾锟犳嚋椤戣法閽电紓鍌欑劍濮婄懓顭囧▎鎾崇厺閹兼番鍔岄悘宕団偓瑙勬礀濞诧箓鎯冮幋鐐电閺夊牆澧介崚鎵磼婢跺孩鐝紒宀冮哺缁绘繈宕惰閻ｅ啿顪冮妶鍡欏ⅵ闁稿﹥顨堢划鍫熷緞閹邦厾鍘电紒鐐緲椤﹂亶宕氭导瀛樼厱闁挎繂娲ら崝瀣煙椤栨稒顥堟鐐疵悾鐑藉炊閵婏箑鏋涢梻鍌欑閹诧繝鎳濋崜褑濮抽柤娴嬫櫅閸ㄦ繈鏌曟繝蹇涙闁稿海鍠栭弻鐔兼倷椤掆偓婢ь垶鏌涢悢閿嬪枠婵﹥妞介獮鎾诲箳閺冨偆鍞规繝鐢靛仦瑜板啫顭囬垾鎰佸殨?
             warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
         }
-        Assay assay = new Assay();
+        Assay assay = null;
         Assay semiAssay;
 
         if (useAssayCount == 1) {
             // 闁兼儳鍢茶ぐ鍥冀閸ヮ亶鍞跺☉?useAssay 闁汇劌瀚畷鎰板箣閹邦剚鎯傞悹浣规緲缂?
             SemiRecordDTO selectedSemi = semiRecords.stream()
-                    .filter(SemiRecordDTO::getUseAssay)
+                    .filter(record -> Boolean.TRUE.equals(record.getUseAssay()))
                     .findFirst()
                     .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_SEMI_RECORD));
             // 闂傚倷绀侀幖顐ょ矓閻戞枻缍栧璺猴功閺嗐倕銆掑锝呬壕閻庤娲嶉崜婵堟崲濠靛绀冮柕濞у倹鎹ｉ梻鍌欑閹诧紕鎹㈤埀顒佺箾鐎靛憡鎳欓梻鍌欑閹诧紕鍒掑畝鍕剶濠靛倻顭堥弸渚€鏌熼幆褜鍤熸い鈺勫皺閹插憡鎯旈埈銉︾洴閸╋繝宕ㄩ鐐靛綁闂備胶绮弻銊╁箺濠婂牆鐭楅柍褜鍓熼弻锝夋偐閸欏鍋嶉梺鎼炲妼濠€閬嶅焵椤掑嫭娑х€殿喖鐖奸妴鍐Ψ閵壯勬畷闂佸憡鍔栭崕鎶藉极瑜版帗鍋?
             semiAssay = getAssayByProductIdAndDate(selectedSemi.getSemiProductId(), selectedSemi.getProductionDate());
-            AssaySubmitDTO dtoAssay = new AssaySubmitDTO();
-            dtoAssay.setProductId(dto.getProductId());
-            dtoAssay.setSampleDate(dto.getEntryDate());
-            dtoAssay.setColorValue(semiAssay.getColorValue());
-            dtoAssay.setReducingSugar(semiAssay.getReducingSugar());
-            dtoAssay.setDryWeight(semiAssay.getDryWeight());
-            dtoAssay.setInsolubleImpurity(semiAssay.getInsolubleImpurity());
-            dtoAssay.setPhValue(semiAssay.getPhValue());
-            dtoAssay.setSucrose(semiAssay.getSucrose());
-            dtoAssay.setConductivityAsh(semiAssay.getConductivityAsh());
+            if (semiAssay != null) {
+                AssaySubmitDTO dtoAssay = new AssaySubmitDTO();
+                dtoAssay.setProductId(dto.getProductId());
+                dtoAssay.setSampleDate(dto.getEntryDate());
+                dtoAssay.setColorValue(semiAssay.getColorValue());
+                dtoAssay.setReducingSugar(semiAssay.getReducingSugar());
+                dtoAssay.setDryWeight(semiAssay.getDryWeight());
+                dtoAssay.setInsolubleImpurity(semiAssay.getInsolubleImpurity());
+                dtoAssay.setPhValue(semiAssay.getPhValue());
+                dtoAssay.setSucrose(semiAssay.getSucrose());
+                dtoAssay.setConductivityAsh(semiAssay.getConductivityAsh());
 
-            AssayJudgeOutcome judgeOutcome = assayStandardJudgeService.judge(product, dtoAssay);
-            BeanUtils.copyProperties(dtoAssay, assay);
-            assay.setTestedBy(operatorId);
-            assay.setQualifiedStandards(judgeOutcome.getQualifiedStandardsJson());
-            assay.setIsQualified(judgeOutcome.getCompatibleConclusion());
-            assay.setAppliedStandardId(judgeOutcome.getAppliedStandardId());
-            assay.setAppliedStandardName(judgeOutcome.getAppliedStandardName());
-            assay.setAppliedStandardVersion(judgeOutcome.getAppliedStandardVersion());
-            assay.setJudgeResult(judgeOutcome.getJudgeResult());
-            assay.setJudgeMessage(judgeOutcome.getJudgeMessage());
-            assay.setFailedMetricCount(judgeOutcome.getFailedMetricCount());
-            assay.setFailedMetricsJson(judgeOutcome.getFailedMetricsJson());
-            assay.setStandardSnapshotJson(judgeOutcome.getStandardSnapshotJson());
+                AssayJudgeOutcome judgeOutcome = assayStandardJudgeService.judge(product, dtoAssay);
+                assay = new Assay();
+                BeanUtils.copyProperties(dtoAssay, assay);
+                assay.setTestedBy(operatorId);
+                assay.setQualifiedStandards(judgeOutcome.getQualifiedStandardsJson());
+                assay.setIsQualified(judgeOutcome.getCompatibleConclusion());
+                assay.setAppliedStandardId(judgeOutcome.getAppliedStandardId());
+                assay.setAppliedStandardName(judgeOutcome.getAppliedStandardName());
+                assay.setAppliedStandardVersion(judgeOutcome.getAppliedStandardVersion());
+                assay.setJudgeResult(judgeOutcome.getJudgeResult());
+                assay.setJudgeMessage(judgeOutcome.getJudgeMessage());
+                assay.setFailedMetricCount(judgeOutcome.getFailedMetricCount());
+                assay.setFailedMetricsJson(judgeOutcome.getFailedMetricsJson());
+                assay.setStandardSnapshotJson(judgeOutcome.getStandardSnapshotJson());
 
-            Assay todaysAssay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
-            if (todaysAssay != null) {
-                int version = todaysAssay.getVersion() + 1;
-                assay.setVersion(version);
-            } else {
-                assay.setVersion(1);
+                Assay todaysAssay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
+                if (todaysAssay != null) {
+                    int version = todaysAssay.getVersion() + 1;
+                    assay.setVersion(version);
+                } else {
+                    assay.setVersion(1);
+                }
+                assay.setCreatedAt(LocalDateTime.now());
+
+                assayMapper.insert(assay);
+                assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
             }
-            assay.setCreatedAt(LocalDateTime.now());
-
-            assayMapper.insert(assay);
-            assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
         } else {
             // 闂傚倷绀侀幖顐ょ矓閻戞枻缍栧璺猴功閺嗐倕銆掑锝呬壕濡ょ姷鍋涢澶愮嵁閸ヮ剦鏁嗗ù锝囨嚀閸撶悂D闂傚倷绀侀幉锛勫垝瀹€鍕殣妞ゆ牜鍋涢惌妤呮煕閳╁叐鎴﹀磿閻斿吋鐓欓柟顖嗗懏鎲奸梺鎸庣☉椤︾敻寮婚敓鐘查唶闁靛繒濮甸悗楣冩⒑缂佹ɑ鎯堢紒杈ㄦ礋楠炲繘鎮╃拠宸綂闂佺粯锚濡﹪宕靛▎鎰箚闁靛牆娲ゅ瓭闂佹椿鍘虹欢姘躲€佸▎鎾崇倞妞ゅ繐鍊峰Ч?
             assay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
@@ -160,6 +163,9 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         // 3. 闂備浇宕甸崰鎰版偡鏉堚晛绶ゅΔ锝呭暞閸婇潧霉閻樺樊鍎忕紒鈧崼鈶╁亾楠炲灝鍔氭繛鏉戝€圭€靛ジ宕掑В顓炵秺閹虫牠鍩℃担鍥风稻缁绘盯鎳栭埡鍌涙瘓闂佽鍨伴崯鏉戠暦閻旂⒈鏁冮柕蹇ｆ緛缁鳖噣姊绘担鐑樺殌闁宦板姂瀹曟繈寮撮姀鐘殿啇?JSON闂傚倷鐒︾€笛呯矙閹达附鍤愭い鏍仦閸ゆ劙鏌ｉ弮鍌氬付闁藉啰鍠栭弻鏇熷緞濡厧甯ラ梺鎼炲€曠€氫即寮婚埄鍐╁闁告繂瀚烽弳顓㈡倵鐟欏嫭灏柣鎺炵畵楠?
         if (!semiRecords.isEmpty()) {
             for (SemiRecordDTO recordDTO : semiRecords) {
+                if (Boolean.TRUE.equals(recordDTO.getFromPreparePool())) {
+                    continue;
+                }
                 int count = semiProductRecordMapper.existsByProductIdAndDate
                         (recordDTO.getSemiProductId(), recordDTO.getProductionDate());
                 if (count == 0)
@@ -318,8 +324,18 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
      * @param semiRecords 闂傚倷绀侀幉锟犮€冮崨瀛樻櫇闁靛鏅涢崹鍌涙叏濡寧纭惧ù鑲╁Т闇夐柨婵嗘祩閻掑墽鈧鍠楁繛濠囩嵁閺嶎偀鍋撳☉娅虫垵鐣烽崟顑句簻闁哄倹瀵х粚鍧楁煏?
      */
     private void judgeInventory(List<SemiRecordDTO> semiRecords, Integer operatorId) {
-        List<Product> products = productMapper.selectBatchIds(semiRecords.stream().map(SemiRecordDTO::getSemiProductId).distinct().toList());
-        Map<Integer, Product> productMap = products.stream().collect(Collectors.toMap(Product::getId, s -> s));
+        if (semiRecords == null || semiRecords.isEmpty()) {
+            return;
+        }
+        List<Integer> productIds = semiRecords.stream()
+                .filter(record -> !Boolean.TRUE.equals(record.getFromPreparePool()))
+                .map(SemiRecordDTO::getSemiProductId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<Integer, Product> productMap = productIds.isEmpty()
+                ? Map.of()
+                : productMapper.selectBatchIds(productIds).stream().collect(Collectors.toMap(Product::getId, s -> s));
         for (SemiRecordDTO semiRecord : semiRecords) {
             if (Boolean.TRUE.equals(semiRecord.getFromPreparePool())) {
                 validatePreparePoolSemiRecord(semiRecord);
@@ -360,23 +376,14 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     }
 
     private void validatePreparePoolSemiRecord(SemiRecordDTO semiRecord) {
-        if (semiRecord.getSemiPalletCodeId() == null) {
-            throw new BusinessException("\u5907\u6599\u6C60\u534A\u6210\u54C1\u6765\u6E90\u7F3A\u5C11\u6258\u76D8\u4FE1\u606F");
+        if (semiRecord.getSemiProductId() == null) {
+            throw new BusinessException("备料池半成品来源缺少产品信息");
         }
-        PalletCode semiPallet = palletCodeMapper.selectById(semiRecord.getSemiPalletCodeId());
-        if (semiPallet == null) {
-            throw new BusinessException("\u534A\u6210\u54C1\u6258\u76D8\u4E0D\u5B58\u5728");
+        if (semiRecord.getProductionDate() == null) {
+            throw new BusinessException("备料池半成品来源缺少生产日期");
         }
-        if (!"INSTOCK".equalsIgnoreCase(semiPallet.getStatus())) {
-            throw new BusinessException("\u534A\u6210\u54C1\u6258\u76D8\u5F53\u524D\u4E0D\u5728\u53EF\u6D88\u8017\u72B6\u6001");
-        }
-        if (!"\u534A\u6210\u54C1".equals(semiPallet.getProductStatus())) {
-            throw new BusinessException("\u4EC5\u5141\u8BB8\u4F7F\u7528\u534A\u6210\u54C1\u6258\u76D8");
-        }
-        int cycleNo = semiRecord.getCycleNo() == null ? (semiPallet.getCurrentCycleNo() == null ? 0 : semiPallet.getCurrentCycleNo()) : semiRecord.getCycleNo();
-        SemiPreparePool preparePool = semiPreparePoolMapper.selectActiveByPalletAndCycle(semiPallet.getId(), cycleNo);
-        if (preparePool == null) {
-            throw new BusinessException("\u534A\u6210\u54C1\u6258\u76D8\u672A\u8FDB\u5165\u5907\u6599\u6C60\uFF0C\u4E0D\u80FD\u7528\u4E8E\u6210\u54C1\u5165\u5E93");
+        if (semiRecord.getQuantity() == null || semiRecord.getQuantity() <= 0) {
+            throw new BusinessException("备料池半成品来源缺少消耗数量");
         }
     }
 

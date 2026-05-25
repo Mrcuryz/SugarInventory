@@ -1,5 +1,6 @@
 export const PALLET_STATUS = {
   FREE: { label: '空闲', type: 'success' },
+  ORDER_RESERVED: { label: '订单预留', type: 'warning' },
   PENDING_IN: { label: '待入库', type: 'warning' },
   PENDING: { label: '待处理', type: 'warning' },
   INSTOCK: { label: '在库', type: 'primary' },
@@ -17,7 +18,7 @@ export const TASK_TYPE = {
 
 export const BIZ_SCENE = {
   DIRECT_OUT: { label: '半成品出库', type: 'warning' },
-  PREPARE_CONSUMED: { label: '转入备料池', type: 'primary' },
+  PREPARE_CONSUMED: { label: '旧版生产领用', type: 'primary' },
   FINISH_OUT: { label: '成品出库', type: 'danger' }
 };
 
@@ -28,12 +29,15 @@ export const TASK_STATUS = {
 };
 
 export const FLOW_OPERATION = {
-  SEMI_BIND: { label: '半成品绑定', type: 'success' },
+  SEMI_BIND: { label: '半成品入库登记', type: 'success' },
   ASSAY: { label: '化验', type: 'info' },
   SEMI_INSTOCK: { label: '半成品入库', type: 'success' },
-  FINISH_BIND: { label: '成品绑定', type: 'primary' },
+  FINISH_BIND: { label: '成品入库登记', type: 'primary' },
   FINISH_INSTOCK: { label: '成品入库', type: 'primary' },
-  PREPARE_CONSUMED: { label: '转入备料池', type: 'warning' },
+  ORDER_LABEL_RESERVE: { label: '订单预分配标签', type: 'warning' },
+  ORDER_LABEL_USED: { label: '订单标签核销', type: 'primary' },
+  ORDER_LABEL_RECYCLE: { label: '订单未用标签回收', type: 'info' },
+  PREPARE_CONSUMED: { label: '旧版生产领用', type: 'warning' },
   TRANSFER: { label: '调拨', type: 'info' },
   CONSUMED: { label: '消耗', type: 'danger' },
   OUT: { label: '出库', type: 'danger' },
@@ -136,14 +140,27 @@ export function enrichTask(task) {
   const type = task.taskType === 'OUT' && task.bizScene
     ? getDictItem(BIZ_SCENE, task.bizScene)
     : getDictItem(TASK_TYPE, task.taskType);
+  const productionQuantityText = formatProductionOutputQuantity(task);
   return {
     ...task,
     taskTypeLabel: type.label,
     taskTypeTagType: type.type,
     taskStatusLabel: status.label,
     taskStatusTagType: status.type,
-    createdAtText: formatDateTime(task.createdAt)
+    createdAtText: formatDateTime(task.createdAt),
+    productionOrderTypeText: task.productionOrderType === 'SEMI' ? '半成品生产' : (task.productionOrderType === 'FINISH' ? '成品生产' : ''),
+    productionQuantityText
   };
+}
+
+function formatProductionOutputQuantity(task) {
+  if (!task || !task.productionOutputCodeId) return '';
+  const boards = task.productionOutputUnit === '0' ? Number(task.productionOutputQuantity || 0) : 0;
+  const pieces = Number(task.productionOutputPieces || (task.productionOutputUnit === '1' ? task.productionOutputQuantity : 0) || 0);
+  if (boards && pieces) return `${boards}板${pieces}件`;
+  if (boards) return `${boards}板`;
+  if (pieces) return `${pieces}件`;
+  return '';
 }
 
 export function enrichPallet(info) {

@@ -107,7 +107,7 @@ const handleSubmit = async () => {
         <div class="brand-copy">
           <p class="eyebrow">Warehouse Operation Platform</p>
           <h1>智能仓储管理系统</h1>
-          <p class="subtitle">面向仓储现场的数字化仓储作业平台，覆盖托盘追溯、库位管理与任务流转。</p>
+          <p class="subtitle">面向仓储现场的数字化仓储作业平台，覆盖二维码追溯、库位管理与任务流转。</p>
         </div>
 
         <div class="tag-list" aria-label="业务关键词">
@@ -123,7 +123,7 @@ const handleSubmit = async () => {
             <div class="capability-item primary">
               <span class="capability-icon">QR</span>
               <div>
-                <strong>托盘二维码</strong>
+                <strong>仓储二维码</strong>
                 <p>一板一码，循环追溯</p>
               </div>
             </div>

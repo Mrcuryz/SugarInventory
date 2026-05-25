@@ -8,6 +8,10 @@ export const getAssayDetail = (id) => {
   return request.get('/assay/' + id)
 }
 
+export const getAssayByProductDate = (params) => {
+  return request.get('/assay/by-product-date', { params })
+}
+
 export const addAssay = ([params]) => {
   return request.post('/assay/import', [params])
 }

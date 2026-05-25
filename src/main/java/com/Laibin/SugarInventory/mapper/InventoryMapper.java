@@ -183,7 +183,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
 
     @Select("<script>" +
             "SELECT MIN(i.id) AS inventoryId, i.product_id AS productId, p.product_name AS productName, " +
-            "       w.warehouse_name AS warehouseName, i.entry_date AS sampleDate, p.product_type AS productType, " +
+            "       w.warehouse_name AS warehouseName, MIN(i.entry_date) AS sampleDate, p.product_type AS productType, " +
             "       i.product_status AS productStatus, " +
             "       GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(a.qualified_standards, '$')) ORDER BY a.id SEPARATOR '、') AS standardNames, " +
             "       GROUP_CONCAT(DISTINCT sm.mesh_name ORDER BY sm.mesh_name SEPARATOR '、') AS meshName, " +
@@ -217,8 +217,8 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "<if test='query.endDate != null'>" +
             "   AND i.entry_date &lt;= #{query.endDate} " +
             "</if> " +
-            "GROUP BY i.product_id, p.product_name, w.warehouse_name, i.entry_date, p.product_type, i.product_status " +
-            "ORDER BY i.entry_date DESC, p.product_name ASC " +
+            "GROUP BY i.product_id, p.product_name, w.warehouse_name, p.product_type, i.product_status " +
+            "ORDER BY MIN(i.entry_date) ASC, p.product_name ASC " +
             "LIMIT #{offset}, #{size}" +
             "</script>")
     List<OutProductVO> pageInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,
@@ -228,7 +228,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
 
     @Select("<script>" +
             "SELECT COUNT(*) FROM (" +
-            "SELECT i.product_id, i.entry_date " +
+            "SELECT i.product_id, i.product_status " +
             "FROM inventory i " +
             "INNER JOIN product p ON i.product_id = p.id " +
             "LEFT JOIN assay a ON i.assay_id = a.id " +
@@ -256,7 +256,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "<if test='query.endDate != null'>" +
             "   AND i.entry_date &lt;= #{query.endDate} " +
             "</if> " +
-            "GROUP BY i.product_id, i.entry_date" +
+            "GROUP BY i.product_id, i.product_status" +
             ") grouped_inventory" +
             "</script>")
     Long countInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,

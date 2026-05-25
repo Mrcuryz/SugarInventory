@@ -17,7 +17,7 @@
     <view class="operation-head">
       <view>
         <view class="operation-title">扫码作业</view>
-        <view class="operation-desc">入库、出库、备料、调拨都从这里开始。</view>
+        <view class="operation-desc">入库、出库、调拨和生产订单现场执行从这里开始。</view>
       </view>
       <button class="main-scan-btn" data-mode="in" bindtap="goScan">开始入库</button>
     </view>

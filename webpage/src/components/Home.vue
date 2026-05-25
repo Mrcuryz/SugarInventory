@@ -4,7 +4,7 @@
       <div>
         <div class="hero-eyebrow">仓储管理工作台</div>
         <div class="hero-title">欢迎回来，今天是 {{ formattedDate }} {{ dayOfWeek }}</div>
-        <div class="hero-subtitle">聚合库位状态、库存概览和常用业务入口，快速进入托盘码、任务和化验流程。</div>
+        <div class="hero-subtitle">聚合库位状态、库存概览和常用业务入口，快速进入二维码、任务和化验流程。</div>
       </div>
       <div class="hero-time">{{ hours }}:{{ minutes }}:{{ seconds }}</div>
     </el-card>
@@ -454,8 +454,8 @@ const router = useRouter()
 const quickEntries = [
   {title: '二维码管理', desc: '生成、查看和追溯二维码', path: '/pallet-code/list'},
   {title: '半成品入库任务', desc: '处理半成品入库确认', path: '/pallet-task/semi/in'},
-  {title: '成品入库任务', desc: '绑定半成品并确认入库', path: '/pallet-task/finish/in'},
-  {title: '半成品出库任务', desc: '普通出库与备料池转入', path: '/pallet-task/semi/out'},
+  {title: '成品入库任务', desc: '确认成品二维码入库，追溯走生产订单', path: '/pallet-task/finish/in'},
+  {title: '半成品出库任务', desc: '处理半成品普通出库', path: '/pallet-task/semi/out'},
   {title: '成品出库任务', desc: '创建并确认成品出库', path: '/pallet-task/finish/out'},
   {title: '调拨任务', desc: '创建与确认库位调拨', path: '/pallet-task/transfer'},
   {title: '仓库平面图', desc: '查看仓区分布与库位状态', path: '/warehouse-map'},

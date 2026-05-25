@@ -29,6 +29,7 @@ public class AutoInboundTask {
      * 原始文本块 + LLM 备注
      */
     private String rawBlock;
+    private String sourceText;
     private String remark;          // 把 ParsedInboundItem.remark + source.remark 等汇总
 
     /**
@@ -69,11 +70,19 @@ public class AutoInboundTask {
     private String status;
 
     /**
-     * 成品入库时建议的半成品记录（映射自 sources，可被前端编辑后作为 dto.semiRecords 传回）
+     * 旧版半成品关联字段，暂时保留兼容历史草稿和旧接口，新智能报数默认不使用。
      */
     private List<SemiRecordDTO> suggestedSemiRecords;
 
     private List<SemiRecordDTO> semiRecords;
+
+    /**
+     * 智能报数中的半成品领用提示。后续生产订单流程按用户确认的二维码实际领用；未匹配时仅留档提示。
+     */
+    private List<ProductionConsumptionItem> productionConsumptionItems;
+    private List<String> productionConsumptionResults;
+    private List<String> unmatchedNames;
+    private String consumptionRemark;
 
     /**
      * 是否允许自动入库（绿/黄 true，红 false）

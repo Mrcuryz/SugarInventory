@@ -1,20 +1,26 @@
 <page-shell>
   <page-header title="库存查询" subtitle="按产品维度查看库存摘要，并继续追到二维码明细" showBack="{{true}}" />
 
+  <view class="inventory-tabs segmented">
+    <view wx:for="{{tabs}}" wx:key="key" class="inventory-tab segmented-item {{activeTab === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="onTabTap">
+      {{item.label}}
+    </view>
+  </view>
+
   <view class="filter-card">
     <view class="filter-row">
       <input class="filter-input" placeholder="输入产品名称" value="{{productName}}" bindinput="onProductNameInput" />
-      <picker class="filter-picker" range="{{statusOptions}}" value="{{statusIndex}}" bindchange="onStatusChange">
+      <picker wx:if="{{activeTab === 'stock'}}" class="filter-picker" range="{{statusOptions}}" value="{{statusIndex}}" bindchange="onStatusChange">
         <view>{{statusOptions[statusIndex]}}</view>
       </picker>
     </view>
     <view class="filter-actions">
       <button class="secondary-btn mini-btn" bindtap="resetSearch">重置</button>
-      <button class="primary-btn mini-btn" loading="{{loading}}" bindtap="search">查询库存</button>
+      <button class="primary-btn mini-btn" loading="{{activeTab === 'prepare' ? prepareLoading : loading}}" bindtap="search">{{activeTab === 'prepare' ? '查询生产中半成品' : '查询库存'}}</button>
     </view>
   </view>
 
-  <view wx:if="{{!detailMode}}" class="result-section">
+  <view wx:if="{{activeTab === 'stock' && !detailMode}}" class="result-section">
     <view class="section-title">产品汇总库存</view>
     <view wx:if="{{loading}}" class="state-card">正在查询库存...</view>
     <empty-state wx:elif="{{error}}" icon="/assets/icons-line/icon-search.svg" title="库存查询失败" description="请稍后重试，或检查网络状态。" />
@@ -51,7 +57,7 @@
     <query-pager wx:if="{{!error && total > 0}}" page="{{page}}" size="{{size}}" total="{{total}}" loading="{{loading}}" bind:change="onPageChange" />
   </view>
 
-  <view wx:else class="result-section">
+  <view wx:elif="{{activeTab === 'stock'}}" class="result-section">
     <view class="detail-title-row">
       <view>
         <view class="section-title compact">二维码明细</view>
@@ -80,5 +86,41 @@
       </view>
     </view>
     <query-pager wx:if="{{palletTotal > 0}}" page="{{palletPage}}" size="{{palletSize}}" total="{{palletTotal}}" loading="{{palletLoading}}" bind:change="onPalletPageChange" />
+  </view>
+
+  <view wx:else class="result-section">
+    <view class="section-title">生产中半成品</view>
+    <view wx:if="{{prepareLoading}}" class="state-card">正在查询生产中半成品...</view>
+    <empty-state wx:elif="{{prepareError}}" icon="/assets/icons-line/icon-search.svg" title="生产中半成品查询失败" description="请稍后重试，或检查网络状态。" />
+    <empty-state wx:elif="{{!prepareList.length}}" icon="/assets/icons-line/icon-location.svg" title="暂无生产中半成品" description="当前没有生产订单领用中的半成品记录。" />
+
+    <view wx:for="{{prepareList}}" wx:key="id" class="prepare-card">
+      <view class="card-head">
+        <view class="product-title">{{item.productNameText}}</view>
+        <status-tag label="{{item.statusLabel}}" type="{{item.statusType}}" />
+      </view>
+      <view class="prepare-subtitle">生产订单 {{item.orderNoText}} · 生产日期 {{item.productionDateText}}</view>
+      <view class="metric-grid prepare-metrics">
+        <view class="metric-item">
+          <view class="metric-value">{{item.quantityText}}</view>
+          <view class="metric-label">领用数量</view>
+        </view>
+        <view class="metric-item">
+          <view class="metric-value">{{item.pickedByText}}</view>
+          <view class="metric-label">领用人</view>
+        </view>
+        <view class="metric-item">
+          <view class="metric-value">{{item.pickedAtText}}</view>
+          <view class="metric-label">领用时间</view>
+        </view>
+      </view>
+      <view class="prepare-meta">
+        <view>来源库位：{{item.sourceLocationText}}</view>
+      </view>
+      <view class="card-actions">
+        <button class="card-link" data-index="{{index}}" bindtap="openPrepareAssay">查看化验</button>
+      </view>
+    </view>
+    <query-pager wx:if="{{!prepareError && prepareTotal > 0}}" page="{{preparePage}}" size="{{prepareSize}}" total="{{prepareTotal}}" loading="{{prepareLoading}}" bind:change="onPreparePageChange" />
   </view>
 </page-shell>

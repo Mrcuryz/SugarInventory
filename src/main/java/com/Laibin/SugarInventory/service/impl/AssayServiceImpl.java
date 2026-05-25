@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -139,6 +140,25 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
         Assay assay = assayMapper.selectById(id);
         if (assay == null) {
             throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
+        }
+        AssayVO assayVO = new AssayVO();
+        BeanUtils.copyProperties(assay, assayVO);
+        Product product = productMapper.selectById(assay.getProductId());
+        if (product != null) {
+            assayVO.setProductName(product.getProductName());
+        }
+        enrichAssayVO(assayVO);
+        return assayVO;
+    }
+
+    @Override
+    public AssayVO getLatestByProductIdAndDate(Integer productId, LocalDate productionDate) {
+        if (productId == null || productionDate == null) {
+            return null;
+        }
+        Assay assay = assayMapper.selectByProductIdAndDate(productId, productionDate);
+        if (assay == null) {
+            return null;
         }
         AssayVO assayVO = new AssayVO();
         BeanUtils.copyProperties(assay, assayVO);

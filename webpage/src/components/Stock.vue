@@ -121,7 +121,7 @@
 
         <div class="drawer-section-title">单明细</div>
         <el-table :data="currentDocument.details" border>
-          <el-table-column prop="palletCode" label="托盘码" min-width="140" show-overflow-tooltip>
+          <el-table-column prop="palletCode" label="二维码" min-width="140" show-overflow-tooltip>
             <template #default="{ row }">
               <el-button v-if="row.palletCode" link type="primary" @click="openPallet(row.palletCode)">{{ row.palletCode }}</el-button>
               <span v-else>-</span>
@@ -181,7 +181,6 @@ const baseLedgerTabs = [
   {value: 'OUT', label: '出库单', documentNoPrefix: 'OUT', documentTypeName: '出库单'},
   {value: 'TRANSFER', label: '调拨单', documentNoPrefix: 'TR', documentTypeName: '调拨单'}
 ]
-const prepareLedgerTab = {value: 'PREPARE', label: '转入备料单', documentNoPrefix: 'PREP', documentTypeName: '转入备料单'}
 
 const taskStatusOptions = [
   {label: '待处理', value: 'PENDING'},
@@ -202,7 +201,7 @@ const currentDocument = ref(null)
 const resolvedPageTitle = computed(() => props.pageTitle)
 const resolvedPageDescription = computed(() => props.pageDescription)
 const effectiveProductStatus = computed(() => props.productStatusFilter || '')
-const ledgerTabs = computed(() => effectiveProductStatus.value === '半成品' ? [...baseLedgerTabs, prepareLedgerTab] : baseLedgerTabs)
+const ledgerTabs = computed(() => baseLedgerTabs)
 const currentTabConfig = computed(() => ledgerTabs.value.find(tab => tab.value === activeTab.value) || ledgerTabs.value[0])
 const currentStatusOptions = computed(() => taskStatusOptions)
 
@@ -425,7 +424,7 @@ function normalizePrepareTask(row) {
     quantityText: '1板',
     unitName: '板',
     fromLocation: row.targetWarehouseName || '原库存位置',
-    toLocation: '备料池',
+    toLocation: '旧版生产领用',
     taskId: row.taskId,
     status,
     statusName: getTaskStatusName(status)
@@ -434,7 +433,7 @@ function normalizePrepareTask(row) {
     raw: row,
     documentNo,
     documentType: 'PREPARE',
-    documentTypeName: '转入备料单',
+    documentTypeName: '旧版生产领用单',
     sourcePage: inferSourcePage(row, 'PREPARE'),
     operator: row.confirmedBy || row.createdBy,
     createdAt: row.confirmedAt || row.createdAt,
@@ -583,7 +582,7 @@ function openDetail(row) {
 
 function openPallet(code) {
   if (!code) {
-    ElMessage.info('当前明细没有托盘码')
+    ElMessage.info('当前明细没有二维码')
     return
   }
   router.push({path: '/pallet-code/list', query: {code}})

@@ -23,8 +23,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -75,6 +77,17 @@ public class AssayController {
     public Result<AssayVO> getAssayById(@PathVariable Integer id) {
         try {
             return Result.success(assayService.getAssayById(id));
+        } catch (BusinessException e) {
+            return Result.error(500, "化验详情查询失败：" + e.getMessage());
+        }
+    }
+
+    @GetMapping("/by-product-date")
+    @Operation(summary = "按产品和生产日期查询化验记录", description = "用于库存链路查看化验，不存在时返回空")
+    public Result<AssayVO> getAssayByProductDate(@RequestParam Integer productId,
+                                                 @RequestParam LocalDate productionDate) {
+        try {
+            return Result.success(assayService.getLatestByProductIdAndDate(productId, productionDate));
         } catch (BusinessException e) {
             return Result.error(500, "化验详情查询失败：" + e.getMessage());
         }

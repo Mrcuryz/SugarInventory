@@ -155,9 +155,9 @@ import { getRoleOptions } from '@/api/rbac'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
-const canCreate = computed(() => authStore.hasPermission('user:create'))
-const canUpdate = computed(() => authStore.hasPermission('user:update'))
-const canDelete = computed(() => authStore.hasPermission('user:delete'))
+const canCreate = computed(() => authStore.hasAnyPermission(['employee:create', 'user:create']))
+const canUpdate = computed(() => authStore.hasAnyPermission(['employee:update', 'user:update']))
+const canDelete = computed(() => authStore.hasAnyPermission(['employee:delete', 'user:delete']))
 
 const roleOptions = ref([])
 const roleNameMap = computed(() => roleOptions.value.reduce((result, item) => {
@@ -185,7 +185,7 @@ const searchForm = reactive({
 })
 
 const createEmptySubmitForm = () => ({
-  id: '',
+  id: null,
   employeeId: '',
   name: '',
   mobile: '',
@@ -288,6 +288,10 @@ const handleClose = () => {
   dialogVisible.value = false
 }
 
+const refreshAuthSilently = async () => {
+  await authStore.ensureLoaded(true).catch(() => {})
+}
+
 const handleAdd = () => {
   operationType.value = '新增用户'
   submitForm.value = createEmptySubmitForm()
@@ -314,12 +318,14 @@ const handleSubmit = async () => {
   if (!valid) return
 
   if (operationType.value === '新增用户') {
-    await addEmployee(submitForm.value)
+    const { id, ...payload } = submitForm.value
+    await addEmployee(payload)
     ElMessage.success('新增成功')
   } else {
     await updateEmployee(submitForm.value)
     ElMessage.success('更新成功')
   }
+  await refreshAuthSilently()
   dialogVisible.value = false
   submitForm.value = createEmptySubmitForm()
   await handleSearch()
@@ -333,6 +339,7 @@ const handleDelete = async () => {
   })
   await deleteEmployee()
   ElMessage.success('清理成功')
+  await refreshAuthSilently()
   await handleSearch()
 }
 

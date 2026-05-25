@@ -33,6 +33,12 @@ function buildFailedMetricMap(failedMetrics = []) {
 }
 
 function buildMetrics(assay) {
+  const hasAppliedStandard = Boolean(
+    assay.appliedStandardId
+    || assay.appliedStandardName
+    || (assay.appliedStandard && assay.appliedStandard.standardName)
+    || (assay.standardSnapshot && assay.standardSnapshot.items && assay.standardSnapshot.items.length)
+  );
   const snapshotItems = assay.standardSnapshot?.items?.length
     ? assay.standardSnapshot.items
     : [
@@ -49,14 +55,17 @@ function buildMetrics(assay) {
     const field = ACTUAL_FIELD_MAP[item.metricCode];
     const actualValue = field ? assay[field] : null;
     const failedItem = failedMap[item.metricCode];
+    const hasValue = actualValue !== null && actualValue !== undefined && actualValue !== '';
+    const hasStandardRange = item.minValue != null || item.maxValue != null;
+    const unavailable = !hasValue || !hasAppliedStandard || !hasStandardRange;
     return {
       key: item.metricCode,
       label: item.metricName,
       actualText: formatValue(actualValue, item.unit),
       standardRangeText: formatMetricRange(item),
-      statusText: failedItem ? '未达标' : '达标',
-      statusType: failedItem ? 'danger' : 'success',
-      reason: failedItem ? failedItem.reason : ''
+      statusText: unavailable ? '暂无' : (failedItem ? '未达标' : '达标'),
+      statusType: unavailable ? 'info' : (failedItem ? 'danger' : 'success'),
+      reason: unavailable ? '' : (failedItem ? failedItem.reason : '')
     };
   });
 }
