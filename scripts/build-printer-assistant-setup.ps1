@@ -27,9 +27,9 @@ $AppDisplayName = "Label Printer Assistant"
 $MenuGroup = "Laibin Sugar"
 $VendorName = "Laibin Sugar"
 $AppDescription = "Laibin Sugar Printer Assistant"
-$AdminGuide = "docs\\printer-assistant-admin-guide-2026-04-24.md"
-$TroubleshootingGuide = "docs\\printer-assistant-troubleshooting-2026-04-24.md"
-$PackagingGuide = "docs\\printer-assistant-packaging-steps-2026-04-24.md"
+$AdminGuide = "docs\\打印说明\\标签打印助手-管理员安装说明-2026-04-24.md"
+$TroubleshootingGuide = "docs\\打印说明\\标签打印助手-常见问题排查-2026-04-24.md"
+$PackagingGuide = "docs\\打印说明\\标签打印助手-setup打包后续步骤-2026-04-24.md"
 $AppImageDir = Join-Path $DistDir $AppDisplayName
 
 function New-Directory {
@@ -111,7 +111,7 @@ New-Directory -Path $DocsDir
 
 Push-Location $ProjectRoot
 try {
-    mvn -q "-Dtest=LocalPrinterConfigServiceTest" test
+    mvn -q clean "-Dtest=LocalPrinterConfigServiceTest" test
     mvn -q "-Pprinter-assistant" "-DskipTests" package
 
     if (!(Test-Path -LiteralPath $PlainJarPath)) {

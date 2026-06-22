@@ -18,10 +18,6 @@ export function pageProductStock(params = {}) {
   return request('/api/inventory/stock/page', 'GET', compactParams(params));
 }
 
-export function pagePreparePoolBalance(params = {}) {
-  return request('/api/inventory/prepare-pool-balance', 'GET', compactParams(params));
-}
-
 export function pageProductionInProcessMaterials(params = {}) {
   return request('/api/production/orders/materials/in-process', 'GET', compactParams(params));
 }

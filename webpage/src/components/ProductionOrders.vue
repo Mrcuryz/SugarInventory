@@ -258,7 +258,6 @@
                     <el-table-column label="数量" width="100">
                       <template #default="{ row: codeRow }">{{ materialQuantityText(codeRow) }}</template>
                     </el-table-column>
-                    <el-table-column prop="palletTaskId" label="任务ID" width="90" />
                     <el-table-column label="状态" width="110">
                       <template #default="{ row: codeRow }">{{ outputCodeStatusText(codeRow.status) }}</template>
                     </el-table-column>
@@ -269,7 +268,7 @@
               <el-table-column label="产出数量" width="120">
                 <template #default="{ row }">{{ outputQuantityText(row) }}</template>
               </el-table-column>
-              <el-table-column prop="boundQrCount" label="已绑定" width="82" />
+              <el-table-column prop="boundQrCount" label="已用码" width="82" />
               <el-table-column prop="inboundQrCount" label="已入库" width="82" />
             </el-table>
           </div>
@@ -387,7 +386,7 @@ const outputQuantityText = row => {
   return '暂无'
 }
 const outputCodeStatusText = status => ({
-  BOUND: '已绑定',
+  BOUND: '已用码',
   PENDING_INBOUND: '待入库',
   INSTOCK: '已入库',
   CANCELED: '已取消'

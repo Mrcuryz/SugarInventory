@@ -2142,7 +2142,7 @@ const buildHintRecommendation = (hint) => buildMaterialPickRecommendation({
   candidates: hint?.candidates || []
 })
 
-const setParseType = (type) => {
+const setParseType = async (type) => {
   if (parseForm.value.parseType === type) return
   parseForm.value.parseType = type
   batchId.value = ''
@@ -2151,6 +2151,10 @@ const setParseType = (type) => {
   selectedTaskIds.value = []
   finishFlow.value = createEmptyFinishFlow()
   finishStep.value = 1
+  if (filteredHistoryOptions.value.length) {
+    batchId.value = filteredHistoryOptions.value[0].batchId
+    await handleReloadBatch()
+  }
 }
 
 const quantityText = (boards, pieces) => {

@@ -1,0 +1,570 @@
+{
+  "version": "0.1",
+  "generatedAt": "2026-06-13",
+  "sourceOfTruth": {
+    "openapi": "docs/openapi.json missing",
+    "code": "Controller, DTO, Service implementation, SQL migrations",
+    "firstReleaseAllowedRiskLevels": ["L0", "L1", "L2"]
+  },
+  "tools": [
+    {
+      "name": "warehouse_help",
+      "category": "help",
+      "riskLevel": "L0",
+      "firstRelease": true,
+      "description": "Explain warehouse MCP capabilities, field meanings, and risk boundaries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": ["inventory", "pallet", "assay", "production", "risk", "all"],
+            "default": "all"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {"type": "string"},
+          "relatedTools": {"type": "array", "items": {"type": "string"}},
+          "riskNotes": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": [],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "none",
+      "backendMapping": ["docs/mcp-analysis/*.md"],
+      "notes": "Static help only; no business data writes."
+    },
+    {
+      "name": "resolve_products",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Resolve natural-language product references into structured product candidates.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {"type": "string"},
+          "productType": {"type": "string", "enum": ["黄冰糖", "白冰糖"]},
+          "productStatus": {"type": "string", "enum": ["半成品", "成品"]},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 10}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {"type": "integer"},
+                "productName": {"type": "string"},
+                "productType": {"type": "string"},
+                "productStatus": {"type": "string"},
+                "packagingMethod": {"type": "string"},
+                "weightPerPiece": {"type": "number"},
+                "piecesPerPallet": {"type": "integer"},
+                "canStack": {"type": "boolean"},
+                "screenMeshId": {"type": "integer"},
+                "confidence": {"type": "number"},
+                "matchReason": {"type": "string"}
+              }
+            }
+          },
+          "needsUserSelection": {"type": "boolean"},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": ["authenticated"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "optional_mcp_query_log",
+      "backendMapping": [
+        "GET /api/products/product",
+        "GET /api/products/semi-products",
+        "GET /api/products/finished-products",
+        "recommended new aggregate: GET /api/agent/resolve/products"
+      ],
+      "notes": "Agent must not infer productId if multiple candidates remain."
+    },
+    {
+      "name": "resolve_warehouses",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Resolve warehouse names or aliases into structured warehouse candidates.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {"type": "string"},
+          "onlyAvailable": {"type": "boolean", "default": false},
+          "side": {"type": "string", "enum": ["左", "右"]},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 10}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "warehouseId": {"type": "integer"},
+                "warehouseName": {"type": "string"},
+                "status": {"type": "string"},
+                "maxRows": {"type": "integer"},
+                "curCapacity": {"type": "integer"},
+                "maxCapacity": {"type": "integer"},
+                "hasSpace": {"type": "boolean"},
+                "confidence": {"type": "number"}
+              }
+            }
+          },
+          "needsUserSelection": {"type": "boolean"}
+        }
+      },
+      "permissions": ["authenticated", "record:query recommended"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "optional_mcp_query_log",
+      "backendMapping": [
+        "GET /api/warehouse/query",
+        "GET /api/inventory/query",
+        "recommended new aggregate: GET /api/agent/resolve/warehouses"
+      ],
+      "notes": "Should expose stable IDs and capacity so later preview tools do not guess."
+    },
+    {
+      "name": "get_inventory_overview",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Answer stock availability questions by product, status, date, and warehouse.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "productId": {"type": "integer"},
+          "productName": {"type": "string"},
+          "productStatus": {"type": "string", "enum": ["半成品", "成品"]},
+          "productionDate": {"type": "string", "format": "date"},
+          "screenMeshId": {"type": "integer"},
+          "page": {"type": "integer", "default": 1},
+          "size": {"type": "integer", "default": 10}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {"type": "object"},
+          "records": {"type": "array", "items": {"type": "object"}},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": ["record:query recommended"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "optional_mcp_query_log",
+      "backendMapping": [
+        "GET /api/inventory/stock/page",
+        "POST /api/inventory/summary",
+        "GET /api/products/product"
+      ],
+      "notes": "Should call resolve_products first when productId is absent."
+    },
+    {
+      "name": "get_warehouse_status",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Inspect warehouse capacity, inventory details, and recent operations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "warehouseId": {"type": "integer"},
+          "warehouseName": {"type": "string"},
+          "includeInventoryDetails": {"type": "boolean", "default": true},
+          "includeRecentOperations": {"type": "boolean", "default": true},
+          "limit": {"type": "integer", "default": 10}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "warehouse": {"type": "object"},
+          "inventoryDetails": {"type": "array", "items": {"type": "object"}},
+          "recentOperations": {"type": "array", "items": {"type": "object"}},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": ["record:query"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "optional_mcp_query_log",
+      "backendMapping": [
+        "GET /api/inventory/query",
+        "POST /api/inventory/qualified-inventory/{warehouseId}/page",
+        "GET /api/inventory/warehouses/{warehouseId}/recent-operations"
+      ],
+      "notes": "Should call resolve_warehouses first when warehouseId is absent."
+    },
+    {
+      "name": "get_pallet_status",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Inspect a pallet QR code, current inventory, assay, pending tasks, and flow timeline.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {"type": "string"},
+          "includeFlows": {"type": "boolean", "default": true},
+          "cycleNo": {"type": "integer"},
+          "includeAssay": {"type": "boolean", "default": true},
+          "includeInventory": {"type": "boolean", "default": true}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "palletInfo": {"type": "object"},
+          "inventory": {"type": "object"},
+          "assay": {"type": "object"},
+          "flowCycles": {"type": "array", "items": {"type": "object"}},
+          "flows": {"type": "array", "items": {"type": "object"}},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": ["authenticated", "record:query recommended"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "optional_mcp_query_log",
+      "backendMapping": [
+        "GET /api/pallet-codes/parse",
+        "GET /api/pallet-codes/{code}/inventory",
+        "GET /api/pallet-codes/{code}/assay",
+        "GET /api/pallet-codes/{code}/flows/cycles",
+        "GET /api/pallet-codes/{code}/flows"
+      ],
+      "notes": "No write operation may be triggered by this tool."
+    },
+    {
+      "name": "get_assay_status",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Get assay and quality-standard judgement for a product/date or assay ID.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "productId": {"type": "integer"},
+          "productName": {"type": "string"},
+          "productionDate": {"type": "string", "format": "date"},
+          "assayId": {"type": "integer"}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "assay": {"type": "object"},
+          "judgeResult": {"type": "string"},
+          "qualifiedStandards": {"type": "array", "items": {"type": "string"}},
+          "failedMetrics": {"type": "array", "items": {"type": "object"}},
+          "appliedStandard": {"type": "object"},
+          "needsAssay": {"type": "boolean"}
+        }
+      },
+      "permissions": ["authenticated", "quality:test for list queries under current API"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "optional_mcp_query_log",
+      "backendMapping": [
+        "GET /api/assay/by-product-date",
+        "GET /api/assay/{id}",
+        "POST /api/assay/query"
+      ],
+      "notes": "Should use product resolver before product/date lookup if productId is absent."
+    },
+    {
+      "name": "preview_auto_inbound_report",
+      "category": "preview",
+      "riskLevel": "L2",
+      "firstRelease": true,
+      "description": "Parse natural-language production report text into candidate inbound tasks without committing inventory.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["rawText"],
+        "properties": {
+          "rawText": {"type": "string"},
+          "entryDate": {"type": "string", "format": "date"},
+          "parseType": {"type": "string"},
+          "clientRequestId": {"type": "string"}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "batchId": {"type": "string"},
+          "tasks": {"type": "array", "items": {"type": "object"}},
+          "globalRemarks": {"type": "array", "items": {"type": "string"}},
+          "missingFields": {"type": "array", "items": {"type": "string"}},
+          "warnings": {"type": "array", "items": {"type": "string"}},
+          "canExecute": {"type": "boolean"}
+        }
+      },
+      "permissions": ["authenticated", "inventory:inbound:preview recommended"],
+      "confirmationRequired": false,
+      "idempotency": "preview should accept clientRequestId; current API generates new batchId every call",
+      "audit": "mcp_preview_log recommended",
+      "backendMapping": [
+        "POST /api/auto-inbound/parse",
+        "GET /api/auto-inbound/{batchId}",
+        "recommended new aggregate: POST /api/agent/inbound/parse-preview"
+      ],
+      "notes": "Current parse relies on LLM-provided IDs; add deterministic product/warehouse resolution."
+    },
+    {
+      "name": "preview_inbound_plan",
+      "category": "preview",
+      "riskLevel": "L2",
+      "firstRelease": true,
+      "description": "Dry-run inbound placement, assay checks, and capacity conflicts.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "mode": {"type": "string", "enum": ["traditional", "pallet", "warehouse_map"], "default": "traditional"},
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {"type": "integer"},
+                "productName": {"type": "string"},
+                "productStatus": {"type": "string", "enum": ["半成品", "成品"]},
+                "productionDate": {"type": "string", "format": "date"},
+                "quantity": {"type": "integer"},
+                "unit": {"type": "string", "enum": ["0", "1"]},
+                "warehouseId": {"type": "integer"},
+                "warehouseName": {"type": "string"},
+                "side": {"type": "string", "enum": ["左", "右"]},
+                "rowNumber": {"type": "integer"},
+                "layer": {"type": "integer"},
+                "palletCode": {"type": "string"}
+              }
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {"type": "string"},
+          "resolvedItems": {"type": "array", "items": {"type": "object"}},
+          "targetLocations": {"type": "array", "items": {"type": "object"}},
+          "capacityCheck": {"type": "object"},
+          "requiredAssays": {"type": "array", "items": {"type": "object"}},
+          "riskLevel": {"type": "string"},
+          "blockingIssues": {"type": "array", "items": {"type": "string"}},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": ["inventory:inbound:preview recommended"],
+      "confirmationRequired": false,
+      "idempotency": "read_only_preview; future execute requires idempotencyKey",
+      "audit": "mcp_preview_log recommended",
+      "backendMapping": [
+        "recommended new aggregate: POST /api/agent/inbound/preview"
+      ],
+      "notes": "No equivalent current dry-run endpoint exists."
+    },
+    {
+      "name": "preview_outbound_plan",
+      "category": "preview",
+      "riskLevel": "L2",
+      "firstRelease": true,
+      "description": "Dry-run outbound deductions and shortage checks.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "productId": {"type": "integer"},
+          "productName": {"type": "string"},
+          "warehouseId": {"type": "integer"},
+          "warehouseName": {"type": "string"},
+          "quantity": {"type": "integer"},
+          "unit": {"type": "string", "enum": ["0", "1"]},
+          "outType": {"type": "integer", "enum": [0, 1]},
+          "side": {"type": "string", "enum": ["左", "右"]},
+          "productionDate": {"type": "string", "format": "date"},
+          "preferPalletCodes": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {"type": "string"},
+          "selectedInventory": {"type": "array", "items": {"type": "object"}},
+          "deductions": {"type": "array", "items": {"type": "object"}},
+          "shortage": {"type": "object"},
+          "assayCheck": {"type": "object"},
+          "riskLevel": {"type": "string"},
+          "blockingIssues": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": ["inventory:outbound:preview recommended"],
+      "confirmationRequired": false,
+      "idempotency": "read_only_preview; future execute requires idempotencyKey",
+      "audit": "mcp_preview_log recommended",
+      "backendMapping": [
+        "recommended new aggregate: POST /api/agent/outbound/preview"
+      ],
+      "notes": "Requires extracting selection logic from OutStockService without mutating inventory."
+    },
+    {
+      "name": "preview_transfer_plan",
+      "category": "preview",
+      "riskLevel": "L2",
+      "firstRelease": true,
+      "description": "Dry-run pallet transfer target allocation and conflict checks.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {"type": "string"},
+                "inventoryId": {"type": "integer"}
+              }
+            }
+          },
+          "sourceWarehouseId": {"type": "integer"},
+          "targetWarehouseId": {"type": "integer"},
+          "targetWarehouseName": {"type": "string"},
+          "targetSide": {"type": "string", "enum": ["左", "右"]}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {"type": "string"},
+          "resolvedPallets": {"type": "array", "items": {"type": "object"}},
+          "sourceLocations": {"type": "array", "items": {"type": "object"}},
+          "targetCandidates": {"type": "array", "items": {"type": "object"}},
+          "capacityCheck": {"type": "object"},
+          "blockingIssues": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "permissions": ["inventory:transfer:preview recommended"],
+      "confirmationRequired": false,
+      "idempotency": "read_only_preview; future execute requires idempotencyKey",
+      "audit": "mcp_preview_log recommended",
+      "backendMapping": [
+        "recommended new aggregate: POST /api/agent/transfer/preview"
+      ],
+      "notes": "Must not create pallet_task during preview."
+    },
+    {
+      "name": "get_production_order_trace",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Trace a production order across materials, outputs, labels, and inbound progress.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "orderId": {"type": "integer"},
+          "orderNo": {"type": "string"},
+          "includeMaterials": {"type": "boolean", "default": true},
+          "includeOutputs": {"type": "boolean", "default": true},
+          "includeLabels": {"type": "boolean", "default": true}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "baseInfo": {"type": "object"},
+          "materials": {"type": "array", "items": {"type": "object"}},
+          "outputs": {"type": "array", "items": {"type": "object"}},
+          "outputCodes": {"type": "array", "items": {"type": "object"}},
+          "labelBatches": {"type": "array", "items": {"type": "object"}},
+          "progress": {"type": "object"}
+        }
+      },
+      "permissions": ["production:order:view"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "optional_mcp_query_log",
+      "backendMapping": [
+        "GET /api/production/orders/{id}",
+        "GET /api/production/orders/{id}/trace",
+        "recommended resolver for orderNo"
+      ],
+      "notes": "Current direct endpoint requires orderId; orderNo lookup should use list query or new resolver."
+    },
+    {
+      "name": "search_operation_logs",
+      "category": "query",
+      "riskLevel": "L1",
+      "firstRelease": true,
+      "description": "Search operation logs for audit and troubleshooting.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tableName": {"type": "string"},
+          "operationType": {"type": "string", "enum": ["INSERT", "UPDATE", "DELETE"]},
+          "operator": {"type": "string"},
+          "startTime": {"type": "string"},
+          "endTime": {"type": "string"},
+          "page": {"type": "integer", "default": 1},
+          "size": {"type": "integer", "default": 10}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "total": {"type": "integer"},
+          "records": {"type": "array", "items": {"type": "object"}}
+        }
+      },
+      "permissions": ["log:view"],
+      "confirmationRequired": false,
+      "idempotency": "read_only",
+      "audit": "none_or_optional_query_log",
+      "backendMapping": [
+        "POST /api/logs/query"
+      ],
+      "notes": "OperationLog coverage is incomplete for several current business writes."
+    }
+  ],
+  "futureExecutionToolsNotForFirstRelease": [
+    {
+      "name": "execute_inbound_plan",
+      "riskLevel": "L3",
+      "requirements": ["executionToken", "idempotencyKey", "explicitUserConfirmation", "operationAudit", "dedicatedPermission"]
+    },
+    {
+      "name": "execute_outbound_plan",
+      "riskLevel": "L3",
+      "requirements": ["executionToken", "idempotencyKey", "explicitUserConfirmation", "operationAudit", "dedicatedPermission"]
+    },
+    {
+      "name": "execute_transfer_plan",
+      "riskLevel": "L3",
+      "requirements": ["executionToken", "idempotencyKey", "explicitUserConfirmation", "operationAudit", "dedicatedPermission"]
+    },
+    {
+      "name": "manage_reference_data",
+      "riskLevel": "L4",
+      "requirements": ["splitByDomain", "strongPermission", "explicitUserConfirmation", "operationAudit", "noGenericUpdate"]
+    }
+  ]
+}

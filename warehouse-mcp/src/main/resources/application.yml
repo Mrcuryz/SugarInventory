@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: warehouse-mcp
+  main:
+    web-application-type: none
+    banner-mode: off
+  ai:
+    mcp:
+      server:
+        name: warehouse-mcp
+        version: 0.1.0
+        type: SYNC
+        stdio: true
+
+warehouse:
+  api:
+    base-url: ${WAREHOUSE_API_BASE_URL:http://localhost:8080}
+    token: ${WAREHOUSE_API_TOKEN:}
+    timeout: ${WAREHOUSE_API_TIMEOUT:5s}
+
+logging:
+  config: classpath:logback-spring.xml

@@ -1108,7 +1108,7 @@ const prepareSingleTransfer = (record) => {
 const isSemiProductSlot = (record) => record?.productStatus === '半成品'
 const openUnsupportedInbound = (actionName, slot) => {
   const position = slot ? `，目标位置：${formatSlotPosition(slot)}` : ''
-  ElMessage.warning(`${actionName}需要先扫码绑定二维码和产品信息${position}，当前页面仅预留入口，暂不直接创建空位入库任务`)
+  ElMessage.warning(`${actionName}需要先扫码确认二维码和产品信息${position}，当前页面仅预留入口，暂不直接创建空位入库任务`)
 }
 const goPalletCode = (code) => {
   if (!code) return

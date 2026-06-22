@@ -105,10 +105,9 @@
             <span :title="formatDateTime(row.updatedAt)">{{ formatDateTime(row.updatedAt) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="290" fixed="right" align="right" header-align="right">
+        <el-table-column label="操作" width="290" fixed="right" align="left" header-align="left">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-button v-if="canShowBindAction(row)" type="success" link @click="openBindDialog(row)">绑定</el-button>
               <el-button type="primary" link @click="openQrDialog(row)">二维码</el-button>
               <el-dropdown trigger="click" @command="command => handleQrAction(row, command)">
                 <el-button type="primary" link :loading="qrDownloadLoading">
@@ -168,36 +167,6 @@
       <template #footer>
         <el-button @click="closeGenerateDialog">关闭</el-button>
         <el-button type="primary" @click="submitGenerate">生成</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog title="绑定二维码并创建入库任务" v-model="bindDialogVisible" width="560px" :before-close="closeBindDialog">
-      <el-form ref="bindFormRef" :model="bindForm" :rules="bindRules" label-width="110px">
-        <el-form-item label="二维码" prop="code">
-          <el-input v-model="bindForm.code" clearable/>
-        </el-form-item>
-        <el-form-item label="产品" prop="productId">
-          <el-cascader
-              v-model="bindForm.productId"
-              :options="productOptions"
-              :props="productCascaderProps"
-              clearable
-              filterable
-              placeholder="请选择产品"
-              style="width: 100%"
-              @change="handleBindProductChange"
-          />
-        </el-form-item>
-        <el-form-item label="生产日期" prop="productionDate">
-          <el-date-picker v-model="bindForm.productionDate" value-format="YYYY-MM-DD" type="date" style="width: 100%"/>
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="bindForm.remark" type="textarea" :rows="2"/>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="closeBindDialog">取消</el-button>
-        <el-button type="primary" @click="submitBind">确定</el-button>
       </template>
     </el-dialog>
 
@@ -377,7 +346,6 @@ import {formatDateTime} from '@/utils/dateTime'
 import {buildProductCascaderOptions, productCascaderProps} from '@/utils/productCascader'
 import {
   batchDownloadPalletQrLabelPdf,
-  bindPalletTask,
   deletePalletFlows,
   downloadPalletQrLabelPdf,
   downloadPalletQrPng,
@@ -436,16 +404,6 @@ const generateDialogVisible = ref(false)
 const generateForm = ref({count: 20})
 const generatedCodes = ref([])
 
-const bindDialogVisible = ref(false)
-const bindFormRef = ref(null)
-const bindForm = ref(defaultBindForm())
-const bindRules = {
-  code: [{required: true, message: '请输入二维码', trigger: 'blur'}],
-  productId: [{required: true, message: '请选择产品', trigger: 'change'}],
-  productStatus: [{required: true, message: '请选择产品状态', trigger: 'change'}],
-  productionDate: [{required: true, message: '请选择生产日期', trigger: 'change'}]
-}
-
 const qrDialogVisible = ref(false)
 const qrImageUrl = ref('')
 const assayDialogVisible = ref(false)
@@ -469,18 +427,6 @@ const selectedFlowIds = ref([])
 const locationDialogVisible = ref(false)
 const currentFlowLocation = ref(null)
 
-function defaultBindForm() {
-  return {
-    code: '',
-    productId: null,
-    productStatus: '',
-    productionDate: '',
-    quantity: 1,
-    unit: '0',
-    remark: ''
-  }
-}
-
 function defaultAssayCreateForm() {
   return {
     code: '',
@@ -500,7 +446,6 @@ const isFreeRow = (row) => row.status === 'FREE'
 const isPendingRow = (row) => row.status === 'PENDING'
 const isInstockRow = (row) => row.status === 'INSTOCK'
 const isInvalidRow = (row) => row.status === 'INVALID'
-const canShowBindAction = (row) => isFreeRow(row)
 const canShowTaskAction = (row) => isPendingRow(row)
 const canShowAssayAction = (row) => isPendingRow(row) || isInstockRow(row)
 const canShowLocationAction = (row) => isInstockRow(row)
@@ -592,37 +537,6 @@ const submitGenerate = async () => {
   const res = await generatePalletCodes(generateForm.value)
   generatedCodes.value = res.data || []
   ElMessage.success('生成成功')
-  await handleSearch()
-}
-
-const openBindDialog = (row) => {
-  bindForm.value = defaultBindForm()
-  bindForm.value.code = row.code
-  currentCode.value = row.code
-  bindDialogVisible.value = true
-}
-
-const closeBindDialog = () => {
-  bindDialogVisible.value = false
-  bindFormRef.value?.resetFields()
-  bindForm.value = defaultBindForm()
-}
-
-const handleBindProductChange = (productId) => {
-  const product = productList.value.find(item => item.id === productId)
-  bindForm.value.productStatus = product?.status || ''
-}
-
-const submitBind = async () => {
-  await bindFormRef.value?.validate()
-  await bindPalletTask({
-    ...bindForm.value,
-    // 前端兼容现有后端接口的过渡处理：创建任务阶段不让用户录入数量。
-    quantity: 1,
-    unit: '0'
-  })
-  ElMessage.success('绑定成功')
-  closeBindDialog()
   await handleSearch()
 }
 
@@ -1061,7 +975,7 @@ onBeforeUnmount(() => {
 
 .row-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: center;
   gap: 10px;
   flex-wrap: nowrap;

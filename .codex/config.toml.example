@@ -1,0 +1,7 @@
+[mcp_servers.smart_warehouse]
+command = "java"
+args = ["-jar", "D:\\Laibin\\LaibinSugarInventory\\warehouse-mcp\\target\\warehouse-mcp-0.1.0.jar"]
+
+[mcp_servers.smart_warehouse.env]
+WAREHOUSE_API_BASE_URL = "http://localhost:8080"
+WAREHOUSE_API_TOKEN = "REPLACE_WITH_TEST_TOKEN"

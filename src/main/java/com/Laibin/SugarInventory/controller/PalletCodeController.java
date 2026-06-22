@@ -310,7 +310,7 @@ public class PalletCodeController {
         }
     }
 
-    @Operation(summary = "扫码绑定托盘并创建入库任务", description = "小程序/PC 扫描托盘二维码后，绑定产品信息并创建入库任务（不处理化验记录）")
+    @Operation(summary = "历史扫码创建入库任务", description = "历史接口：小程序/PC 扫描托盘二维码后确认产品信息并创建入库任务（不处理化验记录）")
     @PostMapping("/bind")
     public Result<PalletBindResultVO> bind(@RequestBody @Valid BindPalletTaskDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {

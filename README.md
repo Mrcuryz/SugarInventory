@@ -125,6 +125,14 @@ npm run dev
 - Swagger UI：`http://localhost:8080/swagger-ui/index.html`
 - OpenAPI JSON：`http://localhost:8080/v3/api-docs`
 
+如需将本地运行后端的 OpenAPI 文档导出到仓库文件：
+
+```powershell
+.\scripts\export-openapi.ps1 -BaseUrl http://localhost:8080
+```
+
+脚本会生成 UTF-8 无 BOM 的 `docs/openapi.json`。如果接口需要鉴权，可先设置 `WAREHOUSE_API_TOKEN` 环境变量。
+
 ## 统一返回与分页约定
 
 - 统一响应：`Result<T>`

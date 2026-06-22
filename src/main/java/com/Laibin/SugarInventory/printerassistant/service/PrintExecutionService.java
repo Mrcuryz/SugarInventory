@@ -13,6 +13,7 @@ import java.awt.print.Paper;
 import java.awt.print.Printable;
 import java.awt.print.PrinterException;
 import java.awt.print.PrinterJob;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -38,18 +39,26 @@ public class PrintExecutionService {
             PrinterJob job = PrinterJob.getPrinterJob();
             job.setPrintService(printer);
             PageFormat pageFormat = createLabelPageFormat(job);
+            List<BufferedImage> printPages = buildPrintPages(labelImages, safeCopies);
             Book book = new Book();
-            for (BufferedImage image : labelImages) {
-                for (int i = 0; i < safeCopies; i++) {
-                    book.append(new LabelImagePrintable(image), pageFormat);
-                }
-            }
+            book.append(new LabelImagesPrintable(printPages), pageFormat, printPages.size());
             job.setPageable(book);
             job.print();
-            return new PrintResult(printer.getName(), labelImages.size() * safeCopies);
+            return new PrintResult(printer.getName(), printPages.size());
         } catch (PrinterException e) {
             throw new IllegalStateException("提交打印任务失败，请检查打印机状态", e);
         }
+    }
+
+    static List<BufferedImage> buildPrintPages(List<BufferedImage> labelImages, int copies) {
+        int safeCopies = Math.max(copies, 1);
+        List<BufferedImage> printPages = new ArrayList<>(labelImages.size() * safeCopies);
+        for (BufferedImage image : labelImages) {
+            for (int i = 0; i < safeCopies; i++) {
+                printPages.add(image);
+            }
+        }
+        return printPages;
     }
 
     private static PageFormat createLabelPageFormat(PrinterJob job) {
@@ -67,19 +76,20 @@ public class PrintExecutionService {
     public record PrintResult(String printerName, int printedCount) {
     }
 
-    private static final class LabelImagePrintable implements Printable {
+    static final class LabelImagesPrintable implements Printable {
 
-        private final BufferedImage image;
+        private final List<BufferedImage> images;
 
-        private LabelImagePrintable(BufferedImage image) {
-            this.image = image;
+        LabelImagesPrintable(List<BufferedImage> images) {
+            this.images = images;
         }
 
         @Override
         public int print(Graphics graphics, PageFormat pageFormat, int pageIndex) {
-            if (pageIndex > 0) {
+            if (pageIndex < 0 || pageIndex >= images.size()) {
                 return NO_SUCH_PAGE;
             }
+            BufferedImage image = images.get(pageIndex);
             Graphics2D graphics2D = (Graphics2D) graphics.create();
             try {
                 graphics2D.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);

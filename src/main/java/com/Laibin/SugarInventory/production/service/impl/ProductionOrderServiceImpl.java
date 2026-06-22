@@ -792,7 +792,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
         flow.setPalletCodeId(palletCode.getId());
         flow.setTaskId(task.getId());
         flow.setOperationType("ORDER_OUTPUT_BIND");
-        flow.setOperationName("生产订单产出绑定二维码");
+        flow.setOperationName("生产订单产出分配二维码");
         flow.setOperationTime(now);
         flow.setOperatorId(operatorId);
         flow.setProductId(product.getId());
@@ -1190,7 +1190,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
 
     private void ensureOutputEditable(ProductionOrderOutput output) {
         if (safeInt(output.getBoundQrCount()) > 0) {
-            throw new BusinessException("产出已绑定二维码，不能修改或删除");
+            throw new BusinessException("产出已使用订单码，不能修改或删除");
         }
         if (!"DRAFT".equals(output.getStatus())) {
             throw new BusinessException("只有待绑定产出允许修改或删除");

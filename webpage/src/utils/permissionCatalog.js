@@ -104,7 +104,7 @@ const permissionMeta = {
   'production:material:pick': '半成品领用',
   'production:output:view': '产出贴码查看',
   'production:output:create': '添加产出',
-  'production:output:bindQr': '产出绑定二维码',
+  'production:output:bindQr': '历史产出分配二维码',
   'production:output:print': '产出二维码打印',
   'screen_mesh:view': '筛网查看',
   'assay:view': '化验查看',

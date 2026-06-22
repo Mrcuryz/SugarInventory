@@ -172,7 +172,7 @@
           <template #default="{ row }">{{ outputQuantityText(row) }}</template>
         </el-table-column>
         <el-table-column prop="requiredQrCount" label="需二维码" width="95" />
-        <el-table-column label="绑定情况" width="110">
+        <el-table-column label="用码情况" width="110">
           <template #default="{ row }">{{ row.boundQrCount || 0 }}/{{ row.requiredQrCount || 0 }}</template>
         </el-table-column>
         <el-table-column label="入库进度" width="110">
@@ -362,14 +362,14 @@ const codeQuantityText = row => {
   return '暂无'
 }
 const outputStatusText = status => ({
-  DRAFT: '待绑定',
-  BOUND: '已绑定',
+  DRAFT: '待用码',
+  BOUND: '已用码',
   PART_INBOUND: '部分入库',
   INSTOCK: '已入库',
   CANCELED: '已取消'
 }[status] || status || '暂无')
 const outputCodeStatusText = status => ({
-  BOUND: '已绑定',
+  BOUND: '已用码',
   PENDING_INBOUND: '待入库',
   INSTOCK: '已入库',
   CANCELED: '已取消'
@@ -578,7 +578,7 @@ const outputCodes = row => (row.codes || []).map(item => item.palletCode).filter
 const printOutputCodes = row => {
   const codes = outputCodes(row)
   if (!codes.length) {
-    ElMessage.warning('当前产出还没有已绑定二维码')
+    ElMessage.warning('当前产出还没有已使用订单码')
     return
   }
   router.push({
@@ -598,7 +598,7 @@ const showOutputCodes = row => {
 const goProcessTasks = row => {
   const codes = outputCodes(row)
   if (!codes.length) {
-    ElMessage.warning('当前产出还没有已绑定二维码')
+    ElMessage.warning('当前产出还没有已使用订单码')
     return
   }
   router.push({

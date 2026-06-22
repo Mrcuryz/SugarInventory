@@ -67,7 +67,7 @@
             <el-tab-pane v-for="tab in bizSceneTabs" :key="tab.value" :label="tab.label" :name="tab.value"/>
           </el-tabs>
           <div class="action-groups">
-            <el-button v-if="hasTopAction('bindPallet')" type="primary" size="small" @click="goBindPallet">绑定二维码</el-button>
+            <el-button v-if="hasTopAction('bindPallet')" type="primary" size="small" @click="goBindPallet">扫码建入库任务</el-button>
             <el-button v-if="hasTopAction('semiOutCreate')" type="primary" size="small" @click="openCommonDialog('semiOutCreate')">{{ getActionLabel('semiOutCreate', '创建普通出库任务') }}</el-button>
             <el-button v-if="hasTopAction('finishOutCreate')" type="primary" size="small" @click="openCommonDialog('finishOutCreate')">创建成品出库任务</el-button>
             <el-button v-if="hasTopAction('transferCreate')" type="primary" size="small" @click="openCommonDialog('transferCreate')">创建调拨任务</el-button>
