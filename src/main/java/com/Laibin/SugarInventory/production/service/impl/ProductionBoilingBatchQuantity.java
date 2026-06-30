@@ -32,6 +32,13 @@ public final class ProductionBoilingBatchQuantity {
         return normalize(bucketCount).multiply(normalize(kgPerBucket)).setScale(3, RoundingMode.HALF_UP);
     }
 
+    public static BigDecimal totalWeight(BigDecimal potCount, BigDecimal bucketCount, BigDecimal kgPerBucket) {
+        return normalize(potCount)
+                .multiply(normalize(bucketCount))
+                .multiply(normalize(kgPerBucket))
+                .setScale(3, RoundingMode.HALF_UP);
+    }
+
     public static UsageQuantity convertUsage(String unit, BigDecimal quantity, BigDecimal kgPerBucket) {
         BigDecimal normalizedQuantity = positiveOrDefault(quantity, null, "引用数量");
         BigDecimal normalizedKgPerBucket = positiveOrDefault(kgPerBucket, DEFAULT_KG_PER_BUCKET, "每桶重量");

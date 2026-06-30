@@ -80,3 +80,5 @@ export const updateBoilingBatch = (id, params) => request.put(`/production/boili
 export const cancelBoilingBatch = id => request.post(`/production/boiling-batches/${id}/cancel`, {})
 
 export const getBoilingBatchTrace = id => request.get(`/production/boiling-batches/${id}/trace`)
+
+export const getBoilingBatchTraceGraph = id => request.get(`/production/boiling-batches/${id}/graph`)

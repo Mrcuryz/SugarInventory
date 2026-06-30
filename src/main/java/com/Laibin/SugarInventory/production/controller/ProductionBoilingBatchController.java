@@ -69,4 +69,10 @@ public class ProductionBoilingBatchController {
     public Result<ProductionBoilingBatchTraceNodeVO> getTrace(@PathVariable Long id) {
         return Result.success(boilingBatchService.getTrace(id));
     }
+
+    @GetMapping("/{id}/graph")
+    @PreAuthorize("hasAuthority('production:boiling:view')")
+    public Result<ProductionBoilingBatchTraceNodeVO> getTraceGraph(@PathVariable Long id) {
+        return Result.success(boilingBatchService.getTrace(id));
+    }
 }

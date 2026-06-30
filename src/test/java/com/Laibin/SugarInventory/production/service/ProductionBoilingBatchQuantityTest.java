@@ -18,6 +18,16 @@ class ProductionBoilingBatchQuantityTest {
     }
 
     @Test
+    void potBucketAndWeightCalculateTotalWeight() {
+        BigDecimal total = ProductionBoilingBatchQuantity.totalWeight(
+                new BigDecimal("2"),
+                ProductionBoilingBatchQuantity.DEFAULT_BUCKET_COUNT,
+                ProductionBoilingBatchQuantity.DEFAULT_KG_PER_BUCKET);
+
+        assertEquals(new BigDecimal("3960.000"), total);
+    }
+
+    @Test
     void bucketUsageConvertsToWeight() {
         ProductionBoilingBatchQuantity.UsageQuantity quantity = ProductionBoilingBatchQuantity.convertUsage(
                 "BUCKET", new BigDecimal("10"), new BigDecimal("11"));

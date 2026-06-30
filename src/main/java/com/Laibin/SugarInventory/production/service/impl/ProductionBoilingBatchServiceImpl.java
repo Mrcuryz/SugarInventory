@@ -607,14 +607,15 @@ public class ProductionBoilingBatchServiceImpl implements ProductionBoilingBatch
         batch.setProductId(dto.getProductId());
         Product product = dto.getProductId() == null ? null : productMapper.selectById(dto.getProductId());
         batch.setProductNameSnapshot(product == null ? null : product.getProductName());
-        batch.setPotCount(positiveIntegerOrNull(dto.getPotCount(), "锅数"));
+        BigDecimal potCount = dto.getPotCount() == null ? BigDecimal.ONE.setScale(3) : positiveInteger(dto.getPotCount(), "锅数");
+        batch.setPotCount(potCount);
         BigDecimal bucketCount = positiveInteger(ProductionBoilingBatchQuantity.positiveOrDefault(
                 dto.getBucketCount(), ProductionBoilingBatchQuantity.DEFAULT_BUCKET_COUNT, "实际桶数"), "实际桶数");
         BigDecimal kgPerBucket = ProductionBoilingBatchQuantity.positiveOrDefault(
                 dto.getKgPerBucket(), ProductionBoilingBatchQuantity.DEFAULT_KG_PER_BUCKET, "每桶重量");
         batch.setBucketCount(bucketCount);
         batch.setKgPerBucket(kgPerBucket);
-        batch.setTotalWeightKg(ProductionBoilingBatchQuantity.totalWeight(bucketCount, kgPerBucket));
+        batch.setTotalWeightKg(ProductionBoilingBatchQuantity.totalWeight(potCount, bucketCount, kgPerBucket));
         batch.setSourceText(blankToNull(dto.getSourceText()));
         batch.setRemark(blankToNull(dto.getRemark()));
     }
