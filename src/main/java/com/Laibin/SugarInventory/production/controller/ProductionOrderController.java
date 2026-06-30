@@ -189,6 +189,15 @@ public class ProductionOrderController {
         writeDownload(response, "production-label-batch-" + batchId + "-" + LocalDate.now() + ".pdf", pdf);
     }
 
+    @GetMapping("/label-codes/{labelCodeId}/qrcode")
+    @PreAuthorize("hasAuthority('production:order:view')")
+    public void getLabelCodeQrCode(@PathVariable Long labelCodeId, HttpServletResponse response) throws IOException {
+        byte[] png = productionOrderService.getLabelCodeQrPng(labelCodeId);
+        response.setContentType("image/png");
+        response.setContentLength(png.length);
+        response.getOutputStream().write(png);
+    }
+
     @PostMapping("/{id}/production-finish")
     @PreAuthorize("hasAuthority('production:label:finish')")
     public Result<ProductionOrderDetailVO> finishProduction(@PathVariable Long id,

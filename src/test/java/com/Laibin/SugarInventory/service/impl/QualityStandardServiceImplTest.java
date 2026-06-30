@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -118,6 +119,25 @@ class QualityStandardServiceImplTest {
         assertEquals("请完整配置 7 项固定指标", error.getMessage());
         verify(qualityStandardMapper, never()).insert(any(QualityStandard.class));
         verify(qualityStandardItemMapper, never()).insert(any(QualityStandardItem.class));
+    }
+
+    @Test
+    void shouldAllowDuplicateStandardCodeWhenAddingStandard() {
+        QualityStandardDTO dto = standardDto();
+        dto.setStandardCode("GB/T35883-2018");
+
+        when(qualityStandardMapper.selectOne(any())).thenReturn(null);
+        doAnswer(invocation -> {
+            QualityStandard standard = invocation.getArgument(0);
+            standard.setId(100);
+            return 1;
+        }).when(qualityStandardMapper).insert(any(QualityStandard.class));
+        when(qualityStandardItemMapper.selectByQualityStandardId(100)).thenReturn(List.of());
+
+        qualityStandardService.addQualityStandard(dto);
+
+        verify(qualityStandardMapper, times(1)).selectOne(any());
+        verify(qualityStandardMapper).insert(any(QualityStandard.class));
     }
 
     @Test

@@ -1,8 +1,12 @@
 package com.Laibin.SugarInventory.mcp.tool;
 
 import com.Laibin.SugarInventory.mcp.client.WarehouseApiException;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductResolutionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveWarehousesRequest;
@@ -11,6 +15,7 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseStatusResponse;
 import com.Laibin.SugarInventory.mcp.service.ErrorMapper;
 import com.Laibin.SugarInventory.mcp.service.WarehouseReadService;
+import com.Laibin.SugarInventory.mcp.security.WarehouseToolCallContext;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -39,7 +44,7 @@ public class WarehouseTools {
 
     public ProductResolutionResponse resolveProducts(ResolveProductsRequest request) {
         try {
-            return readService.resolveProducts(request);
+            return WarehouseToolCallContext.withToolName("resolve_products", () -> readService.resolveProducts(request));
         } catch (WarehouseApiException e) {
             return ProductResolutionResponse.error(ErrorMapper.upstream(e));
         } catch (RuntimeException e) {
@@ -57,7 +62,7 @@ public class WarehouseTools {
 
     public WarehouseResolutionResponse resolveWarehouses(ResolveWarehousesRequest request) {
         try {
-            return readService.resolveWarehouses(request);
+            return WarehouseToolCallContext.withToolName("resolve_warehouses", () -> readService.resolveWarehouses(request));
         } catch (WarehouseApiException e) {
             return WarehouseResolutionResponse.error(ErrorMapper.upstream(e));
         } catch (RuntimeException e) {
@@ -77,7 +82,7 @@ public class WarehouseTools {
 
     public InventoryOverviewResponse getInventoryOverview(InventoryOverviewRequest request) {
         try {
-            return readService.getInventoryOverview(request);
+            return WarehouseToolCallContext.withToolName("get_inventory_overview", () -> readService.getInventoryOverview(request));
         } catch (WarehouseApiException e) {
             return InventoryOverviewResponse.error(ErrorMapper.upstream(e));
         } catch (RuntimeException e) {
@@ -99,13 +104,52 @@ public class WarehouseTools {
 
     public WarehouseStatusResponse getWarehouseStatus(WarehouseStatusRequest request) {
         try {
-            return readService.getWarehouseStatus(request);
+            return WarehouseToolCallContext.withToolName("get_warehouse_status", () -> readService.getWarehouseStatus(request));
         } catch (WarehouseApiException e) {
             return WarehouseStatusResponse.error(ErrorMapper.upstream(e));
         } catch (RuntimeException e) {
             return WarehouseStatusResponse.error(ErrorMapper.unexpected());
         }
     }
-}
+    @Tool(name = "get_pallet_status", description = "Read pallet code status, current inventory position, assay information, flow cycles, and flow details without modifying warehouse data.")
+    public PalletStatusResponse getPalletStatus(
+            @ToolParam(description = "Pallet code. Length 1..100.") @Schema(minLength = 1, maxLength = 100, requiredMode = Schema.RequiredMode.REQUIRED) @NotBlank @Size(min = 1, max = 100) String code,
+            @ToolParam(description = "Include current inventory position. Defaults to true.", required = false) Boolean includeInventory,
+            @ToolParam(description = "Include resolved assay information. Defaults to true.", required = false) Boolean includeAssay,
+            @ToolParam(description = "Include flow cycles and flow details. Defaults to true.", required = false) Boolean includeFlows,
+            @ToolParam(description = "Optional flow cycle number. Minimum 1.", required = false) @Schema(minimum = "1") @Min(1) Integer cycleNo,
+            @ToolParam(description = "Maximum flow cycles/details to return. Range 1..100.", required = false) @Schema(minimum = "1", maximum = "100") @Min(1) @Max(100) Integer flowLimit) {
+        return getPalletStatus(new PalletStatusRequest(code, includeInventory, includeAssay, includeFlows, cycleNo, flowLimit));
+    }
 
+    public PalletStatusResponse getPalletStatus(PalletStatusRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("get_pallet_status", () -> readService.getPalletStatus(request));
+        } catch (WarehouseApiException e) {
+            return PalletStatusResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            return PalletStatusResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    @Tool(name = "get_assay_status", description = "Read an assay by id, or by product and production date, including judge result, failed metrics, and applied standard details.")
+    public AssayStatusResponse getAssayStatus(
+            @ToolParam(description = "Preferred assay id. When supplied, product fields are ignored.", required = false) @Schema(minimum = "1") @Min(1) Integer assayId,
+            @ToolParam(description = "Product id used with productionDate.", required = false) @Schema(minimum = "1") @Min(1) Integer productId,
+            @ToolParam(description = "Production date in ISO format yyyy-MM-dd. Required with productId or productQuery.", required = false) @Schema(minLength = 10, maxLength = 10) @Size(min = 10, max = 10) String productionDate,
+            @ToolParam(description = "Product query used only when productId is absent. Length 1..100.", required = false) @Schema(minLength = 1, maxLength = 100) @Size(min = 1, max = 100) String productQuery,
+            @ToolParam(description = "Include applied standard and failed metric details. Defaults to true.", required = false) Boolean includeStandardDetails) {
+        return getAssayStatus(new AssayStatusRequest(assayId, productId, productionDate, productQuery, includeStandardDetails));
+    }
+
+    public AssayStatusResponse getAssayStatus(AssayStatusRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("get_assay_status", () -> readService.getAssayStatus(request));
+        } catch (WarehouseApiException e) {
+            return AssayStatusResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            return AssayStatusResponse.error(ErrorMapper.unexpected());
+        }
+    }
+}
 

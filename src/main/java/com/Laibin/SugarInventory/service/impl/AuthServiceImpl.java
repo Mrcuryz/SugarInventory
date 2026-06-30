@@ -95,11 +95,6 @@ public class AuthServiceImpl implements AuthService {
             // 生成 JWT Token
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmployeeId());
             String token = jwtUtils.generateToken(userDetails);
-            if (token != null && token.split("\\.").length == 3) {
-                System.out.println("Token format is correct! Token: " + token);
-            } else {
-                System.out.println("Token format is incorrect!");
-            }
             return Result.success(new AuthVO(token, user.getName(), user.getRoleCode(), permissionCodes));
         } catch (UsernameNotFoundException e) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
@@ -116,12 +111,6 @@ public class AuthServiceImpl implements AuthService {
         try {
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmployeeId());
             String token = jwtUtils.generateToken(userDetails);
-
-            if (token != null && token.split("\\.").length == 3) {
-                System.out.println("Token format is correct! Token: " + token);
-            } else {
-                System.out.println("Token format is incorrect!");
-            }
             return new AuthVO(token, user.getName(), user.getRoleCode(), getPermissionCodes(user.getRoleCode()));
         } catch (UsernameNotFoundException e) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
@@ -163,11 +152,8 @@ public class AuthServiceImpl implements AuthService {
     // 处理工号验证绑定
     public AuthVO handleManualBind(EmployeeVerifyDTO dto) throws WxErrorException {
         String openid = wechatClient.getOpenid(dto.getCode());
-        System.out.println("openid: " + openid);
-        System.out.println("employeeId: " + dto.getEmployeeId() + ", name: " + dto.getNamePart());
         // 1. 验证工号存在性
         EmployeeRoster roster = rosterMapper.selectByEmployeeId(dto.getEmployeeId());
-        System.out.println("roster: " + roster);
         if (roster == null) {
             throw new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND);
         }

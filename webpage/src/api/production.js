@@ -61,7 +61,22 @@ export const listProductionLabelBatches = orderId => {
 export const printProductionLabelBatch = batchId => {
   return request.post(`/production/orders/label-batches/${batchId}/print`, {}, {responseType: 'blob'})
 }
+export const getProductionLabelQrCode = labelCodeId => {
+  return request.get(`/production/orders/label-codes/${labelCodeId}/qrcode`, {responseType: 'blob'})
+}
 
 export const finishProductionOrder = (orderId, params) => {
   return request.post(`/production/orders/${orderId}/production-finish`, params)
 }
+
+export const pageBoilingBatches = params => request.get('/production/boiling-batches', {params})
+
+export const getBoilingBatchDetail = id => request.get(`/production/boiling-batches/${id}`)
+
+export const createBoilingBatch = params => request.post('/production/boiling-batches', params)
+
+export const updateBoilingBatch = (id, params) => request.put(`/production/boiling-batches/${id}`, params)
+
+export const cancelBoilingBatch = id => request.post(`/production/boiling-batches/${id}/cancel`, {})
+
+export const getBoilingBatchTrace = id => request.get(`/production/boiling-batches/${id}/trace`)

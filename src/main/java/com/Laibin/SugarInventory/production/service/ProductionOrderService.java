@@ -61,6 +61,8 @@ public interface ProductionOrderService {
 
     byte[] printLabelBatch(Long batchId);
 
+    byte[] getLabelCodeQrPng(Long labelCodeId);
+
     ProductionOrderDetailVO finishProduction(Long orderId, ProductionFinishDTO dto, Integer operatorId);
 
     ProductionQuantitySplitVO splitQuantity(Integer boardCount, Integer pieceCount, Integer piecesPerPallet);

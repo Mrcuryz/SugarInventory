@@ -168,16 +168,17 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="单位">
-          <el-radio-group v-model="confirmInForm.unit" @change="handleConfirmInUnitChange">
+          <el-radio-group v-model="confirmInForm.unit" :disabled="confirmInForm.quantityLocked" @change="handleConfirmInUnitChange">
             <el-radio v-for="item in UNIT_OPTIONS" :key="item.value" :label="item.value">{{ item.label }}</el-radio>
           </el-radio-group>
+          <div v-if="confirmInForm.quantityLocked" class="form-tip">生产订单产出码按订单核销数量入库，不能在任务页修改。</div>
         </el-form-item>
         <el-form-item label="数量">
           <el-input-number
               v-model="confirmInForm.quantity"
               :min="1"
               :max="confirmInQuantityMax"
-              :disabled="confirmInForm.unit === '0'"
+              :disabled="confirmInForm.quantityLocked || confirmInForm.unit === '0'"
               controls-position="right"
           />
         </el-form-item>
@@ -216,7 +217,7 @@
         </el-table-column>
         <el-table-column label="单位" width="95">
           <template #default="{ row }">
-            <el-select v-model="row.unit" @change="normalizeQuantityByUnit(row)">
+            <el-select v-model="row.unit" :disabled="row.quantityLocked" @change="normalizeQuantityByUnit(row)">
               <el-option v-for="item in UNIT_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
             </el-select>
           </template>
@@ -227,11 +228,12 @@
                 v-model="row.quantity"
                 :min="1"
                 :max="getQuantityMax(row)"
-                :disabled="!canEditQuantity(row)"
+                :disabled="row.quantityLocked || !canEditQuantity(row)"
                 controls-position="right"
                 style="width: 100%"
                 @change="normalizeQuantityByUnit(row)"
             />
+            <div v-if="row.quantityLocked" class="table-cell-tip">按订单核销数量</div>
           </template>
         </el-table-column>
         <el-table-column label="每板上限" width="95">
@@ -519,7 +521,8 @@ function defaultConfirmInForm() {
     side: '左',
     quantity: 1,
     unit: '0',
-    remark: ''
+    remark: '',
+    quantityLocked: false
   }
 }
 
@@ -620,7 +623,19 @@ const getPiecesLimitByProductId = (productId) => {
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
-const canEditQuantity = (row) => row.unit === '1'
+const isProductionOrderOutputTask = (row) => Boolean(row?.productionOutputCodeId)
+
+const productionOutputUnit = (row) => String(row?.productionOutputUnit || '0') === '1' ? '1' : '0'
+
+const productionOutputQuantity = (row) => {
+  if (!isProductionOrderOutputTask(row)) return null
+  if (productionOutputUnit(row) === '1') {
+    return Number(row.productionOutputPieces || row.productionOutputQuantity || 0) || 1
+  }
+  return Number(row.productionOutputQuantity || 1) || 1
+}
+
+const canEditQuantity = (row) => row.unit === '1' && !row.quantityLocked
 
 const getQuantityMax = (row) => {
   if (row.unit === '0') {
@@ -634,6 +649,11 @@ const getQuantityMax = (row) => {
 }
 
 const normalizeQuantityByUnit = (row) => {
+  if (row.quantityLocked) {
+    row.unit = productionOutputUnit(row)
+    row.quantity = productionOutputQuantity(row)
+    return
+  }
   if (row.unit === '0') {
     row.quantity = 1
     return
@@ -649,6 +669,9 @@ const normalizeQuantityByUnit = (row) => {
 
 const validateQuantityRows = (rows, label = '任务') => {
   for (const row of rows) {
+    if (row.quantityLocked) {
+      continue
+    }
     if (row.unit === '0') {
       row.quantity = 1
       continue
@@ -678,12 +701,17 @@ const canConfirmFinishOut = (row) => hasRowAction('finishOutConfirm') && row.tas
 const canConfirmTransfer = (row) => hasRowAction('transferConfirm') && row.taskType === 'TRANSFER' && isPending(row)
 
 const openConfirmInDialog = (row) => {
+  const quantityLocked = isProductionOrderOutputTask(row)
   confirmInProduct.value = productMap.value[row.productId] || null
   confirmInForm.value = {
     ...defaultConfirmInForm(),
     code: row.code,
     entryDate: row.productionDate || dayjs().format('YYYY-MM-DD'),
-    side: row.targetSide || '左'
+    side: row.targetSide || '左',
+    quantity: quantityLocked ? productionOutputQuantity(row) : 1,
+    unit: quantityLocked ? productionOutputUnit(row) : '0',
+    quantityLocked,
+    productionOutputCodeId: row.productionOutputCodeId || null
   }
   confirmInDialogVisible.value = true
 }
@@ -696,6 +724,9 @@ const closeConfirmInDialog = () => {
 }
 
 const handleConfirmInUnitChange = (unit) => {
+  if (confirmInForm.value.quantityLocked) {
+    return
+  }
   if (unit === '0') {
     confirmInForm.value.quantity = 1
     return
@@ -707,7 +738,9 @@ const handleConfirmInUnitChange = (unit) => {
 
 const submitConfirmIn = async () => {
   await confirmInFormRef.value?.validate()
-  if (confirmInForm.value.unit === '0') {
+  if (confirmInForm.value.quantityLocked) {
+    // 生产订单产出码以后端核销数量为准，页面只传同口径字段。
+  } else if (confirmInForm.value.unit === '0') {
     confirmInForm.value.quantity = 1
   } else {
     if (!confirmInPiecesLimit.value) {
@@ -751,17 +784,22 @@ const openBatchConfirmInDialog = () => {
   )) {
     return
   }
-  batchConfirmInRows.value = selectedRows.value.map(row => ({
-    code: row.code,
-    productId: row.productId,
-    productName: row.productName,
-    warehouseName: row.targetWarehouseName || '',
-    entryDate: row.productionDate || dayjs().format('YYYY-MM-DD'),
-    side: row.targetSide || '左',
-    quantity: 1,
-    unit: '0',
-    remark: ''
-  }))
+  batchConfirmInRows.value = selectedRows.value.map(row => {
+    const quantityLocked = isProductionOrderOutputTask(row)
+    return {
+      code: row.code,
+      productId: row.productId,
+      productName: row.productName,
+      warehouseName: row.targetWarehouseName || '',
+      entryDate: row.productionDate || dayjs().format('YYYY-MM-DD'),
+      side: row.targetSide || '左',
+      quantity: quantityLocked ? productionOutputQuantity(row) : 1,
+      unit: quantityLocked ? productionOutputUnit(row) : '0',
+      quantityLocked,
+      productionOutputCodeId: row.productionOutputCodeId || null,
+      remark: ''
+    }
+  })
   batchConfirmInDialogVisible.value = true
 }
 

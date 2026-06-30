@@ -102,6 +102,11 @@
 - 是否应与其他接口组合为业务级Tool
 - 是否需要新建后端聚合接口
 
+## MCP 工具上下文
+
+- 当任务涉及 MCP、Agent、自然语言操作、仓储工具调用、工具新增或工具评估时，必须先阅读 `docs/mcp/mcp-tool-registry.md`。
+- 涉及 AI 助手、Agent Gateway、MCP 工具、自然语言交互、前端助手体验的任务，必须先阅读 `docs/agent/ai-assistant-product-goal.md`。
+
 ## MCP设计原则
 
 1. 不要将全部REST接口一对一转换成MCP Tool。

@@ -1,0 +1,2 @@
+"""Warehouse Agent Service package."""
+

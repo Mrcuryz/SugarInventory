@@ -28,11 +28,13 @@ class WarehouseMcpApplicationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void startsAndListsFourTools() {
+    void startsAndListsSixTools() {
         List<String> names = toolSchemas().keySet().stream().sorted().toList();
 
         assertThat(names).containsExactly(
+                "get_assay_status",
                 "get_inventory_overview",
+                "get_pallet_status",
                 "get_warehouse_status",
                 "resolve_products",
                 "resolve_warehouses"
@@ -47,11 +49,15 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("resolve_warehouses"));
         assertObjectClosed(schemas.get("get_inventory_overview"));
         assertObjectClosed(schemas.get("get_warehouse_status"));
+        assertObjectClosed(schemas.get("get_pallet_status"));
+        assertObjectClosed(schemas.get("get_assay_status"));
 
         assertRequired(schemas.get("resolve_products"), "query");
         assertRequired(schemas.get("resolve_warehouses"), "query");
+        assertRequired(schemas.get("get_pallet_status"), "code");
         assertNoRequiredFields(schemas.get("get_inventory_overview"));
         assertNoRequiredFields(schemas.get("get_warehouse_status"));
+        assertNoRequiredFields(schemas.get("get_assay_status"));
 
         assertStringBounds(schemas.get("resolve_products"), "query", 1, 100);
         assertIntegerBounds(schemas.get("resolve_products"), "limit", 1, 100);
@@ -61,6 +67,13 @@ class WarehouseMcpApplicationTest {
         assertIntegerBounds(schemas.get("get_inventory_overview"), "size", 1, 100);
         assertIntegerBounds(schemas.get("get_warehouse_status"), "page", 1, null);
         assertIntegerBounds(schemas.get("get_warehouse_status"), "size", 1, 100);
+        assertStringBounds(schemas.get("get_pallet_status"), "code", 1, 100);
+        assertIntegerBounds(schemas.get("get_pallet_status"), "cycleNo", 1, null);
+        assertIntegerBounds(schemas.get("get_pallet_status"), "flowLimit", 1, 100);
+        assertIntegerBounds(schemas.get("get_assay_status"), "assayId", 1, null);
+        assertIntegerBounds(schemas.get("get_assay_status"), "productId", 1, null);
+        assertStringBounds(schemas.get("get_assay_status"), "productionDate", 10, 10);
+        assertStringBounds(schemas.get("get_assay_status"), "productQuery", 1, 100);
     }
 
     private Map<String, JsonNode> toolSchemas() {

@@ -1,0 +1,6 @@
+.vendor/
+.pytest_cache/
+pytest-cache-files-*/
+*.egg-info/
+__pycache__/
+*.py[cod]

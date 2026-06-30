@@ -2,7 +2,13 @@ package com.Laibin.SugarInventory.mcp;
 
 import com.Laibin.SugarInventory.mcp.client.WarehouseApiClient;
 import com.Laibin.SugarInventory.mcp.config.WarehouseApiProperties;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AmbiguityType;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayLookupMode;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.MatchType;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.OptionType;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveWarehousesRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolutionStatus;
@@ -25,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class WarehouseToolsTest {
-    private static final String FORBIDDEN_WRITE_PATHS = "^(/api/in-stock/add|/api/out-stock/out|/api/out-stock/transferOut|/api/pallet-codes/tasks/confirm|/api/auto-inbound/.*/confirm)$";
+    private static final String FORBIDDEN_WRITE_PATHS = ".*(/api/in-stock/add|/api/out-stock/out|/api/out-stock/transferOut|/api/pallet-codes/tasks/confirm|/api/pallet-codes/invalid|/api/pallet-codes/invalid/restore|/api/pallet-codes/bind|/api/pallet-codes/fixed-product/bind|/api/pallet-codes/.*/confirm|/api/pallet-codes/.*/create|/api/auto-inbound/.*/confirm|/api/assay/import).*";
 
     private MockWebServer backend;
     private WarehouseTools tools;
@@ -116,6 +122,89 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void resolvesWarehouseNaturalSlotName() throws InterruptedException {
+        assertNaturalWarehouseName("2号库位", "2");
+    }
+
+    @Test
+    void resolvesWarehouseChineseNumeralSlotName() throws InterruptedException {
+        assertNaturalWarehouseName("二号库位", "2");
+    }
+
+    @Test
+    void resolvesWarehouseTwoDigitSlotName() throws InterruptedException {
+        assertNaturalWarehouseName("12号库位", "12");
+    }
+
+    @Test
+    void resolvesWarehousePrefixSlotName() throws InterruptedException {
+        assertNaturalWarehouseName("库位2", "2");
+    }
+
+    @Test
+    void normalizedWarehouseNumberIsNotUsedAsWarehouseId() throws InterruptedException {
+        backend.enqueue(json(result("""
+                [{"id":9,"warehouseName":"2","status":"正常"}]
+                """)));
+
+        var response = tools.resolveWarehouses(new ResolveWarehousesRequest("2号库位", false, 10));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.UNIQUE);
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).startsWith("/api/warehouse/query");
+        assertThat(request.getPath()).doesNotStartWith("/api/warehouse/2");
+    }
+
+    @Test
+    void resolvesProductAmbiguityWithHumanOptions() {
+        backend.enqueue(json(result("""
+                [
+                  {"id":84,"productName":"黄冰糖（袋）","productType":"黄冰糖","status":"成品","weightPerPiece":25,"piecesPerPallet":40},
+                  {"id":123,"productName":"黄冰糖（9.6箱装）","productType":"黄冰糖","status":"成品","weightPerPiece":9.6,"piecesPerPallet":100}
+                ]
+                """)));
+
+        var response = tools.resolveProducts(new ResolveProductsRequest("黄冰糖", null, null, 10));
+
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.AMBIGUOUS);
+        assertThat(response.needsUserSelection()).isTrue();
+        assertThat(response.ambiguityType()).isEqualTo(AmbiguityType.PRODUCT_SCOPE);
+        assertThat(response.clarificationPrompt()).contains("黄冰糖");
+        assertThat(response.options()).anySatisfy(option -> {
+            assertThat(option.optionType()).isEqualTo(OptionType.PRODUCT_TYPE_GROUP);
+            assertThat(option.supported()).isFalse();
+        });
+        assertThat(response.options()).anySatisfy(option -> {
+            assertThat(option.optionType()).isEqualTo(OptionType.EXACT_PRODUCT_NAME_GROUP);
+            assertThat(option.supported()).isFalse();
+        });
+        assertThat(response.options()).filteredOn(option -> option.optionType() == OptionType.SINGLE_PRODUCT)
+                .hasSize(2)
+                .allSatisfy(option -> assertThat(option.supported()).isTrue());
+    }
+
+    @Test
+    void ambiguousProductQueryDoesNotAutoLoadInventoryOverview() throws InterruptedException {
+        backend.enqueue(json(result("""
+                [
+                  {"id":84,"productName":"黄冰糖（袋）","productType":"黄冰糖","status":"成品"},
+                  {"id":123,"productName":"黄冰糖（9.6箱装）","productType":"黄冰糖","status":"成品"}
+                ]
+                """)));
+
+        var response = tools.getInventoryOverview(new InventoryOverviewRequest(null, "黄冰糖", null, 1, 10));
+
+        assertThat(response.error().code()).isEqualTo("INVALID_ARGUMENT");
+        assertThat(response.error().field()).isEqualTo("productQuery");
+        assertThat(backend.getRequestCount()).isEqualTo(1);
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).startsWith("/api/products/product");
+        assertThat(request.getPath()).doesNotStartWith("/api/inventory/stock/page");
+    }
+    @Test
     void resolvesWarehouseNotFound() {
         backend.enqueue(json(result("[]")));
 
@@ -192,20 +281,31 @@ class WarehouseToolsTest {
     }
 
     @Test
-    void convertsInventorySummaryPiecesFromPallets() {
+    void exposesRawAndNormalizedInventoryQuantities() {
         backend.enqueue(json(result("""
-                {"id":1,"productName":"白冰糖","status":"成品","piecesPerPallet":25}
+                {"id":84,"productName":"黄冰糖（袋）","status":"成品","weightPerPiece":25,"piecesPerPallet":40}
                 """)));
         backend.enqueue(json(result("""
-                {"total":1,"records":[{"warehouseId":3,"warehouseName":"A-01","productId":1,"productName":"白冰糖","totalQuantity":2,"totalWeight":50.5}]}
+                {"total":1,"records":[{"warehouseId":3,"warehouseName":"A-01","productId":84,"productName":"黄冰糖（袋）","totalQuantity":10,"totalPieces":70,"totalWeight":11750,"stockInfo":"11板30件"}]}
                 """)));
 
-        var response = tools.getInventoryOverview(new InventoryOverviewRequest(1, null, null, 1, 10));
+        var response = tools.getInventoryOverview(new InventoryOverviewRequest(84, null, null, 1, 10));
 
         assertThat(response.error()).isNull();
-        assertThat(response.summary().totalBoards()).isEqualTo(2);
-        assertThat(response.summary().totalPieces()).isEqualTo(50);
-        assertThat(response.records().getFirst().totalPieces()).isEqualTo(50);
+        assertThat(response.summary().rawFullPallets()).isEqualTo(10);
+        assertThat(response.summary().rawLoosePieces()).isEqualTo(70);
+        assertThat(response.summary().normalizedPallets()).isEqualTo(11);
+        assertThat(response.summary().normalizedLoosePieces()).isEqualTo(30);
+        assertThat(response.summary().totalEquivalentPieces()).isEqualTo(470);
+        assertThat(response.summary().displayStockInfo()).isEqualTo("11板30件");
+        assertThat(response.summary().calculationNote()).contains("rawFullPallets=10", "rawLoosePieces=70", "piecesPerPallet=40", "11板30件");
+        assertThat(response.records().getFirst().rawFullPallets()).isEqualTo(10);
+        assertThat(response.records().getFirst().rawLoosePieces()).isEqualTo(70);
+        assertThat(response.records().getFirst().normalizedPallets()).isEqualTo(11);
+        assertThat(response.records().getFirst().normalizedLoosePieces()).isEqualTo(30);
+        assertThat(response.records().getFirst().totalEquivalentPieces()).isEqualTo(470);
+        assertThat(response.records().getFirst().displayStockInfo()).isEqualTo("11板30件");
+        assertThat(response.records().getFirst().calculationNote()).contains("totalEquivalentPieces=470");
     }
 
     @Test
@@ -307,12 +407,279 @@ class WarehouseToolsTest {
         assertNoForbiddenWriteRequests();
     }
 
+
+    @Test
+    void getsPalletStatusParseOnly() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {"id":7,"code":"P20260613001","status":"NORMAL","productName":"黄冰糖（袋）"}
+                """)));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P20260613001", false, false, false, null, 20));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.partial()).isFalse();
+        assertThat(response.palletInfo().path("code").asText()).isEqualTo("P20260613001");
+        assertThat(backend.getRequestCount()).isEqualTo(1);
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).startsWith("/api/pallet-codes/parse");
+    }
+
+    @Test
+    void getsPalletStatusWithInventory() {
+        backend.enqueue(json(result("""
+                {"id":7,"code":"P1","status":"NORMAL"}
+                """)));
+        backend.enqueue(json(result("""
+                {"warehouseName":"2","side":"A","rowNumber":1,"layer":2,"quantity":1,"unit":false}
+                """)));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", true, false, false, null, 20));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.inventory().path("warehouseName").asText()).isEqualTo("2");
+        assertThat(response.partial()).isFalse();
+    }
+
+    @Test
+    void getsPalletStatusWithAssay() {
+        backend.enqueue(json(result("""
+                {"id":7,"code":"P1","status":"NORMAL"}
+                """)));
+        backend.enqueue(json(result("""
+                {"id":66,"resolveStatus":"FOUND","isQualified":true,"testerName":"qa"}
+                """)));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", false, true, false, null, 20));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.assay().path("id").asInt()).isEqualTo(66);
+        assertThat(response.partial()).isFalse();
+    }
+
+    @Test
+    void getsPalletStatusWithFlows() {
+        backend.enqueue(json(result("""
+                {"id":7,"code":"P1","status":"NORMAL"}
+                """)));
+        backend.enqueue(json(result("""
+                {"total":1,"records":[{"cycleNo":2,"productName":"黄冰糖（袋）"}]}
+                """)));
+        backend.enqueue(json(result("""
+                [{"cycleNo":2,"flowType":"IN","warehouseName":"2"}]
+                """)));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", false, false, true, null, 20));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.flowCyclePage().total()).isEqualTo(1);
+        assertThat(response.flowCycles()).hasSize(1);
+        assertThat(response.flows()).hasSize(1);
+        assertThat(response.partial()).isFalse();
+    }
+
+    @Test
+    void returnsPartialWhenOptionalPalletSubqueryFails() {
+        backend.enqueue(json(result("""
+                {"id":7,"code":"P1","status":"NORMAL"}
+                """)));
+        backend.enqueue(json("""
+                {"code":404,"msg":"inventory missing internal detail"}
+                """));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", true, false, false, null, 20));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.partial()).isTrue();
+        assertThat(response.warnings()).anyMatch(warning -> warning.contains("inventory"));
+        assertThat(response.inventory()).isNull();
+    }
+
+    @Test
+    void mapsPalletStatus401() {
+        backend.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", false, false, false, null, 20));
+
+        assertThat(response.error().code()).isEqualTo("UPSTREAM_UNAUTHORIZED");
+    }
+
+    @Test
+    void mapsPalletStatus403() {
+        backend.enqueue(new MockResponse().setResponseCode(403).setBody("{}"));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", false, false, false, null, 20));
+
+        assertThat(response.error().code()).isEqualTo("UPSTREAM_PERMISSION_DENIED");
+    }
+
+    @Test
+    void mapsPalletStatus500() {
+        backend.enqueue(new MockResponse().setResponseCode(500).setBody("{}"));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", false, false, false, null, 20));
+
+        assertThat(response.error().code()).isEqualTo("UPSTREAM_SERVER_ERROR");
+    }
+
+    @Test
+    void mapsPalletStatusTimeout() {
+        backend.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", false, false, false, null, 20));
+
+        assertThat(response.error().code()).isEqualTo("UPSTREAM_TIMEOUT");
+        assertThat(response.error().retryable()).isTrue();
+    }
+
+    @Test
+    void getsAssayStatusById() {
+        backend.enqueue(json(result("""
+                {"id":99,"productId":84,"judgeResult":"QUALIFIED","failedMetrics":[],"appliedStandard":{"id":5,"name":"成品标准"}}
+                """)));
+
+        var response = tools.getAssayStatus(new AssayStatusRequest(99, null, null, null, true));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.lookupMode()).isEqualTo(AssayLookupMode.ASSAY_ID);
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.UNIQUE);
+        assertThat(response.needsAssay()).isFalse();
+        assertThat(response.judgeResult()).isEqualTo("QUALIFIED");
+        assertThat(response.appliedStandard().path("name").asText()).isEqualTo("成品标准");
+    }
+
+    @Test
+    void getsAssayStatusByProductDate() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {"id":100,"productId":84,"judgeResult":"UNQUALIFIED","failedMetrics":[{"metric":"colorValue"}],"appliedStandard":{"id":5}}
+                """)));
+
+        var response = tools.getAssayStatus(new AssayStatusRequest(null, 84, "2026-06-13", null, true));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.lookupMode()).isEqualTo(AssayLookupMode.PRODUCT_DATE);
+        assertThat(response.failedMetrics()).hasSize(1);
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).startsWith("/api/assay/by-product-date");
+    }
+
+    @Test
+    void assayStatusProductQueryAmbiguousReturnsAmbiguous() {
+        backend.enqueue(json(result("""
+                [
+                  {"id":84,"productName":"黄冰糖（袋）","productType":"黄冰糖","status":"成品"},
+                  {"id":123,"productName":"黄冰糖（9.6箱装）","productType":"黄冰糖","status":"成品"}
+                ]
+                """)));
+
+        var response = tools.getAssayStatus(new AssayStatusRequest(null, null, "2026-06-13", "黄冰糖", true));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.AMBIGUOUS);
+        assertThat(response.needsUserSelection()).isTrue();
+        assertThat(response.productResolution()).isNotNull();
+        assertThat(backend.getRequestCount()).isEqualTo(1);
+    }
+
+    @Test
+    void assayStatusNotFoundNeedsAssay() {
+        backend.enqueue(json(result("null")));
+
+        var response = tools.getAssayStatus(new AssayStatusRequest(null, 84, "2026-06-13", null, true));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.NOT_FOUND);
+        assertThat(response.needsAssay()).isTrue();
+        assertThat(response.warnings()).anyMatch(warning -> warning.contains("No assay"));
+    }
+
+    @Test
+    void newReadToolsNeverRequestForbiddenWriteEndpoints() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {"id":7,"code":"P1","status":"NORMAL"}
+                """)));
+        backend.enqueue(json(result("""
+                {"warehouseName":"2"}
+                """)));
+        backend.enqueue(json(result("""
+                {"id":66,"resolveStatus":"FOUND"}
+                """)));
+        backend.enqueue(json(result("""
+                {"total":0,"records":[]}
+                """)));
+        backend.enqueue(json(result("""
+                {"id":99,"judgeResult":"QUALIFIED"}
+                """)));
+
+        tools.getPalletStatus(new PalletStatusRequest("P1", true, true, true, null, 20));
+        tools.getAssayStatus(new AssayStatusRequest(99, null, null, null, true));
+
+        assertNoForbiddenWriteRequests();
+    }
+
+    @Test
+    void sendsStaticTokenAndToolNameHeaders() throws InterruptedException {
+        backend.enqueue(json(result("""
+                [{"id":1,"productName":"白冰糖","status":"成品"}]
+                """)));
+
+        var response = tools.resolveProducts(new ResolveProductsRequest("白冰糖", null, null, 10));
+
+        assertThat(response.error()).isNull();
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getHeader("Authorization")).isEqualTo("Bearer test-token");
+        assertThat(request.getHeader("X-Agent-Tool-Name")).isEqualTo("resolve_products");
+        assertThat(request.getHeader("X-Agent-Session-Id")).isNull();
+    }
+
+    @Test
+    void delegatedTokenTakesPrecedenceAndSendsAgentSessionHeader() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        WarehouseApiClient delegatedClient = new WarehouseApiClient(
+                new WarehouseApiProperties(backend.url("/").toString(), "static-token", "delegated-token", "agent-session-1", Duration.ofMillis(200)),
+                objectMapper
+        );
+        WarehouseTools delegatedTools = new WarehouseTools(new WarehouseReadService(delegatedClient));
+        backend.enqueue(json(result("""
+                [{"id":3,"warehouseName":"A-01","status":"正常"}]
+                """)));
+
+        var response = delegatedTools.resolveWarehouses(new ResolveWarehousesRequest("A-01", false, 10));
+
+        assertThat(response.error()).isNull();
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getHeader("Authorization")).isEqualTo("Bearer delegated-token");
+        assertThat(request.getHeader("X-Agent-Session-Id")).isEqualTo("agent-session-1");
+        assertThat(request.getHeader("X-Agent-Tool-Name")).isEqualTo("resolve_warehouses");
+    }
+    private void assertNaturalWarehouseName(String query, String warehouseName) throws InterruptedException {
+        backend.enqueue(json(result("[{\"id\":2,\"warehouseName\":\"" + warehouseName + "\",\"status\":\"正常\"}]")));
+
+        var response = tools.resolveWarehouses(new ResolveWarehousesRequest(query, false, 10));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.UNIQUE);
+        assertThat(response.candidates().getFirst().warehouseName()).isEqualTo(warehouseName);
+        assertThat(response.candidates().getFirst().matchType()).isEqualTo(MatchType.NORMALIZED_NAME);
+        assertThat(response.candidates().getFirst().matchReason()).contains("归一化为 " + warehouseName);
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).startsWith("/api/warehouse/query");
+        assertThat(request.getPath()).doesNotStartWith("/api/warehouse/" + warehouseName);
+    }
     private void assertNoForbiddenWriteRequests() throws InterruptedException {
         int count = backend.getRequestCount();
         for (int i = 0; i < count; i++) {
             RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
             assertThat(request).isNotNull();
-            assertThat(request.getPath()).doesNotMatch(FORBIDDEN_WRITE_PATHS);
+            String requestLine = request.getMethod() + " " + request.getPath();
+            assertThat(requestLine).doesNotMatch(FORBIDDEN_WRITE_PATHS);
+            assertThat(requestLine).doesNotMatch("^(POST|PUT|PATCH|DELETE) /api/assay(/.*)?(\\?.*)?$");
+            assertThat(requestLine).doesNotMatch("^(POST|PUT|PATCH|DELETE) /api/quality-standard.*$");
+            assertThat(requestLine).doesNotMatch("^(POST|PUT|PATCH|DELETE) /api/quality-standards.*$");
         }
     }
 
@@ -327,5 +694,4 @@ class WarehouseToolsTest {
         return "{\"code\":200,\"msg\":\"success\",\"data\":" + dataJson + "}";
     }
 }
-
 

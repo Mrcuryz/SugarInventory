@@ -4,4 +4,8 @@ args = ["-jar", "D:\\Laibin\\LaibinSugarInventory\\warehouse-mcp\\target\\wareho
 
 [mcp_servers.smart_warehouse.env]
 WAREHOUSE_API_BASE_URL = "http://localhost:8080"
+# Development-only static token. Do not use as the production Agent authorization model.
 WAREHOUSE_API_TOKEN = "REPLACE_WITH_TEST_TOKEN"
+# Backend-injected transition values for per-session STDIO delegation, if used.
+# WAREHOUSE_DELEGATED_TOKEN = "REPLACE_WITH_BACKEND_INJECTED_DELEGATED_TOKEN"
+# WAREHOUSE_AGENT_SESSION_ID = "REPLACE_WITH_AGENT_SESSION_ID"

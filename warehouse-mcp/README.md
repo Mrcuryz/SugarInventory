@@ -10,12 +10,14 @@
 | `resolve_warehouses` | Resolve a warehouse name/id query into unique, ambiguous, or not-found candidates. | `GET /api/warehouse/{id}`, `GET /api/warehouse/query` |
 | `get_inventory_overview` | Read paged product inventory summary and calculated totals. | `GET /api/products/{id}`, `GET /api/inventory/stock/page` |
 | `get_warehouse_status` | Read warehouse capacity, inventory details, and recent operations. | `GET /api/warehouse/{id}`, `GET /api/inventory/warehouses`, `POST /api/inventory/qualified-inventory/{warehouseId}/page`, `GET /api/inventory/warehouses/{warehouseId}/recent-operations` |
+| `get_pallet_status` | Read pallet code status, current inventory position, assay information, flow cycles, and flow details. | `GET /api/pallet-codes/parse`, `GET /api/pallet-codes/{code}/inventory`, `GET /api/pallet-codes/{code}/assay`, `GET /api/pallet-codes/{code}/flows/cycles`, `GET /api/pallet-codes/{code}/flows` |
+| `get_assay_status` | Read an assay by id, or by product and production date, including judge result, failed metrics, and applied standard details. | `GET /api/assay/{id}`, `GET /api/assay/by-product-date` |
 
-`POST /api/inventory/qualified-inventory/{warehouseId}/page` is used only as an existing read query endpoint. No business write endpoints are called.
+`POST /api/inventory/qualified-inventory/{warehouseId}/page` is used only as an existing read query endpoint. No business write endpoints are called. M1.1 still does not expose preview, execute, SQL, arbitrary HTTP proxy, direct database, pallet mutation, assay mutation, or quality-standard mutation tools.
 
 ## Environment
 
-Set both values before starting the server:
+For local Codex development, set both values before starting the server. `WAREHOUSE_API_TOKEN` is a STATIC_TOKEN development fallback only and is not the production authorization model:
 
 ```powershell
 $env:WAREHOUSE_API_BASE_URL = "http://localhost:8080"
@@ -26,25 +28,87 @@ Optional:
 
 ```powershell
 $env:WAREHOUSE_API_TIMEOUT = "5s"
+$env:WAREHOUSE_DELEGATED_TOKEN = "<backend-injected-agent-token>"
+$env:WAREHOUSE_AGENT_SESSION_ID = "<backend-agent-session-id>"
 $env:WAREHOUSE_MCP_LOG_FILE = "D:\Laibin\LaibinSugarInventory\warehouse-mcp\warehouse-mcp.log"
 ```
 
 ## Build and Test
 
 ```powershell
-cd warehouse-mcp
-mvn test
-mvn package
+cd D:\Laibin\LaibinSugarInventory\warehouse-mcp
+mvn clean test
+mvn clean package -DskipTests
 ```
+
+
+## Agent Session Authorization
+
+Production Agent authorization is backend delegated. The MCP server does not expose a login tool and does not return a delegation token to the Agent. A logged-in Web or mini-program user creates an Agent session through the backend, and the backend injects a short-lived delegated identity into the MCP context.
+
+For the current STDIO transition path, the backend may inject `WAREHOUSE_DELEGATED_TOKEN` and `WAREHOUSE_AGENT_SESSION_ID` into the MCP process environment. Production should prefer HTTP/Streamable HTTP MCP with request-level identity injection. `X-Agent-Tool-Name` and `X-Agent-Session-Id` are sent to the backend only for audit correlation; permissions are enforced by the backend from the `AGENT_DELEGATION` token and `agent_session` table state.
+
+See `docs/mcp/agent-session-authorization.md` for the backend session API, validation rules, and audit model.
+
+## M1.2 Agent Gateway Usage
+
+`warehouse-mcp` can run in two authorization modes:
+
+- `STATIC_TOKEN`: local Codex development only. Set `WAREHOUSE_API_TOKEN` manually and start the jar directly.
+- `USER_DELEGATED`: productized Web/mini-program Agent flow. The backend creates an `agent_session`, internally issues a short-lived delegated token, and injects it into a dedicated MCP process through `WAREHOUSE_DELEGATED_TOKEN`.
+
+In `USER_DELEGATED` mode, the Agent and frontend never receive the delegated token. The backend `McpSessionManager` binds one STDIO MCP process to one `agentSessionId` and injects:
+
+```powershell
+WAREHOUSE_DELEGATED_TOKEN=<backend-internal-token>
+WAREHOUSE_AGENT_SESSION_ID=<agent-session-id>
+WAREHOUSE_API_BASE_URL=http://localhost:8080
+WAREHOUSE_MCP_LOG_FILE=logs/mcp/warehouse-mcp-<agent-session-id>.log
+```
+
+The STDIO one-user-one-process model is a transition path. Production multi-user deployments should move to HTTP/Streamable HTTP MCP with request-level delegated identity injection.
+
+M1.2 does not add a login tool and does not add any new business MCP tools. The server still exposes only the six read-only tools listed above.
+## Resolver Semantics
+
+Product resolver results always follow one of three paths:
+
+- `UNIQUE`: the Agent may pass the returned `productId` to `get_inventory_overview`.
+- `AMBIGUOUS`: the Agent must ask the user to choose an option. Terms such as `黄冰糖` may mean a product type group, a product-name group, or one concrete product specification.
+- `NOT_FOUND`: the Agent should tell the user no matching product was found.
+
+For ambiguous products, `options` may include:
+
+- `PRODUCT_TYPE_GROUP`: for example all products whose `productType` is `黄冰糖`. This is currently `supported=false` because `get_inventory_overview` does not yet support product-type group aggregation.
+- `EXACT_PRODUCT_NAME_GROUP`: all specifications under the same human product name. This is currently `supported=false` until a backend aggregate query is added.
+- `SINGLE_PRODUCT`: a concrete `productId`; this is currently supported and can be used for follow-up inventory reads.
+
+Warehouse resolver normalizes common Chinese slot expressions before querying by warehouse name. Examples such as `2号库位`, `2号库`, `2号位`, `库位2`, `二号库位`, `十二号库位`, `2#`, and `2 号` are normalized to warehouse names like `2` or `12`. The normalized number is not treated as a `warehouseId`; it is sent to the existing read-only warehouse-name query endpoint and returned with `matchType=NORMALIZED_NAME` when matched.
+
+## Pallet and Assay Query Semantics
+
+`get_pallet_status` always reads the pallet parse endpoint first. Optional inventory, assay, and flow subqueries can be disabled. Non-fatal optional subquery failures return `partial=true` with `warnings`; authentication, permission, timeout, and server errors return the unified `error` structure.
+
+`get_assay_status` accepts either `assayId`, or `productId + productionDate`, or `productQuery + productionDate`. When `productQuery` is ambiguous, it returns `AMBIGUOUS` and `needsUserSelection=true` through the same resolver semantics; it does not guess a product id. When no assay exists for a product/date query, it returns `resolutionStatus=NOT_FOUND` and `needsAssay=true`.
+
+## Inventory Quantity Semantics
+
+`get_inventory_overview` does not return `totalBoards`, `totalPieces`, or `stockInfo`.
+
+The MCP output uses explicit quantity fields:
+
+- `rawFullPallets`: backend raw full-pallet count.
+- `rawLoosePieces`: backend raw loose-piece count.
+- `normalizedPallets`: pallet count after converting raw full pallets and loose pieces by `piecesPerPallet`.
+- `normalizedLoosePieces`: loose-piece remainder after conversion.
+- `totalEquivalentPieces`: total equivalent pieces.
+- `displayStockInfo`: user-facing pallet/piece text.
+
+Agents should answer inventory questions using `normalizedPallets`, `normalizedLoosePieces`, and `totalEquivalentPieces` first. Raw fields are only the backend source quantities and must not be treated as the normalized inventory display.
 
 ## Run with STDIO
 
-```powershell
-cd warehouse-mcp
-mvn spring-boot:run
-```
-
-Or run the packaged jar:
+Run the packaged jar directly so STDOUT remains reserved for MCP protocol messages:
 
 ```powershell
 java -jar target/warehouse-mcp-0.1.0.jar
@@ -68,6 +132,11 @@ WAREHOUSE_API_TOKEN = "REPLACE_WITH_TEST_TOKEN"
 
 Do not commit real tokens.
 
+## MCP Tool Registry
+
+工具规划、风险等级、已实现/未实现工具清单见：
+`docs/mcp/mcp-tool-registry.md`
+
 ## OpenAPI Export
 
 If the backend is running locally, export the current OpenAPI document from the project root:
@@ -78,3 +147,17 @@ If the backend is running locally, export the current OpenAPI document from the 
 
 The script writes UTF-8 without BOM to `docs/openapi.json`.
 
+
+## AI Assistant Product Goal
+
+`warehouse-mcp` is the internal safe-tool layer for the smart warehouse AI assistant. It should not shape the normal user-facing conversation by exposing tool names, raw ids, raw JSON, or protocol details. The final product goal is documented in:
+
+`docs/agent/ai-assistant-product-goal.md`
+
+Key boundary:
+
+- The Agent Gateway owns user conversation, context memory, tool orchestration, streaming business events, and audit.
+- The MCP Server owns safe tool capability and backend API access.
+- Normal users should see natural-language answers, business cards, candidate buttons, progress states, and human-readable errors.
+- Admin debug mode may show sanitized tool call summaries.
+- Write operations remain prohibited unless they follow `preview -> confirmation -> executionToken -> idempotencyKey -> execute` in a future phase.

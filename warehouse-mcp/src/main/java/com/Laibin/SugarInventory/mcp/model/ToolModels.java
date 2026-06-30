@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -33,6 +34,23 @@ public final class ToolModels {
         ALIAS,
         PREFIX,
         CONTAINS
+    }
+
+    public enum AmbiguityType {
+        PRODUCT_SCOPE,
+        MULTIPLE_SPECS
+    }
+
+    public enum OptionType {
+        PRODUCT_TYPE_GROUP,
+        EXACT_PRODUCT_NAME_GROUP,
+        SINGLE_PRODUCT
+    }
+
+    public enum AssayLookupMode {
+        ASSAY_ID,
+        PRODUCT_DATE,
+        PRODUCT_QUERY
     }
 
     @JsonIgnoreProperties(ignoreUnknown = false)
@@ -118,6 +136,48 @@ public final class ToolModels {
     ) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record PalletStatusRequest(
+            @JsonProperty(value = "code", required = true)
+            @JsonPropertyDescription("Pallet code. Length 1..100.")
+            @NotBlank
+            @Size(min = 1, max = 100)
+            String code,
+            @JsonPropertyDescription("Include current inventory position. Defaults to true.")
+            Boolean includeInventory,
+            @JsonPropertyDescription("Include resolved assay information. Defaults to true.")
+            Boolean includeAssay,
+            @JsonPropertyDescription("Include flow cycles and flow details. Defaults to true.")
+            Boolean includeFlows,
+            @JsonPropertyDescription("Optional flow cycle number. Minimum 1.")
+            @Min(1)
+            Integer cycleNo,
+            @JsonPropertyDescription("Maximum flow cycles/details to return. Range 1..100. Defaults to 20.")
+            @Min(1)
+            @Max(100)
+            Integer flowLimit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record AssayStatusRequest(
+            @JsonPropertyDescription("Preferred assay id. When supplied, product fields are ignored.")
+            @Min(1)
+            Integer assayId,
+            @JsonPropertyDescription("Product id used with productionDate.")
+            @Min(1)
+            Integer productId,
+            @JsonPropertyDescription("Production date in ISO format yyyy-MM-dd. Required with productId or productQuery.")
+            @Size(min = 10, max = 10)
+            String productionDate,
+            @JsonPropertyDescription("Product query used only when productId is absent. Length 1..100.")
+            @Size(min = 1, max = 100)
+            String productQuery,
+            @JsonPropertyDescription("Include applied standard and failed metric details. Defaults to true.")
+            Boolean includeStandardDetails
+    ) {
+    }
+
     public record ToolError(
             String code,
             String message,
@@ -140,7 +200,8 @@ public final class ToolModels {
             Boolean canStack,
             Integer screenMeshId,
             MatchType matchType,
-            Integer matchScore
+            Integer matchScore,
+            String matchReason
     ) {
     }
 
@@ -153,18 +214,33 @@ public final class ToolModels {
             Integer curCapacity,
             Integer freeCapacity,
             MatchType matchType,
-            Integer matchScore
+            Integer matchScore,
+            String matchReason
+    ) {
+    }
+
+    public record ResolutionOption(
+            OptionType optionType,
+            String displayLabel,
+            Integer productId,
+            String productName,
+            String productType,
+            boolean supported,
+            String matchReason
     ) {
     }
 
     public record ProductResolutionResponse(
             ResolutionStatus resolutionStatus,
             boolean needsUserSelection,
+            AmbiguityType ambiguityType,
+            String clarificationPrompt,
+            List<ResolutionOption> options,
             List<ProductCandidate> candidates,
             ToolError error
     ) {
         public static ProductResolutionResponse error(ToolError error) {
-            return new ProductResolutionResponse(ResolutionStatus.NOT_FOUND, false, List.of(), error);
+            return new ProductResolutionResponse(ResolutionStatus.NOT_FOUND, false, null, null, List.of(), List.of(), error);
         }
     }
 
@@ -188,9 +264,14 @@ public final class ToolModels {
 
     public record InventoryOverviewSummary(
             int totalRecords,
-            int totalBoards,
-            int totalPieces,
+            int rawFullPallets,
+            int rawLoosePieces,
+            Integer normalizedPallets,
+            Integer normalizedLoosePieces,
+            Integer totalEquivalentPieces,
             BigDecimal totalWeight,
+            String displayStockInfo,
+            String calculationNote,
             int warehouseCount,
             int productCount
     ) {
@@ -203,10 +284,14 @@ public final class ToolModels {
             String productName,
             String productStatus,
             LocalDate entryDate,
-            Integer totalQuantity,
-            Integer totalPieces,
+            Integer rawFullPallets,
+            Integer rawLoosePieces,
+            Integer normalizedPallets,
+            Integer normalizedLoosePieces,
+            Integer totalEquivalentPieces,
             BigDecimal totalWeight,
-            String stockInfo,
+            String displayStockInfo,
+            String calculationNote,
             Integer warehouseCount
     ) {
     }
@@ -287,6 +372,41 @@ public final class ToolModels {
 
         public static WarehouseStatusResponse resolutionFailure(ResolutionStatus status, List<WarehouseCandidate> candidates, ToolError error) {
             return new WarehouseStatusResponse(status, status == ResolutionStatus.AMBIGUOUS, candidates, null, null, null, List.of(), List.of(), error);
+        }
+    }
+
+    public record PalletStatusResponse(
+            String code,
+            boolean partial,
+            JsonNode palletInfo,
+            JsonNode inventory,
+            JsonNode assay,
+            PageInfo flowCyclePage,
+            List<JsonNode> flowCycles,
+            List<JsonNode> flows,
+            List<String> warnings,
+            ToolError error
+    ) {
+        public static PalletStatusResponse error(ToolError error) {
+            return new PalletStatusResponse(null, false, null, null, null, null, List.of(), List.of(), List.of(), error);
+        }
+    }
+
+    public record AssayStatusResponse(
+            AssayLookupMode lookupMode,
+            ResolutionStatus resolutionStatus,
+            boolean needsUserSelection,
+            ProductResolutionResponse productResolution,
+            JsonNode assay,
+            String judgeResult,
+            List<JsonNode> failedMetrics,
+            JsonNode appliedStandard,
+            boolean needsAssay,
+            List<String> warnings,
+            ToolError error
+    ) {
+        public static AssayStatusResponse error(ToolError error) {
+            return new AssayStatusResponse(null, ResolutionStatus.NOT_FOUND, false, null, null, null, List.of(), null, false, List.of(), error);
         }
     }
 }

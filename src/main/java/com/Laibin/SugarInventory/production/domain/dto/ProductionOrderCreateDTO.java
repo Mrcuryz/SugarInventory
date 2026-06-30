@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class ProductionOrderCreateDTO {
@@ -16,6 +17,7 @@ public class ProductionOrderCreateDTO {
 
     private Object plannedMaterialJson;
     private Object plannedOutputJson;
+    private List<ProductionBoilingBatchUsageDTO> boilingSources;
     private String teamName;
     private String remark;
 }

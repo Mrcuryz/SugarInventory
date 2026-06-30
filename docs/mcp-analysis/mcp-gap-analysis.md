@@ -320,3 +320,20 @@
 - 与 `mcp-tool-candidates.md` 一致：第一版只实现 L0/L1/L2；L3/L4 仅列未来要求。
 - 与 `business-rules.md` 一致：不确定业务边界仍列为待确认。
 - 与 `api-inventory.md` 一致：OpenAPI 缺失、方法权限和审计覆盖不一致是已确认缺口。
+
+## 2026-06-25 Agent 会话授权更新
+
+已补充 M1 Agent 会话授权基础能力：
+
+- 新增 `/api/agent/sessions`、`/api/agent/sessions/current`、`DELETE /api/agent/sessions/{agentSessionId}`，响应不返回 delegationToken。
+- 后端内部可签发短期 `AGENT_DELEGATION` token，用于注入 MCP 上下文。
+- 每次处理 `AGENT_DELEGATION` token 时检查 `agent_session` 状态、过期时间、用户有效性和 `mcp:warehouse:read` scope。
+- 新增 Agent Tool 审计和后端 API 审计表结构。
+- `X-Agent-Tool-Name` 仅作为审计辅助，不作为权限依据。
+- `warehouse-mcp` 支持开发 STATIC_TOKEN、过渡 STDIO 委托 token 和 Agent session header 注入；未新增业务工具。
+
+仍待后续增强：
+
+- 生产推荐切换到 HTTP/Streamable HTTP MCP，实现请求级身份注入。
+- scope 需要从 `mcp:warehouse:read` 拆分为 product、warehouse、inventory、pallet、assay、log 等细粒度授权。
+- 前端/小程序尚需接入 Agent 会话创建和撤销入口。

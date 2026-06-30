@@ -312,16 +312,7 @@ public class QualityStandardServiceImpl implements QualityStandardService, Logga
         if (qualityStandardMapper.selectOne(wrapper) != null) {
             throw new BusinessException("同产品类型下相同标准名称和版本已存在");
         }
-        if (dto.getStandardCode() != null && !dto.getStandardCode().isBlank()) {
-            QueryWrapper<QualityStandard> codeWrapper = new QueryWrapper<>();
-            codeWrapper.eq("standard_code", dto.getStandardCode());
-            if (currentId != null) {
-                codeWrapper.ne("id", currentId);
-            }
-            if (qualityStandardMapper.selectOne(codeWrapper) != null) {
-                throw new BusinessException("标准编号已存在");
-            }
-        }
+
     }
 
     @Override

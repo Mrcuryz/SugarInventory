@@ -34,7 +34,15 @@ public class ToolConfiguration {
                 methodTool(warehouseTools, "get_warehouse_status",
                         "Read warehouse capacity, inventory details, and recent operations, preferring a unique warehouseId when available.",
                         warehouseStatusSchema(),
-                        WarehouseTools.class.getMethod("getWarehouseStatus", Integer.class, String.class, Boolean.class, Boolean.class, Integer.class, Integer.class, Integer.class))
+                        WarehouseTools.class.getMethod("getWarehouseStatus", Integer.class, String.class, Boolean.class, Boolean.class, Integer.class, Integer.class, Integer.class)),
+                methodTool(warehouseTools, "get_pallet_status",
+                        "Read pallet code status, current inventory position, assay information, flow cycles, and flow details without modifying warehouse data.",
+                        palletStatusSchema(),
+                        WarehouseTools.class.getMethod("getPalletStatus", String.class, Boolean.class, Boolean.class, Boolean.class, Integer.class, Integer.class)),
+                methodTool(warehouseTools, "get_assay_status",
+                        "Read an assay by id, or by product and production date, including judge result, failed metrics, and applied standard details.",
+                        assayStatusSchema(),
+                        WarehouseTools.class.getMethod("getAssayStatus", Integer.class, Integer.class, String.class, String.class, Boolean.class))
         ));
     }
 
@@ -72,6 +80,17 @@ public class ToolConfiguration {
     private static String warehouseStatusSchema() {
         return """
                 {"type":"object","additionalProperties":false,"properties":{"warehouseId":{"type":"integer","minimum":1,"description":"Preferred unique warehouse id."},"warehouseQuery":{"type":"string","minLength":1,"maxLength":100,"description":"Warehouse query used only when warehouseId is absent."},"includeInventoryDetails":{"type":"boolean","description":"Include paged inventory details."},"includeRecentOperations":{"type":"boolean","description":"Include recent operation records."},"page":{"type":"integer","minimum":1,"description":"Page number."},"size":{"type":"integer","minimum":1,"maximum":100,"description":"Page size."},"recentLimit":{"type":"integer","minimum":1,"maximum":100,"description":"Recent operation limit."}}}
+                """;
+    }
+    private static String palletStatusSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["code"],"properties":{"code":{"type":"string","minLength":1,"maxLength":100,"description":"Pallet code."},"includeInventory":{"type":"boolean","description":"Include current inventory position. Defaults to true."},"includeAssay":{"type":"boolean","description":"Include resolved assay information. Defaults to true."},"includeFlows":{"type":"boolean","description":"Include flow cycles and flow details. Defaults to true."},"cycleNo":{"type":"integer","minimum":1,"description":"Optional flow cycle number."},"flowLimit":{"type":"integer","minimum":1,"maximum":100,"description":"Maximum flow cycles/details to return."}}}
+                """;
+    }
+
+    private static String assayStatusSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"properties":{"assayId":{"type":"integer","minimum":1,"description":"Preferred assay id."},"productId":{"type":"integer","minimum":1,"description":"Product id used with productionDate."},"productionDate":{"type":"string","minLength":10,"maxLength":10,"format":"date","description":"Production date in yyyy-MM-dd format."},"productQuery":{"type":"string","minLength":1,"maxLength":100,"description":"Product query used only when productId is absent."},"includeStandardDetails":{"type":"boolean","description":"Include applied standard and failed metric details. Defaults to true."}}}
                 """;
     }
 }

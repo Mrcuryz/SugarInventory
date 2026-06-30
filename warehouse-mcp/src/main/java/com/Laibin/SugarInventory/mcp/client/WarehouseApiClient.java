@@ -1,6 +1,9 @@
 package com.Laibin.SugarInventory.mcp.client;
 
 import com.Laibin.SugarInventory.mcp.config.WarehouseApiProperties;
+import com.Laibin.SugarInventory.mcp.security.EnvironmentWarehouseTokenProvider;
+import com.Laibin.SugarInventory.mcp.security.WarehouseTokenProvider;
+import com.Laibin.SugarInventory.mcp.security.WarehouseToolCallContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -26,21 +29,25 @@ public class WarehouseApiClient {
     private static final Logger log = LoggerFactory.getLogger(WarehouseApiClient.class);
 
     private final String baseUrl;
-    private final String token;
+    private final WarehouseTokenProvider tokenProvider;
     private final Duration timeout;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
     @Autowired
     public WarehouseApiClient(WarehouseApiProperties properties, ObjectMapper objectMapper) {
-        this(properties, objectMapper, HttpClient.newBuilder()
+        this(properties, objectMapper, new EnvironmentWarehouseTokenProvider(properties), HttpClient.newBuilder()
                 .connectTimeout(properties.timeout())
                 .build());
     }
 
     public WarehouseApiClient(WarehouseApiProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
+        this(properties, objectMapper, new EnvironmentWarehouseTokenProvider(properties), httpClient);
+    }
+
+    public WarehouseApiClient(WarehouseApiProperties properties, ObjectMapper objectMapper, WarehouseTokenProvider tokenProvider, HttpClient httpClient) {
         this.baseUrl = trimTrailingSlash(properties.baseUrl());
-        this.token = properties.token();
+        this.tokenProvider = tokenProvider;
         this.timeout = properties.timeout();
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
@@ -72,9 +79,10 @@ public class WarehouseApiClient {
                 .uri(buildUri(path, query))
                 .timeout(timeout)
                 .header("Accept", "application/json");
-        if (token != null && !token.isBlank()) {
-            builder.header("Authorization", "Bearer " + token);
-        }
+        tokenProvider.currentToken().ifPresent(token -> builder.header("Authorization", "Bearer " + token));
+        tokenProvider.agentSessionId().ifPresent(sessionId -> builder.header("X-Agent-Session-Id", sessionId));
+        WarehouseToolCallContext.currentToolName()
+                .ifPresent(toolName -> builder.header("X-Agent-Tool-Name", sanitizeHeader(toolName, 100)));
         return builder;
     }
 
@@ -198,6 +206,11 @@ public class WarehouseApiClient {
         return sanitized.length() > 240 ? sanitized.substring(0, 240) : sanitized;
     }
 
+    private static String sanitizeHeader(String value, int maxLength) {
+        String sanitized = value.replaceAll("[^A-Za-z0-9_.:-]", "_");
+        return sanitized.length() <= maxLength ? sanitized : sanitized.substring(0, maxLength);
+    }
+
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
@@ -213,4 +226,3 @@ public class WarehouseApiClient {
         return result;
     }
 }
-

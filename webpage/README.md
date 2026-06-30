@@ -56,6 +56,59 @@ Web 管理端轻量 UI token 统一维护在 `src/assets/main.scss`：
 - `/stock` 现在重定向到 `/stock/semi`，不再提供全部单据混合页面；单据中心只保留 `/stock/semi` 半成品单据和 `/stock/finish` 成品单据两个二级入口。
 - 半成品单据按入库单、出库单、转入备料单、调拨单查看；成品单据按入库单、出库单、调拨单查看。两类页面复用同一个台账组件，通过 `productStatus` 和 `bizScene` 过滤新版托盘任务单据；退货入库入口已从 Web 操作区和台账页签移除，仅保留历史代码与后端能力归档。
 
+
+## AI 助手入口
+
+Web 管理端主框架右上角提供“AI 助手”按钮。用户必须先登录仓储系统；前端不接收、不保存、不展示 `delegationToken`、`WAREHOUSE_DELEGATED_TOKEN` 或 Authorization Header。
+
+最小交互流程：
+
+- 点击“AI 助手”后，前端调用 `POST /api/agent/sessions` 创建当前用户的 Agent 会话。
+- 前端只展示会话状态、过期时间、自然语言对话内容和业务候选卡片，不展示 MCP 工具名或调用摘要。
+- 用户输入自然语言后，前端调用 `POST /api/agent/sessions/{agentSessionId}/messages`。
+- 后端 `AgentGatewayService` 负责模型规划、会话上下文、MCP 工具调用、消歧和审计。
+- 同一 Agent 会话内支持“这些”“刚才那个”“它”“这个库位”等跟进指代；后端会结合最近唯一产品/库位上下文继续规划。
+- 当产品或库位解析返回 `AMBIGUOUS` 时，前端展示业务候选卡片，Agent 不得自行猜测 ID。点击候选卡片时，前端只把选择项作为同一对话窗口的上下文发送，不把展示文本追加成新的用户消息。
+- 点击关闭时，前端调用 `DELETE /api/agent/sessions/{agentSessionId}` 撤销会话，后端关闭对应 STDIO MCP 进程。
+
+当前支持的只读场景：
+
+- 查黄冰糖（袋）库存。
+- 查 2 号库位状态。
+- 查托盘状态。
+- 查某产品某日期化验状态。
+
+当前 STDIO 一用户一 MCP 进程只是过渡方案；生产多用户 Agent 推荐迁移到 HTTP/Streamable HTTP MCP，通过请求级上下文注入用户委托身份。
+
+### AI 助手最终产品目标
+
+AI 助手前端体验以 `docs/agent/ai-assistant-product-goal.md` 为准。普通用户看到的是自然语言回答、候选按钮、结果卡片、追问建议、加载中的业务状态和人话错误解释，而不是 MCP 工具调用过程。
+
+普通用户界面不得展示：
+
+- `productId`、`warehouseId`；
+- `toolName`、`SUCCESS`；
+- raw JSON；
+- token、Authorization Header、密码；
+- 后端异常堆栈、数据库连接信息、内部服务器路径。
+
+管理员调试模式可以查看脱敏后的工具调用摘要、耗时和错误码。Agent Gateway 负责会话记忆、工具编排、权限上下文、流式事件和审计；MCP Server 负责安全工具能力，不直接和用户对话。
+### Agent 模型规划
+
+AI 助手消息接口默认使用 `agent.model.mode=llm`，通过 OpenAI 兼容接口把用户自然语言规划为受控 JSON：库存、库位、托盘、化验或不支持意图。模型只负责意图和实体抽取，不直接返回产品 ID、库位 ID，也不调用任意接口。
+
+可配置项：
+
+```yaml
+agent:
+  model:
+    mode: llm # llm 或 rule
+    name: ${openai.model}
+    max-tokens: 800
+```
+
+当模型接口不可用时，后端会回退到规则解析，保证只读查询入口仍可用，但自然语言效果会下降。M1.2 的会话上下文为后端内存态，关闭或撤销 Agent 会话会清理上下文，后端进程重启也会丢失上下文。
+
 ## Project setup
 
 ```

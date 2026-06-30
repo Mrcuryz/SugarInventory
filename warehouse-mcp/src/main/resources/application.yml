@@ -16,6 +16,8 @@ warehouse:
   api:
     base-url: ${WAREHOUSE_API_BASE_URL:http://localhost:8080}
     token: ${WAREHOUSE_API_TOKEN:}
+    delegated-token: ${WAREHOUSE_DELEGATED_TOKEN:}
+    agent-session-id: ${WAREHOUSE_AGENT_SESSION_ID:}
     timeout: ${WAREHOUSE_API_TIMEOUT:5s}
 
 logging:

@@ -1,0 +1,25 @@
+[project]
+name = "warehouse-agent-service"
+version = "0.1.0"
+description = "Python FastAPI Agent Runtime for the Laibin smart warehouse assistant."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "pydantic>=2.7,<3.0",
+]
+
+[project.optional-dependencies]
+run = [
+  "uvicorn>=0.30,<1.0",
+]
+langgraph = [
+  "langgraph>=0.2,<2.0",
+]
+test = [
+  "pytest>=8.0",
+  "httpx2>=0.28",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

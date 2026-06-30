@@ -33,6 +33,7 @@ const routes = [
       { path: 'pallet-task/finish/in', name: 'FinishInTaskPage', meta: { title: '成品入库任务', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/FinishInTaskPage.vue') },
       { path: 'pallet-task/finish/out', name: 'FinishOutTaskPage', meta: { title: '成品出库任务', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/FinishOutTaskPage.vue') },
       { path: 'pallet-task/transfer', name: 'TransferTaskPage', meta: { title: '调拨任务', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/TransferTaskPage.vue') },
+      { path: 'production/boiling-batches', name: 'ProductionBoilingBatches', meta: { title: '煮糖批次', keepAlive: true, permCode: 'production:boiling:view' }, component: () => import('@/components/ProductionBoilingBatches.vue') },
       { path: 'production/orders', name: 'ProductionOrders', meta: { title: '生产订单', keepAlive: true, permCode: 'production:order:view' }, component: () => import('@/components/ProductionOrders.vue') },
       { path: 'production/material-pick', name: 'ProductionMaterialPick', meta: { title: '半成品领用', keepAlive: true, permCode: 'production:material:view' }, component: () => import('@/components/ProductionMaterialPick.vue') },
       { path: 'production/output-bind', name: 'ProductionOutputBind', meta: { title: '产出贴码', keepAlive: true, permCode: 'production:output:view' }, component: () => import('@/components/ProductionOutputBind.vue') },

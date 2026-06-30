@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import PageTabs from '@/components/PageTabs.vue'
+import AgentAssistant from '@/components/AgentAssistant.vue'
 import { useTabsStore } from '@/stores/tabs'
 import { filterMenuByPermissions, menuList } from '@/utils/navigation'
 import { useAuthStore } from '@/stores/auth'
@@ -16,6 +17,7 @@ const tabsStore = useTabsStore()
 const authStore = useAuthStore()
 const tokenStore = useTokenStore()
 const routerViewVisible = ref(true)
+const agentAssistantRef = ref(null)
 
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
@@ -55,6 +57,10 @@ const refreshCurrentPage = async () => {
     tabsStore.restoreCacheName(path, name)
   }
   routerViewVisible.value = true
+}
+
+const openAgentAssistant = () => {
+  agentAssistantRef.value?.open()
 }
 
 const handleLogout = async () => {
@@ -144,6 +150,10 @@ const handleLogout = async () => {
           </div>
 
           <div class="header-right">
+            <el-button type="primary" plain class="agent-button" @click="openAgentAssistant">
+              <el-icon><ChatDotRound /></el-icon>
+              <span>AI 助手</span>
+            </el-button>
             <el-dropdown trigger="click">
               <span class="user-trigger">
                 <img :src="appLogo" alt="用户" class="user-logo">
@@ -180,6 +190,7 @@ const handleLogout = async () => {
       <footer class="icp-footer">
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂 ICP 备 2025058642 号-2</a>
       </footer>
+      <AgentAssistant ref="agentAssistantRef" />
     </div>
   </div>
 </template>
@@ -262,6 +273,13 @@ const handleLogout = async () => {
       .header-right {
         display: flex;
         align-items: center;
+        gap: 12px;
+      }
+
+      .agent-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
       }
 
       .user-trigger {

@@ -61,3 +61,13 @@ logging:
     db-config:
       logic-delete-field: deleted
       id-type: auto
+agent:
+  internal-tool:
+    service-key: ${AGENT_INTERNAL_TOOL_SERVICE_KEY:}
+    max-arguments-bytes: ${AGENT_INTERNAL_TOOL_MAX_ARGUMENTS_BYTES:16384}
+  runtime:
+    mode: ${AGENT_RUNTIME_MODE:legacy}
+    python-base-url: ${AGENT_PYTHON_BASE_URL:http://localhost:8091}
+    python-timeout-ms: ${AGENT_PYTHON_TIMEOUT_MS:30000}
+    python-service-key: ${AGENT_PYTHON_SERVICE_KEY:}
+    fallback-enabled: ${AGENT_RUNTIME_FALLBACK_ENABLED:true}

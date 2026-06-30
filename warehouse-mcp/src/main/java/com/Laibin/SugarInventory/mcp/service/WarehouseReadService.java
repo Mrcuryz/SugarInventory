@@ -1,16 +1,25 @@
 package com.Laibin.SugarInventory.mcp.service;
 
 import com.Laibin.SugarInventory.mcp.client.WarehouseApiClient;
+import com.Laibin.SugarInventory.mcp.client.WarehouseApiException;
 import com.Laibin.SugarInventory.mcp.model.ToolModels;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AmbiguityType;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayLookupMode;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRecord;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewSummary;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.MatchType;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.OptionType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PageInfo;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCandidate;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductResolutionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolutionOption;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveWarehousesRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolutionStatus;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseCandidate;
@@ -24,9 +33,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -78,7 +90,7 @@ public class WarehouseReadService {
                         .thenComparing(ProductCandidate::productId, Comparator.nullsLast(Integer::compareTo)))
                 .limit(limit)
                 .toList();
-        return productResolution(candidates);
+        return productResolution(request.query(), candidates);
     }
 
     public WarehouseResolutionResponse resolveWarehouses(ResolveWarehousesRequest request) {
@@ -87,17 +99,25 @@ public class WarehouseReadService {
             return WarehouseResolutionResponse.error(validation);
         }
         int limit = defaultLimit(request.limit());
+        WarehouseNameQuery warehouseQuery = normalizeWarehouseNameQuery(request.query());
         List<WarehouseCandidate> candidates = new ArrayList<>();
-        if (isPositiveInteger(request.query())) {
+        if (!warehouseQuery.normalized() && isPositiveInteger(request.query())) {
             JsonNode warehouse = apiClient.getData("/api/warehouse/" + request.query().trim());
             if (isObject(warehouse)) {
-                candidates.add(warehouseCandidate(warehouse, MatchType.EXACT_ID, 100));
+                candidates.add(warehouseCandidate(warehouse, MatchType.EXACT_ID, 100, "用户输入为数字，按库位 ID 精确匹配。"));
             }
         }
-        JsonNode data = apiClient.getData("/api/warehouse/query", Map.of("name", request.query().trim()));
+        JsonNode data = apiClient.getData("/api/warehouse/query", Map.of("name", warehouseQuery.queryName()));
         for (JsonNode item : asArray(data)) {
-            WarehouseCandidate candidate = warehouseCandidate(item, matchType(request.query(), text(item, "warehouseName"), false),
-                    matchScore(request.query(), text(item, "warehouseName"), false));
+            String warehouseName = text(item, "warehouseName");
+            MatchType candidateMatchType = warehouseQuery.normalized() && normalize(warehouseQuery.queryName()).equals(normalize(warehouseName))
+                    ? MatchType.NORMALIZED_NAME
+                    : matchType(warehouseQuery.queryName(), warehouseName, false);
+            int candidateMatchScore = matchScore(candidateMatchType);
+            String matchReason = warehouseQuery.normalized()
+                    ? warehouseQuery.matchReason()
+                    : matchReason(candidateMatchType, request.query(), warehouseName);
+            WarehouseCandidate candidate = warehouseCandidate(item, candidateMatchType, candidateMatchScore, matchReason);
             if (Boolean.TRUE.equals(request.onlyAvailable()) && !hasFreeCapacity(candidate)) {
                 continue;
             }
@@ -219,6 +239,139 @@ public class WarehouseReadService {
         return new WarehouseStatusResponse(ResolutionStatus.UNIQUE, false, List.of(warehouse), warehouse, capacity, inventoryPage, details, operations, null);
     }
 
+
+    public PalletStatusResponse getPalletStatus(PalletStatusRequest request) {
+        ToolModels.ToolError validation = validatePalletStatusRequest(request);
+        if (validation != null) {
+            return PalletStatusResponse.error(validation);
+        }
+
+        String code = request.code().trim();
+        boolean includeInventory = request.includeInventory() == null || request.includeInventory();
+        boolean includeAssay = request.includeAssay() == null || request.includeAssay();
+        boolean includeFlows = request.includeFlows() == null || request.includeFlows();
+        int flowLimit = request.flowLimit() == null ? 20 : request.flowLimit();
+        String codePath = pathSegment(code);
+
+        JsonNode palletInfo = apiClient.getData("/api/pallet-codes/parse", Map.of("code", code));
+        JsonNode inventory = null;
+        JsonNode assay = null;
+        PageInfo flowCyclePage = null;
+        List<JsonNode> flowCycles = new ArrayList<>();
+        List<JsonNode> flows = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+
+        if (includeInventory) {
+            try {
+                inventory = apiClient.getData("/api/pallet-codes/" + codePath + "/inventory");
+            } catch (WarehouseApiException e) {
+                if (isFatalUpstream(e)) {
+                    throw e;
+                }
+                warnings.add("inventory query failed with " + e.code() + ".");
+            }
+        }
+        if (includeAssay) {
+            try {
+                assay = apiClient.getData("/api/pallet-codes/" + codePath + "/assay");
+            } catch (WarehouseApiException e) {
+                if (isFatalUpstream(e)) {
+                    throw e;
+                }
+                warnings.add("assay query failed with " + e.code() + ".");
+            }
+        }
+        if (includeFlows) {
+            try {
+                JsonNode cyclesPage = apiClient.getData("/api/pallet-codes/" + codePath + "/flows/cycles",
+                        Map.of("pageNum", 1, "pageSize", flowLimit));
+                for (JsonNode item : asArray(cyclesPage.path("records"))) {
+                    flowCycles.add(item);
+                }
+                flowCyclePage = new PageInfo(1, flowLimit, longValue(cyclesPage, "total", flowCycles.size()));
+                Integer selectedCycleNo = request.cycleNo();
+                if (selectedCycleNo == null && !flowCycles.isEmpty()) {
+                    selectedCycleNo = intValue(flowCycles.getFirst(), "cycleNo", null);
+                }
+                if (selectedCycleNo != null) {
+                    JsonNode flowData = apiClient.getData("/api/pallet-codes/" + codePath + "/flows", Map.of("cycleNo", selectedCycleNo));
+                    for (JsonNode item : asArray(flowData)) {
+                        if (flows.size() >= flowLimit) {
+                            break;
+                        }
+                        flows.add(item);
+                    }
+                }
+            } catch (WarehouseApiException e) {
+                if (isFatalUpstream(e)) {
+                    throw e;
+                }
+                warnings.add("flows query failed with " + e.code() + ".");
+            }
+        }
+        return new PalletStatusResponse(code, !warnings.isEmpty(), palletInfo, inventory, assay, flowCyclePage, flowCycles, flows, warnings, null);
+    }
+
+    public AssayStatusResponse getAssayStatus(AssayStatusRequest request) {
+        ToolModels.ToolError validation = validateAssayStatusRequest(request);
+        if (validation != null) {
+            return AssayStatusResponse.error(validation);
+        }
+
+        boolean includeStandardDetails = request.includeStandardDetails() == null || request.includeStandardDetails();
+        if (request.assayId() != null) {
+            JsonNode assay = apiClient.getData("/api/assay/" + request.assayId());
+            return assayStatusResponse(AssayLookupMode.ASSAY_ID, null, assay, includeStandardDetails, List.of());
+        }
+
+        LocalDate productionDate = LocalDate.parse(request.productionDate());
+        Integer productId = request.productId();
+        ProductResolutionResponse productResolution = null;
+        AssayLookupMode lookupMode = AssayLookupMode.PRODUCT_DATE;
+        if (productId == null) {
+            productResolution = resolveProducts(new ResolveProductsRequest(request.productQuery(), null, null, 10));
+            if (productResolution.error() != null) {
+                return AssayStatusResponse.error(productResolution.error());
+            }
+            if (productResolution.resolutionStatus() != ResolutionStatus.UNIQUE) {
+                return new AssayStatusResponse(
+                        AssayLookupMode.PRODUCT_QUERY,
+                        productResolution.resolutionStatus(),
+                        productResolution.needsUserSelection(),
+                        productResolution,
+                        null,
+                        null,
+                        List.of(),
+                        null,
+                        productResolution.resolutionStatus() == ResolutionStatus.NOT_FOUND,
+                        productResolution.resolutionStatus() == ResolutionStatus.NOT_FOUND
+                                ? List.of("No product matched the productQuery; assay lookup was not attempted.")
+                                : List.of("Product query is ambiguous; ask the user to choose a product before assay lookup."),
+                        null
+                );
+            }
+            productId = productResolution.candidates().getFirst().productId();
+            lookupMode = AssayLookupMode.PRODUCT_QUERY;
+        }
+
+        JsonNode assay = apiClient.getData("/api/assay/by-product-date", Map.of("productId", productId, "productionDate", productionDate));
+        if (assay == null || assay.isNull() || assay.isMissingNode() || (assay.isObject() && assay.isEmpty())) {
+            return new AssayStatusResponse(
+                    lookupMode,
+                    ResolutionStatus.NOT_FOUND,
+                    false,
+                    productResolution,
+                    null,
+                    null,
+                    List.of(),
+                    null,
+                    true,
+                    List.of("No assay result exists for the requested product and production date."),
+                    null
+            );
+        }
+        return assayStatusResponse(lookupMode, productResolution, assay, includeStandardDetails, List.of());
+    }
     private WarehouseResolution resolveWarehouseForStatus(WarehouseStatusRequest request) {
         if (request.warehouseId() != null) {
             JsonNode warehouseNode = apiClient.getData("/api/warehouse/" + request.warehouseId());
@@ -231,16 +384,93 @@ public class WarehouseReadService {
         return new WarehouseResolution(resolution.resolutionStatus(), resolution.candidates());
     }
 
-    private ProductResolutionResponse productResolution(List<ProductCandidate> candidates) {
+    private ProductResolutionResponse productResolution(String query, List<ProductCandidate> candidates) {
         if (candidates.isEmpty()) {
-            return new ProductResolutionResponse(ResolutionStatus.NOT_FOUND, false, List.of(), null);
+            return new ProductResolutionResponse(ResolutionStatus.NOT_FOUND, false, null, null, List.of(), List.of(), null);
         }
         if (hasSingleCertainProduct(candidates)) {
-            return new ProductResolutionResponse(ResolutionStatus.UNIQUE, false, List.of(candidates.getFirst()), null);
+            return new ProductResolutionResponse(ResolutionStatus.UNIQUE, false, null, null, List.of(), List.of(candidates.getFirst()), null);
         }
-        return new ProductResolutionResponse(ResolutionStatus.AMBIGUOUS, true, candidates, null);
+        return new ProductResolutionResponse(
+                ResolutionStatus.AMBIGUOUS,
+                true,
+                ambiguityType(query, candidates),
+                clarificationPrompt(query),
+                productOptions(query, candidates),
+                candidates,
+                null
+        );
     }
 
+    private AmbiguityType ambiguityType(String query, List<ProductCandidate> candidates) {
+        String normalizedQuery = normalize(query);
+        boolean productTypeScope = candidates.stream()
+                .map(ProductCandidate::productType)
+                .anyMatch(productType -> normalize(productType).equals(normalizedQuery));
+        return productTypeScope ? AmbiguityType.PRODUCT_SCOPE : AmbiguityType.MULTIPLE_SPECS;
+    }
+
+    private String clarificationPrompt(String query) {
+        String trimmedQuery = query == null ? "" : query.trim();
+        return "“" + trimmedQuery + "”可能指产品大类、产品名称组或某个具体规格，请选择查询范围。";
+    }
+
+    private List<ResolutionOption> productOptions(String query, List<ProductCandidate> candidates) {
+        String normalizedQuery = normalize(query);
+        List<ResolutionOption> options = new ArrayList<>();
+        candidates.stream()
+                .map(ProductCandidate::productType)
+                .filter(productType -> productType != null && normalize(productType).equals(normalizedQuery))
+                .distinct()
+                .forEach(productType -> options.add(new ResolutionOption(
+                        OptionType.PRODUCT_TYPE_GROUP,
+                        "全部" + productType + "大类",
+                        null,
+                        null,
+                        productType,
+                        false,
+                        "当前库存概览尚不支持按产品大类聚合查询，请让用户选择具体产品规格。"
+                )));
+        boolean hasExactProductNameGroup = candidates.stream()
+                .map(ProductCandidate::productName)
+                .anyMatch(productName -> normalize(productName).equals(normalizedQuery) || alias(productName).equals(normalizedQuery));
+        if (hasExactProductNameGroup) {
+            options.add(new ResolutionOption(
+                    OptionType.EXACT_PRODUCT_NAME_GROUP,
+                    "产品名称为“" + query.trim() + "”的全部规格",
+                    null,
+                    query.trim(),
+                    null,
+                    false,
+                    "当前库存概览尚不支持按产品名称组聚合查询，请让用户选择具体产品规格。"
+            ));
+        }
+        candidates.forEach(candidate -> options.add(new ResolutionOption(
+                OptionType.SINGLE_PRODUCT,
+                singleProductLabel(candidate),
+                candidate.productId(),
+                candidate.productName(),
+                candidate.productType(),
+                true,
+                "选择该具体 productId 后可继续查询库存概览。"
+        )));
+        return options;
+    }
+
+    private String singleProductLabel(ProductCandidate candidate) {
+        StringBuilder label = new StringBuilder();
+        label.append(candidate.productName() == null ? "未命名产品" : candidate.productName());
+        if (candidate.productId() != null) {
+            label.append(" (#").append(candidate.productId()).append(")");
+        }
+        if (candidate.weightPerPiece() != null) {
+            label.append(" ").append(candidate.weightPerPiece()).append("kg/件");
+        }
+        if (candidate.piecesPerPallet() != null) {
+            label.append(" ").append(candidate.piecesPerPallet()).append("件/板");
+        }
+        return label.toString();
+    }
     private WarehouseResolutionResponse warehouseResolution(List<WarehouseCandidate> candidates) {
         if (candidates.isEmpty()) {
             return new WarehouseResolutionResponse(ResolutionStatus.NOT_FOUND, false, List.of(), null);
@@ -350,6 +580,57 @@ public class WarehouseReadService {
         return null;
     }
 
+
+    private ToolModels.ToolError validatePalletStatusRequest(PalletStatusRequest request) {
+        ToolModels.ToolError error = validateRequiredString("code", request == null ? null : request.code(), 100);
+        if (error != null) {
+            return error;
+        }
+        if (request.cycleNo() != null && request.cycleNo() < 1) {
+            return ErrorMapper.invalid("cycleNo", "cycleNo must be greater than or equal to 1.");
+        }
+        if (request.flowLimit() != null && (request.flowLimit() < 1 || request.flowLimit() > 100)) {
+            return ErrorMapper.invalid("flowLimit", "flowLimit must be between 1 and 100.");
+        }
+        return null;
+    }
+
+    private ToolModels.ToolError validateAssayStatusRequest(AssayStatusRequest request) {
+        if (request == null) {
+            return ErrorMapper.invalid("assayId", "assayId or productId plus productionDate is required.");
+        }
+        ToolModels.ToolError error = validatePositiveId("assayId", request.assayId());
+        if (error != null) {
+            return error;
+        }
+        error = validatePositiveId("productId", request.productId());
+        if (error != null) {
+            return error;
+        }
+        error = validateOptionalString("productQuery", request.productQuery(), 100);
+        if (error != null) {
+            return error;
+        }
+        if (request.assayId() != null) {
+            return null;
+        }
+        if (request.productId() == null && request.productQuery() == null) {
+            return ErrorMapper.invalid("assayId", "assayId or productId/productQuery plus productionDate is required.");
+        }
+        error = validateRequiredString("productionDate", request.productionDate(), 10);
+        if (error != null) {
+            return error;
+        }
+        if (request.productionDate().length() != 10) {
+            return ErrorMapper.invalid("productionDate", "productionDate must use yyyy-MM-dd format.");
+        }
+        try {
+            LocalDate.parse(request.productionDate());
+        } catch (DateTimeParseException e) {
+            return ErrorMapper.invalid("productionDate", "productionDate must use yyyy-MM-dd format.");
+        }
+        return null;
+    }
     private ToolModels.ToolError validateRequiredString(String field, String value, int maxLength) {
         if (value == null || value.isBlank()) {
             return ErrorMapper.invalid(field, field + " must not be blank.");
@@ -402,9 +683,10 @@ public class WarehouseReadService {
     }
 
     private ProductCandidate productCandidate(JsonNode item, MatchType matchType, int matchScore) {
+        String productName = text(item, "productName");
         return new ProductCandidate(
                 intValue(item, "id", intValue(item, "productId", null)),
-                text(item, "productName"),
+                productName,
                 text(item, "productType"),
                 text(item, "status", text(item, "productStatus")),
                 text(item, "packagingMethod"),
@@ -413,11 +695,16 @@ public class WarehouseReadService {
                 booleanValue(item, "canStack"),
                 intValue(item, "screenMeshId", null),
                 matchType,
-                matchScore
+                matchScore,
+                matchReason(matchType, null, productName)
         );
     }
 
     private WarehouseCandidate warehouseCandidate(JsonNode item, MatchType matchType, int matchScore) {
+        return warehouseCandidate(item, matchType, matchScore, matchReason(matchType, null, text(item, "warehouseName")));
+    }
+
+    private WarehouseCandidate warehouseCandidate(JsonNode item, MatchType matchType, int matchScore, String matchReason) {
         Integer maxCapacity = intValue(item, "maxCapacity", null);
         Integer curCapacity = intValue(item, "curCapacity", null);
         Integer freeCapacity = maxCapacity == null || curCapacity == null ? null : Math.max(0, maxCapacity - curCapacity);
@@ -430,16 +717,15 @@ public class WarehouseReadService {
                 curCapacity,
                 freeCapacity,
                 matchType,
-                matchScore
+                matchScore,
+                matchReason
         );
     }
 
     private InventoryOverviewRecord inventoryRecord(JsonNode item, ProductCandidate product) {
-        Integer totalQuantity = intValue(item, "totalQuantity", 0);
-        Integer totalPieces = intValue(item, "totalPieces", null);
-        if (totalPieces == null && product != null && product.piecesPerPallet() != null) {
-            totalPieces = totalQuantity * product.piecesPerPallet();
-        }
+        Integer rawFullPallets = intValue(item, "totalQuantity", 0);
+        Integer rawLoosePieces = intValue(item, "totalPieces", 0);
+        StockQuantity quantity = normalizeStockQuantity(rawFullPallets, rawLoosePieces, product);
         return new InventoryOverviewRecord(
                 intValue(item, "warehouseId", null),
                 text(item, "warehouseName"),
@@ -447,10 +733,14 @@ public class WarehouseReadService {
                 text(item, "productName"),
                 text(item, "productStatus"),
                 localDate(item, "entryDate"),
-                totalQuantity,
-                totalPieces,
+                rawFullPallets,
+                rawLoosePieces,
+                quantity.normalizedPallets(),
+                quantity.normalizedLoosePieces(),
+                quantity.totalEquivalentPieces(),
                 decimalValue(item, "totalWeight"),
-                text(item, "stockInfo"),
+                displayStockInfo(text(item, "stockInfo"), quantity),
+                quantity.calculationNote(),
                 intValue(item, "warehouseCount", null)
         );
     }
@@ -458,12 +748,19 @@ public class WarehouseReadService {
     private InventoryOverviewSummary summarize(List<InventoryOverviewRecord> records) {
         Set<Integer> warehouseIds = new HashSet<>();
         Set<Integer> productIds = new HashSet<>();
-        int boards = 0;
-        int pieces = 0;
+        int rawFullPallets = 0;
+        int rawLoosePieces = 0;
+        int totalEquivalentPieces = 0;
+        boolean allRecordsHaveEquivalentPieces = true;
         BigDecimal weight = BigDecimal.ZERO;
         for (InventoryOverviewRecord record : records) {
-            boards += nullToZero(record.totalQuantity());
-            pieces += nullToZero(record.totalPieces());
+            rawFullPallets += nullToZero(record.rawFullPallets());
+            rawLoosePieces += nullToZero(record.rawLoosePieces());
+            if (record.totalEquivalentPieces() == null) {
+                allRecordsHaveEquivalentPieces = false;
+            } else {
+                totalEquivalentPieces += record.totalEquivalentPieces();
+            }
             if (record.totalWeight() != null) {
                 weight = weight.add(record.totalWeight());
             }
@@ -474,7 +771,60 @@ public class WarehouseReadService {
                 productIds.add(record.productId());
             }
         }
-        return new InventoryOverviewSummary(records.size(), boards, pieces, weight, warehouseIds.size(), productIds.size());
+        Integer normalizedPallets = records.size() == 1 ? records.getFirst().normalizedPallets() : null;
+        Integer normalizedLoosePieces = records.size() == 1 ? records.getFirst().normalizedLoosePieces() : null;
+        String displayStockInfo = records.size() == 1 ? records.getFirst().displayStockInfo() : null;
+        String calculationNote = records.size() == 1
+                ? records.getFirst().calculationNote()
+                : "summary.rawFullPallets/rawLoosePieces are sums of backend raw fields. normalizedPallets/normalizedLoosePieces are only populated for a single product row because different products may have different piecesPerPallet.";
+        return new InventoryOverviewSummary(
+                records.size(),
+                rawFullPallets,
+                rawLoosePieces,
+                normalizedPallets,
+                normalizedLoosePieces,
+                allRecordsHaveEquivalentPieces ? totalEquivalentPieces : null,
+                weight,
+                displayStockInfo,
+                calculationNote,
+                warehouseIds.size(),
+                productIds.size()
+        );
+    }
+
+    private StockQuantity normalizeStockQuantity(Integer rawFullPallets, Integer rawLoosePieces, ProductCandidate product) {
+        int fullPallets = nullToZero(rawFullPallets);
+        int loosePieces = nullToZero(rawLoosePieces);
+        Integer piecesPerPallet = product == null ? null : product.piecesPerPallet();
+        if (piecesPerPallet == null || piecesPerPallet <= 0) {
+            return new StockQuantity(
+                    null,
+                    null,
+                    null,
+                    "Backend returned rawFullPallets=" + fullPallets + " and rawLoosePieces=" + loosePieces + "; normalization requires a positive piecesPerPallet."
+            );
+        }
+        int totalEquivalentPieces = fullPallets * piecesPerPallet + loosePieces;
+        int normalizedPallets = totalEquivalentPieces / piecesPerPallet;
+        int normalizedLoosePieces = totalEquivalentPieces % piecesPerPallet;
+        return new StockQuantity(
+                normalizedPallets,
+                normalizedLoosePieces,
+                totalEquivalentPieces,
+                "Backend raw fields mean rawFullPallets=" + fullPallets + " full pallets and rawLoosePieces=" + loosePieces
+                        + " loose pieces. With piecesPerPallet=" + piecesPerPallet + ", totalEquivalentPieces=" + totalEquivalentPieces
+                        + ", displayed as " + normalizedPallets + "板" + normalizedLoosePieces + "件."
+        );
+    }
+
+    private String displayStockInfo(String upstreamStockInfo, StockQuantity quantity) {
+        if (upstreamStockInfo != null && !upstreamStockInfo.isBlank()) {
+            return upstreamStockInfo;
+        }
+        if (quantity.normalizedPallets() == null || quantity.normalizedLoosePieces() == null) {
+            return null;
+        }
+        return quantity.normalizedPallets() + "板" + quantity.normalizedLoosePieces() + "件";
     }
 
     private WarehouseInventoryRecord warehouseInventoryRecord(JsonNode item) {
@@ -512,6 +862,49 @@ public class WarehouseReadService {
         );
     }
 
+
+    private AssayStatusResponse assayStatusResponse(AssayLookupMode lookupMode, ProductResolutionResponse productResolution, JsonNode assay,
+                                                    boolean includeStandardDetails, List<String> warnings) {
+        String judgeResult = text(assay, "judgeResult");
+        if (judgeResult == null && booleanValue(assay, "isQualified") != null) {
+            judgeResult = Boolean.TRUE.equals(booleanValue(assay, "isQualified")) ? "QUALIFIED" : "UNQUALIFIED";
+        }
+        return new AssayStatusResponse(
+                lookupMode,
+                ResolutionStatus.UNIQUE,
+                false,
+                productResolution,
+                assay,
+                judgeResult,
+                includeStandardDetails ? jsonList(assay.path("failedMetrics")) : List.of(),
+                includeStandardDetails && assay.path("appliedStandard").isObject() ? assay.path("appliedStandard") : null,
+                false,
+                warnings,
+                null
+        );
+    }
+
+    private static List<JsonNode> jsonList(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<JsonNode> result = new ArrayList<>();
+        for (JsonNode item : node) {
+            result.add(item);
+        }
+        return result;
+    }
+
+    private static boolean isFatalUpstream(WarehouseApiException exception) {
+        return switch (exception.code()) {
+            case "UPSTREAM_UNAUTHORIZED", "UPSTREAM_PERMISSION_DENIED", "UPSTREAM_TIMEOUT", "UPSTREAM_SERVER_ERROR" -> true;
+            default -> false;
+        };
+    }
+
+    private static String pathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
     private MatchType matchType(String query, String value, boolean code) {
         if (code && query.equals(value)) {
             return MatchType.EXACT_CODE;
@@ -534,7 +927,11 @@ public class WarehouseReadService {
     }
 
     private int matchScore(String query, String value, boolean code) {
-        return switch (matchType(query, value, code)) {
+        return matchScore(matchType(query, value, code));
+    }
+
+    private int matchScore(MatchType matchType) {
+        return switch (matchType) {
             case EXACT_ID, EXACT_CODE, EXACT_NAME -> 100;
             case NORMALIZED_NAME -> 95;
             case ALIAS -> 90;
@@ -543,6 +940,99 @@ public class WarehouseReadService {
         };
     }
 
+    private String matchReason(MatchType matchType, String query, String value) {
+        return switch (matchType) {
+            case EXACT_ID -> "按 ID 精确匹配。";
+            case EXACT_CODE -> "按编码精确匹配。";
+            case EXACT_NAME -> "按名称精确匹配。";
+            case NORMALIZED_NAME -> "归一化名称后匹配。";
+            case ALIAS -> "按去除规格括号后的别名匹配。";
+            case PREFIX -> "按名称前缀匹配。";
+            case CONTAINS -> "按名称包含关系匹配。";
+        };
+    }
+
+    private WarehouseNameQuery normalizeWarehouseNameQuery(String query) {
+        String original = query == null ? "" : query.trim();
+        String naturalNumber = warehouseNaturalNumber(original);
+        if (naturalNumber == null) {
+            return new WarehouseNameQuery(original, false, null);
+        }
+        return new WarehouseNameQuery(
+                naturalNumber,
+                true,
+                "将 " + original + " 归一化为 " + naturalNumber + " 后匹配库位名称。"
+        );
+    }
+
+    private String warehouseNaturalNumber(String query) {
+        String compact = Normalizer.normalize(query, Normalizer.Form.NFKC)
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", "");
+        String token = null;
+        if (compact.endsWith("#")) {
+            token = compact.substring(0, compact.length() - 1);
+        } else if (compact.startsWith("库位") && compact.length() > 2) {
+            token = compact.substring(2);
+        } else {
+            String[] suffixes = {"号库位", "号库", "号位", "号"};
+            for (String suffix : suffixes) {
+                if (compact.endsWith(suffix) && compact.length() > suffix.length()) {
+                    token = compact.substring(0, compact.length() - suffix.length());
+                    break;
+                }
+            }
+        }
+        return parseNaturalNumber(token);
+    }
+
+    private String parseNaturalNumber(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        if (token.matches("[1-9]\\d{0,2}")) {
+            return String.valueOf(Integer.parseInt(token));
+        }
+        Integer chineseNumber = parseChineseNumber(token);
+        return chineseNumber == null ? null : String.valueOf(chineseNumber);
+    }
+
+    private Integer parseChineseNumber(String token) {
+        if (token == null || token.isBlank() || !token.matches("[零〇一二两三四五六七八九十]+")) {
+            return null;
+        }
+        if (token.equals("十")) {
+            return 10;
+        }
+        int tenIndex = token.indexOf('十');
+        if (tenIndex >= 0) {
+            String tensPart = token.substring(0, tenIndex);
+            String onesPart = token.substring(tenIndex + 1);
+            int tens = tensPart.isEmpty() ? 1 : chineseDigit(tensPart);
+            int ones = onesPart.isEmpty() ? 0 : chineseDigit(onesPart);
+            if (tens < 0 || ones < 0) {
+                return null;
+            }
+            return tens * 10 + ones;
+        }
+        return chineseDigit(token);
+    }
+
+    private int chineseDigit(String value) {
+        return switch (value) {
+            case "零", "〇" -> 0;
+            case "一" -> 1;
+            case "二", "两" -> 2;
+            case "三" -> 3;
+            case "四" -> 4;
+            case "五" -> 5;
+            case "六" -> 6;
+            case "七" -> 7;
+            case "八" -> 8;
+            case "九" -> 9;
+            default -> -1;
+        };
+    }
     private static String normalize(String value) {
         if (value == null) {
             return "";
@@ -637,6 +1127,12 @@ public class WarehouseReadService {
 
     private static int nullToZero(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private record StockQuantity(Integer normalizedPallets, Integer normalizedLoosePieces, Integer totalEquivalentPieces, String calculationNote) {
+    }
+
+    private record WarehouseNameQuery(String queryName, boolean normalized, String matchReason) {
     }
 
     private record WarehouseResolution(ResolutionStatus status, List<WarehouseCandidate> candidates) {

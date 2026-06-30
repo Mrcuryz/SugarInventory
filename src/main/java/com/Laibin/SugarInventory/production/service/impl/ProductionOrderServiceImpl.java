@@ -49,8 +49,10 @@ import com.Laibin.SugarInventory.production.mapper.ProductionOrderLabelCodeMappe
 import com.Laibin.SugarInventory.production.mapper.ProductionOrderMaterialMapper;
 import com.Laibin.SugarInventory.production.mapper.ProductionOrderOutputCodeMapper;
 import com.Laibin.SugarInventory.production.mapper.ProductionOrderOutputMapper;
+import com.Laibin.SugarInventory.production.service.ProductionBoilingBatchService;
 import com.Laibin.SugarInventory.production.service.ProductionOrderService;
 import com.Laibin.SugarInventory.util.PalletQrLabelPdfRenderer;
+import com.Laibin.SugarInventory.util.QrCodeUtils;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -60,6 +62,9 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.imageio.ImageIO;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -99,6 +104,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
     private final WarehouseMapper warehouseMapper;
     private final OutStockMapper outStockMapper;
     private final ObjectMapper objectMapper;
+    private final ProductionBoilingBatchService boilingBatchService;
 
     @Override
     public PageResult<ProductionOrderPageVO> pageOrders(ProductionOrderQueryDTO query) {
@@ -115,6 +121,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
     @Transactional
     public ProductionOrder createOrder(ProductionOrderCreateDTO dto, Integer operatorId, String operatorName) {
         validateOrderType(dto.getOrderType());
+        validateBoilingSourcesForOrderType(dto);
         ProductionOrder order = new ProductionOrder();
         order.setOrderNo(generateOrderNo(dto.getProductionDate()));
         order.setOrderType(dto.getOrderType());
@@ -133,6 +140,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
             order.setOrderNo(generateOrderNo(dto.getProductionDate()));
             productionOrderMapper.insert(order);
         }
+        boilingBatchService.reserveForOrder(order, dto.getBoilingSources(), operatorId, operatorName);
         return order;
     }
 
@@ -148,6 +156,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
 
         ProductionOrderDetailVO detail = new ProductionOrderDetailVO();
         detail.setBaseInfo(toBaseVO(order));
+        detail.setBoilingSources(boilingBatchService.listUsagesByOrder(id));
         detail.setMaterials(materials);
         detail.setOutputs(outputs);
         detail.setOutputCodes(codes);
@@ -337,6 +346,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
         if (labelCount > 0) {
             throw new BusinessException("订单已有预打印批次，不能直接删除；请先取消订单并回收预留码");
         }
+        boilingBatchService.releaseReservedByOrder(orderId);
         productionOrderMapper.deleteById(orderId);
     }
 
@@ -359,6 +369,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
         if (materialCount > 0 || outputCount > 0) {
             throw new BusinessException("订单已有领用或实际产出，不能直接取消，请走异常处理");
         }
+        boilingBatchService.releaseReservedByOrder(orderId);
         recycleRemainingReservedLabels(orderId, operatorId, "订单取消，回收全部未使用预打印标签");
         List<ProductionOrderLabelBatch> batches = labelBatchMapper.listByOrderForUpdate(orderId);
         LocalDateTime now = LocalDateTime.now();
@@ -506,6 +517,22 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
         }
     }
 
+    @Override
+    public byte[] getLabelCodeQrPng(Long labelCodeId) {
+        ProductionOrderLabelCode labelCode = labelCodeMapper.selectById(labelCodeId);
+        if (labelCode == null) {
+            throw new BusinessException("预打印订单码不存在");
+        }
+        if (labelCode.getQrContent() == null || labelCode.getQrContent().isBlank()) {
+            throw new BusinessException("预打印订单码内容为空");
+        }
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            ImageIO.write(QrCodeUtils.generateQrCode(labelCode.getQrContent(), 512, 512), "PNG", output);
+            return output.toByteArray();
+        } catch (IOException e) {
+            throw new BusinessException("生成预打印订单二维码失败");
+        }
+    }
     @Override
     @Transactional
     public ProductionOrderDetailVO finishProduction(Long orderId, ProductionFinishDTO dto, Integer operatorId) {
@@ -1049,6 +1076,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
         if (required > 0 && inbound >= required) {
             order.setStatus(ORDER_STATUS_COMPLETED);
             order.setCompletedAt(LocalDateTime.now());
+            boilingBatchService.consumeReservedByOrder(orderId);
         } else if (inbound > 0) {
             order.setStatus(ORDER_STATUS_PART_INBOUND);
         } else if (required > 0 && bound >= required) {
@@ -1162,6 +1190,13 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
         }
     }
 
+    private void validateBoilingSourcesForOrderType(ProductionOrderCreateDTO dto) {
+        if ("FINISH".equals(dto.getOrderType())
+                && dto.getBoilingSources() != null
+                && !dto.getBoilingSources().isEmpty()) {
+            throw new BusinessException("煮糖批次来源仅支持半成品生产订单，成品生产订单请通过半成品领用关联来源");
+        }
+    }
     private void validateOutputProductStatus(ProductionOrder order, Product product) {
         if ("SEMI".equals(order.getOrderType()) && !"半成品".equals(product.getStatus())) {
             throw new BusinessException("半成品生产订单只能产出半成品");

@@ -73,6 +73,7 @@ export const menuList = [
     icon: Goods,
     permCode: 'production:order:view',
     children: [
+      { path: '/production/boiling-batches', title: '煮糖批次', icon: Goods, permCode: 'production:boiling:view' },
       { path: '/production/orders', title: '生产订单', icon: List, permCode: 'production:order:view' },
       { path: '/production/material-pick', title: '半成品领用', icon: Box, permCode: 'production:material:view' },
       { path: '/production/output-bind', title: '产出贴码', icon: Tickets, permCode: 'production:output:view' }

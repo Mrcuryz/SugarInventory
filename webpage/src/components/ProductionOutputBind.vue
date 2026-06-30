@@ -194,7 +194,6 @@
     <el-dialog v-model="codesDialogVisible" title="本次产出二维码" width="620px">
       <el-table :data="dialogCodes" border stripe empty-text="暂无">
         <el-table-column prop="palletCode" label="二维码" min-width="150" />
-        <el-table-column prop="productNameSnapshot" label="产品" min-width="160" />
         <el-table-column label="数量" width="100">
           <template #default="{ row }">{{ codeQuantityText(row) }}</template>
         </el-table-column>
@@ -206,7 +205,7 @@
       </el-table>
     </el-dialog>
 
-    <el-dialog v-model="labelCodesDialogVisible" title="预打印订单码" width="760px">
+    <el-dialog v-model="labelCodesDialogVisible" title="预打印订单码" width="min(1080px, 92vw)">
       <div class="label-dialog-header">
         <div>
           <div class="label-dialog-title">{{ selectedLabelBatch?.batchNo || '暂无批次' }}</div>
@@ -226,6 +225,11 @@
         </el-table-column>
         <el-table-column label="回收时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.recycledAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="88" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link :loading="previewLoadingCode === `label-${row.id}`" @click="previewLabelQr(row)">查看</el-button>
+          </template>
         </el-table-column>
       </el-table>
     </el-dialog>
@@ -253,6 +257,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProductList } from '@/api/product'
 import {
   finishProductionOrder,
+  getProductionLabelQrCode,
   getProductionOrderDetail,
   listProductionOrderOptions,
   printProductionLabelBatch,
@@ -632,6 +637,26 @@ const previewQr = async row => {
   } catch (error) {
     previewDialogVisible.value = false
     ElMessage.error(error?.response?.data?.message || '二维码图片加载失败')
+  } finally {
+    previewLoadingCode.value = ''
+  }
+}
+const previewLabelQr = async row => {
+  if (!row?.id) {
+    ElMessage.warning('缺少预打印订单码信息')
+    return
+  }
+  const loadingKey = `label-${row.id}`
+  previewDialogVisible.value = true
+  previewLoadingCode.value = loadingKey
+  previewCode.value = row.palletCode || `序号 ${row.sequenceNo}`
+  revokePreviewUrl()
+  try {
+    const res = await getProductionLabelQrCode(row.id)
+    previewImageUrl.value = URL.createObjectURL(res.data)
+  } catch (error) {
+    previewDialogVisible.value = false
+    ElMessage.error(error?.response?.data?.message || '订单标签二维码加载失败')
   } finally {
     previewLoadingCode.value = ''
   }
