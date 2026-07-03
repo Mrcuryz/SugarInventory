@@ -223,7 +223,7 @@ Web 前端
 
 ### 普通 UI 展示内部字段
 
-普通用户界面不得展示 `toolName`、`SUCCESS`、`productId`、`warehouseId`、raw JSON、错误堆栈、token 或 Authorization。管理员调试模式可以查看脱敏后的 toolCalls、耗时和错误码。
+普通用户界面不得展示 `toolName`、`SUCCESS`、`productId`、`warehouseId`、raw JSON、错误堆栈、token 或 Authorization。管理员调试模式可以查看脱敏后的 tool 摘要、耗时和错误码。
 
 ### Python 直接连数据库
 
@@ -454,25 +454,89 @@ Fallback 边界：
 
 验收标准：用户选择“黄冰糖（袋）”后，追问“这些主要在哪些库位”“它今天有没有化验”不再要求重新输入产品。
 
-### M1.3R-5：流式输出
+### M1.3R-5：流式交互首版（已完成）
 
-目标：实现 SSE 或 WebSocket，普通用户显示业务进度和最终回答。
+目标：实现 Java 代理的 Agent 业务事件流，让普通用户看到“正在确认产品范围、正在查询库存、正在汇总结果、需要选择”等业务过程，而不是只看到最终回答的文本分片。
 
-允许做什么：增加 `/messages/stream`，输出业务事件，如确认产品、查询库存、汇总结果、需要选择、最终回答。
+当前状态：已完成。Python 生成统一 envelope SSE；Java 通过 `/api/agent/sessions/{agentSessionId}/messages/stream` 代理 Python `/internal/agent/chat/stream`，并做事件白名单、二次脱敏、流中错误补偿和 Python 会话 fallback 边界保护；前端 `AgentAssistant` 已按单个 assistant message 容器渲染 progress、clarification、card、text_delta 和 error。
 
-禁止做什么：显示模型原始 chain-of-thought、token、内部错误堆栈或未脱敏 tool payload。
+允许做什么：
 
-验收标准：前端能流式展示业务进度和回答；管理员调试模式可查看脱敏 toolCalls。
+- 固化 SSE event envelope：`eventId`、`messageId`、`agentSessionId`、`type`、`sequence`、`payload`；
+- 增加 `/api/agent/sessions/{agentSessionId}/messages/stream`，Java 内部代理 Python `/internal/agent/chat/stream`；
+- 输出用户可见业务事件：`message_start`、`progress`、`clarification`、`text_delta`、`card`、`error`、`message_end`；
+- 输出系统控制事件：`heartbeat`、`cancelled`、`timeout`、`fallback`；
+- 管理员 debug 模式输出脱敏 `tool_start`、`tool_end`、`debug`；
+- 处理流中错误，尽量补发 `error + message_end`。
 
-### M1.3R-6：human-in-the-loop 预留
+禁止做什么：
 
-目标：为未来 preview/execute 的人工确认设计 interrupt/resume。
+- 显示模型原始 chain-of-thought；
+- 显示 MCP 原始协议帧；
+- 向普通 UI 暴露 token、Authorization、delegationToken、内部错误堆栈、数据库连接串或未脱敏 tool payload；
+- 让前端直接调用 Python；
+- 同一 `agentSessionId` 已进入 Python runtime 后 fallback 到 legacy Java AgentGateway。
+
+验收标准：
+
+- clarification 流以 `message_end.finishReason=clarification_required` 结束；
+- 正常完成以 `finishReason=completed` 结束；
+- 工具超时以业务 `error` 加 `message_end.finishReason=timeout` 结束；
+- 前端按 `messageId + eventId` 去重，按 `sequence` 渲染；
+- 一个用户问题对应一个 assistant message 容器，progress 不堆成多条聊天气泡；
+- Java 代理层对 Python 事件做二次脱敏；
+- 普通 UI 只显示业务事件，管理员调试模式可查看脱敏 tool 摘要。
+
+### M1.3R-5.1：流式链路加固
+
+目标：让流式链路可取消、可诊断、可稳定验收。
+
+当前状态：已完成本阶段首轮加固。后端取消接口、Java 到 Python 取消通知、同一 `messageId` 关联、取消后事件抑制和九类审计结果已实现；Python 同步 runtime 暂不能真正中断正在执行的模型，但不会再向已取消的 assistant message 转发后续结果。自动化测试已覆盖取消、工具超时和安全过滤；真实浏览器已通过正常回答、候选等待与恢复、连续消息、主动取消、迟到结果抑制、自动滚动、刷新和 390px 移动端布局验收。
+
+范围：
+
+- 实现 `POST /api/agent/sessions/{agentSessionId}/messages/{messageId}/cancel`；
+- Java 通知 Python `POST /internal/agent/cancel`，标记 message cancelled 并停止继续转发事件；
+- 即使 Python 暂时不能真正中断模型，也不得让后续 tool result 写回已取消的 assistant 容器；
+- 区分客户端意外断开和用户主动取消；
+- 审计结果至少区分 `COMPLETED`、`CLIENT_DISCONNECTED`、`CLIENT_CANCELLED`、`PYTHON_TIMEOUT`、`PYTHON_ERROR`、`TOOL_TIMEOUT`、`TOOL_ERROR`、`SECURITY_FILTERED`、`FALLBACK_BLOCKED`；
+- 增加 Java 端到端 SSE 测试和真实浏览器验收。
+
+浏览器验收：长回答自动滚动；clarification 卡片出现后停止等待；取消后按钮恢复；移动端卡片不溢出；连续两条消息不串流；刷新后状态合理。
+
+### M1.3R-5.2：模型原生增量输出
+
+目标：接入 LLM token delta，同时保留 `progress`、`clarification` 和 `card` 等结构化业务事件。
+
+禁止做什么：展示 chain-of-thought、模型内部推理、raw MCP frame 或未脱敏工具数据。
+
+验收标准：文本可原生增量输出，结构化事件顺序稳定，取消和超时仍能正确收口。
+
+当前状态：Python 已新增 `AgentRunRegistry`、`CancellationToken` 和 OpenAI-compatible provider-native streaming client。`basic` 模式只输出已审核答案作为兼容 delta，不模拟 token；`openai_compatible` 模式从模型 SSE 实时读取安全可见文本并转成 `text_delta`。clarification、card、progress、取消、错误和 message_end 协议保持不变；reasoning、chain-of-thought、tool calls、raw JSON 和敏感字段不会进入普通 UI。
+
+### M1.3R-6：Human-in-the-loop 统一模型
+
+目标：统一 clarification resume、preview 确认、execute 前确认，以及用户拒绝、修改和重新预览的 interrupt/resume 模型。
 
 允许做什么：设计确认事件、resume 接口、pending action state 和审计字段。
 
 禁止做什么：实际执行入库、出库、调拨等写操作。
 
-验收标准：只读候选选择和未来写操作确认都能用统一的人类介入模型表达。
+阶段拆分：
+
+- M1.3R-6a：协议与状态机。定义 `HitlInterrupt`、`ResumeAction`、状态机、`finishReason`、audit code、`resumeToken` 能力凭证规则和 action/kind 允许矩阵。
+- M1.3R-6b：clarification 迁移。候选选择改成 interrupt；前端只拿 opaque `optionId`；后端保存 `interruptId + optionId` 到已验证业务实体的映射；兼容旧 `candidate_selected`。
+- M1.3R-6c：Java resume API 与审计。新增 `/interrupts/{interruptId}/resume` 和优先流式的 `/resume/stream` 入口；Java 校验 user/session/status 并保存 interrupt 最小元数据。
+- M1.3R-6d：前端统一卡片。clarification 卡片走统一 interrupt；preview / execute confirmation 只占位，不触发写操作。
+- M1.3R-6e：验收与文档。覆盖正常选择、重复点击、过期点击、刷新后恢复或失效提示、不暴露内部字段、不触发写操作。
+
+`resumeToken` 视为一次性能力凭证：短期有效、单次使用、绑定 `agentSessionId` / `interruptId` / `userId` / action / `optionId` 或 `previewId`、不可预测、不写普通日志、过期不可恢复。同一 `clientRequestId` 重放返回同一次结果；不同 `clientRequestId` 命中已完成 interrupt 时返回已处理或已失效，不得重复调用工具或重复写 state。
+
+`message_end.finishReason` 标准化为：`completed`、`interrupt_required`、`cancelled`、`timeout`、`error`、`rejected`、`expired`。产生 interrupt 时必须以 `interrupt_required` 收口，不能当成普通 `completed`。
+
+当前状态：clarification 已接入统一 interrupt/resume。Python 侧生成 opaque `optionId`、`interruptId`、短期一次性 `resumeToken` 和 `expiresAt`；Java 侧提供非流式和流式 resume 入口，并新增 `agent_interrupt_state` 最小元数据持久化，记录 PENDING/RESUMED/CANCELLED/EXPIRED 等状态摘要，不保存 token 明文；前端点击候选后走 stream resume。
+
+验收标准：现有黄冰糖候选选择体验不退化；clarification 事件携带 `interruptId`、`resumeToken`、`expiresAt`；用户选择通过统一 resume 入口恢复；重复点击不会重复执行；过期、取消、拒绝都有明确状态和审计；前端不展示内部 ID、toolName、raw JSON、chain-of-thought；当前阶段仍不开放实际写操作。
 
 ### M1.4：受控只读数据分析层
 
@@ -517,7 +581,8 @@ Fallback 边界：
 MCP/Tool 继续保留 Java；
 Python 专门处理 Agent Runtime；
 Java AgentGatewayService 当前规则式规划能力不应继续扩展为完整 Agent 框架；
-下一步应进入 M1.3R-4/M1.3R-5，完善持久化上下文、候选恢复和 Java 到前端的流式代理。
+M1.3R-5.1 已完成取消、审计分类、断开处理、Java SSE 测试和真实浏览器验收；
+M1.3R-5.2 已接入 OpenAI-compatible provider-native LLM token streaming 边界，并引入运行时取消信号。
 ```
 
-M1.3R-3 已完成 Java 非流式转发。建议下一阶段进入 M1.3R-4/M1.3R-5：把 in-memory checkpointer 替换为可恢复存储，并实现 Java SSE 代理和前端业务事件渲染；Java 规则路径只保留为受限 fallback。
+M1.3R-5 流式交互首版、M1.3R-5.1 流式链路加固、M1.3R-5.2 模型原生增量输出边界均已完成；Java 规则路径只保留为受限 fallback。

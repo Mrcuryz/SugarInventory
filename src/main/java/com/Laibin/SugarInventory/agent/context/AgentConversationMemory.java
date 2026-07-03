@@ -204,12 +204,12 @@ public class AgentConversationMemory {
                 return false;
             }
             Integer storedProductId = positiveInt(option.get("productId"));
-            if (productId != null || storedProductId != null) {
-                return productId != null && productId.equals(storedProductId);
+            if (productId != null) {
+                return productId.equals(storedProductId);
             }
             Integer storedWarehouseId = positiveInt(option.get("warehouseId"));
-            if (warehouseId != null || storedWarehouseId != null) {
-                return warehouseId != null && warehouseId.equals(storedWarehouseId);
+            if (warehouseId != null) {
+                return warehouseId.equals(storedWarehouseId);
             }
             String storedLabel = stringValue(option.get("displayLabel"));
             return displayLabel != null && displayLabel.equals(storedLabel);

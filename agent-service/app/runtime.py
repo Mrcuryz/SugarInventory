@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from datetime import date
+from datetime import datetime, timedelta, timezone
+import hashlib
 import re
+import secrets
+from collections.abc import Iterator
 from typing import Any
 
+from app.cancellation import current_cancellation_token
 from app.graph.state import (
     InMemoryCheckpointer,
     PendingClarification,
@@ -28,6 +33,8 @@ from app.tools.client import AgentToolClient, ToolGatewayError
 class WarehouseAgentRuntime:
     """Minimal LangGraph-compatible runtime for M1.3R."""
 
+    RESUME_TOKEN_TTL = timedelta(minutes=10)
+
     def __init__(
         self,
         tool_client: AgentToolClient,
@@ -41,6 +48,7 @@ class WarehouseAgentRuntime:
     def chat(self, request: ChatRequest) -> ChatResponse:
         state = self.checkpointer.get(request.agentSessionId)
         text = request.message.content.strip()
+        self._raise_if_cancelled()
         state.messages.append({"role": "user", "content": text})
 
         try:
@@ -48,38 +56,98 @@ class WarehouseAgentRuntime:
         except ToolGatewayError as exc:
             response = self._tool_error_response(request.agentSessionId, exc)
 
+        self._raise_if_cancelled()
         state.messages.append({"role": "assistant", "content": response.answer})
         self.checkpointer.save(request.agentSessionId, state)
         return response
 
+    def stream_answer_deltas(self, answer: str) -> Iterator[str]:
+        yield from self.argument_builder.stream_answer_deltas(answer)
+
     def resume(self, request: ResumeRequest) -> ChatResponse:
         state = self.checkpointer.get(request.agentSessionId)
         selection = request.event.selection
+        interrupt_id = request.event.interruptId
+        client_request_id = request.event.clientRequestId or request.client.requestId
+        self._raise_if_cancelled()
         state.messages.append(
             {
                 "role": "user",
                 "event": "candidate_selected",
-                "displayLabel": selection.displayLabel,
+                "interruptId": interrupt_id,
+                "optionId": selection.optionId,
             }
         )
 
-        if state.pending_clarification is None:
-            response = ChatResponse(
-                agentSessionId=request.agentSessionId,
-                answer="当前没有等待选择的业务候选项，请重新描述要查询的内容。",
-                needsUserSelection=True,
-            )
+        cached = self._cached_resume_response(state, interrupt_id, client_request_id)
+        if cached is not None:
+            return cached
+
+        pending = state.pending_clarification
+        if pending is None:
+            response = self._terminal_interrupt_response(request.agentSessionId, state, interrupt_id)
+            self._cache_resume_response(state, interrupt_id, client_request_id, response)
+            self._raise_if_cancelled()
             self.checkpointer.save(request.agentSessionId, state)
             return response
 
-        option = self._find_pending_option(state.pending_clarification, selection.optionId, selection.displayLabel)
+        if interrupt_id and interrupt_id != pending.interrupt_id:
+            response = self._terminal_interrupt_response(request.agentSessionId, state, interrupt_id)
+            self._cache_resume_response(state, interrupt_id, client_request_id, response)
+            self._raise_if_cancelled()
+            self.checkpointer.save(request.agentSessionId, state)
+            return response
+
+        if pending.status != "PENDING":
+            response = self._status_response(request.agentSessionId, pending.status)
+            self._cache_resume_response(state, pending.interrupt_id, client_request_id, response)
+            self._raise_if_cancelled()
+            self.checkpointer.save(request.agentSessionId, state)
+            return response
+
+        if self._is_expired(pending):
+            pending.status = "EXPIRED"
+            state.interrupt_status[pending.interrupt_id] = pending.status
+            state.pending_clarification = None
+            response = ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="这个确认已过期，请重新发起。",
+            )
+            self._cache_resume_response(state, pending.interrupt_id, client_request_id, response)
+            self._raise_if_cancelled()
+            self.checkpointer.save(request.agentSessionId, state)
+            return response
+
+        if not self._resume_token_matches(pending, request.resumeToken) or not self._user_matches(pending, request):
+            response = ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="这个选择已失效，请重新发起。",
+            )
+            self._cache_resume_response(state, pending.interrupt_id, client_request_id, response)
+            self._raise_if_cancelled()
+            self.checkpointer.save(request.agentSessionId, state)
+            return response
+
+        if request.event.action == "CANCEL":
+            pending.status = "CANCELLED"
+            state.interrupt_status[pending.interrupt_id] = pending.status
+            state.pending_clarification = None
+            response = ChatResponse(agentSessionId=request.agentSessionId, answer="这个任务已取消。")
+            self._cache_resume_response(state, pending.interrupt_id, client_request_id, response)
+            self._raise_if_cancelled()
+            state.messages.append({"role": "assistant", "content": response.answer})
+            self.checkpointer.save(request.agentSessionId, state)
+            return response
+
+        option = self._find_pending_option(pending, selection.optionId, selection.displayLabel)
         if option is None:
             response = ChatResponse(
                 agentSessionId=request.agentSessionId,
                 answer="没有找到你选择的候选项，请重新选择。",
                 needsUserSelection=True,
-                cards=[self._clarification_card(state.pending_clarification)],
+                cards=[self._clarification_card(pending)],
             )
+            self._raise_if_cancelled()
             self.checkpointer.save(request.agentSessionId, state)
             return response
 
@@ -89,12 +157,15 @@ class WarehouseAgentRuntime:
                 answer=f"{option.get('displayLabel', '该选项')}当前暂不支持直接查询。",
                 suggestions=["请选择一个具体产品或库位。"],
             )
+            self._raise_if_cancelled()
             self.checkpointer.save(request.agentSessionId, state)
             return response
 
         internal = option.get("_internal", {})
-        intent = state.pending_clarification.intent
-        if state.pending_clarification.kind == "product":
+        intent = pending.intent
+        pending.status = "RESUMED"
+        state.interrupt_status[pending.interrupt_id] = pending.status
+        if pending.kind == "product":
             product_id = self._int_value(internal, "productId")
             if product_id is None:
                 response = ChatResponse(
@@ -102,8 +173,10 @@ class WarehouseAgentRuntime:
                     answer="该产品候选缺少可校验的内部映射，请重新查询。",
                     needsUserSelection=True,
                 )
+                self._raise_if_cancelled()
                 self.checkpointer.save(request.agentSessionId, state)
                 return response
+            self._raise_if_cancelled()
             state.selected_product = SelectedEntity(
                 internal_id=product_id,
                 display_label=self._safe_display_label(str(option.get("displayLabel") or "所选产品")),
@@ -117,7 +190,7 @@ class WarehouseAgentRuntime:
                 request.client.traceId,
                 request.client.requestId,
             )
-        elif state.pending_clarification.kind == "warehouse":
+        elif pending.kind == "warehouse":
             warehouse_id = self._int_value(internal, "warehouseId")
             if warehouse_id is None:
                 response = ChatResponse(
@@ -125,8 +198,10 @@ class WarehouseAgentRuntime:
                     answer="该库位候选缺少可校验的内部映射，请重新查询。",
                     needsUserSelection=True,
                 )
+                self._raise_if_cancelled()
                 self.checkpointer.save(request.agentSessionId, state)
                 return response
+            self._raise_if_cancelled()
             state.selected_warehouse = SelectedEntity(
                 internal_id=warehouse_id,
                 display_label=self._safe_display_label(str(option.get("displayLabel") or "所选库位")),
@@ -142,111 +217,112 @@ class WarehouseAgentRuntime:
         else:
             response = ChatResponse(agentSessionId=request.agentSessionId, answer="已记录你的选择。")
 
+        self._cache_resume_response(state, pending.interrupt_id, client_request_id, response)
+        self._raise_if_cancelled()
         state.messages.append({"role": "assistant", "content": response.answer})
         self.checkpointer.save(request.agentSessionId, state)
         return response
 
     def _handle_message(self, request: ChatRequest, state: WarehouseAgentState, text: str) -> ChatResponse:
-        if self._is_inventory_location_followup(text):
-            if state.selected_product is None:
-                return ChatResponse(
-                    agentSessionId=request.agentSessionId,
-                    answer="你想查哪个产品？请先选择或输入一个明确的产品名称。",
-                    needsUserSelection=True,
-                    suggestions=["例如：黄冰糖（袋）库存。"],
-                )
-            return self._answer_inventory_locations(
-                request.agentSessionId,
-                state,
-                request.client.traceId,
-                request.client.requestId,
+        try:
+            plan = self.argument_builder.plan(user_message=text, state=state)
+        except ValueError:
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="当前我只能使用受控的只读仓储工具。请补充要查询的产品、库位、托盘码或生产日期。",
+                needsUserSelection=True,
+            )
+        state.messages.append(
+            {
+                "role": "planner",
+                "action": plan.action,
+                "toolName": plan.toolName,
+                "intent": plan.intent,
+                "responseMode": plan.responseMode,
+            }
+        )
+        return self._execute_plan(request, state, plan)
+
+    def _execute_plan(self, request: ChatRequest, state: WarehouseAgentState, plan: Any) -> ChatResponse:
+        if plan.action == "ask_user":
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=plan.prompt or "请补充更明确的查询条件。",
+                needsUserSelection=True,
+                suggestions=plan.suggestions,
+            )
+        if plan.action == "answer":
+            return ChatResponse(agentSessionId=request.agentSessionId, answer=plan.answer or "已处理。")
+        if plan.action != "call_tool" or not plan.toolName:
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="当前我只能使用受控的只读仓储工具。请补充要查询的产品、库位、托盘码或生产日期。",
+                needsUserSelection=True,
             )
 
-        if self._is_context_product_followup(text):
+        if plan.toolName == "resolve_products":
+            return self._resolve_product_and_continue(request, state, plan.arguments, plan.intent or "inventory")
+        if plan.toolName == "resolve_warehouses":
+            return self._resolve_warehouse_and_continue(request, state, plan.arguments)
+        if plan.toolName == "get_inventory_overview":
             if state.selected_product is None:
                 return ChatResponse(
                     agentSessionId=request.agentSessionId,
                     answer="你想查哪个产品？请先选择或输入一个明确的产品名称。",
                     needsUserSelection=True,
-                    suggestions=["例如：黄冰糖（袋）库存。"],
+                )
+            if plan.responseMode == "inventory_locations":
+                return self._answer_inventory_locations(
+                    request.agentSessionId,
+                    state,
+                    request.client.traceId,
+                    request.client.requestId,
+                    plan.arguments,
                 )
             return self._answer_inventory(
                 request.agentSessionId,
                 state,
                 request.client.traceId,
                 request.client.requestId,
+                plan.arguments,
             )
-
-        if self._has_warehouse_semantics(text):
-            arguments = self._build_arguments_or_empty("resolve_warehouses", text, state)
-            if arguments.get("query"):
-                return self._resolve_warehouse_and_continue(request, state, arguments)
-            if state.selected_warehouse is not None:
-                return self._answer_warehouse_status(
-                    request.agentSessionId,
-                    state,
-                    request.client.traceId,
-                    request.client.requestId,
-                )
-            return ChatResponse(
-                agentSessionId=request.agentSessionId,
-                answer="你想查哪个库位？请提供库位名称，例如 2号库位。",
-                needsUserSelection=True,
-            )
-
-        if "托盘" in text:
-            arguments = self._build_arguments_or_empty("get_pallet_status", text, state)
-            if not arguments.get("code"):
+        if plan.toolName == "get_warehouse_status":
+            if state.selected_warehouse is None:
                 return ChatResponse(
                     agentSessionId=request.agentSessionId,
-                    answer="请提供要查询的托盘码。",
+                    answer="你想查哪个库位？请提供库位名称，例如 2号库位。",
                     needsUserSelection=True,
                 )
-            result = self._call_tool(request, "get_pallet_status", arguments)
-            state.last_pallet_result = result
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_pallet_answer(result))
-
-        if "化验" in text:
-            if state.selected_product is not None and self._has_context_reference(text):
-                result = self._call_tool(
-                    request,
-                    "get_assay_status",
-                    {"productId": state.selected_product.internal_id, "productionDate": date.today().isoformat()},
-                )
-                state.last_assay_result = result
-                return ChatResponse(
-                    agentSessionId=request.agentSessionId,
-                    answer=self._format_assay_answer(state.selected_product.display_label, result),
-                )
-            arguments = self._build_arguments_or_empty("resolve_products", text, state)
-            if not arguments.get("query"):
+            return self._answer_warehouse_status(
+                request.agentSessionId,
+                state,
+                request.client.traceId,
+                request.client.requestId,
+                plan.arguments,
+            )
+        if plan.toolName == "get_assay_status":
+            if "productId" in plan.arguments and state.selected_product is None and "assayId" not in plan.arguments:
                 return ChatResponse(
                     agentSessionId=request.agentSessionId,
                     answer="你想查询哪个产品的化验？请提供明确产品名称或先选择产品。",
                     needsUserSelection=True,
                 )
-            return self._resolve_product_and_continue(request, state, arguments, "assay")
-
-        if "库存" in text:
-            arguments = self._build_arguments_or_empty("resolve_products", text, state)
-            if not arguments.get("query") and state.selected_product is not None:
-                return self._answer_inventory(
-                    request.agentSessionId,
-                    state,
-                    request.client.traceId,
-                    request.client.requestId,
-                )
-            if not arguments.get("query"):
-                return ChatResponse(
-                    agentSessionId=request.agentSessionId,
-                    answer="你想查哪个产品的库存？请先输入明确产品名称。",
-                    needsUserSelection=True,
-                )
-            return self._resolve_product_and_continue(request, state, arguments, "inventory")
+            result = self._call_tool(request, "get_assay_status", plan.arguments)
+            self._raise_if_cancelled()
+            state.last_assay_result = result
+            self._record_tool_message(state, "get_assay_status", self._safe_tool_summary("get_assay_status", result))
+            label = state.selected_product.display_label if state.selected_product else "该产品"
+            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_assay_answer(label, result))
+        if plan.toolName == "get_pallet_status":
+            result = self._call_tool(request, "get_pallet_status", plan.arguments)
+            self._raise_if_cancelled()
+            state.last_pallet_result = result
+            self._record_tool_message(state, "get_pallet_status", self._safe_tool_summary("get_pallet_status", result))
+            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_pallet_answer(result))
 
         return ChatResponse(
             agentSessionId=request.agentSessionId,
-            answer="当前我只支持库存、库位、托盘和化验的只读查询。请补充要查询的产品、库位、托盘码或生产日期。",
+            answer="当前工具不在只读白名单内，无法执行。",
             needsUserSelection=True,
         )
 
@@ -254,10 +330,14 @@ class WarehouseAgentRuntime:
         self, request: ChatRequest, state: WarehouseAgentState, arguments: dict[str, Any], intent: str
     ) -> ChatResponse:
         result = self._call_tool(request, "resolve_products", arguments)
+        self._raise_if_cancelled()
+        self._record_tool_message(state, "resolve_products", self._safe_tool_summary("resolve_products", result))
         status = str(result.get("resolutionStatus") or "").upper()
         if status == "AMBIGUOUS":
-            pending = self._product_clarification(result, intent)
+            pending = self._product_clarification(result, intent, request)
+            self._raise_if_cancelled()
             state.pending_clarification = pending
+            state.interrupt_status[pending.interrupt_id] = pending.status
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
                 answer=pending.prompt,
@@ -276,6 +356,7 @@ class WarehouseAgentRuntime:
                 answer="产品解析结果不完整，请换一个更准确的产品名称。",
                 needsUserSelection=True,
             )
+        self._raise_if_cancelled()
         state.selected_product = entity
         return self._continue_product_intent(
             request.agentSessionId,
@@ -294,14 +375,16 @@ class WarehouseAgentRuntime:
         request_id: str | None,
     ) -> ChatResponse:
         if intent == "assay":
-            result = self.tool_client.call_tool(
+            result = self._call_tool_values(
                 agent_session_id=agent_session_id,
                 tool_name="get_assay_status",
                 arguments={"productId": state.selected_product.internal_id, "productionDate": date.today().isoformat()},
                 trace_id=trace_id,
                 request_id=request_id,
             )
+            self._raise_if_cancelled()
             state.last_assay_result = result
+            self._record_tool_message(state, "get_assay_status", self._safe_tool_summary("get_assay_status", result))
             return ChatResponse(
                 agentSessionId=agent_session_id,
                 answer=self._format_assay_answer(state.selected_product.display_label, result),
@@ -314,17 +397,25 @@ class WarehouseAgentRuntime:
         state: WarehouseAgentState,
         trace_id: str | None,
         request_id: str | None,
+        arguments: dict[str, Any] | None = None,
     ) -> ChatResponse:
-        result = self.tool_client.call_tool(
+        tool_arguments = arguments or {"productId": state.selected_product.internal_id}
+        result = self._call_tool_values(
             agent_session_id=agent_session_id,
             tool_name="get_inventory_overview",
-            arguments={"productId": state.selected_product.internal_id},
+            arguments=tool_arguments,
             trace_id=trace_id,
             request_id=request_id,
         )
         safe_result = self._adapt_inventory_result(result)
+        self._raise_if_cancelled()
         state.last_inventory_result = safe_result.model_dump(exclude_none=True)
         state.tool_results.append({"kind": "inventory_overview", "summary": self._inventory_summary(safe_result)})
+        self._record_tool_message(
+            state,
+            "get_inventory_overview",
+            self._safe_tool_summary("get_inventory_overview", safe_result.model_dump(exclude_none=True)),
+        )
         return ChatResponse(
             agentSessionId=agent_session_id,
             answer=self._format_inventory_answer(state.selected_product.display_label, safe_result),
@@ -336,6 +427,7 @@ class WarehouseAgentRuntime:
         state: WarehouseAgentState,
         trace_id: str | None,
         request_id: str | None,
+        arguments: dict[str, Any] | None = None,
     ) -> ChatResponse:
         safe_result = None
         if state.last_inventory_result:
@@ -344,15 +436,22 @@ class WarehouseAgentRuntime:
             except ValueError:
                 safe_result = None
         if safe_result is None:
-            result = self.tool_client.call_tool(
+            tool_arguments = arguments or {"productId": state.selected_product.internal_id}
+            result = self._call_tool_values(
                 agent_session_id=agent_session_id,
                 tool_name="get_inventory_overview",
-                arguments={"productId": state.selected_product.internal_id},
+                arguments=tool_arguments,
                 trace_id=trace_id,
                 request_id=request_id,
             )
             safe_result = self._adapt_inventory_result(result)
+            self._raise_if_cancelled()
             state.last_inventory_result = safe_result.model_dump(exclude_none=True)
+            self._record_tool_message(
+                state,
+                "get_inventory_overview",
+                self._safe_tool_summary("get_inventory_overview", safe_result.model_dump(exclude_none=True)),
+            )
 
         return ChatResponse(
             agentSessionId=agent_session_id,
@@ -363,10 +462,14 @@ class WarehouseAgentRuntime:
         self, request: ChatRequest, state: WarehouseAgentState, arguments: dict[str, Any]
     ) -> ChatResponse:
         result = self._call_tool(request, "resolve_warehouses", arguments)
+        self._raise_if_cancelled()
+        self._record_tool_message(state, "resolve_warehouses", self._safe_tool_summary("resolve_warehouses", result))
         status = str(result.get("resolutionStatus") or "").upper()
         if status == "AMBIGUOUS":
-            pending = self._warehouse_clarification(result)
+            pending = self._warehouse_clarification(result, request)
+            self._raise_if_cancelled()
             state.pending_clarification = pending
+            state.interrupt_status[pending.interrupt_id] = pending.status
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
                 answer=pending.prompt,
@@ -382,6 +485,7 @@ class WarehouseAgentRuntime:
                 answer="库位解析结果不完整，请换一个更准确的库位名称。",
                 needsUserSelection=True,
             )
+        self._raise_if_cancelled()
         state.selected_warehouse = entity
         return self._answer_warehouse_status(
             request.agentSessionId,
@@ -396,29 +500,62 @@ class WarehouseAgentRuntime:
         state: WarehouseAgentState,
         trace_id: str | None,
         request_id: str | None,
+        arguments: dict[str, Any] | None = None,
     ) -> ChatResponse:
-        result = self.tool_client.call_tool(
+        tool_arguments = arguments or {"warehouseId": state.selected_warehouse.internal_id}
+        result = self._call_tool_values(
             agent_session_id=agent_session_id,
             tool_name="get_warehouse_status",
-            arguments={"warehouseId": state.selected_warehouse.internal_id},
+            arguments=tool_arguments,
             trace_id=trace_id,
             request_id=request_id,
         )
         safe_result = self._adapt_warehouse_result(result)
+        self._raise_if_cancelled()
         state.last_warehouse_result = safe_result.model_dump(exclude_none=True)
+        self._record_tool_message(
+            state,
+            "get_warehouse_status",
+            self._safe_tool_summary("get_warehouse_status", safe_result.model_dump(exclude_none=True)),
+        )
         return ChatResponse(
             agentSessionId=agent_session_id,
             answer=self._format_warehouse_answer(state.selected_warehouse.display_label, safe_result),
         )
 
     def _call_tool(self, request: ChatRequest, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        return self.tool_client.call_tool(
+        return self._call_tool_values(
             agent_session_id=request.agentSessionId,
             tool_name=tool_name,
             arguments=arguments,
             trace_id=request.client.traceId,
             request_id=request.client.requestId,
         )
+
+    def _call_tool_values(
+        self,
+        *,
+        agent_session_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        trace_id: str | None,
+        request_id: str | None,
+    ) -> dict[str, Any]:
+        self._raise_if_cancelled()
+        result = self.tool_client.call_tool(
+            agent_session_id=agent_session_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            trace_id=trace_id,
+            request_id=request_id,
+        )
+        self._raise_if_cancelled()
+        return result
+
+    def _raise_if_cancelled(self) -> None:
+        token = current_cancellation_token()
+        if token is not None:
+            token.raise_if_cancelled()
 
     def _build_arguments_or_empty(
         self, tool_name: str, text: str, state: WarehouseAgentState
@@ -428,7 +565,7 @@ class WarehouseAgentRuntime:
         except ValueError:
             return {}
 
-    def _product_clarification(self, result: dict[str, Any], intent: str) -> PendingClarification:
+    def _product_clarification(self, result: dict[str, Any], intent: str, request: ChatRequest) -> PendingClarification:
         raw_options = result.get("options") or result.get("candidates") or []
         options = []
         for idx, option in enumerate(raw_options[:10], start=1):
@@ -448,9 +585,20 @@ class WarehouseAgentRuntime:
                 }
             )
         prompt = str(result.get("clarificationPrompt") or "该产品名称存在多个匹配项，请选择要查询的具体产品。")
-        return PendingClarification(kind="product", intent=intent, prompt=prompt, options=options)
+        token = self._new_resume_token()
+        return PendingClarification(
+            kind="product",
+            intent=intent,
+            prompt=prompt,
+            options=options,
+            interrupt_id=self._new_interrupt_id(),
+            resume_token_hash=self._hash_resume_token(token),
+            resume_token=token,
+            expires_at=self._expires_at(),
+            user_id=request.user.userId if request.user else None,
+        )
 
-    def _warehouse_clarification(self, result: dict[str, Any]) -> PendingClarification:
+    def _warehouse_clarification(self, result: dict[str, Any], request: ChatRequest) -> PendingClarification:
         raw_options = result.get("options") or result.get("candidates") or []
         options = []
         for idx, option in enumerate(raw_options[:10], start=1):
@@ -469,13 +617,28 @@ class WarehouseAgentRuntime:
                 }
             )
         prompt = str(result.get("clarificationPrompt") or "该库位名称存在多个匹配项，请选择要查询的库位。")
-        return PendingClarification(kind="warehouse", intent="warehouse_status", prompt=prompt, options=options)
+        token = self._new_resume_token()
+        return PendingClarification(
+            kind="warehouse",
+            intent="warehouse_status",
+            prompt=prompt,
+            options=options,
+            interrupt_id=self._new_interrupt_id(),
+            resume_token_hash=self._hash_resume_token(token),
+            resume_token=token,
+            expires_at=self._expires_at(),
+            user_id=request.user.userId if request.user else None,
+        )
 
     def _clarification_card(self, pending: PendingClarification) -> BusinessCard:
         return BusinessCard(
             cardType="candidate_selection",
             title="请选择查询范围",
             prompt=pending.prompt,
+            interruptId=pending.interrupt_id,
+            interruptKind="CLARIFICATION",
+            resumeToken=pending.resume_token,
+            expiresAt=pending.expires_at.isoformat(),
             options=[
                 UserOption(
                     optionId=str(option["optionId"]),
@@ -498,6 +661,68 @@ class WarehouseAgentRuntime:
             if display_label and option.get("displayLabel") == display_label:
                 return option
         return None
+
+    def _new_interrupt_id(self) -> str:
+        return f"intr_{secrets.token_hex(12)}"
+
+    def _new_resume_token(self) -> str:
+        return f"resume_{secrets.token_urlsafe(32)}"
+
+    def _hash_resume_token(self, token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def _expires_at(self) -> datetime:
+        return datetime.now(timezone.utc) + self.RESUME_TOKEN_TTL
+
+    def _is_expired(self, pending: PendingClarification) -> bool:
+        return datetime.now(timezone.utc) >= pending.expires_at
+
+    def _resume_token_matches(self, pending: PendingClarification, resume_token: str | None) -> bool:
+        if not resume_token:
+            return False
+        return secrets.compare_digest(self._hash_resume_token(resume_token), pending.resume_token_hash)
+
+    def _user_matches(self, pending: PendingClarification, request: ResumeRequest) -> bool:
+        request_user_id = request.user.userId if request.user else None
+        return pending.user_id is None or request_user_id is None or pending.user_id == request_user_id
+
+    def _cached_resume_response(
+        self, state: WarehouseAgentState, interrupt_id: str | None, client_request_id: str | None
+    ) -> ChatResponse | None:
+        if not interrupt_id or not client_request_id:
+            return None
+        cached = state.interrupt_client_results.get(interrupt_id, {}).get(client_request_id)
+        if cached is None:
+            return None
+        return ChatResponse.model_validate(cached)
+
+    def _cache_resume_response(
+        self,
+        state: WarehouseAgentState,
+        interrupt_id: str | None,
+        client_request_id: str | None,
+        response: ChatResponse,
+    ) -> None:
+        if not interrupt_id or not client_request_id:
+            return
+        state.interrupt_client_results.setdefault(interrupt_id, {})[client_request_id] = response.model_dump()
+
+    def _terminal_interrupt_response(
+        self, agent_session_id: str, state: WarehouseAgentState, interrupt_id: str | None
+    ) -> ChatResponse:
+        status = state.interrupt_status.get(interrupt_id or "")
+        return self._status_response(agent_session_id, status)
+
+    def _status_response(self, agent_session_id: str, status: str | None) -> ChatResponse:
+        if status == "RESUMED":
+            return ChatResponse(agentSessionId=agent_session_id, answer="这个选择已经处理过了。")
+        if status == "EXPIRED":
+            return ChatResponse(agentSessionId=agent_session_id, answer="这个确认已过期，请重新发起。")
+        if status == "CANCELLED":
+            return ChatResponse(agentSessionId=agent_session_id, answer="这个任务已取消。")
+        if status == "REJECTED":
+            return ChatResponse(agentSessionId=agent_session_id, answer="这个确认已被拒绝。")
+        return ChatResponse(agentSessionId=agent_session_id, answer="当前没有等待选择的业务候选项，请重新描述要查询的内容。")
 
     def _single_product_entity(self, result: dict[str, Any]) -> SelectedEntity | None:
         candidate = self._first_candidate(result)
@@ -702,6 +927,52 @@ class WarehouseAgentRuntime:
             error=AgentError(code=error.code, message=error.message, retryable=error.retryable),
         )
 
+    def _record_tool_message(self, state: WarehouseAgentState, tool_name: str, summary: dict[str, Any]) -> None:
+        state.messages.append(
+            {
+                "role": "tool",
+                "toolName": tool_name,
+                "content": summary,
+            }
+        )
+        state.tool_results.append({"kind": tool_name, "summary": summary})
+
+    def _safe_tool_summary(self, tool_name: str, result: dict[str, Any]) -> dict[str, Any]:
+        if tool_name == "resolve_products":
+            return {
+                "resolutionStatus": self._safe_text(result.get("resolutionStatus")),
+                "candidateCount": self._list_size(result.get("options") or result.get("candidates")),
+            }
+        if tool_name == "resolve_warehouses":
+            return {
+                "resolutionStatus": self._safe_text(result.get("resolutionStatus")),
+                "candidateCount": self._list_size(result.get("options") or result.get("candidates")),
+            }
+        if tool_name == "get_inventory_overview":
+            source = result if isinstance(result, dict) else {}
+            return {
+                "displayStockInfo": self._safe_text(source.get("displayStockInfo")),
+                "totalEquivalentPieces": self._first_scalar([source], "totalEquivalentPieces"),
+                "totalWeight": self._first_scalar([source], "totalWeight"),
+                "locationCount": self._list_size(source.get("locations") or source.get("records")),
+            }
+        if tool_name == "get_warehouse_status":
+            source = result if isinstance(result, dict) else {}
+            return {
+                "warehouseName": self._safe_text(source.get("warehouseName")),
+                "status": self._safe_text(source.get("status")),
+                "remainingCapacity": self._first_scalar([source], "remainingCapacity"),
+            }
+        if tool_name == "get_assay_status":
+            return {
+                "judgeResult": self._safe_text(result.get("judgeResult") or result.get("result")),
+                "needsAssay": bool(result.get("needsAssay", False)),
+            }
+        if tool_name == "get_pallet_status":
+            info = self._dict_value(result.get("palletInfo") or result.get("baseInfo") or result)
+            return {"status": self._safe_text(info.get("status") or info.get("bindStatus"))}
+        return {}
+
     def _is_context_product_followup(self, text: str) -> bool:
         return self._has_context_reference(text) and "库存" in text
 
@@ -713,6 +984,9 @@ class WarehouseAgentRuntime:
 
     def _has_warehouse_semantics(self, text: str) -> bool:
         return any(word in text for word in ["库位", "仓库", "容量", "位置"])
+
+    def _list_size(self, value: Any) -> int:
+        return len(value) if isinstance(value, list) else 0
 
     def _first_candidate(self, result: dict[str, Any]) -> dict[str, Any]:
         candidates = result.get("candidates") or result.get("options") or []

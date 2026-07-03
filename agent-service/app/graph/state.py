@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 
@@ -18,6 +19,12 @@ class PendingClarification:
     intent: str
     prompt: str
     options: list[dict[str, Any]]
+    interrupt_id: str
+    resume_token_hash: str
+    resume_token: str = field(repr=False)
+    expires_at: datetime
+    user_id: int | None = None
+    status: str = "PENDING"
 
 
 @dataclass
@@ -30,6 +37,8 @@ class WarehouseAgentState:
     last_assay_result: dict[str, Any] | None = None
     last_pallet_result: dict[str, Any] | None = None
     pending_clarification: PendingClarification | None = None
+    interrupt_status: dict[str, str] = field(default_factory=dict)
+    interrupt_client_results: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     tool_results: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -49,4 +58,3 @@ class InMemoryCheckpointer:
 
     def clear(self, thread_id: str) -> None:
         self._states.pop(thread_id, None)
-

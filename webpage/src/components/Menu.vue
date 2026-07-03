@@ -150,7 +150,12 @@ const handleLogout = async () => {
           </div>
 
           <div class="header-right">
-            <el-button type="primary" plain class="agent-button" @click="openAgentAssistant">
+            <el-button
+              type="primary"
+              plain
+              class="agent-button"
+              @click="openAgentAssistant"
+            >
               <el-icon><ChatDotRound /></el-icon>
               <span>AI 助手</span>
             </el-button>

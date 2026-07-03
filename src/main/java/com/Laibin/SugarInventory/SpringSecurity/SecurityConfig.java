@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.SpringSecurity;
 
 import com.Laibin.SugarInventory.agent.security.AgentApiAuditFilter;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,6 +32,7 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                                .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                                 .requestMatchers("/api/auth/**",
                                         "/internal/agent/tools/**",
                                         "/v3/api-docs/**",

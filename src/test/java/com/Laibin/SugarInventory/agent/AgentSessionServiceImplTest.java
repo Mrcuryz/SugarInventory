@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.agent.dto.AgentSessionCreateDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentToolAuditDTO;
 import com.Laibin.SugarInventory.agent.security.AgentSessionAuthenticationException;
+import com.Laibin.SugarInventory.agent.service.AgentInterruptStateService;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.agent.service.impl.AgentSessionServiceImpl;
 import com.Laibin.SugarInventory.common.BusinessException;
@@ -37,6 +38,7 @@ class AgentSessionServiceImplTest {
     private AgentSessionMapper sessionMapper;
     private JwtUtils jwtUtils;
     private AgentToolAuditLogMapper toolAuditLogMapper;
+    private AgentInterruptStateService interruptStateService;
     private UserDetailsService userDetailsService;
     private AgentSessionServiceImpl service;
     private LoginUser loginUser;
@@ -46,11 +48,13 @@ class AgentSessionServiceImplTest {
         sessionMapper = mock(AgentSessionMapper.class);
         jwtUtils = mock(JwtUtils.class);
         toolAuditLogMapper = mock(AgentToolAuditLogMapper.class);
+        interruptStateService = mock(AgentInterruptStateService.class);
         userDetailsService = mock(UserDetailsService.class);
         service = new AgentSessionServiceImpl(
                 sessionMapper,
                 mock(AgentApiAuditLogMapper.class),
                 toolAuditLogMapper,
+                interruptStateService,
                 jwtUtils,
                 userDetailsService,
                 15);
@@ -76,6 +80,18 @@ class AgentSessionServiceImplTest {
         assertThat(response.getMcpServerName()).isEqualTo("smart_warehouse");
         String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(response);
         assertThat(json).doesNotContain("delegationToken", "token", "Authorization");
+        verify(sessionMapper).insert(any(AgentSession.class));
+    }
+
+    @Test
+    void createSessionCancelsPendingInterruptsForReplacedActiveSessions() {
+        AgentSession previous = activeSession();
+        previous.setId("old-session");
+        when(sessionMapper.selectList(any())).thenReturn(List.of(previous));
+
+        service.createSession(loginUser, new AgentSessionCreateDTO(), new MockHttpServletRequest());
+
+        verify(interruptStateService).cancelSessionInterrupts("old-session", "SESSION_CLOSED_OR_REPLACED");
         verify(sessionMapper).insert(any(AgentSession.class));
     }
 

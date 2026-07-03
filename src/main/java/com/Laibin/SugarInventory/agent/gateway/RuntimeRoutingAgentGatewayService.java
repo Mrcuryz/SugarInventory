@@ -7,7 +7,9 @@ import com.Laibin.SugarInventory.agent.python.PythonAgentClient;
 import com.Laibin.SugarInventory.agent.python.PythonAgentClientException;
 import com.Laibin.SugarInventory.agent.python.dto.PythonAgentChatRequestDTO;
 import com.Laibin.SugarInventory.agent.python.dto.PythonAgentChatResponseDTO;
+import com.Laibin.SugarInventory.agent.python.dto.PythonAgentStreamEventDTO;
 import com.Laibin.SugarInventory.agent.runtime.AgentRuntimeProperties;
+import com.Laibin.SugarInventory.agent.service.AgentInterruptStateService;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.agent.vo.AgentBusinessCardVO;
 import com.Laibin.SugarInventory.agent.vo.AgentChoiceOptionVO;
@@ -15,13 +17,18 @@ import com.Laibin.SugarInventory.agent.vo.AgentMessageResponseVO;
 import com.Laibin.SugarInventory.agent.vo.AgentSessionVO;
 import com.Laibin.SugarInventory.domain.po.AgentSession;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,7 +36,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 @Primary
@@ -38,6 +48,10 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     private static final Logger log = LoggerFactory.getLogger(RuntimeRoutingAgentGatewayService.class);
     private static final String UNAVAILABLE_MESSAGE = "AI 助手暂时不可用，请稍后重试。";
     private static final Set<String> SAFE_PAGE_CONTEXT_KEYS = Set.of("path", "routeName", "pageTitle");
+    private static final Set<String> STREAM_EVENT_TYPES = Set.of(
+            "message_start", "progress", "clarification", "text_delta", "card", "error", "message_end",
+            "tool_start", "tool_end", "debug", "heartbeat", "cancelled", "timeout", "fallback");
+    private static final Set<String> DEBUG_STREAM_EVENT_TYPES = Set.of("tool_start", "tool_end", "debug");
     private static final Pattern INTERNAL_TEXT = Pattern.compile(
             "(?i)(authorization|bearer\\s+|delegationToken|refreshToken|productId|warehouseId|toolName|stackTrace|jdbc:|\\bSUCCESS\\b|\\btoken\\b)");
     private static final Pattern LABEL_ID = Pattern.compile("\\s*[(（]#\\d+[)）]\\s*");
@@ -46,18 +60,24 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     private final AgentGatewayService legacyGateway;
     private final PythonAgentClient pythonAgentClient;
     private final AgentRuntimeProperties properties;
+    private final AgentInterruptStateService interruptStateService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Set<String> pythonContextSessions = ConcurrentHashMap.newKeySet();
     private final Set<String> legacyFallbackSessions = ConcurrentHashMap.newKeySet();
+    private final Set<String> cancelledMessageKeys = ConcurrentHashMap.newKeySet();
+    private final Map<String, ActiveStream> activeStreams = new ConcurrentHashMap<>();
 
     public RuntimeRoutingAgentGatewayService(
             AgentSessionService agentSessionService,
             @Qualifier("legacyAgentGatewayService") AgentGatewayService legacyGateway,
             PythonAgentClient pythonAgentClient,
-            AgentRuntimeProperties properties) {
+            AgentRuntimeProperties properties,
+            AgentInterruptStateService interruptStateService) {
         this.agentSessionService = agentSessionService;
         this.legacyGateway = legacyGateway;
         this.pythonAgentClient = pythonAgentClient;
         this.properties = properties;
+        this.interruptStateService = interruptStateService;
     }
 
     @Override
@@ -87,6 +107,14 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         String errorCode = null;
         String path = "python";
         AgentMessageResponseVO result;
+
+        String invalidResumeStatus = invalidResumeStatus(sessionVO, request);
+        if (invalidResumeStatus != null) {
+            result = invalidResumeResponse(sessionVO, invalidResumeStatus);
+            recordRuntimeAudit(agentSessionId, sessionVO.getUserId(), requestId, traceId, request,
+                    "python", "INVALID", "HITL_INTERRUPT_NOT_PENDING", false, result, elapsedMillis(startedAt));
+            return result;
+        }
 
         try {
             if (!pythonAgentClient.isHealthy()) {
@@ -125,9 +153,182 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     }
 
     @Override
+    public SseEmitter streamMessage(LoginUser loginUser, String agentSessionId, AgentMessageRequestDTO request) {
+        SseEmitter emitter = new SseEmitter((long) Math.max(1000, properties.getPythonTimeoutMs()) + 5000);
+        if (properties.getMode() == AgentRuntimeProperties.Mode.LEGACY
+                || legacyFallbackSessions.contains(agentSessionId)) {
+            CompletableFuture.runAsync(() -> streamLegacy(loginUser, agentSessionId, request, emitter, false));
+            return emitter;
+        }
+
+        AgentSession session = agentSessionService.requireOwnedActiveSession(loginUser, agentSessionId);
+        AgentSessionVO sessionVO = agentSessionService.toSessionVO(session, loginUser);
+        String requestId = UUID.randomUUID().toString();
+        String traceId = UUID.randomUUID().toString();
+        String messageId = "msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String invalidResumeStatus = invalidResumeStatus(sessionVO, request);
+        if (invalidResumeStatus != null) {
+            CompletableFuture.runAsync(() -> streamInvalidResume(
+                    sessionVO, request, emitter, requestId, traceId, messageId, invalidResumeStatus));
+            return emitter;
+        }
+        PythonAgentChatRequestDTO pythonRequest = buildPythonRequest(loginUser, sessionVO, request, requestId, traceId);
+        pythonRequest.setMessageId(messageId);
+        recordResumeRequestedIfNeeded(sessionVO, request);
+        ActiveStream activeStream = new ActiveStream(agentSessionId, messageId, emitter);
+        activeStreams.put(streamKey(agentSessionId, messageId), activeStream);
+        CompletableFuture.runAsync(() -> streamPython(
+                loginUser, sessionVO, request, activeStream, pythonRequest, requestId, traceId));
+        return emitter;
+    }
+
+    @Override
+    public boolean cancelMessage(LoginUser loginUser, String agentSessionId, String messageId) {
+        agentSessionService.requireOwnedActiveSession(loginUser, agentSessionId);
+        if (messageId == null || !messageId.matches("msg_[a-zA-Z0-9]{1,56}")) {
+            return false;
+        }
+        String key = streamKey(agentSessionId, messageId);
+        cancelledMessageKeys.add(key);
+        ActiveStream activeStream = activeStreams.get(key);
+        if (activeStream != null) {
+            activeStream.cancel();
+            try {
+                synchronized (activeStream) {
+                    if (!activeStream.isClosed()) {
+                        sendEnvelope(activeStream.emitter(), "cancelled", agentSessionId, messageId,
+                                activeStream.nextSequence(), Map.of("message", "已取消本次生成。"));
+                        sendEnvelope(activeStream.emitter(), "message_end", agentSessionId, messageId,
+                                activeStream.nextSequence(), Map.of("finishReason", "cancelled"));
+                        activeStream.close();
+                    }
+                }
+            } catch (StreamClientDisconnectedException ignored) {
+                activeStream.close();
+            }
+        }
+        try {
+            pythonAgentClient.cancel(agentSessionId, messageId);
+        } catch (PythonAgentClientException e) {
+            log.warn("Python cancellation notification failed; errorCode={}", safeCode(e.getCode()));
+        }
+        return true;
+    }
+
+    private void streamPython(LoginUser loginUser,
+                              AgentSessionVO session,
+                              AgentMessageRequestDTO request,
+                              ActiveStream activeStream,
+                              PythonAgentChatRequestDTO pythonRequest,
+                              String requestId,
+                              String traceId) {
+        long startedAt = System.nanoTime();
+        String resultCode = "COMPLETED";
+        String errorCode = null;
+        boolean fallbackUsed = false;
+        AgentMessageResponseVO auditResponse = unavailableResponse(session);
+        try {
+            if (!pythonAgentClient.isHealthy()) {
+                throw new PythonAgentClientException("PYTHON_AGENT_UNAVAILABLE", true);
+            }
+            pythonAgentClient.stream(pythonRequest, event -> {
+                pythonContextSessions.add(session.getAgentSessionId());
+                sendPythonStreamEvent(activeStream, event, session, loginUser);
+            });
+            resultCode = activeStream.resultCode();
+            auditResponse.setAnswer("stream completed");
+            activeStream.close();
+        } catch (StreamClientDisconnectedException e) {
+            resultCode = activeStream.isCancelled() ? "CLIENT_CANCELLED" : "CLIENT_DISCONNECTED";
+            errorCode = "CLIENT_DISCONNECTED";
+            activeStream.close();
+        } catch (InvalidStreamEventException e) {
+            resultCode = "SECURITY_FILTERED";
+            errorCode = "INVALID_STREAM_EVENT";
+            emitStreamFailure(activeStream.emitter(), session.getAgentSessionId(), errorCode, UNAVAILABLE_MESSAGE);
+        } catch (PythonAgentClientException e) {
+            errorCode = safeCode(e.getCode());
+            if (canFallback(session.getAgentSessionId(), request)) {
+                fallbackUsed = true;
+                legacyFallbackSessions.add(session.getAgentSessionId());
+                streamLegacy(loginUser, session.getAgentSessionId(), request, activeStream.emitter(), true);
+                resultCode = "COMPLETED";
+                return;
+            }
+            resultCode = "PYTHON_AGENT_TIMEOUT".equals(e.getCode()) ? "PYTHON_TIMEOUT"
+                    : pythonContextSessions.contains(session.getAgentSessionId()) ? "FALLBACK_BLOCKED" : "PYTHON_ERROR";
+            emitStreamFailure(activeStream.emitter(), session.getAgentSessionId(), e.getCode(), safeErrorMessage(e.getCode()));
+        } catch (RuntimeException e) {
+            resultCode = activeStream.isCancelled() ? "CLIENT_CANCELLED" : "PYTHON_ERROR";
+            errorCode = "PYTHON_AGENT_SERVICE_ERROR";
+            if (!activeStream.isCancelled()) {
+                emitStreamFailure(activeStream.emitter(), session.getAgentSessionId(), errorCode, UNAVAILABLE_MESSAGE);
+            }
+        } finally {
+            if (activeStream.isCancelled() && "CLIENT_CANCELLED".equals(activeStream.resultCode())) {
+                resultCode = "CLIENT_CANCELLED";
+                errorCode = "CLIENT_CANCELLED";
+            }
+            recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), requestId, traceId, request,
+                    "python_stream", resultCode, errorCode, fallbackUsed, auditResponse, elapsedMillis(startedAt));
+            activeStreams.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()), activeStream);
+            cancelledMessageKeys.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()));
+        }
+    }
+
+    private void streamLegacy(LoginUser loginUser,
+                              String agentSessionId,
+                              AgentMessageRequestDTO request,
+                              SseEmitter emitter,
+                              boolean fallbackEvent) {
+        String messageId = "msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        try {
+            int sequence = 1;
+            if (fallbackEvent) {
+                sendEnvelope(emitter, "fallback", agentSessionId, messageId, sequence++,
+                        Map.of("message", "Python Agent 暂不可用，已切换到基础只读查询。"));
+            }
+            AgentMessageResponseVO response = sanitizeLegacyResponse(
+                    legacyGateway.handleMessage(loginUser, agentSessionId, request), loginUser);
+            sendEnvelope(emitter, "message_start", agentSessionId, messageId, sequence++, Map.of("role", "assistant"));
+            if (response.isNeedsUserSelection() && !safeList(response.getOptions()).isEmpty()) {
+                List<Map<String, Object>> options = safeList(response.getOptions()).stream()
+                        .map(option -> {
+                            Map<String, Object> item = new LinkedHashMap<String, Object>();
+                            item.put("optionType", safeText(option.getOptionType(), "BUSINESS_OPTION"));
+                            item.put("displayLabel", safeLabel(option.getDisplayLabel()));
+                            item.put("description", safeText(option.getDescription(), null));
+                            item.put("supported", !Boolean.FALSE.equals(option.getSupported()));
+                            item.put("disabledReason", safeText(option.getDisabledReason(), null));
+                            item.values().removeIf(java.util.Objects::isNull);
+                            return item;
+                        })
+                        .toList();
+                sendEnvelope(emitter, "clarification", agentSessionId, messageId, sequence++, Map.of(
+                        "prompt", safeText(response.getAnswer(), UNAVAILABLE_MESSAGE),
+                        "interruptKind", "LEGACY_CLARIFICATION",
+                        "options", options));
+                sendEnvelope(emitter, "message_end", agentSessionId, messageId, sequence,
+                        Map.of("finishReason", "clarification_required", "interruptKind", "LEGACY_CLARIFICATION"));
+            } else {
+                sendEnvelope(emitter, "text_delta", agentSessionId, messageId, sequence++,
+                        Map.of("text", safeText(response.getAnswer(), UNAVAILABLE_MESSAGE)));
+                sendEnvelope(emitter, "message_end", agentSessionId, messageId, sequence,
+                        Map.of("finishReason", "completed"));
+            }
+            emitter.complete();
+        } catch (RuntimeException e) {
+            emitStreamFailure(emitter, agentSessionId, "LEGACY_AGENT_ERROR", UNAVAILABLE_MESSAGE);
+        }
+    }
+
+    @Override
     public void clearSession(String agentSessionId) {
         pythonContextSessions.remove(agentSessionId);
         legacyFallbackSessions.remove(agentSessionId);
+        activeStreams.entrySet().removeIf(entry -> entry.getValue().agentSessionId().equals(agentSessionId));
+        cancelledMessageKeys.removeIf(key -> key.startsWith(agentSessionId + ":"));
+        interruptStateService.cancelSessionInterrupts(agentSessionId);
         legacyGateway.clearSession(agentSessionId);
     }
 
@@ -159,12 +360,14 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             message.setContent(request.getMessage().trim());
         } else {
             message.setType("candidate_selected");
+            message.setInterruptId(safeScalar(selectedOption.get("interruptId")));
+            message.setResumeToken(safeScalar(selectedOption.get("resumeToken")));
+            message.setAction(firstNonBlank(safeScalar(selectedOption.get("action")), "SELECT_OPTION"));
+            message.setClientRequestId(safeScalar(selectedOption.get("clientRequestId")));
             PythonAgentChatRequestDTO.Selection selection = new PythonAgentChatRequestDTO.Selection();
             selection.setOptionId(safeScalar(selectedOption.get("optionId")));
             selection.setOptionType(safeScalar(selectedOption.get("optionType")));
-            selection.setDisplayLabel(safeLabel(firstNonBlank(
-                    safeScalar(selectedOption.get("displayLabel")),
-                    safeScalar(selectedOption.get("rawDisplayLabel")))));
+            selection.setDisplayLabel(safeLabel(safeScalar(selectedOption.get("displayLabel"))));
             message.setSelection(selection);
         }
         payload.setMessage(message);
@@ -183,7 +386,6 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
                                                      LoginUser loginUser) {
         AgentMessageResponseVO target = new AgentMessageResponseVO();
         target.setSession(session);
-        target.setNeedsUserSelection(source.isNeedsUserSelection());
         target.setAnswer(source.getError() == null
                 ? safeText(source.getAnswer(), UNAVAILABLE_MESSAGE)
                 : safeErrorMessage(source.getError().getCode()));
@@ -207,6 +409,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
         target.setCards(cards);
         target.setOptions(flattenedOptions);
+        target.setNeedsUserSelection(source.isNeedsUserSelection() && !flattenedOptions.isEmpty());
         target.setSuggestions(safeList(source.getSuggestions()).stream()
                 .map(value -> safeText(value, null))
                 .filter(value -> value != null && !value.isBlank())
@@ -268,6 +471,58 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         return response;
     }
 
+    private String invalidResumeStatus(AgentSessionVO session, AgentMessageRequestDTO request) {
+        Map<String, Object> selectedOption = selectedOption(request.getPageContext());
+        if (selectedOption == null) {
+            return null;
+        }
+        String interruptId = safeScalar(selectedOption.get("interruptId"));
+        if (interruptId == null) {
+            return "MISSING";
+        }
+        String status = interruptStateService.findOwnedStatus(session.getAgentSessionId(), session.getUserId(), interruptId);
+        return "PENDING".equals(status) ? null : firstNonBlank(status, "MISSING");
+    }
+
+    private AgentMessageResponseVO invalidResumeResponse(AgentSessionVO session, String status) {
+        AgentMessageResponseVO response = new AgentMessageResponseVO();
+        response.setSession(session);
+        response.setAnswer(switch (status) {
+            case "RESUMED" -> "这个选择已经处理过了。";
+            case "EXPIRED" -> "这个确认已过期，请重新发起查询。";
+            case "CANCELLED" -> "该选择已失效，请重新发起查询。";
+            case "REJECTED" -> "这个确认已被拒绝。";
+            default -> "当前没有等待选择的业务候选项，请重新描述要查询的内容。";
+        });
+        return response;
+    }
+
+    private void streamInvalidResume(AgentSessionVO session,
+                                     AgentMessageRequestDTO request,
+                                     SseEmitter emitter,
+                                     String requestId,
+                                     String traceId,
+                                     String messageId,
+                                     String status) {
+        long startedAt = System.nanoTime();
+        AgentMessageResponseVO response = invalidResumeResponse(session, status);
+        try {
+            sendEnvelope(emitter, "message_start", session.getAgentSessionId(), messageId, 1,
+                    Map.of("role", "assistant"));
+            sendEnvelope(emitter, "text_delta", session.getAgentSessionId(), messageId, 2,
+                    Map.of("text", response.getAnswer()));
+            sendEnvelope(emitter, "message_end", session.getAgentSessionId(), messageId, 3,
+                    Map.of("finishReason", "completed"));
+            emitter.complete();
+        } catch (RuntimeException e) {
+            emitter.completeWithError(e);
+        } finally {
+            recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), requestId, traceId, request,
+                    "python_stream", "INVALID", "HITL_INTERRUPT_NOT_PENDING", false,
+                    response, elapsedMillis(startedAt));
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> selectedOption(Map<String, Object> pageContext) {
         if (pageContext == null) {
@@ -322,6 +577,264 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         return result.isEmpty() ? null : result;
     }
 
+    private void sendPythonStreamEvent(ActiveStream activeStream,
+                                       PythonAgentStreamEventDTO source,
+                                       AgentSessionVO session,
+                                       LoginUser loginUser) {
+        if (activeStream.isCancelled()
+                || cancelledMessageKeys.contains(streamKey(session.getAgentSessionId(), activeStream.messageId()))) {
+            return;
+        }
+        String type = source.getType();
+        if (!STREAM_EVENT_TYPES.contains(type)) {
+            throw new InvalidStreamEventException();
+        }
+        if (!activeStream.messageId().equals(source.getMessageId()) || containsUnsafeValue(source.getPayload())) {
+            throw new InvalidStreamEventException();
+        }
+        validateInterruptStreamEvent(activeStream, source);
+        if (DEBUG_STREAM_EVENT_TYPES.contains(type) && !isAdmin(loginUser)) {
+            return;
+        }
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("eventId", safeText(source.getEventId(), "evt_unknown"));
+        event.put("messageId", safeText(source.getMessageId(), "msg_unknown"));
+        event.put("agentSessionId", session.getAgentSessionId());
+        event.put("type", type);
+        event.put("sequence", source.getSequence());
+        event.put("payload", safeJsonValue(source.getPayload()));
+        recordInterruptEvent(activeStream, source, session);
+        activeStream.observe(source);
+        activeStream.updateSequence(source.getSequence());
+        sendSse(activeStream.emitter(), type, event);
+    }
+
+    private void validateInterruptStreamEvent(ActiveStream activeStream, PythonAgentStreamEventDTO source) {
+        JsonNode payload = source.getPayload();
+        if (payload == null || payload.isNull()) {
+            return;
+        }
+        if ("clarification".equals(source.getType()) || "hitl_interrupt".equals(source.getType())) {
+            String interruptId = safeScalar(payload.path("interruptId").asText(null));
+            if (interruptId == null) {
+                throw new InvalidStreamEventException();
+            }
+            activeStream.recordInterrupt(interruptId);
+            return;
+        }
+        if ("message_end".equals(source.getType())
+                && "interrupt_required".equals(payload.path("finishReason").asText(null))) {
+            String interruptId = safeScalar(payload.path("interruptId").asText(null));
+            if (interruptId == null || !activeStream.hasInterrupt(interruptId)) {
+                throw new InvalidStreamEventException();
+            }
+        }
+    }
+
+    private void recordResumeRequestedIfNeeded(AgentSessionVO session, AgentMessageRequestDTO request) {
+        Map<String, Object> selectedOption = selectedOption(request.getPageContext());
+        if (selectedOption == null) {
+            return;
+        }
+        interruptStateService.recordResumeRequested(
+                session.getAgentSessionId(),
+                session.getUserId(),
+                safeScalar(selectedOption.get("interruptId")),
+                safeScalar(selectedOption.get("action")),
+                safeScalar(selectedOption.get("optionId")),
+                safeScalar(selectedOption.get("previewId")),
+                safeScalar(selectedOption.get("clientRequestId")));
+    }
+
+    private void recordInterruptEvent(ActiveStream activeStream,
+                                      PythonAgentStreamEventDTO source,
+                                      AgentSessionVO session) {
+        JsonNode payload = source.getPayload();
+        if (payload == null || payload.isNull()) {
+            return;
+        }
+        if ("clarification".equals(source.getType()) || "hitl_interrupt".equals(source.getType())) {
+            interruptStateService.recordCreated(
+                    session.getAgentSessionId(),
+                    session.getUserId(),
+                    activeStream.messageId(),
+                    safeScalar(payload.path("interruptId").asText(null)),
+                    safeScalar(firstNonBlank(payload.path("interruptKind").asText(null), payload.path("kind").asText(null))),
+                    parseDateTime(payload.path("expiresAt").asText(null)));
+            return;
+        }
+        if (!"message_end".equals(source.getType())) {
+            return;
+        }
+        String interruptId = safeScalar(payload.path("interruptId").asText(null));
+        if (interruptId == null) {
+            return;
+        }
+        String status = interruptStatusForFinishReason(safeScalar(payload.path("finishReason").asText(null)));
+        if (status == null) {
+            return;
+        }
+        interruptStateService.recordTerminal(
+                session.getAgentSessionId(),
+                session.getUserId(),
+                interruptId,
+                status,
+                activeStream.resultCode(),
+                null);
+    }
+
+    private String interruptStatusForFinishReason(String finishReason) {
+        if (finishReason == null) {
+            return null;
+        }
+        return switch (finishReason) {
+            case "completed" -> "RESUMED";
+            case "cancelled" -> "CANCELLED";
+            case "rejected" -> "REJECTED";
+            case "expired" -> "EXPIRED";
+            case "error" -> "ERROR";
+            case "timeout" -> "TIMEOUT";
+            default -> null;
+        };
+    }
+
+    private LocalDateTime parseDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value).toLocalDateTime();
+        } catch (RuntimeException ignored) {
+            try {
+                return LocalDateTime.parse(value);
+            } catch (RuntimeException ignoredAgain) {
+                return null;
+            }
+        }
+    }
+
+    private void emitStreamFailure(SseEmitter emitter, String agentSessionId, String code, String message) {
+        String messageId = "msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String finishReason = "PYTHON_AGENT_TIMEOUT".equals(code) || "UPSTREAM_TIMEOUT".equals(code) ? "timeout" : "error";
+        try {
+            sendEnvelope(emitter, "error", agentSessionId, messageId, 1,
+                    Map.of("message", safeText(message, UNAVAILABLE_MESSAGE), "retryable", true));
+            sendEnvelope(emitter, "message_end", agentSessionId, messageId, 2,
+                    Map.of("finishReason", finishReason));
+            emitter.complete();
+        } catch (RuntimeException e) {
+            emitter.completeWithError(e);
+        }
+    }
+
+    private void sendEnvelope(SseEmitter emitter,
+                              String type,
+                              String agentSessionId,
+                              String messageId,
+                              int sequence,
+                              Map<String, Object> payload) {
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("eventId", "evt_" + String.format("%06d", sequence));
+        event.put("messageId", messageId);
+        event.put("agentSessionId", agentSessionId);
+        event.put("type", type);
+        event.put("sequence", sequence);
+        event.put("payload", safeObjectValue(payload));
+        sendSse(emitter, type, event);
+    }
+
+    private void sendSse(SseEmitter emitter, String type, Map<String, Object> event) {
+        try {
+            emitter.send(SseEmitter.event().name(type).data(event));
+        } catch (IOException | IllegalStateException e) {
+            throw new StreamClientDisconnectedException();
+        }
+    }
+
+    private Object safeJsonValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return Map.of();
+        }
+        return safeObjectValue(objectMapper.convertValue(node, Object.class));
+    }
+
+    private Object safeObjectValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((rawKey, rawValue) -> {
+                String key = rawKey == null ? null : String.valueOf(rawKey);
+                if (isSafeEventKey(key)) {
+                    Object safeValue = safeObjectValue(rawValue);
+                    if (safeValue != null) {
+                        safe.put(key, safeValue);
+                    }
+                }
+            });
+            return safe;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(this::safeObjectValue)
+                    .filter(item -> item != null)
+                    .toList();
+        }
+        if (value instanceof String text) {
+            return safeText(text, null);
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return value;
+        }
+        return null;
+    }
+
+    private boolean isSafeEventKey(String key) {
+        if (key == null || key.isBlank()) {
+            return false;
+        }
+        String normalized = key.replace("_", "").toLowerCase(Locale.ROOT);
+        return !Set.of(
+                "authorization",
+                "delegationtoken",
+                "password",
+                "productid",
+                "refreshtoken",
+                "stacktrace",
+                "token",
+                "toolname",
+                "warehouseid"
+        ).contains(normalized) && isSafeScalar(key);
+    }
+
+    private boolean containsUnsafeValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return false;
+        }
+        if (node.isObject()) {
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                var entry = fields.next();
+                if (!isSafeEventKey(entry.getKey()) || containsUnsafeValue(entry.getValue())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                if (containsUnsafeValue(item)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return node.isTextual()
+                && (node.asText().length() > 2000 || INTERNAL_TEXT.matcher(node.asText()).find());
+    }
+
+    private String streamKey(String agentSessionId, String messageId) {
+        return agentSessionId + ":" + messageId;
+    }
+
     private void recordRuntimeAudit(String agentSessionId,
                                     Integer userId,
                                     String requestId,
@@ -334,16 +847,22 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
                                     AgentMessageResponseVO response,
                                     long durationMs) {
         try {
+            Map<String, Object> selectedOption = selectedOption(request.getPageContext());
             AgentToolAuditDTO audit = new AgentToolAuditDTO();
             audit.setToolName("agent_runtime");
             audit.setToolCallId(requestId);
-            audit.setUpstreamPath("python".equals(path) ? "/internal/agent/chat" : "legacy");
+            audit.setUpstreamPath(switch (path) {
+                case "python" -> "/internal/agent/chat";
+                case "python_stream" -> "/internal/agent/chat/stream";
+                default -> "legacy";
+            });
             audit.setArgumentsSummary("runtimeMode=" + properties.getMode().name().toLowerCase(Locale.ROOT)
                     + "; path=" + path
                     + "; requestId=" + requestId
                     + "; traceId=" + traceId
-                    + "; eventType=" + (selectedOption(request.getPageContext()) == null
-                    ? "user_message" : "candidate_selected")
+                    + "; eventType=" + (selectedOption == null ? "user_message" : "candidate_selected")
+                    + "; interruptId=" + (selectedOption == null ? null : safeScalar(selectedOption.get("interruptId")))
+                    + "; resumeAction=" + (selectedOption == null ? null : safeScalar(selectedOption.get("action")))
                     + "; fallbackUsed=" + fallbackUsed);
             audit.setRequestSummary("messageLength=" + (request.getMessage() == null ? 0 : request.getMessage().length()));
             audit.setResponseSummary("needsUserSelection=" + response.isNeedsUserSelection()
@@ -429,5 +948,116 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
 
     private <T> List<T> safeList(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    private static class StreamClientDisconnectedException extends RuntimeException {
+    }
+
+    private static class InvalidStreamEventException extends RuntimeException {
+    }
+
+    private static final class ActiveStream {
+        private final String agentSessionId;
+        private final String messageId;
+        private final SseEmitter emitter;
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private final AtomicBoolean closed = new AtomicBoolean(false);
+        private final AtomicInteger sequence = new AtomicInteger(0);
+        private final Set<String> interruptIds = ConcurrentHashMap.newKeySet();
+        private volatile String resultCode = "COMPLETED";
+
+        private ActiveStream(String agentSessionId, String messageId, SseEmitter emitter) {
+            this.agentSessionId = agentSessionId;
+            this.messageId = messageId;
+            this.emitter = emitter;
+        }
+
+        private void observe(PythonAgentStreamEventDTO event) {
+            JsonNode payload = event.getPayload();
+            if ("error".equals(event.getType()) && payload != null) {
+                String category = payload.path("category").asText();
+                if ("TOOL_TIMEOUT".equals(category)) {
+                    resultCode = "TOOL_TIMEOUT";
+                } else if ("TOOL_CANCELLED".equals(category)) {
+                    resultCode = "TOOL_CANCELLED";
+                } else if ("MODEL_TIMEOUT".equals(category)) {
+                    resultCode = "MODEL_TIMEOUT";
+                } else if ("MODEL_CANCELLED".equals(category)) {
+                    resultCode = "MODEL_CANCELLED";
+                } else if ("PYTHON_TIMEOUT".equals(category)) {
+                    resultCode = "PYTHON_TIMEOUT";
+                } else if ("UPSTREAM_ERROR".equals(category)) {
+                    resultCode = "UPSTREAM_ERROR";
+                } else {
+                    resultCode = "TOOL_ERROR";
+                }
+            }
+            if ("message_end".equals(event.getType()) && payload != null) {
+                String finishReason = payload.path("finishReason").asText();
+                if ("timeout".equals(finishReason) && "COMPLETED".equals(resultCode)) {
+                    resultCode = "PYTHON_TIMEOUT";
+                } else if ("error".equals(finishReason) && "COMPLETED".equals(resultCode)) {
+                    resultCode = "UPSTREAM_ERROR";
+                } else if ("cancelled".equals(finishReason)) {
+                    if ("COMPLETED".equals(resultCode)) {
+                        resultCode = "MODEL_CANCELLED";
+                    }
+                    cancelled.set(true);
+                }
+            }
+        }
+
+        private void cancel() {
+            cancelled.set(true);
+            resultCode = "CLIENT_CANCELLED";
+        }
+
+        private void recordInterrupt(String interruptId) {
+            interruptIds.add(interruptId);
+        }
+
+        private boolean hasInterrupt(String interruptId) {
+            return interruptIds.contains(interruptId);
+        }
+
+        private void close() {
+            if (closed.compareAndSet(false, true)) {
+                emitter.complete();
+            }
+        }
+
+        private int nextSequence() {
+            return sequence.incrementAndGet();
+        }
+
+        private void updateSequence(Integer value) {
+            if (value != null) {
+                sequence.accumulateAndGet(value, Math::max);
+            }
+        }
+
+        private String agentSessionId() {
+            return agentSessionId;
+        }
+
+        private String messageId() {
+            return messageId;
+        }
+
+        private SseEmitter emitter() {
+            return emitter;
+        }
+
+        private boolean isCancelled() {
+            return cancelled.get();
+        }
+
+        private boolean isClosed() {
+            return closed.get();
+        }
+
+        private String resultCode() {
+            return resultCode;
+        }
     }
 }

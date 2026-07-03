@@ -283,7 +283,7 @@ Agent 必须具备持续上下文，而不是只把最后一句用户输入扔�
 
 ## 9. 流式输出目标
 
-流式输出应提升真实感，但展示的是业务进度，不是模型原始思考链。
+流式输出应提升真实感，但展示的是业务进度，不是模型原始思考链，也不是单纯把最终回答拆成文本分片。
 
 允许展示：
 
@@ -308,6 +308,20 @@ Agent 必须具备持续上下文，而不是只把最后一句用户输入扔�
 * token；
 * Authorization Header；
 * 内部堆栈。
+
+流式事件应至少区分三类：
+
+* 用户可见业务事件：`message_start`、`progress`、`clarification`、`text_delta`、`card`、`error`、`message_end`；
+* 管理员调试事件：`tool_start`、`tool_end`、`debug`；
+* 系统控制事件：`heartbeat`、`cancelled`、`timeout`、`fallback`。
+
+每个事件协议内部应具备 `messageId`、`eventId`、`sequence`、`type` 和 `payload`，用于前端去重、排序和审计定位。普通用户界面不直接展示这些协议字段。
+
+当助手需要用户选择，例如“黄冰糖”存在多个规格时，流式输出应以 `message_end.finishReason=clarification_required` 结束，表示当前消息暂停等待用户输入，而不是普通完成。
+
+流式中途失败时不得直接断开连接。已经发送 `message_start` 或 `progress` 后，如果工具调用超时或上游失败，应尽量继续发送业务 `error` 事件，再发送 `message_end`，并标记 `finishReason=timeout` 或 `error`。
+
+前端渲染应以一个用户问题对应一个 assistant message 容器。`progress` 应作为容器内当前进度短句或可折叠处理过程，不应堆成多条独立聊天气泡。
 
 ## 10. 组件职责
 
@@ -384,18 +398,21 @@ MCP Server 负责：
 * 普通 UI 不显示 toolName、SUCCESS、productId、warehouseId；
 * 会话撤销后上下文被清理。
 
-### M1.3.2：流式输出
+### M1.3R-5：流式交互首版（已完成）
 
 目标：
 
 * 前端支持业务进度事件和最终回答流式展示；
 * 用户在等待期间看到“正在确认产品”“正在查询库存”“正在分析结果”等业务状态。
+* 流式协议支持 `messageId`、`eventId`、`sequence`、`finishReason`、`heartbeat`、`cancelled`、`timeout` 和 `fallback`。
 
 允许做什么：
 
 * 增加 Agent Gateway 流式事件协议；
 * 增加前端流式渲染；
 * 区分普通事件和管理员调试事件；
+* 一个用户问题渲染为一个 assistant message 容器；
+* 预留取消生成接口；
 * 保持当前只读工具范围。
 
 禁止做什么：
@@ -409,9 +426,49 @@ MCP Server 负责：
 
 * 用户能看到业务进度；
 * 最终回答可逐段或逐字输出；
+* clarification 以 `finishReason=clarification_required` 暂停等待用户；
+* 流中错误以 `error + message_end` 结束；
+* 前端按事件 ID 去重并按 sequence 渲染；
 * 普通模式不显示工具细节；
 * 管理员调试模式可查看安全摘要；
 * 权限错误和上游错误仍用业务语言解释。
+
+### M1.3R-5.1：流式链路加固
+
+目标：补齐流式审计、Java 端到端 SSE 测试、后端取消接口、客户端断开处理、真实浏览器验收和结果分类。
+
+验收标准：
+
+* 用户主动取消与客户端意外断开分别记录；
+* 取消后不再向原 assistant message 写入工具结果或最终回答；
+* 审计至少区分 `COMPLETED`、`CLIENT_DISCONNECTED`、`CLIENT_CANCELLED`、`PYTHON_TIMEOUT`、`PYTHON_ERROR`、`TOOL_TIMEOUT`、`TOOL_ERROR`、`SECURITY_FILTERED`、`FALLBACK_BLOCKED`；
+* 长回答、候选等待、取消恢复、移动端卡片、连续消息和刷新状态通过真实浏览器验收。
+
+### M1.3R-5.2：模型原生增量输出
+
+目标：输出 LLM token delta，同时保留业务 `progress`、`clarification` 和 `card` 事件。
+
+禁止展示 chain-of-thought、内部推理、raw MCP frame 或敏感工具数据。
+
+### M1.3R-6：Human-in-the-loop 统一模型
+
+目标：统一 clarification resume、preview 确认、execute 前确认，以及用户拒绝、修改和重新预览。
+
+当前阶段只建设统一状态与协议模型，不开放入库、出库、调拨等执行能力。
+
+阶段拆分：
+
+* M1.3R-6a：协议与状态机，定义 `HitlInterrupt`、`ResumeAction`、`resumeToken`、状态机、`finishReason` 和审计码；
+* M1.3R-6b：clarification 迁移，候选选择改成统一 interrupt/resume，前端只提交 opaque `optionId`；
+* M1.3R-6c：Java resume API 与审计，Java 至少记录 interrupt 最小元数据并处理重复提交；
+* M1.3R-6d：前端统一卡片，preview / execute confirmation 只占位，不触发写操作；
+* M1.3R-6e：验收与文档，覆盖正常选择、重复点击、过期点击、刷新状态、不暴露内部字段和不触发写操作。
+
+`resumeToken` 是前端可见的一次性能力凭证，必须短期有效、单次使用、绑定 `agentSessionId`、`interruptId`、`userId`、action 和 `optionId` / `previewId`，不可预测，不写普通日志，过期不可恢复。
+
+候选项前端只展示 `optionId`、`displayLabel`、`description` 和 `supported`，不得暴露 `productId`、`warehouseId`、`inventoryId`。真实业务实体映射保存在后端 pending interrupt state。
+
+产生人类介入时，当前消息必须以 `message_end.finishReason=interrupt_required` 暂停，而不是普通 `completed`。
 
 ### M1.4：受控只读数据分析层
 

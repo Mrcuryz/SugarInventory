@@ -191,22 +191,63 @@ agent-service/
 用途：流式对话。Java 将 Python 事件转换为前端 SSE 或 WebSocket 事件。
 
 请求 schema 与 `/internal/agent/chat` 基本一致。响应为 SSE 事件流，不返回一次性 JSON。
+流式重点是业务过程事件，不只是把最终回答拆成 `text_delta`。
+
+每个事件必须使用统一 envelope，至少包含：
+
+```json
+{
+  "eventId": "evt_001",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "progress",
+  "sequence": 3,
+  "payload": {}
+}
+```
+
+字段要求：
+
+- `messageId`：一次用户问题对应的 assistant message 容器 ID。
+- `eventId`：单个事件 ID，用于前端和审计去重。
+- `sequence`：同一 `messageId` 内递增序号，用于乱序保护。
+- `type`：事件类型。
+- `payload`：业务载荷；普通 UI 不直接展示 envelope 内部字段。
 
 事件序列示例：
 
 ```text
 event: message_start
-data: {"messageId":"msg-001"}
+data: {"eventId":"evt_001","messageId":"msg_001","agentSessionId":"agt_20260629_001","type":"message_start","sequence":1,"payload":{}}
 
 event: progress
-data: {"stage":"resolve_product","text":"正在确认产品范围..."}
+data: {"eventId":"evt_002","messageId":"msg_001","agentSessionId":"agt_20260629_001","type":"progress","sequence":2,"payload":{"stage":"resolve_product","text":"正在确认产品范围..."}}
 
 event: clarification
-data: {"prompt":"“黄冰糖”有多个规格，请选择：","options":[...]}
+data: {"eventId":"evt_003","messageId":"msg_001","agentSessionId":"agt_20260629_001","type":"clarification","sequence":3,"payload":{"prompt":"“黄冰糖”有多个规格，请选择：","options":[...]}}
 
 event: message_end
-data: {"resultCode":"NEEDS_USER_SELECTION"}
+data: {"eventId":"evt_004","messageId":"msg_001","agentSessionId":"agt_20260629_001","type":"message_end","sequence":4,"payload":{"finishReason":"clarification_required"}}
 ```
+
+如果流式过程中 Python、Java Tool Gateway 或 Java 代理中途失败，连接不能静默断开，必须尽量输出：
+
+```text
+event: error
+data: {"eventId":"evt_010","messageId":"msg_001","agentSessionId":"agt_20260629_001","type":"error","sequence":10,"payload":{"message":"查询仓储数据超时，请稍后重试。","retryable":true}}
+
+event: message_end
+data: {"eventId":"evt_011","messageId":"msg_001","agentSessionId":"agt_20260629_001","type":"message_end","sequence":11,"payload":{"finishReason":"timeout"}}
+```
+
+`message_end.payload.finishReason` 取值：
+
+- `completed`
+- `clarification_required`
+- `error`
+- `cancelled`
+- `timeout`
+- `fallback`
 
 ### 4.3 `POST /internal/agent/resume`
 
@@ -579,27 +620,76 @@ Python Agent Service -> HTTP/Streamable HTTP MCP -> Java MCP Server
 
 ## 10. 流式输出协议
 
-建议 Java 对前端暴露 SSE 或 WebSocket，Python 内部输出统一事件。事件类型：
+建议 Java 对前端暴露 SSE，Python 内部输出统一事件。M1.3R-5 的重点是业务过程流，不是单纯文本分片。
+
+### 10.1 事件 envelope
+
+所有 Python -> Java -> Web 的事件必须使用统一 envelope：
+
+```json
+{
+  "eventId": "evt_001",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "progress",
+  "sequence": 3,
+  "payload": {}
+}
+```
+
+协议要求：
+
+- `messageId` 表示一次用户问题对应的 assistant message 容器。
+- `eventId` 表示单个事件，用于前端去重和审计定位。
+- `sequence` 在同一 `messageId` 内单调递增，用于前端排序和乱序保护。
+- 前端按 `messageId + eventId` 去重，按 `sequence` 渲染。
+- 普通 UI 可以不显示 envelope 字段，但日志和调试应保留。
+
+### 10.2 事件分类
+
+用户可见业务事件：
 
 ```text
 message_start
 progress
 clarification
-tool_start
-tool_end
 text_delta
 card
 error
 message_end
 ```
 
-### 10.1 普通用户事件
+管理员调试事件：
+
+```text
+tool_start
+tool_end
+debug
+```
+
+系统控制事件：
+
+```text
+heartbeat
+cancelled
+timeout
+fallback
+```
+
+普通用户只看到业务事件。管理员调试事件只允许在 `client.debug=true` 且当前用户具备管理员角色时返回，并且仍必须脱敏。
+
+### 10.3 普通用户事件
 
 `message_start`：
 
 ```json
 {
-  "messageId": "msg-001"
+  "eventId": "evt_001",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "message_start",
+  "sequence": 1,
+  "payload": {}
 }
 ```
 
@@ -607,8 +697,15 @@ message_end
 
 ```json
 {
-  "stage": "resolve_product",
-  "text": "正在确认产品范围..."
+  "eventId": "evt_002",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "progress",
+  "sequence": 2,
+  "payload": {
+    "stage": "resolve_product",
+    "text": "正在确认产品范围..."
+  }
 }
 ```
 
@@ -616,15 +713,22 @@ message_end
 
 ```json
 {
-  "prompt": "“黄冰糖”有多个规格，请选择：",
-  "options": [
-    {
-      "optionId": "opt-001",
-      "displayLabel": "黄冰糖（袋）",
-      "description": "25.0kg/件，40件/板",
-      "supported": true
-    }
-  ]
+  "eventId": "evt_003",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "clarification",
+  "sequence": 3,
+  "payload": {
+    "prompt": "“黄冰糖”有多个规格，请选择：",
+    "options": [
+      {
+        "optionId": "opt_001",
+        "displayLabel": "黄冰糖（袋）",
+        "description": "25.0kg/件，40件/板",
+        "supported": true
+      }
+    ]
+  }
 }
 ```
 
@@ -632,7 +736,14 @@ message_end
 
 ```json
 {
-  "text": "黄冰糖（袋）当前库存为 "
+  "eventId": "evt_004",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "text_delta",
+  "sequence": 4,
+  "payload": {
+    "text": "黄冰糖（袋）当前库存为 "
+  }
 }
 ```
 
@@ -640,13 +751,20 @@ message_end
 
 ```json
 {
-  "cardType": "inventory_summary",
-  "title": "黄冰糖（袋）库存",
-  "fields": [
-    {"label": "当前库存", "value": "11板30件"},
-    {"label": "折合件数", "value": "470件"},
-    {"label": "总重量", "value": "11750kg"}
-  ]
+  "eventId": "evt_005",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "card",
+  "sequence": 5,
+  "payload": {
+    "cardType": "inventory_summary",
+    "title": "黄冰糖（袋）库存",
+    "fields": [
+      {"label": "当前库存", "value": "11板30件"},
+      {"label": "折合件数", "value": "470件"},
+      {"label": "总重量", "value": "11750kg"}
+    ]
+  }
 }
 ```
 
@@ -654,10 +772,43 @@ message_end
 
 ```json
 {
-  "message": "查询库存时遇到权限或服务问题，请稍后重试或联系管理员。",
-  "retryable": true
+  "eventId": "evt_006",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "error",
+  "sequence": 6,
+  "payload": {
+    "message": "查询仓储数据超时，请稍后重试。",
+    "retryable": true
+  }
 }
 ```
+
+`message_end`：
+
+```json
+{
+  "eventId": "evt_007",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "message_end",
+  "sequence": 7,
+  "payload": {
+    "finishReason": "completed"
+  }
+}
+```
+
+`message_end.payload.finishReason` 取值：
+
+- `completed`：正常完成。
+- `clarification_required`：已发出候选或追问，等待用户选择或补充。
+- `error`：业务错误或不可恢复错误。
+- `cancelled`：用户取消或客户端断开。
+- `timeout`：工具、Python 或 Java 代理超时。
+- `fallback`：尚未进入 Python 会话前的安全降级。
+
+当输出 `clarification` 时，不能把它当作普通完成；必须以 `message_end.finishReason=clarification_required` 结束当前流，为 M1.3R-6 的 interrupt/resume 预留语义。
 
 普通用户不得看到：
 
@@ -671,23 +822,69 @@ message_end
 - 数据库连接串；
 - 内部服务器路径。
 
-### 10.2 管理员调试事件
+### 10.4 管理员调试事件
 
-管理员调试模式可以额外接收脱敏事件，例如：
+管理员调试模式可以看到脱敏后的 `tool_start`、`tool_end`、`debug`，用于定位耗时、错误码和工具路径。
+
+示例：
 
 ```json
 {
-  "debugType": "tool_call",
-  "toolName": "get_inventory_overview",
-  "durationMs": 180,
-  "resultCode": "SUCCESS",
-  "errorCode": null,
-  "requestSummary": "productLabel=黄冰糖（袋）",
-  "responseSummary": "displayStockInfo=11板30件,totalEquivalentPieces=470"
+  "eventId": "evt_010",
+  "messageId": "msg_001",
+  "agentSessionId": "agt_20260629_001",
+  "type": "tool_end",
+  "sequence": 10,
+  "payload": {
+    "tool": "resolve_products",
+    "status": "SUCCESS",
+    "durationMs": 120,
+    "resultSummary": "AMBIGUOUS, 8 candidates"
+  }
 }
 ```
 
-调试事件仍不得包含 token、Authorization Header、密码、完整堆栈或数据库连接串。
+调试事件仍不得包含 token、Authorization Header、密码、delegationToken、完整异常堆栈、数据库连接串、原始 tool payload 或未脱敏内部 ID。
+
+### 10.5 系统控制事件
+
+`heartbeat` 用于长耗时查询期间保持连接活性，不写入长期 messages。
+
+`cancelled` 用于用户取消或客户端断开。当前阶段可以先做到：
+
+- Java 检测客户端断开；
+- Java 停止继续转发；
+- Java 记录 `CANCELLED` 或 `CLIENT_DISCONNECTED` 审计；
+- Python 真正取消执行可留到后续增强。
+
+预留取消接口：
+
+```text
+POST /api/agent/sessions/{agentSessionId}/messages/{messageId}/cancel
+```
+
+`timeout` 用于 Java/Python/Tool Gateway 任一环节超时。流中超时必须输出 `error` 和 `message_end.finishReason=timeout`，不能直接断开连接。
+
+`fallback` 只允许在尚未进入 Python runtime 的简单首轮只读查询中使用。只要同一个 `agentSessionId` 已经由 Python 处理过，后续不得 fallback 到 legacy Java AgentGateway，避免 Python state 与 Java legacy memory 分叉。
+
+### 10.6 流式 state 写入边界
+
+- 用户消息：收到请求后立即写入 state/messages。
+- tool result：工具成功返回并经过 safe adapter 后写入 state/messages。
+- assistant final answer：`message_end` 前写入 state/messages。
+- progress：默认不写长期 messages，可写 event log 或审计摘要。
+- clarification：必须写入 `pendingClarification`，否则前端看到候选后点击会接不上上下文。
+
+### 10.7 前端渲染约束
+
+前端不要把每条 `progress` 渲染成独立聊天气泡。一个用户问题对应一个 assistant message 容器：
+
+- 顶部：当前进度短句；
+- 中间：候选卡片或业务卡片；
+- 底部：最终回答文本；
+- 完成后：进度可折叠，只保留最终答案和卡片。
+
+前端必须按 `messageId + eventId` 去重，按 `sequence` 排序或丢弃重复旧事件。
 
 ## 11. Human-in-the-loop 预留
 
@@ -799,18 +996,19 @@ structured state 用于稳定工具调用，例如 `selectedProduct.productId`�
 
 ## 14. Fallback 策略
 
-Python 不可用时，Java 可以 fallback，但 fallback 必须收敛，不应继续扩展为完整 Agent Runtime。
+Python 不可用时，Java 可以 fallback，但 fallback 必须收敛，不应继续扩展为完整 Agent Runtime，也不得造成 Python state 与 Java legacy memory 分叉。
 
 允许 Java 旧 `AgentGatewayService` fallback 的场景：
 
-- Python `/internal/agent/health` 不可用；
-- Python chat 超时；
-- 模型服务短暂不可用；
-- 用户请求属于当前 6 个只读工具能覆盖的简单查询；
-- fallback 仍能遵守 resolver `UNIQUE` / `AMBIGUOUS` / `NOT_FOUND` 规则。
+- 当前 `agentSessionId` 尚未进入 Python runtime；
+- Python `/internal/agent/health` 不可用，或首次 Python chat/stream 建立前失败；
+- 用户请求属于当前 6 个只读工具能覆盖的明确、简单、首轮只读查询；
+- fallback 仍能遵守 resolver `UNIQUE` / `AMBIGUOUS` / `NOT_FOUND` 规则；
+- fallback 后该 `agentSessionId` 固定走 legacy，不能再混入 Python state。
 
 应提示“AI 助手暂不可用”的场景：
 
+- 同一个 `agentSessionId` 已经由 Python runtime 处理过任意消息；
 - 需要多步上下文推理；
 - 需要工具结果回填后自然语言分析；
 - 需要流式输出；
@@ -923,17 +1121,233 @@ Fallback：
 
 验收：用户选择“黄冰糖（袋）”后，追问“这些主要在哪些库位？”和“它今天有没有化验？”无需重新选择。
 
-### M1.3R-5：流式输出
+### M1.3R-5：流式交互首版（已完成）
 
-目标：实现业务进度事件、候选事件、卡片事件和最终回答流式展示。
+目标：实现 Java 代理的业务过程流式输出，让用户看到“正在确认产品范围、正在查询库存、正在汇总结果、需要选择”等业务状态，而不是只把最终回答拆成文本片段。
 
-验收：普通 UI 只显示业务事件，管理员调试模式显示脱敏 tool 摘要。
+当前实现状态：
 
-### M1.3R-6：human-in-the-loop 预留
+- Python `/internal/agent/chat/stream` 已输出统一 event envelope，并在调用 runtime 前先发送 `message_start` 和业务 `progress`；
+- Python clarification 流以 `message_end.payload.finishReason=clarification_required` 结束，工具超时以 `error + message_end.finishReason=timeout` 收口；
+- Java 已新增 `POST /api/agent/sessions/{agentSessionId}/messages/stream`，通过 `HttpPythonAgentClient.stream` 代理 Python SSE；
+- Java 代理层已做事件类型白名单、普通用户 debug 事件过滤、递归二次脱敏、流中失败补 `error + message_end`；
+- Java stream fallback 遵守同一会话状态边界：已进入 Python runtime 的 `agentSessionId` 不再 fallback 到 legacy；
+- 前端 `AgentAssistant` 已改为 `fetch + ReadableStream` 消费 POST SSE，一个用户问题对应一个 assistant message 容器；
+- 前端 progress 只更新当前助手消息顶部状态，clarification/card/text_delta/error 分区渲染，并支持前端取消连接；
+- 后端 cancel endpoint、完整审计分类和真实浏览器验收进入 M1.3R-5.1。
 
-目标：为未来 preview/execute 建立 interrupt/resume 事件模型。
+#### M1.3R-5a：流式事件协议固化
 
-验收：候选选择使用统一 resume 模型；写操作仍未开放。
+目标：
+
+- 固化统一 event envelope：`eventId`、`messageId`、`agentSessionId`、`type`、`sequence`、`payload`；
+- 固化 `message_end.payload.finishReason`：`completed`、`clarification_required`、`error`、`cancelled`、`timeout`、`fallback`；
+- 区分用户可见业务事件、管理员调试事件和系统控制事件；
+- 定义 `heartbeat`、`cancelled`、`timeout`、`fallback` 控制事件。
+
+验收：
+
+- 前端可按 `messageId + eventId` 去重，并按 `sequence` 排序；
+- clarification 结束时必须返回 `finishReason=clarification_required`；
+- 协议禁止 chain-of-thought、raw MCP frame、token、Authorization、内部 ID 和堆栈进入普通 UI。
+
+#### M1.3R-5b：Python chat/stream 完善
+
+目标：
+
+- Python `/internal/agent/chat/stream` 输出业务 `progress`、`clarification`、`card`、`text_delta`、`error` 和 `message_end`；
+- 中途 tool timeout 或 gateway 错误时输出 `error + message_end`，不能静默断流；
+- clarification 必须写入 `pendingClarification`；
+- tool result 成功并 safe adapter 后写入 messages/state；
+- progress 默认只进 event log 或审计摘要，不写长期 messages。
+
+验收：
+
+- “帮我查黄冰糖当前库存”能输出确认产品范围、候选卡片和 `clarification_required`；
+- 工具超时输出业务错误和 `finishReason=timeout`；
+- Python 事件不包含 token、Authorization、内部 ID、raw JSON 或堆栈。
+
+#### M1.3R-5c：Java SSE 代理
+
+目标：
+
+- 新增或规划 `POST /api/agent/sessions/{agentSessionId}/messages/stream`；
+- 预留 `POST /api/agent/sessions/{agentSessionId}/messages/{messageId}/cancel`；
+- Java 校验登录用户、session 归属、状态和 scope；
+- Java 调用 Python `/internal/agent/chat/stream` 并注入 `AGENT_PYTHON_SERVICE_KEY`；
+- Java 对所有事件做二次脱敏和 schema 校验；
+- Java 处理中途失败，补发安全 `error + message_end`；
+- Java 检测客户端断开，停止转发并记录 `CLIENT_DISCONNECTED`。
+
+验收：
+
+- Python 返回非法 event 时，Java 拒绝或转换为安全 error；
+- Python event 中包含 `productId`、`warehouseId`、token 或 Authorization 时，Java 二次脱敏；
+- 同一 `agentSessionId` 已走 Python 后不得 fallback 到 legacy；
+- 审计记录 messageId、finishReason、duration、fallbackUsed 和错误码。
+
+#### M1.3R-5d：前端 AgentAssistant 流式渲染
+
+目标：
+
+- 一个用户问题对应一个 assistant message 容器；
+- 容器顶部显示当前进度短句；
+- 容器中部展示候选卡片或业务卡片；
+- 容器底部展示最终回答；
+- 完成后可折叠进度，只保留最终答案和卡片；
+- 普通模式隐藏 debug/tool 事件，管理员 debug 模式显示脱敏摘要。
+
+验收：
+
+- progress 不堆成多条独立聊天气泡；
+- 前端按 `messageId + eventId` 去重，按 `sequence` 渲染；
+- 候选选择后能继续同一会话上下文。
+
+#### M1.3R-5e：端到端验收
+
+场景：
+
+- 黄冰糖候选；
+- 选择黄冰糖（袋）后库存查询；
+- “它今天有没有化验？”沿用 Python state；
+- “2号库位现在还有多少容量？”；
+- Python 断开；
+- 工具超时；
+- 普通 UI 脱敏；
+- 管理员 debug 模式脱敏可见；
+- 前端断开 SSE，Java 停止转发并记录。
+
+验收：
+
+- 普通 UI 只显示业务事件；
+- 管理员调试模式显示脱敏 tool 摘要；
+- 流式中断有 `error + message_end`；
+- 已进入 Python 的会话不 fallback 到 legacy。
+
+### M1.3R-5.1：流式链路加固
+
+目标：补齐流式审计、Java 端到端 SSE 测试、后端 cancel endpoint、客户端断开处理、真实浏览器验收，以及上游失败/超时/正常结束分类。
+
+当前实现状态：
+
+- Java 已实现 `POST /api/agent/sessions/{agentSessionId}/messages/{messageId}/cancel`，校验当前用户与会话归属；
+- Java 为流请求预分配 `messageId` 并传给 Python，主动取消后停止转发、发送 `cancelled + message_end` 并通知 Python；
+- Python 已实现 `POST /internal/agent/cancel` 和进程内取消登记，运行返回后会抑制后续卡片、文本和工具结果事件；
+- 审计已区分正常完成、主动取消、被动断开、Python 超时/错误、工具超时/错误、安全过滤和禁止降级；
+- 已增加 Python 取消/分类测试，以及 Java HTTP cancel、主动取消审计、工具超时和安全过滤测试；
+- 真实浏览器已验证正常回答、候选暂停与恢复、连续消息隔离、主动取消后按钮恢复、迟到结果抑制、自动滚动、刷新重置和 390px 移动端布局；
+- 浏览器验收期间修复了 Spring Security 异步二次分派被拒绝、Vue 流消息对象未稳定触发增量渲染，以及 420px 固定抽屉超出移动端视口的问题；
+- Python 当前基础 runtime 仍是同步调用，第一阶段取消只能保证结果不再转发，真正中断模型执行留到 M1.3R-5.2 的原生增量运行时。
+
+取消链路：
+
+- 前端调用 `POST /api/agent/sessions/{agentSessionId}/messages/{messageId}/cancel`；
+- Java 校验当前用户和 session/message 归属后，通知 Python `POST /internal/agent/cancel`；
+- message 状态标记为 cancelled，Java 停止转发后续事件；
+- Python 第一阶段即使不能中断正在运行的模型，也必须阻止后续 tool result 或最终回答写回同一个 assistant message；
+- 用户主动取消记录 `CLIENT_CANCELLED`，网络或页面导致的被动断开记录 `CLIENT_DISCONNECTED`。
+
+审计结果包括：`COMPLETED`、`CLIENT_DISCONNECTED`、`CLIENT_CANCELLED`、`PYTHON_TIMEOUT`、`PYTHON_ERROR`、`TOOL_TIMEOUT`、`TOOL_ERROR`、`SECURITY_FILTERED`、`FALLBACK_BLOCKED`。
+
+真实浏览器验收结果：长回答保持自动滚动到底部；clarification 卡片出现后停止等待；取消后发送按钮恢复且迟到结果不写回；390px 视口抽屉和卡片均不溢出；连续消息不串流；刷新后关闭临时抽屉并保留可重新进入的助手入口。
+
+### M1.3R-5.2：模型原生增量输出
+
+目标：接入 LLM token delta，并继续保留 `progress`、`clarification`、`card`、`error` 和 `message_end` 等结构化事件。
+
+边界：不得展示 chain-of-thought；取消、超时、脱敏和审计规则继续沿用 M1.3R-5.1。
+
+当前实现：Python 已提供 `AgentRunRegistry` 和 `CancellationToken`，每条流式消息按 `messageId` 注册 active run；runtime 在模型调用前、模型流期间、工具调用前后、工具结果写 state 前、最终回答输出前检查取消信号。`AGENT_MODEL_MODE=basic` 只输出已审核答案作为兼容 delta，不伪装 token；`AGENT_MODEL_MODE=openai_compatible` 调用配置的 OpenAI-compatible `/chat/completions` SSE，`text_delta` 来自模型实时 `delta.content` 或 `response.output_text.delta`。reasoning、chain-of-thought、tool calls、raw JSON、token 和内部字段均被忽略或过滤。模型超时、工具超时、模型/工具取消和上游错误通过 `error.category` 分类，Java runtime audit 映射为 `MODEL_TIMEOUT`、`TOOL_TIMEOUT`、`MODEL_CANCELLED`、`TOOL_CANCELLED`、`UPSTREAM_ERROR` 或 `CLIENT_CANCELLED`。
+
+### M1.3R-6：Human-in-the-loop 统一模型
+
+目标：统一 clarification resume、preview 确认、execute 前确认，以及用户拒绝、修改和重新预览的 interrupt/resume 事件模型。
+
+边界：本阶段只建设统一状态与协议模型，并把现有 clarification 迁移到该协议。preview / execute confirmation 只做协议、状态、审计和 UI 占位，不接入入库、出库、调拨等真实写工具。
+
+阶段拆分：
+
+- M1.3R-6a：协议与状态机。定义 `HitlInterrupt`、`ResumeAction`、`status`、`finishReason`、audit code、`resumeToken` 能力凭证规则和 action/kind 允许矩阵。
+- M1.3R-6b：clarification 迁移。现有候选选择改成 interrupt；前端只提交 opaque `optionId`；后端用 `interruptId + optionId` 恢复已验证业务实体；兼容旧 `candidate_selected`。
+- M1.3R-6c：Java resume API 与审计。新增统一 resume 入口，Java 校验 user/session/status 并记录 interrupt 最小元数据，转发 Python `/internal/agent/resume`。
+- M1.3R-6d：前端统一卡片。clarification 卡片走统一 interrupt；preview / execute confirmation 只占位；展示处理中、已处理、已过期、已取消等用户可理解状态。
+- M1.3R-6e：验收与文档。覆盖正常选择、重复点击、过期点击、刷新恢复或失效提示、不暴露内部字段、不触发写操作。
+
+`resumeToken` 按一次性能力凭证处理：
+
+- 短期有效、单次使用、不可预测；
+- 绑定 `agentSessionId`、`interruptId`、`userId`、action 类型和 `optionId` / `previewId`；
+- 不写普通日志，不进入前端可见调试信息；
+- 过期后不可恢复，必须重新发起用户请求；
+- 同一个 `clientRequestId` 重放时返回同一次 resume 结果；不同 `clientRequestId` 命中已 `RESUMED` interrupt 时返回已处理或已失效，不得重复调用工具或重复写 state。
+
+前端候选项必须使用 opaque id：
+
+```json
+{
+  "optionId": "opt_003",
+  "displayLabel": "黄冰糖（袋）",
+  "description": "25.0kg/件 40件/板",
+  "supported": true
+}
+```
+
+前端 resume 只提交：
+
+```json
+{
+  "action": "SELECT_OPTION",
+  "selection": {
+    "optionId": "opt_003"
+  },
+  "clientRequestId": "..."
+}
+```
+
+不得把 `productId`、`warehouseId`、`inventoryId` 等内部 ID 放入普通前端事件。内部映射保存在 pending interrupt state 中：`interruptId + optionId -> 已验证的业务实体`。
+
+状态机固定为：
+
+```text
+PENDING
+  -> RESUMED
+  -> REJECTED
+  -> MODIFIED
+  -> EXPIRED
+  -> CANCELLED
+```
+
+非法转换必须拒绝：`RESUMED` 不能再次 resume，`REJECTED` 不能 approve，`EXPIRED` 不能 select option，`CANCELLED` 不能恢复。用户可见文案使用“这个选择已经处理过了”“这个确认已过期，请重新发起”“这个任务已取消”，不得返回内部状态机错误。
+
+`message_end.finishReason` 固定枚举：`completed`、`interrupt_required`、`cancelled`、`timeout`、`error`、`rejected`、`expired`。产生 interrupt 时事件序列为：
+
+```text
+message_start
+progress
+clarification / hitl_interrupt
+message_end { finishReason: "interrupt_required", interruptId, interruptKind }
+```
+
+action 与 interrupt kind 的允许矩阵：
+
+```text
+CLARIFICATION:
+  SELECT_OPTION / CANCEL
+
+PREVIEW_CONFIRMATION:
+  APPROVE / REJECT / MODIFY / REQUEST_REPREVIEW / CANCEL
+
+EXECUTE_CONFIRMATION:
+  APPROVE / REJECT / CANCEL
+```
+
+resume 需要支持流式继续。建议提供 `POST /api/agent/sessions/{agentSessionId}/interrupts/{interruptId}/resume/stream`，或让 resume 默认返回 SSE；短期如果保留非流式，协议中仍需明确后续 resume stream 能力，避免普通消息流式而候选选择后非流式的体验断层。
+
+pending interrupt 分层：Python 保存运行态、option 映射和 pending interrupt 细节；Java 至少记录 interrupt 审计和最小元数据，包括 `messageId`、`interruptId`、`userId`、`agentSessionId`、`kind`、`status`、`expiresAt`。M1.3R-6 可以不做完整持久化，但不能只有 Python 内存知道 interrupt 的存在，否则刷新、重启和排查时无法区分过期、取消、重启丢失或非法请求。
+
+当前实现：clarification 已迁移到统一 interrupt/resume 基础模型。Python 生成 `interruptId`、一次性 `resumeToken`、`expiresAt` 和 opaque `optionId`，并在 resume 时校验 token、状态、过期时间和 `clientRequestId` 幂等。Java 暴露 `/interrupts/{interruptId}/resume` 与 `/interrupts/{interruptId}/resume/stream`，前端候选点击走 stream resume。Java 新增 `agent_interrupt_state` 最小元数据表，只保存 `interruptId`、session/user/message、kind、status、expiresAt、action、opaque option/preview id、clientRequestId 和终态结果，不保存 `resumeToken` 明文。
+
+验收：现有黄冰糖候选选择体验不退化；clarification 事件携带 `interruptId`、`resumeToken`、`expiresAt`；用户选择通过统一 resume 入口恢复；重复点击不会重复执行；过期、取消、拒绝都有明确状态和审计；前端不展示内部 ID、toolName、raw JSON、chain-of-thought；不新增任何真实写操作。
 
 ### M1.4：受控只读数据分析层
 
@@ -956,14 +1370,14 @@ Fallback：
 - Python 怎么维护上下文：通过 LangGraph `messages`、`WarehouseAgentState`、`agentSessionId` 到 `thread_id` 映射和短期 checkpointer。
 - Python 怎么调用 Java 工具：短期调用 `POST /internal/agent/tools/{toolName}`，中长期作为 MCP Client 调 Java HTTP/Streamable HTTP MCP。
 - 工具结果怎么回填给模型：以 tool message 和 structured state 写回，再由模型生成自然语言回答。
-- 流式事件怎么发给前端：Python 产生 `message_start`、`progress`、`clarification`、`tool_start`、`tool_end`、`text_delta`、`card`、`error`、`message_end`，Java 转发给前端。
+- 流式事件怎么发给前端：Python 产生统一 envelope 事件，包含 `message_start`、`progress`、`clarification`、`text_delta`、`card`、`error`、`message_end`、`heartbeat`、`cancelled`、`timeout`、`fallback`，管理员 debug 模式才允许脱敏 `tool_start`、`tool_end`、`debug`，Java 校验、二次脱敏后转发给前端。
 - 候选选择怎么进入上下文：前端点击候选后经 Java 转为 `candidate_selected` event，Python 写入 messages 和 structured state。
 - 权限和审计在哪里做：最终权限、数据权限、`agent_session` 状态和工具/API 审计都在 Java；Python 只携带 `agentSessionId`、traceId 和 requestId。
-- Python 不可用怎么 fallback：简单只读查询可走 Java 旧 Gateway；复杂多轮、流式、human-in-the-loop 和不确定场景应提示暂不可用。
+- Python 不可用怎么 fallback：仅未进入 Python runtime 的首次简单只读查询可走 Java 旧 Gateway；同一 `agentSessionId` 一旦进入 Python，后续不得 fallback 到 legacy，复杂多轮、流式、human-in-the-loop 和不确定场景应提示暂不可用。
 
 本设计不新增 MCP 业务工具，不新增 login 工具，不新增 preview/execute，不开放 SQL、任意 HTTP 代理、直接数据库访问或写接口调用。
 
-## 17. M1.3R-3 本地联调配置
+## 17. M1.3R 本地联调配置
 
 Java：
 
@@ -993,5 +1407,6 @@ REQUEST_TIMEOUT_MS=20000
 2. 启动 Python Agent Service；
 3. 将 Java runtime mode 切换为 `python` 后重启 Java；
 4. 启动 Web 前端，通过原 `/api/agent/sessions/{agentSessionId}/messages` 验收。
+5. M1.3R-5 流式验收时，Java 对前端暴露 `/api/agent/sessions/{agentSessionId}/messages/stream`，内部代理 Python `/internal/agent/chat/stream`。
 
-当前非流式链路已经接通。`/internal/agent/chat/stream` 尚未由 Java 代理给前端，留待 M1.3R-5。
+当前非流式、M1.3R-5 首版流式、M1.3R-5.1 链路加固和 M1.3R-5.2 原生模型 token streaming 边界均已接通。后续可继续增强模型规划/最终回答生成质量，或进入 M1.3R-6 Human-in-the-loop 统一模型。

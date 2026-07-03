@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.agent.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.agent.context.AgentConversationMemory;
+import com.Laibin.SugarInventory.agent.dto.AgentInterruptResumeRequestDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentMessageRequestDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentSessionCreateDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentSessionRevokeDTO;
@@ -17,6 +18,7 @@ import com.Laibin.SugarInventory.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,8 +26,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/agent")
@@ -64,6 +69,39 @@ public class AgentSessionController {
         return Result.success(agentGatewayService.handleMessage(loginUser, agentSessionId, request));
     }
 
+    @PostMapping(value = "/sessions/{agentSessionId}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamMessage(@AuthenticationPrincipal LoginUser loginUser,
+                                    @PathVariable String agentSessionId,
+                                    @Valid @RequestBody AgentMessageRequestDTO request) {
+        return agentGatewayService.streamMessage(loginUser, agentSessionId, request);
+    }
+
+    @PostMapping("/sessions/{agentSessionId}/messages/{messageId}/cancel")
+    public Result<Boolean> cancelMessage(@AuthenticationPrincipal LoginUser loginUser,
+                                         @PathVariable String agentSessionId,
+                                         @PathVariable String messageId) {
+        return Result.success(agentGatewayService.cancelMessage(loginUser, agentSessionId, messageId));
+    }
+
+    @PostMapping("/sessions/{agentSessionId}/interrupts/{interruptId}/resume")
+    public Result<AgentMessageResponseVO> resumeInterrupt(@AuthenticationPrincipal LoginUser loginUser,
+                                                          @PathVariable String agentSessionId,
+                                                          @PathVariable String interruptId,
+                                                          @Valid @RequestBody AgentInterruptResumeRequestDTO request) {
+        return Result.success(agentGatewayService.handleMessage(
+                loginUser,
+                agentSessionId,
+                toResumeMessageRequest(interruptId, request)));
+    }
+
+    @PostMapping(value = "/sessions/{agentSessionId}/interrupts/{interruptId}/resume/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter resumeInterruptStream(@AuthenticationPrincipal LoginUser loginUser,
+                                            @PathVariable String agentSessionId,
+                                            @PathVariable String interruptId,
+                                            @Valid @RequestBody AgentInterruptResumeRequestDTO request) {
+        return agentGatewayService.streamMessage(loginUser, agentSessionId, toResumeMessageRequest(interruptId, request));
+    }
+
     @DeleteMapping("/sessions/{agentSessionId}")
     public Result<Boolean> revokeSession(@AuthenticationPrincipal LoginUser loginUser,
                                          @PathVariable String agentSessionId,
@@ -88,6 +126,22 @@ public class AgentSessionController {
         Integer resolvedUserId = userId instanceof Integer value ? value : loginUser.getUser().getId();
         agentSessionService.recordToolAudit(String.valueOf(sessionId), resolvedUserId, dto);
         return Result.success(Boolean.TRUE);
+    }
+
+    private AgentMessageRequestDTO toResumeMessageRequest(String interruptId, AgentInterruptResumeRequestDTO request) {
+        AgentMessageRequestDTO messageRequest = new AgentMessageRequestDTO();
+        messageRequest.setMessage("用户选择了候选项");
+        Map<String, Object> selectedOption = new LinkedHashMap<>();
+        selectedOption.put("interruptId", interruptId);
+        selectedOption.put("resumeToken", request.getResumeToken());
+        selectedOption.put("action", request.getAction());
+        selectedOption.put("clientRequestId", request.getClientRequestId());
+        if (request.getSelection() != null) {
+            selectedOption.put("optionId", request.getSelection().getOptionId());
+            selectedOption.put("previewId", request.getSelection().getPreviewId());
+        }
+        messageRequest.setPageContext(Map.of("selectedOption", selectedOption));
+        return messageRequest;
     }
 }
 

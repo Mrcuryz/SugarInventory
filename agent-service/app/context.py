@@ -16,11 +16,21 @@ class ContextBuilder:
     """Builds small domain context packs for the model layer."""
 
     WAREHOUSE_KEYWORDS = ("库位", "仓库", "容量", "存放", "位置")
+    PRODUCT_KEYWORDS = ("产品", "库存", "冰糖", "白砂糖", "糖")
+    PALLET_KEYWORDS = ("托盘", "托盘码", "二维码")
+    ASSAY_KEYWORDS = ("化验", "质检", "合格", "不合格")
 
     def build(self, message: str, state: WarehouseAgentState) -> list[DomainContextPack]:
         packs: list[DomainContextPack] = []
+        packs.append(self._safety_pack())
+        if any(keyword in message for keyword in self.PRODUCT_KEYWORDS):
+            packs.append(self._product_pack())
         if any(keyword in message for keyword in self.WAREHOUSE_KEYWORDS):
             packs.append(self._warehouse_pack())
+        if any(keyword in message for keyword in self.PALLET_KEYWORDS):
+            packs.append(self._pallet_pack())
+        if any(keyword in message for keyword in self.ASSAY_KEYWORDS):
+            packs.append(self._assay_pack())
         if state.selected_product is not None:
             packs.append(
                 DomainContextPack(
@@ -45,6 +55,28 @@ class ContextBuilder:
             )
         return packs
 
+    def _safety_pack(self) -> DomainContextPack:
+        return DomainContextPack(
+            name="mcp_safety_boundary",
+            triggerReason="always include read-only MCP safety rules",
+            instructions=[
+                "只能选择白名单内的 L1 只读工具。",
+                "不得生成 SQL、任意 HTTP 请求、写库存、入库、出库、调拨或配置修改。",
+                "解析结果为 AMBIGUOUS 时必须追问，不得猜 productId 或 warehouseId。",
+            ],
+        )
+
+    def _product_pack(self) -> DomainContextPack:
+        return DomainContextPack(
+            name="product_inventory",
+            triggerReason="message contains product or inventory semantics",
+            instructions=[
+                "查询产品库存前必须先用 resolve_products 解析产品名称。",
+                "如果已有 selected_product 且用户使用“它、这些、刚才那个产品”等指代，可以沿用 structured state 中的已确认产品。",
+                "get_inventory_overview 只能使用已确认 productId，不得从自然语言猜 ID。",
+            ],
+        )
+
     def _warehouse_pack(self) -> DomainContextPack:
         return DomainContextPack(
             name="warehouse_naming",
@@ -55,5 +87,27 @@ class ContextBuilder:
                 "查询库位前必须先调用 resolve_warehouses。",
                 "resolve_warehouses 的 query 应传入用户提到的库位名称片段，不要传整句。",
                 "不要猜 warehouseId。",
+            ],
+        )
+
+    def _pallet_pack(self) -> DomainContextPack:
+        return DomainContextPack(
+            name="pallet_status",
+            triggerReason="message contains pallet semantics",
+            instructions=[
+                "托盘查询使用 get_pallet_status。",
+                "只有用户提供明确托盘码时才能查询；缺少托盘码时应追问。",
+                "不得作废、恢复、创建或确认托盘任务。",
+            ],
+        )
+
+    def _assay_pack(self) -> DomainContextPack:
+        return DomainContextPack(
+            name="assay_status",
+            triggerReason="message contains assay or quality semantics",
+            instructions=[
+                "单产品/单日期化验查询使用 get_assay_status。",
+                "如果用户说“它今天有没有化验”，并且 structured state 有 selected_product，可以使用该产品和今天日期。",
+                "批量趋势分析和导出尚未开放安全工具，应说明能力缺口。",
             ],
         )

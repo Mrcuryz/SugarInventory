@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `agent_interrupt_state` (
+  `interrupt_id` varchar(100) NOT NULL,
+  `agent_session_id` varchar(64) NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `message_id` varchar(80) DEFAULT NULL,
+  `kind` varchar(40) DEFAULT NULL,
+  `status` varchar(40) NOT NULL,
+  `resume_action` varchar(40) DEFAULT NULL,
+  `option_id` varchar(100) DEFAULT NULL,
+  `preview_id` varchar(100) DEFAULT NULL,
+  `client_request_id` varchar(100) DEFAULT NULL,
+  `result_code` varchar(40) DEFAULT NULL,
+  `error_code` varchar(80) DEFAULT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `resumed_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`interrupt_id`),
+  KEY `idx_agent_interrupt_session_status` (`agent_session_id`, `status`),
+  KEY `idx_agent_interrupt_user_time` (`user_id`, `created_at`),
+  KEY `idx_agent_interrupt_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

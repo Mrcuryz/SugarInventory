@@ -33,6 +33,10 @@ class CandidateSelectedMessage(BaseModel):
 
     type: Literal["candidate_selected"]
     selection: CandidateSelection
+    interruptId: str | None = Field(default=None, max_length=100)
+    resumeToken: str | None = Field(default=None, max_length=200)
+    action: Literal["SELECT_OPTION", "CANCEL"] = "SELECT_OPTION"
+    clientRequestId: str | None = Field(default=None, max_length=100)
 
 
 AgentMessage = Annotated[ChatMessage | CandidateSelectedMessage, Field(discriminator="type")]
@@ -51,6 +55,7 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     agentSessionId: str = Field(min_length=1, max_length=64)
+    messageId: str | None = Field(default=None, min_length=1, max_length=64)
     user: UserSummary | None = None
     scopes: list[str] = Field(default_factory=list)
     message: AgentMessage
@@ -61,17 +66,36 @@ class ChatRequest(BaseModel):
 class ResumeEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["candidate_selected"]
+    type: Literal["candidate_selected"] = "candidate_selected"
+    interruptId: str | None = Field(default=None, max_length=100)
+    action: Literal["SELECT_OPTION", "CANCEL"] = "SELECT_OPTION"
     selection: CandidateSelection
+    clientRequestId: str | None = Field(default=None, max_length=100)
 
 
 class ResumeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     agentSessionId: str = Field(min_length=1, max_length=64)
-    resumeToken: str | None = Field(default=None, max_length=100)
+    resumeToken: str | None = Field(default=None, max_length=200)
+    user: UserSummary | None = None
     event: ResumeEvent
     client: ClientContext = Field(default_factory=ClientContext)
+
+
+class CancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agentSessionId: str = Field(min_length=1, max_length=64)
+    messageId: str = Field(min_length=1, max_length=64)
+
+
+class CancelResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agentSessionId: str
+    messageId: str
+    cancelled: bool
 
 
 class UserOption(BaseModel):
@@ -91,6 +115,10 @@ class BusinessCard(BaseModel):
     cardType: str
     title: str
     prompt: str | None = None
+    interruptId: str | None = None
+    interruptKind: str | None = None
+    resumeToken: str | None = None
+    expiresAt: str | None = None
     options: list[UserOption] = Field(default_factory=list)
     fields: list[dict[str, str]] = Field(default_factory=list)
 

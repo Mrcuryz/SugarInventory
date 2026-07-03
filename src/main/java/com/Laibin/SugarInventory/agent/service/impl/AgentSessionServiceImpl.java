@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.agent.dto.AgentSessionCreateDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentToolAuditDTO;
 import com.Laibin.SugarInventory.agent.security.AgentSessionAuthenticationException;
+import com.Laibin.SugarInventory.agent.service.AgentInterruptStateService;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.agent.service.InternalAgentSessionAccess;
 import com.Laibin.SugarInventory.agent.vo.AgentSessionVO;
@@ -47,6 +48,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     private final AgentSessionMapper agentSessionMapper;
     private final AgentApiAuditLogMapper apiAuditLogMapper;
     private final AgentToolAuditLogMapper toolAuditLogMapper;
+    private final AgentInterruptStateService interruptStateService;
     private final JwtUtils jwtUtils;
     private final UserDetailsService userDetailsService;
     private final long delegationTokenTtlMinutes;
@@ -54,12 +56,14 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     public AgentSessionServiceImpl(AgentSessionMapper agentSessionMapper,
                                    AgentApiAuditLogMapper apiAuditLogMapper,
                                    AgentToolAuditLogMapper toolAuditLogMapper,
+                                   AgentInterruptStateService interruptStateService,
                                    JwtUtils jwtUtils,
                                    UserDetailsService userDetailsService,
                                    @Value("${agent.delegation-token-ttl-minutes:15}") long delegationTokenTtlMinutes) {
         this.agentSessionMapper = agentSessionMapper;
         this.apiAuditLogMapper = apiAuditLogMapper;
         this.toolAuditLogMapper = toolAuditLogMapper;
+        this.interruptStateService = interruptStateService;
         this.jwtUtils = jwtUtils;
         this.userDetailsService = userDetailsService;
         this.delegationTokenTtlMinutes = delegationTokenTtlMinutes;
@@ -71,6 +75,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         requireLoginUser(loginUser);
         List<String> scopes = normalizeRequestedScopes(dto == null ? null : dto.getRequestedScopes());
         LocalDateTime now = LocalDateTime.now();
+        cancelPendingInterruptsForReplacedSessions(loginUser.getUser().getId());
         AgentSession session = new AgentSession();
         session.setId(UUID.randomUUID().toString());
         session.setUserId(loginUser.getUser().getId());
@@ -86,6 +91,20 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         session.setLastUsedAt(now);
         agentSessionMapper.insert(session);
         return toSessionVO(session, loginUser);
+    }
+
+    private void cancelPendingInterruptsForReplacedSessions(Integer userId) {
+        List<AgentSession> activeSessions = agentSessionMapper.selectList(new LambdaQueryWrapper<AgentSession>()
+                .eq(AgentSession::getUserId, userId)
+                .eq(AgentSession::getStatus, STATUS_ACTIVE));
+        if (activeSessions == null) {
+            return;
+        }
+        for (AgentSession activeSession : activeSessions) {
+            if (activeSession.getId() != null) {
+                interruptStateService.cancelSessionInterrupts(activeSession.getId(), "SESSION_CLOSED_OR_REPLACED");
+            }
+        }
     }
 
     @Override
@@ -178,6 +197,9 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         session.setRevokedBy(loginUser.getUser().getId());
         session.setRevokedReason(limit(revokedReason, 200));
         agentSessionMapper.updateById(session);
+        interruptStateService.cancelSessionInterrupts(
+                agentSessionId,
+                revokedReason == null || revokedReason.isBlank() ? "SESSION_CLOSED_OR_REPLACED" : revokedReason);
     }
 
     @Override

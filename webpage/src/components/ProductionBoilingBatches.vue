@@ -212,7 +212,7 @@
                       v-for="column in traceGraphColumns"
                         :key="column.key"
                       class="trace-stage"
-                      :style="{ left: column.x + 'px', width: traceColumnWidth + 'px' }"
+                      :style="{ left: column.x + 'px', width: traceColumnStride + 'px' }"
                     >
                       <div class="trace-stage-title">{{ column.title }}</div>
                     </div>
@@ -227,13 +227,40 @@
                         <marker id="trace-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
                           <path d="M0,0 L8,4 L0,8 Z" fill="#6f93e8" />
                         </marker>
+                        <marker id="trace-arrow-aux" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                          <path d="M0,0 L8,4 L0,8 Z" fill="#8fa2bf" />
+                        </marker>
                       </defs>
-                      <g v-for="edge in traceFlowEdges" :key="edge.id">
+                      <g
+                        v-for="edge in auxiliaryTraceFlowEdges"
+                        :key="edge.id"
+                        class="trace-edge-layer trace-edge-layer--auxiliary"
+                      >
+                        <path :d="edge.path" class="trace-flow-path-hit" @click="openEdgeDetail(edge)" />
                         <path
                           :d="edge.path"
-                          class="trace-flow-path-hit"
+                          class="trace-flow-path trace-flow-path--auxiliary"
+                          marker-end="url(#trace-arrow-aux)"
                           @click="openEdgeDetail(edge)"
                         />
+                        <foreignObject
+                          :x="edge.labelX"
+                          :y="edge.labelY"
+                          :width="edge.labelWidth"
+                          height="40"
+                          class="trace-edge-foreign"
+                        >
+                          <div class="trace-flow-edge-label" :title="edge.fullLabel" @click="openEdgeDetail(edge)">
+                            <strong>{{ edge.shortAction }}</strong>
+                          </div>
+                        </foreignObject>
+                      </g>
+                      <g
+                        v-for="edge in primaryTraceFlowEdges"
+                        :key="edge.id"
+                        class="trace-edge-layer trace-edge-layer--primary"
+                      >
+                        <path :d="edge.path" class="trace-flow-path-hit" @click="openEdgeDetail(edge)" />
                         <path
                           :d="edge.path"
                           class="trace-flow-path"
@@ -317,26 +344,30 @@
                           <div class="chain-summary">
                             来源批次：{{ chain.sourceBatch }} · 链路总消耗：{{ chain.consumeText }} · 最终产品：{{ chain.finalProduct }} · 最终入库：{{ chain.finalWarehouse }}
                           </div>
+                          <div class="chain-metrics">
+                            共 {{ chain.actionCount }} 个流转动作 · {{ chain.detailCount }} 条明细记录 · 已聚合 {{ chain.aggregatedGroupCount }} 组
+                          </div>
                         </div>
                       </div>
                     </template>
-                    <div class="chain-timeline">
-                      <div
-                        v-for="record in chain.records"
-                        :key="record.key"
-                        class="chain-record"
-                        :class="{ 'chain-record--aux': isAuxiliaryRecord(record) }"
-                      >
-                        <div class="chain-dot"></div>
-                        <div class="chain-time">{{ formatDateTime(record.occurredAt) || '-' }}</div>
-                        <div class="chain-action">{{ record.actionType || '-' }}</div>
-                        <div class="chain-doc">{{ record.documentNo || '-' }}</div>
-                        <div class="chain-product">{{ record.productName || '-' }}</div>
-                        <div class="chain-qty">{{ record.quantityText || '-' }}</div>
-                        <div class="chain-warehouse">{{ record.warehouseName || '-' }}</div>
-                        <div class="chain-related">{{ record.relatedObject || '-' }}</div>
-                        <el-tag size="small" :type="timelineStatusType(record.status)">{{ record.status || '-' }}</el-tag>
+                    <div class="chain-timeline-groups">
+                      <div class="chain-timeline-head">
+                        <span>时间</span>
+                        <span>流转动作</span>
+                        <span>批次号/单号</span>
+                        <span>产品名称/类型</span>
+                        <span>数量</span>
+                        <span>库位</span>
+                        <span>关联对象/摘要</span>
+                        <span>状态</span>
+                        <span>明细</span>
+                        <span></span>
                       </div>
+                      <TraceTimelineGroup
+                        v-for="group in chain.groups"
+                        :key="group.id"
+                        :group="group"
+                      />
                     </div>
                   </el-collapse-item>
                 </el-collapse>
@@ -420,6 +451,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim, Box, Calendar, CircleCheck, Clock, Connection, Refresh, Tickets, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import { cancelBoilingBatch, createBoilingBatch, getBoilingBatchDetail, getBoilingBatchTraceGraph, pageBoilingBatches, updateBoilingBatch } from '@/api/production'
 import { formatDateTime } from '@/utils/dateTime'
+import { aggregateTraceTimeline, isAuxiliaryTraceEdge, routeTraceEdge } from '@/utils/productionTracePresentation.mjs'
+import TraceTimelineGroup from '@/components/production/TraceTimelineGroup.vue'
 
 const statusOptions = [
   { value: 'AVAILABLE', label: '可用', type: 'success' },
@@ -476,11 +509,10 @@ const defaultBatchNo = date => {
 const totalWeightPreview = computed(() => Number(form.value.potCount || 0) * Number(form.value.bucketCount || 0) * Number(form.value.kgPerBucket || 0))
 const traceNodeWidth = 160
 const traceNodeHeight = 84
-const traceColumnWidth = 220
 const traceColumnStride = 300
 const traceTopPadding = 72
 const traceLeftPadding = 32
-const traceRowStride = 118
+const traceRowStride = 104
 
 const traceNodes = computed(() => trace.value?.nodes || [])
 const traceEdges = computed(() => trace.value?.edges || [])
@@ -558,6 +590,18 @@ const warehouseByPalletId = computed(() => {
   return map
 })
 
+const labelBatchByPalletId = computed(() => {
+  const map = new Map()
+  traceEdges.value.forEach(edge => {
+    const source = traceNodeMap.value.get(edge.source)
+    const target = traceNodeMap.value.get(edge.target)
+    if (source?.type === 'PALLET_CODE_BATCH' && target?.type === 'PALLET_CODE') {
+      map.set(target.id, source.id)
+    }
+  })
+  return map
+})
+
 const normalizedTraceNodes = computed(() => traceNodes.value
   .filter(node => !foldedInboundMap.value.has(node.id))
   .map((node, index) => {
@@ -600,11 +644,19 @@ const traceGraphLayout = computed(() => {
   const nodes = normalizedTraceNodes.value
   const nodeIds = new Set(nodes.map(item => item.id))
   const validEdges = traceEdges.value
-    .map(edge => ({
-      ...edge,
-      source: foldedInboundMap.value.get(edge.source)?.palletId || edge.source,
-      target: foldedInboundMap.value.get(edge.target)?.palletId || edge.target
-    }))
+    .map(edge => {
+      const rawTarget = traceNodeMap.value.get(edge.target)
+      const finishedInboundBatchSource = rawTarget?.type === 'FINISHED_WAREHOUSE_LOCATION'
+        ? labelBatchByPalletId.value.get(edge.source)
+        : null
+      return {
+        ...edge,
+        originalSource: edge.source,
+        originalTarget: edge.target,
+        source: finishedInboundBatchSource || foldedInboundMap.value.get(edge.source)?.palletId || edge.source,
+        target: foldedInboundMap.value.get(edge.target)?.palletId || edge.target
+      }
+    })
     .filter(edge => edge.source !== edge.target)
     .filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target))
     .filter((edge, index, edges) => edges.findIndex(item => [
@@ -630,6 +682,7 @@ const traceGraphLayout = computed(() => {
     return {
       ...definition,
       x: traceLeftPadding + columnIndex * traceColumnStride,
+      columnIndex,
       items: items.sort((left, right) => {
         const rowCompare = Number(left.rowIndex || 0) - Number(right.rowIndex || 0)
         const timeCompare = String(left.occurredAt || '').localeCompare(String(right.occurredAt || ''))
@@ -641,10 +694,25 @@ const traceGraphLayout = computed(() => {
   return { columns, edges: validEdges }
 })
 
-const traceGraphWidth = computed(() => Math.max(1480, traceLeftPadding * 2 + (traceColumnDefs.length - 1) * traceColumnStride + traceColumnWidth))
+const traceGraphWidth = computed(() => Math.max(1480, traceLeftPadding * 2 + traceColumnDefs.length * traceColumnStride))
+const traceColumnIndexMap = computed(() => {
+  const map = new Map()
+  traceGraphLayout.value.columns.forEach(column => {
+    column.items.forEach(node => map.set(node.id, column.columnIndex))
+  })
+  return map
+})
+const auxiliaryEdgeCount = computed(() => traceGraphLayout.value.edges.filter(edge => {
+  const sourceIndex = traceColumnIndexMap.value.get(edge.source)
+  const targetIndex = traceColumnIndexMap.value.get(edge.target)
+  if (sourceIndex === undefined || targetIndex === undefined) return false
+  return targetIndex <= sourceIndex || targetIndex - sourceIndex > 1
+}).length)
 const traceGraphHeight = computed(() => {
   const maxRows = Math.max(1, ...traceGraphLayout.value.columns.map(item => item.items.length))
-  return Math.max(440, traceTopPadding + maxRows * traceRowStride + 56)
+  const contentHeight = Math.max(440, traceTopPadding + maxRows * traceRowStride + 56)
+  const auxiliaryChannelHeight = auxiliaryEdgeCount.value ? Math.min(96, 42 + auxiliaryEdgeCount.value * 12) : 0
+  return contentHeight + auxiliaryChannelHeight
 })
 const scaledTraceGraphWidth = computed(() => traceGraphWidth.value * traceZoom.value)
 const scaledTraceGraphHeight = computed(() => traceGraphHeight.value * traceZoom.value)
@@ -680,7 +748,8 @@ const tracePositionedNodes = computed(() => {
   return traceGraphColumns.value.flatMap(column => {
     return column.items.map((node, rowIndex) => ({
       ...node,
-      x: column.x + (traceColumnWidth - traceNodeWidth) / 2,
+      x: column.x + (traceColumnStride - traceNodeWidth) / 2,
+      columnIndex: column.columnIndex,
       y: traceTopPadding + rowIndex * traceRowStride
     }))
   })
@@ -688,31 +757,46 @@ const tracePositionedNodes = computed(() => {
 
 const traceNodePositionMap = computed(() => new Map(tracePositionedNodes.value.map(node => [node.id, node])))
 
-const traceFlowEdges = computed(() => traceGraphLayout.value.edges.map(edge => {
-  const source = traceNodePositionMap.value.get(edge.source)
-  const target = traceNodePositionMap.value.get(edge.target)
-  if (!source || !target) return null
+const traceFlowEdges = computed(() => {
+  const auxiliaryChannelMap = new Map()
+  return traceGraphLayout.value.edges.map(edge => {
+    const source = traceNodePositionMap.value.get(edge.source)
+    const target = traceNodePositionMap.value.get(edge.target)
+    if (!source || !target) return null
+    const auxiliary = isAuxiliaryTraceEdge(source, target)
+    const auxiliaryGroupKey = auxiliary
+      ? [edge.source, edge.action || edge.label || '', source.columnIndex, target.columnIndex].join('|')
+      : ''
+    if (auxiliary && !auxiliaryChannelMap.has(auxiliaryGroupKey)) {
+      auxiliaryChannelMap.set(auxiliaryGroupKey, auxiliaryChannelMap.size)
+    }
+    const routed = routeTraceEdge({
+      edge,
+      source,
+      target,
+      nodeWidth: traceNodeWidth,
+      nodeHeight: traceNodeHeight,
+      canvasHeight: traceGraphHeight.value,
+      channelIndex: auxiliary ? auxiliaryChannelMap.get(auxiliaryGroupKey) : 0
+    })
+    return {
+      ...routed,
+      sourceDisplayName: traceNodeDisplayName(source),
+      targetDisplayName: traceNodeDisplayName(target),
+      fullLabel: [edge.action, edge.quantityText].filter(Boolean).join(' ')
+    }
+  }).filter(Boolean)
+})
+const auxiliaryTraceFlowEdges = computed(() => traceFlowEdges.value.filter(edge => edge.auxiliary))
+const primaryTraceFlowEdges = computed(() => traceFlowEdges.value.filter(edge => !edge.auxiliary))
 
-  const sourceX = source.x + traceNodeWidth + 14
-  const sourceY = source.y + traceNodeHeight / 2
-  const targetX = target.x - 14
-  const targetY = target.y + traceNodeHeight / 2
-  const gap = Math.max(72, targetX - sourceX)
-  const controlX = sourceX + gap / 2
-  const labelWidth = 64
-  const labelCenterX = sourceX + gap * 0.5
-  const labelX = labelCenterX - labelWidth / 2
-  const labelY = (sourceY + targetY) / 2 - 12
-
-  return {
-    ...edge,
-    path: 'M ' + sourceX + ' ' + sourceY + ' C ' + controlX + ' ' + sourceY + ', ' + controlX + ' ' + targetY + ', ' + targetX + ' ' + targetY,
-    labelX,
-    labelY,
-    labelWidth,
-    fullLabel: [edge.action, edge.quantityText].filter(Boolean).join(' ')
-  }
-}).filter(Boolean))
+const traceNodeDisplayName = node => {
+  if (!node) return ''
+  const title = nodeTitle(node)
+  const details = [node.productName, node.quantityText, node.warehouseName]
+    .filter(value => value && value !== title)
+  return [title, ...details].filter(Boolean).join(' / ')
+}
 
 const nodeTooltip = node => [
   nodeTypeText(node.type),
@@ -735,7 +819,9 @@ const filteredTraceChains = computed(() => traceChains.value.filter(chain => {
 }))
 const completedChainCount = computed(() => traceChains.value.filter(item => item.status === '已完成').length)
 const reservedChainCount = computed(() => traceChains.value.filter(item => item.kind === 'reserved').length)
-const finalInboundRecordCount = computed(() => traceTimeline.value.filter(item => item.actionType?.includes('成品入库')).length)
+const finalInboundRecordCount = computed(() => aggregateTraceTimeline(
+  traceTimeline.value.filter(item => item.actionType?.includes('成品入库'))
+).length)
 const selectedTraceDetailRows = computed(() => {
   const item = selectedTraceDetail.value || {}
   if (selectedTraceDetailKind.value === 'edge') {
@@ -743,8 +829,8 @@ const selectedTraceDetailRows = computed(() => {
       { label: '动作', value: item.action || item.shortAction },
       { label: '数量', value: item.quantityText },
       { label: '状态', value: item.status },
-      { label: '来源节点', value: item.source },
-      { label: '目标节点', value: item.target }
+      { label: '来源节点', value: item.sourceDisplayName || item.source },
+      { label: '目标节点', value: item.targetDisplayName || item.target }
     ]
   }
   return [
@@ -1053,6 +1139,7 @@ const createTraceChain = (records, kind, index) => {
   const actualKind = reserved && !completed ? 'reserved' : kind
   const prefix = actualKind === 'reserved' ? '预占链路' : actualKind === 'support' ? '支链路' : '主链路'
   const suffix = String.fromCharCode(65 + index)
+  const groups = aggregateTraceTimeline(records)
   return {
     id: `chain-${actualKind}-${index}`,
     name: `${prefix} ${suffix}`,
@@ -1063,6 +1150,10 @@ const createTraceChain = (records, kind, index) => {
     finalProduct: finalProduct ? [finalProduct.productName, finalProduct.quantityText].filter(Boolean).join(' ') : '-',
     status: completed ? '已完成' : actualKind === 'reserved' ? '预占' : '流转中',
     hasFinishedFlow: records.some(item => item.actionType?.includes('成品')),
+    groups,
+    actionCount: new Set(records.map(item => item.actionType).filter(Boolean)).size,
+    detailCount: records.length,
+    aggregatedGroupCount: groups.filter(group => group.count > 1).length,
     records
   }
 }
@@ -1433,7 +1524,7 @@ onMounted(() => loadList(1))
 }
 .trace-flow-node {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   width: 176px;
   height: 104px;
   display: flex;
@@ -1700,9 +1791,9 @@ onMounted(() => loadList(1))
   cursor: grab;
   user-select: none;
   background:
-    radial-gradient(circle, rgba(132, 151, 176, 0.16) 1px, transparent 1.5px),
-    linear-gradient(#f4f7fb 1px, transparent 1px),
-    linear-gradient(90deg, #f4f7fb 1px, transparent 1px);
+    radial-gradient(circle, rgba(132, 151, 176, 0.1) 1px, transparent 1.5px),
+    linear-gradient(#f7f9fc 1px, transparent 1px),
+    linear-gradient(90deg, #f7f9fc 1px, transparent 1px);
   background-size: 18px 18px, 36px 36px, 36px 36px;
 }
 .trace-graph-scroll--dragging {
@@ -1716,14 +1807,19 @@ onMounted(() => loadList(1))
   transform-origin: left top;
 }
 .trace-stage {
-  border-left-color: rgba(212, 222, 235, 0.88);
-  background: rgba(255, 255, 255, 0.34);
+  box-sizing: border-box;
+  border-left: 0;
+  border-right: 1px solid rgba(212, 222, 235, 0.88);
+  background: rgba(255, 255, 255, 0.28);
 }
-.trace-stage:last-of-type {
-  border-right-color: rgba(212, 222, 235, 0.88);
+.trace-stage:first-of-type {
+  border-left: 1px solid rgba(212, 222, 235, 0.88);
 }
 .trace-stage-title {
+  box-sizing: border-box;
+  width: 100%;
   height: 48px;
+  padding: 0 8px;
 }
 .trace-flow-lines {
   z-index: 1;
@@ -1743,6 +1839,20 @@ onMounted(() => loadList(1))
   stroke: #a9b6c8;
   stroke-dasharray: 6 6;
   opacity: 0.74;
+}
+.trace-edge-layer--auxiliary {
+  opacity: 0.95;
+}
+.trace-flow-path--auxiliary {
+  stroke: #8fa2bf;
+  stroke-width: 1.7;
+  stroke-dasharray: 7 5;
+}
+.trace-edge-layer--auxiliary .trace-flow-edge-label {
+  border-color: #dfe6ef;
+  background: rgba(247, 249, 252, 0.96);
+  color: #7b889b;
+  box-shadow: none;
 }
 .trace-edge-foreign {
   pointer-events: auto;
@@ -1870,8 +1980,30 @@ onMounted(() => loadList(1))
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chain-timeline {
+.chain-metrics {
+  margin-top: 3px;
+  color: #8a96a7;
+  font-size: 11px;
+  line-height: 16px;
+}
+.chain-timeline-groups {
   padding: 10px 14px 14px;
+  overflow-x: auto;
+}
+.chain-timeline-head {
+  min-width: 1160px;
+  display: grid;
+  grid-template-columns: 132px 126px minmax(140px, 1.1fr) minmax(120px, 1fr) minmax(150px, 1.2fr) 92px minmax(132px, 1fr) 88px 78px 24px;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px 0 28px;
+  border-bottom: 1px solid #e1e8f2;
+  border-radius: 4px 4px 0 0;
+  background: #f1f5fb;
+  color: #637188;
+  font-size: 12px;
+  font-weight: 600;
 }
 .chain-record {
   position: relative;
