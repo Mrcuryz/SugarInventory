@@ -4,12 +4,15 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.agent.context.AgentConversationMemory;
 import com.Laibin.SugarInventory.agent.dto.AgentInterruptResumeRequestDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentMessageRequestDTO;
+import com.Laibin.SugarInventory.agent.dto.AgentMessageReviewFeedbackDTO;
+import com.Laibin.SugarInventory.agent.dto.AgentMessageReviewRecordDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentSessionCreateDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentSessionRevokeDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentToolAuditDTO;
 import com.Laibin.SugarInventory.agent.gateway.AgentGatewayService;
 import com.Laibin.SugarInventory.agent.mcp.McpSessionManager;
 import com.Laibin.SugarInventory.agent.security.AgentSecurityContext;
+import com.Laibin.SugarInventory.agent.service.AgentMessageReviewService;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.agent.vo.AgentMessageResponseVO;
 import com.Laibin.SugarInventory.agent.vo.AgentSessionVO;
@@ -39,15 +42,18 @@ public class AgentSessionController {
     private final AgentGatewayService agentGatewayService;
     private final McpSessionManager mcpSessionManager;
     private final AgentConversationMemory conversationMemory;
+    private final AgentMessageReviewService agentMessageReviewService;
 
     public AgentSessionController(AgentSessionService agentSessionService,
                                   AgentGatewayService agentGatewayService,
                                   McpSessionManager mcpSessionManager,
-                                  AgentConversationMemory conversationMemory) {
+                                  AgentConversationMemory conversationMemory,
+                                  AgentMessageReviewService agentMessageReviewService) {
         this.agentSessionService = agentSessionService;
         this.agentGatewayService = agentGatewayService;
         this.mcpSessionManager = mcpSessionManager;
         this.conversationMemory = conversationMemory;
+        this.agentMessageReviewService = agentMessageReviewService;
     }
 
     @PostMapping("/sessions")
@@ -81,6 +87,23 @@ public class AgentSessionController {
                                          @PathVariable String agentSessionId,
                                          @PathVariable String messageId) {
         return Result.success(agentGatewayService.cancelMessage(loginUser, agentSessionId, messageId));
+    }
+
+    @PostMapping("/sessions/{agentSessionId}/message-reviews")
+    public Result<Boolean> recordMessageReview(@AuthenticationPrincipal LoginUser loginUser,
+                                               @PathVariable String agentSessionId,
+                                               @Valid @RequestBody AgentMessageReviewRecordDTO request) {
+        agentMessageReviewService.recordAssistantTurn(loginUser, agentSessionId, request);
+        return Result.success(Boolean.TRUE);
+    }
+
+    @PostMapping("/sessions/{agentSessionId}/message-reviews/{messageId}/feedback")
+    public Result<Boolean> submitMessageReviewFeedback(@AuthenticationPrincipal LoginUser loginUser,
+                                                       @PathVariable String agentSessionId,
+                                                       @PathVariable String messageId,
+                                                       @Valid @RequestBody AgentMessageReviewFeedbackDTO request) {
+        agentMessageReviewService.submitFeedback(loginUser, agentSessionId, messageId, request);
+        return Result.success(Boolean.TRUE);
     }
 
     @PostMapping("/sessions/{agentSessionId}/interrupts/{interruptId}/resume")

@@ -111,6 +111,43 @@ public final class ToolModels {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = false)
+    public record ProductScope(
+            @JsonProperty(value = "type", required = true) String type,
+            @Min(1) Integer productId,
+            @Size(min = 1, max = 100) String productName,
+            @Size(min = 1, max = 50) String productType
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record WarehouseScope(
+            @JsonProperty(value = "type", required = true) String type,
+            @Min(1) Integer warehouseId
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record InventoryDistributionFilter(
+            List<String> productStatuses,
+            List<String> warehouseStatuses,
+            List<String> palletStatuses,
+            String assayStatus,
+            LocalDate entryDateFrom,
+            LocalDate entryDateTo
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record InventoryDistributionRequest(
+            @JsonProperty(value = "productScope", required = true) ProductScope productScope,
+            @JsonProperty(value = "warehouseScope", required = true) WarehouseScope warehouseScope,
+            InventoryDistributionFilter statusFilter,
+            @JsonProperty(value = "groupBy", required = true) String groupBy,
+            @Min(1) @Max(100) Integer limit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
     public record WarehouseStatusRequest(
             @JsonPropertyDescription("Preferred unique warehouse id. When supplied, warehouseQuery is ignored.")
             @Min(1)
@@ -305,6 +342,52 @@ public final class ToolModels {
     ) {
         public static InventoryOverviewResponse error(ToolError error) {
             return new InventoryOverviewResponse(null, null, null, List.of(), error);
+        }
+    }
+
+    public record InventoryDistributionGroup(
+            String groupLabel,
+            String warehouseLabel,
+            String productLabel,
+            long rawFullPallets,
+            long rawLoosePieces,
+            Long normalizedPallets,
+            Long normalizedLoosePieces,
+            long totalEquivalentPieces,
+            String stockText,
+            String totalWeightText,
+            long palletCount,
+            long warehouseCount,
+            long productCount,
+            String percentageText,
+            LocalDate latestInboundTime,
+            List<String> riskLabels,
+            String calculationNote
+    ) {
+    }
+
+    public record InventoryDistributionResponse(
+            String scopeLabel,
+            String productLabel,
+            String groupBy,
+            long rawFullPallets,
+            long rawLoosePieces,
+            Long normalizedPallets,
+            Long normalizedLoosePieces,
+            long totalEquivalentPieces,
+            String totalStockText,
+            String totalWeightText,
+            long warehouseCount,
+            long productCount,
+            long palletCount,
+            String calculationNote,
+            List<InventoryDistributionGroup> groups,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static InventoryDistributionResponse error(ToolError error) {
+            return new InventoryDistributionResponse(null, null, null, 0, 0, null, null, 0, null, null,
+                    0, 0, 0, null, List.of(), List.of(), error);
         }
     }
 

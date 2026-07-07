@@ -114,6 +114,15 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await selectHuangBingtangBag(page)
 
     await clearCapturedSse(page)
+    await sendAssistantMessage(page, '这些主要存放在哪些库位？')
+    await expect(page.getByText(/当前库存主要存放在以下库位/).last()).toBeVisible()
+    await expect(page.getByText(/库存分布/).last()).toBeVisible()
+    await expect(page.getByText(/号库位/).last()).toBeVisible()
+
+    const distributionStream = await lastSse(page)
+    expect(terminalPayload(distributionStream).finishReason).toBe('completed')
+
+    await clearCapturedSse(page)
     await sendAssistantMessage(page, '它今天有没有化验？')
     await expect(page.getByText(/没有查询到对应日期的化验记录|化验/).last()).toBeVisible()
     await expect(page.getByText('等待你选择').last()).not.toBeVisible()
@@ -123,6 +132,18 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await expect(page.getByText(/剩余容量 117/)).toBeVisible()
     await expect(page.getByText(/占用率 2\.5%/)).toBeVisible()
 
+    await assertNoForbiddenUiTerms(page)
+  })
+
+  test('all-product distribution supports controlled filters and product grouping', async ({ page }) => {
+    await openAssistant(page)
+    await clearCapturedSse(page)
+
+    await sendAssistantMessage(page, '帮我查全部产品中最近7天的不合格库存，按产品分类')
+    await expect(page.getByText(/按产品分布|未查询到.*全部产品/).last()).toBeVisible()
+
+    const distributionStream = await lastSse(page)
+    expect(terminalPayload(distributionStream).finishReason).toBe('completed')
     await assertNoForbiddenUiTerms(page)
   })
 

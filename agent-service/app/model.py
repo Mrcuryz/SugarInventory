@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import socket
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 import re
 from collections.abc import Iterator
 from typing import Any, Literal, Protocol
@@ -97,20 +97,74 @@ class BasicModelClient:
                 confidenceNote="security refusal for credential exfiltration request",
             )
 
-        if self._is_inventory_location_followup(text):
-            if state.selected_product is None:
+        if self._is_warehouse_inventory_distribution_query(text):
+            arguments = self.build_tool_arguments(
+                ModelArgumentRequest(
+                    toolName="resolve_warehouses",
+                    userMessage=text,
+                    messages=request.messages,
+                    state=state,
+                    domainContext=request.domainContext,
+                    toolSchema=request.toolSchemas["resolve_warehouses"],
+                )
+            ).arguments
+            if arguments.get("query"):
                 return ModelPlanDecision(
-                    action="ask_user",
-                    prompt="你想查哪个产品？请先选择或输入一个明确的产品名称。",
-                    suggestions=["例如：黄冰糖（袋）库存。"],
-                    confidenceNote="product location follow-up without selected product",
+                    action="call_tool",
+                    toolName="resolve_warehouses",
+                    arguments=arguments,
+                    intent="inventory_distribution",
+                    responseMode="inventory_distribution",
+                    confidenceNote="warehouse inventory query requires warehouse resolver before scoped distribution",
+                )
+            return ModelPlanDecision(
+                action="ask_user",
+                prompt="你想查哪个库位的库存？请提供库位名称，例如 8号库位。",
+                confidenceNote="warehouse inventory query lacks resolvable warehouse phrase",
+            )
+
+        if self._is_inventory_distribution_query(text):
+            distribution_arguments = self._distribution_arguments(text, state)
+            if distribution_arguments["productScope"]["type"] == "ALL":
+                return ModelPlanDecision(
+                    action="call_tool",
+                    toolName="get_inventory_distribution",
+                    arguments=distribution_arguments,
+                    intent="inventory_distribution",
+                    responseMode="inventory_distribution",
+                    confidenceNote="explicit all-product distribution uses controlled aggregate scope",
+                )
+            if state.selected_product is None:
+                if self._has_context_reference(text):
+                    return ModelPlanDecision(
+                        action="ask_user",
+                        prompt="你想查哪个产品？请先选择或输入一个明确的产品名称。",
+                        suggestions=["例如：黄冰糖（袋）在哪些库位？"],
+                        confidenceNote="product location follow-up without selected product",
+                    )
+                arguments = self.build_tool_arguments(
+                    ModelArgumentRequest(
+                        toolName="resolve_products",
+                        userMessage=text,
+                        messages=request.messages,
+                        state=state,
+                        domainContext=request.domainContext,
+                        toolSchema=request.toolSchemas["resolve_products"],
+                    )
+                ).arguments
+                return ModelPlanDecision(
+                    action="call_tool",
+                    toolName="resolve_products",
+                    arguments=arguments,
+                    intent="inventory_distribution",
+                    confidenceNote="distribution query requires product resolution",
                 )
             return ModelPlanDecision(
                 action="call_tool",
-                toolName="get_inventory_overview",
-                arguments={"productId": state.selected_product.internal_id},
-                intent="inventory",
-                responseMode="inventory_locations",
+                toolName="get_inventory_distribution",
+                arguments=distribution_arguments,
+                intent="inventory_distribution",
+                responseMode="inventory_distribution",
                 confidenceNote="follow-up uses selected product from structured state",
             )
 
@@ -177,7 +231,7 @@ class BasicModelClient:
             return ModelPlanDecision(action="ask_user", prompt="请提供要查询的托盘码。")
 
         if "化验" in text:
-            if state.selected_product is not None and self._has_context_reference(text):
+            if state.selected_product is not None and state.selected_product.internal_id is not None and self._has_context_reference(text):
                 return ModelPlanDecision(
                     action="call_tool",
                     toolName="get_assay_status",
@@ -206,7 +260,7 @@ class BasicModelClient:
 
         if "库存" in text:
             product_args = self._product_arguments(request)
-            if state.selected_product is not None and (
+            if state.selected_product is not None and state.selected_product.internal_id is not None and (
                 self._has_context_reference(text) or not product_args.get("query")
             ):
                 return ModelPlanDecision(
@@ -283,6 +337,10 @@ class BasicModelClient:
             return {}
 
     def _extract_warehouse_phrase(self, text: str) -> str:
+        warehouse_match = re.search(r"([0-9０-９]{1,4})\s*号\s*库位?", text)
+        if warehouse_match:
+            number = warehouse_match.group(1).translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+            return f"{number}号库位"
         cleaned = self._strip_common_words(
             text,
             [
@@ -295,8 +353,11 @@ class BasicModelClient:
                 "还有多少",
                 "多少",
                 "容量",
+                "库存",
                 "状态",
                 "情况",
+                "库位",
+                "的",
                 "是什么",
                 "怎么样",
             ],
@@ -318,6 +379,30 @@ class BasicModelClient:
                 "有没有",
                 "化验",
                 "合不合格",
+                "主要存放在",
+                "存放在哪",
+                "哪些库位",
+                "哪些库",
+                "库存分布",
+                "按产品",
+                "按品种",
+                "按库位",
+                "分类",
+                "统计",
+                "全部产品",
+                "所有产品",
+                "全部品种",
+                "所有品种",
+                "全产品",
+                "最近",
+                "近",
+                "天",
+                "不合格",
+                "未通过",
+                "检测失败",
+                "无化验",
+                "未化验",
+                "无标准",
             ],
         )
         return self._trim_phrase(cleaned).removesuffix("的").strip()
@@ -347,6 +432,122 @@ class BasicModelClient:
 
     def _is_inventory_location_followup(self, text: str) -> bool:
         return self._has_context_reference(text) and any(word in text for word in ["存放", "在哪", "哪些库位"])
+
+    def _is_warehouse_inventory_distribution_query(self, text: str) -> bool:
+        return bool(re.search(r"[0-9０-９]{1,4}\s*号\s*库位?", text)) and "库存" in text
+
+    def _is_inventory_distribution_query(self, text: str) -> bool:
+        if any(word in text for word in ["存放在哪", "主要在哪", "哪些库位", "哪些库", "库存分布", "分布情况", "按产品分布", "按库位分布"]):
+            return True
+        if "库存" in text and any(
+            phrase in text
+            for phrase in [
+                "按产品分类",
+                "按品种分类",
+                "按产品统计",
+                "按品种统计",
+                "按库位分类",
+                "按库位统计",
+                "按库位和产品分类",
+                "按产品和库位分类",
+            ]
+        ):
+            return True
+        return self._explicit_all_product_request(text) and any(
+            word in text for word in ["不合格", "未通过", "检测失败", "无化验", "未化验", "无标准", "分类", "统计"]
+        )
+
+    def _distribution_arguments(self, text: str, state: WarehouseAgentState) -> dict[str, Any]:
+        if self._explicit_all_product_request(text):
+            product_scope: dict[str, Any] = {"type": "ALL"}
+        elif state.selected_product is not None:
+            scope_type = str(state.selected_product.metadata.get("scopeType") or "SINGLE_PRODUCT")
+            if scope_type == "EXACT_PRODUCT_NAME_GROUP":
+                product_scope = {
+                    "type": scope_type,
+                    "productName": state.selected_product.metadata.get("productName"),
+                }
+            elif scope_type == "PRODUCT_TYPE_GROUP":
+                product_scope = {
+                    "type": scope_type,
+                    "productType": state.selected_product.metadata.get("productType"),
+                }
+            else:
+                product_scope = {"type": "SINGLE_PRODUCT", "productId": state.selected_product.internal_id}
+        else:
+            product_scope = {"type": "UNRESOLVED"}
+
+        warehouse_scope: dict[str, Any] = {"type": "ALL"}
+        if state.selected_warehouse is not None and self._has_context_reference(text) and any(
+            word in text for word in ["这个库位", "该库位", "这个仓库", "该仓库"]
+        ):
+            warehouse_scope = {
+                "type": "SINGLE_WAREHOUSE",
+                "warehouseId": state.selected_warehouse.internal_id,
+            }
+        return {
+            "productScope": product_scope,
+            "warehouseScope": warehouse_scope,
+            "statusFilter": self._distribution_filters(text),
+            "groupBy": self._distribution_grouping(text),
+            "limit": 20,
+        }
+
+    def _distribution_grouping(self, text: str) -> str:
+        if any(phrase in text for phrase in ["产品和库位", "库位和产品", "各产品各库位", "产品库位明细", "按库位和产品分类", "按产品和库位分类"]):
+            return "warehouse_product"
+        if any(phrase in text for phrase in ["按产品", "各产品", "按品种", "各品种"]):
+            return "product"
+        return "warehouse"
+
+    def _distribution_filters(self, text: str) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        if "半成品" in text:
+            result["productStatuses"] = ["半成品"]
+        elif "成品" in text:
+            result["productStatuses"] = ["成品"]
+        warehouse_statuses = [status for status in ["正常", "空置", "满仓", "维护", "临期预警"] if status in text]
+        if warehouse_statuses:
+            result["warehouseStatuses"] = warehouse_statuses
+        pallet_status_map = {
+            "空闲托盘": "FREE",
+            "待入库托盘": "PENDING",
+            "在库托盘": "INSTOCK",
+            "作废托盘": "INVALID",
+            "订单预留托盘": "ORDER_RESERVED",
+        }
+        pallet_statuses = [value for label, value in pallet_status_map.items() if label in text]
+        if pallet_statuses:
+            result["palletStatuses"] = pallet_statuses
+        assay_status_map = [
+            ("没有化验", "MISSING_ASSAY"),
+            ("无化验", "MISSING_ASSAY"),
+            ("未化验", "MISSING_ASSAY"),
+            ("有化验", "HAS_ASSAY"),
+            ("无标准", "NO_STANDARD"),
+            ("检测失败", "FAIL"),
+            ("未通过", "FAIL"),
+            ("不合格", "FAIL"),
+            ("合格", "PASS"),
+        ]
+        for label, value in assay_status_map:
+            if label in text:
+                result["assayStatus"] = value
+                break
+        today = date.today()
+        if "今天" in text:
+            result["entryDateFrom"] = today.isoformat()
+            result["entryDateTo"] = today.isoformat()
+        else:
+            recent_match = re.search(r"(?:最近|近)\s*(\d{1,3})\s*天", text)
+            if recent_match:
+                days = max(1, min(int(recent_match.group(1)), 365))
+                result["entryDateFrom"] = (today - timedelta(days=days - 1)).isoformat()
+                result["entryDateTo"] = today.isoformat()
+        return result
+
+    def _explicit_all_product_request(self, text: str) -> bool:
+        return any(phrase in text for phrase in ["全部产品", "所有产品", "全产品", "全部品种", "所有品种"])
 
     def _has_context_reference(self, text: str) -> bool:
         return any(word in text for word in ["这些", "它", "刚才", "这个", "该产品"])

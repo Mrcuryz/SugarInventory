@@ -11,6 +11,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRecord;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewSummary;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.MatchType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.OptionType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PageInfo;
@@ -192,6 +194,17 @@ public class WarehouseReadService {
                 records,
                 null
         );
+    }
+
+    public InventoryDistributionResponse getInventoryDistribution(InventoryDistributionRequest request) {
+        ToolModels.ToolError validation = validateInventoryDistributionRequest(request);
+        if (validation != null) {
+            return InventoryDistributionResponse.error(validation);
+        }
+        InventoryDistributionRequest normalized = new InventoryDistributionRequest(
+                request.productScope(), request.warehouseScope(), request.statusFilter(), request.groupBy(),
+                request.limit() == null ? 20 : request.limit());
+        return apiClient.postData("/api/inventory/distribution", normalized, InventoryDistributionResponse.class);
     }
 
     public WarehouseStatusResponse getWarehouseStatus(WarehouseStatusRequest request) {
@@ -428,8 +441,8 @@ public class WarehouseReadService {
                         null,
                         null,
                         productType,
-                        false,
-                        "当前库存概览尚不支持按产品大类聚合查询，请让用户选择具体产品规格。"
+                        true,
+                        "可用于库存分布分析；库存概览仍需选择具体产品规格。"
                 )));
         boolean hasExactProductNameGroup = candidates.stream()
                 .map(ProductCandidate::productName)
@@ -441,8 +454,8 @@ public class WarehouseReadService {
                     null,
                     query.trim(),
                     null,
-                    false,
-                    "当前库存概览尚不支持按产品名称组聚合查询，请让用户选择具体产品规格。"
+                    true,
+                    "可用于库存分布分析；库存概览仍需选择具体产品规格。"
             ));
         }
         candidates.forEach(candidate -> options.add(new ResolutionOption(
@@ -460,9 +473,6 @@ public class WarehouseReadService {
     private String singleProductLabel(ProductCandidate candidate) {
         StringBuilder label = new StringBuilder();
         label.append(candidate.productName() == null ? "未命名产品" : candidate.productName());
-        if (candidate.productId() != null) {
-            label.append(" (#").append(candidate.productId()).append(")");
-        }
         if (candidate.weightPerPiece() != null) {
             label.append(" ").append(candidate.weightPerPiece()).append("kg/件");
         }
@@ -553,6 +563,66 @@ public class WarehouseReadService {
             return error;
         }
         return validatePage(request.page() == null ? DEFAULT_PAGE : request.page(), request.size() == null ? DEFAULT_SIZE : request.size());
+    }
+
+    private ToolModels.ToolError validateInventoryDistributionRequest(InventoryDistributionRequest request) {
+        if (request == null || request.productScope() == null) {
+            return ErrorMapper.invalid("productScope", "productScope is required.");
+        }
+        String productType = request.productScope().type();
+        if (productType == null
+                || !Set.of("SINGLE_PRODUCT", "EXACT_PRODUCT_NAME_GROUP", "PRODUCT_TYPE_GROUP", "ALL").contains(productType)) {
+            return ErrorMapper.invalid("productScope.type", "Unsupported product scope type.");
+        }
+        ToolModels.ToolError error;
+        if ("SINGLE_PRODUCT".equals(productType)) {
+            error = validatePositiveId("productScope.productId", request.productScope().productId());
+            if (error != null || request.productScope().productId() == null) {
+                return error == null ? ErrorMapper.invalid("productScope.productId", "productId is required.") : error;
+            }
+        } else if ("EXACT_PRODUCT_NAME_GROUP".equals(productType)) {
+            error = validateRequiredString("productScope.productName", request.productScope().productName(), 100);
+            if (error != null) return error;
+        } else if ("PRODUCT_TYPE_GROUP".equals(productType)) {
+            error = validateRequiredString("productScope.productType", request.productScope().productType(), 50);
+            if (error != null) return error;
+        }
+        if (request.warehouseScope() == null || request.warehouseScope().type() == null
+                || !Set.of("ALL", "SINGLE_WAREHOUSE").contains(request.warehouseScope().type())) {
+            return ErrorMapper.invalid("warehouseScope.type", "Unsupported warehouse scope type.");
+        }
+        if ("SINGLE_WAREHOUSE".equals(request.warehouseScope().type())) {
+            error = validatePositiveId("warehouseScope.warehouseId", request.warehouseScope().warehouseId());
+            if (error != null || request.warehouseScope().warehouseId() == null) {
+                return error == null ? ErrorMapper.invalid("warehouseScope.warehouseId", "warehouseId is required.") : error;
+            }
+        }
+        if (request.groupBy() == null
+                || !Set.of("warehouse", "product", "warehouse_product").contains(request.groupBy())) {
+            return ErrorMapper.invalid("groupBy", "Unsupported distribution grouping.");
+        }
+        if (request.statusFilter() != null) {
+            if (!allowedValues(request.statusFilter().productStatuses(), Set.of("半成品", "成品"))
+                    || !allowedValues(request.statusFilter().warehouseStatuses(), Set.of("正常", "空置", "满仓", "维护", "临期预警"))
+                    || !allowedValues(request.statusFilter().palletStatuses(), Set.of("FREE", "PENDING", "INSTOCK", "INVALID", "ORDER_RESERVED"))) {
+                return ErrorMapper.invalid("statusFilter", "Status filter contains unsupported values.");
+            }
+            if (request.statusFilter().assayStatus() != null
+                    && !Set.of("HAS_ASSAY", "MISSING_ASSAY", "PASS", "FAIL", "NO_STANDARD", "MULTIPLE_CANDIDATES")
+                    .contains(request.statusFilter().assayStatus())) {
+                return ErrorMapper.invalid("statusFilter.assayStatus", "Unsupported assay status.");
+            }
+            if (request.statusFilter().entryDateFrom() != null && request.statusFilter().entryDateTo() != null
+                    && request.statusFilter().entryDateFrom().isAfter(request.statusFilter().entryDateTo())) {
+                return ErrorMapper.invalid("statusFilter.entryDateFrom", "entryDateFrom must not be after entryDateTo.");
+            }
+        }
+        return validateLimit(request.limit());
+    }
+
+    private boolean allowedValues(List<String> values, Set<String> allowed) {
+        return values == null || (values.size() <= 10
+                && values.stream().allMatch(value -> value != null && allowed.contains(value)));
     }
 
     private ToolModels.ToolError validateWarehouseStatusRequest(WarehouseStatusRequest request) {

@@ -4,11 +4,16 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cancelAgentMessage,
   createAgentSession,
+  recordAgentMessageReview,
   revokeAgentSession,
   streamAgentInterruptResume,
-  streamAgentMessage
+  streamAgentMessage,
+  submitAgentMessageReviewFeedback
 } from '@/api/agent'
 import { useAuthStore } from '@/stores/auth'
+import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
+import AgentSessionPanel from '@/components/agent/AgentSessionPanel.vue'
+import { cleanOptionLabel } from '@/components/agent/agentDisplay'
 
 const visible = ref(false)
 const loadingSession = ref(false)
@@ -26,6 +31,30 @@ let activeAssistantMessage = null
 
 const sessionStatus = computed(() => session.value?.status || '未启动')
 const isAdmin = computed(() => ['ADMIN', 'SUPER_ADMIN'].includes(session.value?.roleCode || authStore.roleCode))
+const currentUserName = computed(() => session.value?.name || authStore.name || authStore.employeeId || '当前用户')
+const currentUserRole = computed(() => roleLabel(session.value?.roleCode || authStore.roleCode))
+const assistantName = computed(() => '智能仓储助手')
+const assistantModelName = computed(() => (
+  session.value?.modelDisplayName ||
+  '模型未配置'
+))
+const assistantModelState = computed(() => (session.value?.modelDisplayName ? 'running' : 'missing'))
+const userAvatarText = computed(() => avatarText(currentUserName.value, '用'))
+
+const avatarText = (name, fallback) => {
+  const normalized = String(name || '').trim()
+  if (!normalized) return fallback
+  return normalized.slice(0, 1).toUpperCase()
+}
+
+const roleLabel = (roleCode) => {
+  const labels = {
+    SUPER_ADMIN: '超级管理员',
+    ADMIN: '管理员',
+    USER: '业务用户'
+  }
+  return labels[roleCode] || roleCode || '登录用户'
+}
 
 const open = async () => {
   visible.value = true
@@ -54,10 +83,11 @@ const startSession = async () => {
 
 const send = async (options = {}) => {
   const text = (options.message || input.value).trim()
-  if (!text || sending.value) return
+  if (!text || (sending.value && !options.allowWhileSending)) return
   if (!session.value?.agentSessionId) {
     await startSession()
   }
+  await markPreviousAssistantIfCorrection(text, options)
   const selectedOption = options.selectedOption || null
   if (options.showUserMessage !== false) {
     messages.value.push({ role: 'user', content: text })
@@ -135,8 +165,70 @@ const send = async (options = {}) => {
     activeStreamController = null
     activeAssistantMessage = null
     await scrollToBottom()
+    recordAssistantReview(text, assistantMessage, selectedOption)
   }
   return assistantMessage.finishReason
+}
+
+const recordAssistantReview = async (userQuestion, assistantMessage, selectedOption) => {
+  if (!session.value?.agentSessionId || assistantMessage.reviewRecorded) return
+  if (!assistantMessage.messageId && !assistantMessage.content) return
+  assistantMessage.reviewRecorded = true
+  try {
+    await recordAgentMessageReview(session.value.agentSessionId, {
+      messageId: assistantMessage.messageId,
+      userQuestion,
+      assistantAnswerTextSafe: assistantMessage.content,
+      assistantAnswerSummary: assistantMessage.content,
+      pagePath: window.location.pathname,
+      actualIntentSummary: selectedOption?.displayLabel
+        ? `用户选择候选项后继续：${selectedOption.displayLabel}`
+        : null,
+      actualToolNames: extractToolNames(assistantMessage.toolCalls),
+      hasCards: Boolean(assistantMessage.cards?.length),
+      finishReason: assistantMessage.finishReason
+    })
+  } catch {
+    assistantMessage.reviewRecorded = false
+  }
+}
+
+const extractToolNames = (toolCalls = []) => {
+  const names = new Set()
+  toolCalls.forEach(call => {
+    if (call?.toolName) names.add(call.toolName)
+  })
+  return Array.from(names)
+}
+
+const correctionPatterns = [
+  '不是',
+  '不对',
+  '你理解错了',
+  '我问的是',
+  '重新',
+  '不是这个',
+  '怎么没有',
+  '为什么没查到'
+]
+
+const markPreviousAssistantIfCorrection = async (text, options = {}) => {
+  if (options.showUserMessage === false || !session.value?.agentSessionId) return
+  if (!correctionPatterns.some(pattern => text.includes(pattern))) return
+  const previousAssistant = [...messages.value]
+    .reverse()
+    .find(item => item.role === 'assistant' && item.messageId && item.finishReason && !item.correctionAutoReported)
+  if (!previousAssistant) return
+  previousAssistant.correctionAutoReported = true
+  try {
+    await submitAgentMessageReviewFeedback(session.value.agentSessionId, previousAssistant.messageId, {
+      feedbackType: 'USER_CORRECTION',
+      feedbackNote: `用户下一轮纠正：${text}`,
+      expectedIntentSummary: text
+    })
+  } catch {
+    previousAssistant.correctionAutoReported = false
+  }
 }
 
 const applyStreamEvent = (message, event) => {
@@ -230,13 +322,11 @@ const cancelStream = async () => {
   }
 }
 
-const cleanOptionLabel = (label) => String(label || '')
-  .replace(/\s*[(（]#\d+[)）]\s*/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim()
-
 const chooseOption = async (option, sourceMessage) => {
   if (!option?.displayLabel || option.supported === false) return
+  if (!sourceMessage?.interruptId || !sourceMessage?.resumeToken || sourceMessage.optionSubmitting || sourceMessage.selectionCompleted) {
+    return
+  }
   const clientRequestId = window.crypto?.randomUUID
     ? window.crypto.randomUUID()
     : `resume_${Date.now()}_${Math.random().toString(16).slice(2)}`
@@ -251,6 +341,7 @@ const chooseOption = async (option, sourceMessage) => {
     clientRequestId
   }
   if (sourceMessage) {
+    sourceMessage.optionSubmitting = true
     sourceMessage.needsUserSelection = false
     sourceMessage.progress = '正在继续查询……'
   }
@@ -258,25 +349,39 @@ const chooseOption = async (option, sourceMessage) => {
   const finishReason = await send({
     message: '用户选择了候选项',
     selectedOption,
-    showUserMessage: false
+    showUserMessage: false,
+    allowWhileSending: true
   })
   if (sourceMessage) {
+    sourceMessage.optionSubmitting = false
+    sourceMessage.selectionCompleted = finishReason === 'completed'
+    sourceMessage.needsUserSelection = finishReason !== 'completed'
     sourceMessage.progress = finishReason === 'completed' ? '已处理' : ''
   }
 }
 
-const optionTypeLabel = (optionType) => {
-  const labels = {
-    PRODUCT_TYPE_GROUP: '产品大类',
-    EXACT_PRODUCT_NAME_GROUP: '产品名称组',
-    SINGLE_PRODUCT: '具体产品',
-    SINGLE_WAREHOUSE: '具体库位'
+const submitMessageFeedback = async ({ item, feedbackType }) => {
+  if (!session.value?.agentSessionId || !item?.messageId || item.feedbackSubmitting) return
+  item.feedbackSubmitting = true
+  try {
+    await submitAgentMessageReviewFeedback(session.value.agentSessionId, item.messageId, {
+      feedbackType
+    })
+    item.feedbackSubmitted = true
+    ElMessage.success('已记录反馈')
+  } catch {
+    ElMessage.error('反馈记录失败')
+  } finally {
+    item.feedbackSubmitting = false
   }
-  return labels[optionType] || '候选项'
 }
 
-const visibleCards = (item) => (item.cards || []).filter(card => card?.cardType !== 'candidate_selection')
-
+const messageStateClass = (item) => ({
+  'is-error': item.finishReason === 'error',
+  'is-cancelled': item.cancelled || item.finishReason === 'cancelled',
+  'is-interrupt': item.needsUserSelection || ['clarification_required', 'interrupt_required'].includes(item.finishReason),
+  'is-streaming': Boolean(item.progress && !item.finishReason)
+})
 const handleBeforeClose = async (done) => {
   const closed = await closeSession()
   if (closed && done) done()
@@ -321,75 +426,68 @@ defineExpose({ open })
   <el-drawer
     v-model="visible"
     title="AI 助手"
+    aria-label="AI 助手"
     direction="rtl"
-    size="min(420px, 100vw)"
+    size="min(480px, 100vw)"
     :before-close="handleBeforeClose"
     class="agent-assistant-drawer"
   >
-    <div class="assistant-shell" v-loading="loadingSession">
-      <div class="session-bar">
-        <span>会话：{{ sessionStatus }}</span>
-        <span v-if="session?.expiresAt">到期：{{ session.expiresAt }}</span>
-        <el-button v-if="isAdmin" text size="small" class="debug-toggle" @click="debugMode = !debugMode">
-          {{ debugMode ? '隐藏调试' : '调试' }}
-        </el-button>
+    <template #header>
+      <div class="assistant-header">
+        <div class="assistant-mark">
+          <el-icon><ChatDotRound /></el-icon>
+        </div>
+        <div class="assistant-heading">
+          <div class="assistant-title">AI 助手</div>
+          <div class="assistant-subtitle">库存、库位、托盘和化验查询</div>
+        </div>
       </div>
+    </template>
+
+    <div class="assistant-shell" v-loading="loadingSession">
+      <AgentSessionPanel
+        v-model:debug-mode="debugMode"
+        :status="sessionStatus"
+        :expires-at="session?.expiresAt"
+        :is-admin="isAdmin"
+        :assistant-name="assistantName"
+        :model-display-name="assistantModelName"
+        :model-state="assistantModelState"
+        :user-name="currentUserName"
+        :user-role="currentUserRole"
+        :user-avatar-text="userAvatarText"
+      />
 
       <el-scrollbar ref="scrollRef" class="message-list">
         <div
           v-for="(item, index) in messages"
           :key="index"
           class="message-row"
-          :class="item.role"
+          :class="[item.role, messageStateClass(item)]"
         >
-          <div class="message-bubble">
-            <div v-if="item.progress" class="message-progress">{{ item.progress }}</div>
-            <div class="message-text">{{ item.content }}</div>
-            <div v-if="visibleCards(item).length" class="business-card-list">
-              <div
-                v-for="(card, cardIndex) in visibleCards(item)"
-                :key="`${card.cardType || 'card'}-${card.title || cardIndex}`"
-                class="business-card"
-              >
-                <div class="business-card-title">{{ card.title || '查询结果' }}</div>
-                <div v-if="card.fields?.length" class="business-card-fields">
-                  <div
-                    v-for="(field, fieldIndex) in card.fields"
-                    :key="`${field.label || field.name || fieldIndex}-${field.value || fieldIndex}`"
-                    class="business-card-field"
-                  >
-                    <span>{{ field.label || field.name }}</span>
-                    <strong>{{ field.value }}</strong>
-                  </div>
-                </div>
-              </div>
+          <div v-if="item.role === 'assistant'" class="assistant-avatar">
+            <el-icon><Service /></el-icon>
+          </div>
+          <div class="message-stack">
+            <div class="message-speaker" :class="item.role">
+              <template v-if="item.role === 'assistant'">
+                <span class="speaker-name">{{ assistantName }}</span>
+                <span class="model-badge">{{ assistantModelName }}</span>
+              </template>
+              <template v-else>
+                <span class="speaker-name">{{ currentUserName }}</span>
+              </template>
             </div>
-            <div v-if="item.options?.length" class="option-card-list">
-              <button
-                v-for="option in item.options"
-                :key="`${option.optionId || option.optionType}-${option.displayLabel}`"
-                class="option-card"
-                :class="{ disabled: option.supported === false }"
-                type="button"
-                :disabled="option.supported === false || sending || !item.needsUserSelection"
-                @click="chooseOption(option, item)"
-              >
-                <span class="option-title">{{ cleanOptionLabel(option.displayLabel) }}</span>
-                <span class="option-meta">{{ optionTypeLabel(option.optionType) }}</span>
-                <span v-if="option.supported === false" class="option-note">暂不支持直接查询</span>
-              </button>
-            </div>
-            <div v-if="debugMode && item.toolCalls?.length" class="tool-summary">
-              <div
-                v-for="call in item.toolCalls"
-                :key="`${call.toolName}-${call.durationMs}-${call.resultCode}`"
-                class="tool-summary-line"
-              >
-                <span>{{ call.toolName }}</span>
-                <span>{{ call.resultCode }}</span>
-                <span v-if="call.errorCode">{{ call.errorCode }}</span>
-              </div>
-            </div>
+            <AgentMessageBubble
+              :item="item"
+              :debug-mode="debugMode"
+              :sending="sending"
+              @choose-option="chooseOption($event, item)"
+              @feedback="submitMessageFeedback"
+            />
+          </div>
+          <div v-if="item.role === 'user'" class="user-avatar">
+            {{ userAvatarText }}
           </div>
         </div>
       </el-scrollbar>
@@ -401,13 +499,18 @@ defineExpose({ open })
           :rows="3"
           maxlength="500"
           show-word-limit
-          placeholder="例如：查黄冰糖（袋）库存"
+          placeholder="例如：查黄冰糖（袋）库存，或问这些主要放在哪些库位"
           @keydown.ctrl.enter.prevent="send"
         />
         <div class="composer-actions">
-          <el-button @click="closeSession">关闭</el-button>
-          <el-button v-if="sending" :loading="cancelling" @click="cancelStream">取消</el-button>
-          <el-button type="primary" :loading="sending" @click="send">发送</el-button>
+          <button type="button" class="plain-action" @click="closeSession">关闭</button>
+          <button v-if="sending" type="button" class="plain-action" :disabled="cancelling" @click="cancelStream">
+            {{ cancelling ? '取消中' : '取消' }}
+          </button>
+          <button type="button" class="send-action" :disabled="sending || !input.trim()" @click="send">
+            <span>{{ sending ? '发送中' : '发送' }}</span>
+            <el-icon><Promotion /></el-icon>
+          </button>
         </div>
       </div>
     </div>
@@ -415,38 +518,106 @@ defineExpose({ open })
 </template>
 
 <style scoped lang="scss">
+:deep(.agent-assistant-drawer) {
+  --assistant-border: #e6eaf2;
+  --assistant-border-strong: #d8e1ef;
+  --assistant-surface: #f5f7fb;
+  --assistant-soft-blue: #eef5ff;
+  --assistant-blue: #165dff;
+}
+
+:deep(.agent-assistant-drawer .el-drawer__header) {
+  margin: 0;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--assistant-border);
+  background: #ffffff;
+}
+
+:deep(.agent-assistant-drawer .el-drawer__close-btn) {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #667085;
+  transition: background-color 0.16s ease, color 0.16s ease;
+
+  &:hover {
+    background: #f2f4f7;
+    color: #1d2129;
+  }
+}
+
+:deep(.agent-assistant-drawer .el-drawer__body) {
+  padding: 0;
+  background: var(--assistant-surface);
+}
+
+.assistant-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.assistant-mark {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d7e4ff;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f6f9ff 0%, #eaf2ff 100%);
+  color: var(--app-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.assistant-heading {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.assistant-title {
+  color: var(--app-text);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.assistant-subtitle {
+  color: var(--app-text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .assistant-shell {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.session-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  color: var(--app-text-tertiary);
-  font-size: 12px;
-}
-
-.debug-toggle {
-  margin-left: auto;
+  background: var(--assistant-surface);
 }
 
 .message-list {
   flex: 1;
   min-height: 0;
-  border: 1px solid var(--app-border-soft);
-  border-radius: 8px;
-  background: #fafafa;
-  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.64) 0%, rgba(245, 247, 251, 0.96) 36%),
+    var(--assistant-surface);
+}
+
+.message-list :deep(.el-scrollbar__view) {
+  min-height: 100%;
+  padding: 16px 18px 18px;
 }
 
 .message-row {
   display: flex;
-  margin-bottom: 12px;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
 
   &.user {
     justify-content: flex-end;
@@ -457,146 +628,215 @@ defineExpose({ open })
   }
 }
 
-.message-bubble {
-  max-width: 88%;
-  padding: 10px 12px;
-  border-radius: 8px;
+.assistant-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  margin-top: 20px;
+  border: 1px solid #dbe7ff;
+  border-radius: 9px;
   background: #ffffff;
-  color: var(--app-text);
-  line-height: 1.55;
-  box-shadow: 0 2px 8px rgba(29, 33, 41, 0.06);
-}
-
-.message-row.user .message-bubble {
-  background: var(--app-primary-light);
   color: var(--app-primary);
+  box-shadow: 0 4px 12px rgba(22, 93, 255, 0.08);
 }
 
-.message-text {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.message-progress {
-  margin-bottom: 6px;
-  color: var(--app-text-tertiary);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.business-card-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.business-card {
-  border: 1px solid var(--app-border-soft);
-  border-radius: 8px;
-  padding: 9px 10px;
-  background: #fbfcfe;
-}
-
-.business-card-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.business-card-fields {
+.user-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
   display: grid;
-  gap: 6px;
-}
-
-.business-card-field {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--app-text-tertiary);
+  place-items: center;
+  margin-top: 20px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #2f73ff 0%, #165dff 100%);
+  color: #ffffff;
   font-size: 13px;
-
-  strong {
-    color: var(--app-text);
-    font-weight: 600;
-    text-align: right;
-    overflow-wrap: anywhere;
-  }
+  font-weight: 750;
+  box-shadow: 0 7px 16px rgba(22, 93, 255, 0.18);
 }
 
-.option-card-list {
+.message-stack {
+  min-width: 0;
+  max-width: calc(100% - 42px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
 }
 
-.option-card {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 10px;
+.message-row.user .message-stack {
+  max-width: calc(86% - 42px);
+  align-items: flex-end;
+}
+
+.message-speaker {
+  display: inline-flex;
   align-items: center;
-  border: 1px solid var(--app-border-soft);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--app-text);
-  padding: 9px 10px;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-
-  &:hover:not(.disabled) {
-    border-color: var(--app-primary);
-    background: var(--app-primary-light);
-  }
-
-  &.disabled {
-    cursor: not-allowed;
-    color: var(--app-text-tertiary);
-    background: #f7f8fa;
-  }
+  gap: 7px;
+  max-width: 100%;
+  min-height: 18px;
+  margin-bottom: 5px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.option-title {
+.message-speaker.user {
+  justify-content: flex-end;
+}
+
+.speaker-name {
   min-width: 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
+  color: #344054;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.option-meta {
-  color: var(--app-text-tertiary);
+.model-badge {
+  flex: none;
+  max-width: 150px;
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid #d7e4ff;
+  border-radius: 999px;
+  background: #f2f6ff;
+  color: #4267b2;
   font-size: 12px;
-}
-
-.option-note {
-  grid-column: 1 / -1;
-  color: var(--app-text-tertiary);
-  font-size: 12px;
-}
-
-.tool-summary {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--app-border-soft);
-  color: var(--app-text-tertiary);
-  font-size: 12px;
-}
-
-.tool-summary-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  font-weight: 650;
+  line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer {
   flex: 0 0 auto;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--assistant-border);
+  background: #ffffff;
+  box-shadow: 0 -8px 22px rgba(29, 33, 41, 0.04);
+}
+
+.composer :deep(.el-textarea__inner) {
+  min-height: 82px !important;
+  padding: 11px 12px 24px;
+  border: 1px solid #dfe7f4;
+  border-radius: 10px;
+  background: #fbfcff;
+  box-shadow: none;
+  color: var(--app-text);
+  line-height: 1.5;
+  resize: none;
+
+  &:focus {
+    border-color: #8fb0ff;
+    box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
+  }
+}
+
+.composer :deep(.el-input__count) {
+  right: 10px;
+  bottom: 5px;
+  background: transparent;
+  color: #98a2b3;
 }
 
 .composer-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 11px;
+}
+
+.plain-action,
+.send-action {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 0 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.plain-action {
+  border: 1px solid #dfe7f4;
+  background: #ffffff;
+  color: #475467;
+
+  &:hover:not(:disabled) {
+    border-color: #c7d7fe;
+    background: #f7fbff;
+    color: var(--app-primary);
+  }
+}
+
+.send-action {
+  min-width: 82px;
+  border: 1px solid var(--app-primary);
+  background: linear-gradient(180deg, #2f73ff 0%, #165dff 100%);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(22, 93, 255, 0.20);
+
+  &:hover:not(:disabled) {
+    box-shadow: 0 10px 22px rgba(22, 93, 255, 0.26);
+  }
+}
+
+.plain-action:disabled,
+.send-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  box-shadow: none;
+}
+
+@media (max-width: 520px) {
+  :deep(.agent-assistant-drawer .el-drawer__header) {
+    padding: 15px 14px 13px;
+  }
+
+  .assistant-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .message-list :deep(.el-scrollbar__view) {
+    padding: 12px 12px 14px;
+  }
+
+  .assistant-avatar,
+  .user-avatar {
+    width: 28px;
+    height: 28px;
+    margin-top: 20px;
+    border-radius: 8px;
+    font-size: 12px;
+  }
+
+  .message-stack {
+    max-width: calc(100% - 38px);
+  }
+
+  .message-row.user .message-stack {
+    max-width: calc(100% - 38px);
+  }
+
+  .model-badge {
+    max-width: 120px;
+  }
+
+  .composer {
+    padding: 12px;
+  }
 }
 </style>
 

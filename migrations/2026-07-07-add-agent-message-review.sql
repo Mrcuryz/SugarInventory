@@ -1,0 +1,51 @@
+CREATE TABLE IF NOT EXISTS agent_message_review (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  agent_session_id VARCHAR(80) NOT NULL,
+  message_id VARCHAR(100) NULL,
+  user_id INT NULL,
+  conversation_turn_index INT NULL,
+  page_path VARCHAR(255) NULL,
+  user_question VARCHAR(1000) NULL,
+  assistant_answer_text_safe TEXT NULL,
+  assistant_answer_summary VARCHAR(1000) NULL,
+  answer_status VARCHAR(40) NOT NULL DEFAULT 'NEEDS_REVIEW',
+  confidence_level VARCHAR(20) NOT NULL DEFAULT 'UNKNOWN',
+  failure_domain VARCHAR(40) NULL,
+  failure_category VARCHAR(80) NULL,
+  expected_intent_summary VARCHAR(1000) NULL,
+  actual_intent_summary VARCHAR(1000) NULL,
+  expected_tool_names VARCHAR(500) NULL,
+  actual_tool_names VARCHAR(500) NULL,
+  expected_capability VARCHAR(200) NULL,
+  suggested_fix_type VARCHAR(60) NULL,
+  suggested_tool_name VARCHAR(100) NULL,
+  suggested_backend_endpoint VARCHAR(200) NULL,
+  test_case_status VARCHAR(40) NOT NULL DEFAULT 'NONE',
+  review_source VARCHAR(40) NOT NULL DEFAULT 'AUTO',
+  review_status VARCHAR(40) NOT NULL DEFAULT 'OPEN',
+  severity VARCHAR(20) NOT NULL DEFAULT 'LOW',
+  user_feedback_type VARCHAR(60) NULL,
+  user_feedback_note VARCHAR(1000) NULL,
+  reviewed_by INT NULL,
+  review_note VARCHAR(1000) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_agent_message_review_message (agent_session_id, message_id),
+  KEY idx_agent_message_review_session (agent_session_id),
+  KEY idx_agent_message_review_user (user_id),
+  KEY idx_agent_message_review_status (review_status, answer_status),
+  KEY idx_agent_message_review_category (failure_domain, failure_category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_message_review_evidence (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  review_id BIGINT NOT NULL,
+  evidence_type VARCHAR(40) NOT NULL,
+  ref_id VARCHAR(100) NULL,
+  evidence_summary VARCHAR(1000) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_agent_message_review_evidence_review (review_id),
+  CONSTRAINT fk_agent_message_review_evidence_review
+    FOREIGN KEY (review_id) REFERENCES agent_message_review(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

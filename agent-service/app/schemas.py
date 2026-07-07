@@ -157,6 +157,40 @@ class SafeInventoryResult(BaseModel):
     locations: list[SafeInventoryLocation] = Field(default_factory=list)
 
 
+class SafeInventoryDistributionGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    groupLabel: str
+    warehouseLabel: str | None = None
+    productLabel: str | None = None
+    stockText: str
+    totalEquivalentPieces: int | float | str
+    palletCount: int | float | str
+    warehouseCount: int | float | str = 0
+    productCount: int | float | str = 0
+    percentageText: str
+    latestInboundTime: str | None = None
+    riskLabels: list[str] = Field(default_factory=list)
+
+
+class SafeInventoryDistributionResult(BaseModel):
+    """Allowlisted distribution result; internal IDs and raw rows are excluded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scopeLabel: str
+    productLabel: str
+    groupBy: Literal["warehouse", "product", "warehouse_product"]
+    totalStockText: str
+    totalEquivalentPieces: int | float | str
+    totalWeightText: str | None = None
+    warehouseCount: int | float | str
+    productCount: int | float | str
+    palletCount: int | float | str
+    groups: list[SafeInventoryDistributionGroup] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class SafeWarehouseResult(BaseModel):
     """Allowlisted warehouse data; internal IDs and raw nested objects are excluded."""
 

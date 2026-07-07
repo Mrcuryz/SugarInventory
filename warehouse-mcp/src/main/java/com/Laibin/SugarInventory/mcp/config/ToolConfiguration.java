@@ -31,6 +31,14 @@ public class ToolConfiguration {
                         "Read paged inventory overview and totals, preferring a unique productId when available.",
                         inventoryOverviewSchema(),
                         WarehouseTools.class.getMethod("getInventoryOverview", Integer.class, String.class, String.class, Integer.class, Integer.class)),
+                methodTool(warehouseTools, "get_inventory_distribution",
+                        "Read filtered current inventory distribution for a controlled product and warehouse scope without modifying warehouse data.",
+                        inventoryDistributionSchema(),
+                        WarehouseTools.class.getMethod("getInventoryDistribution",
+                                com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope.class,
+                                com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope.class,
+                                com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionFilter.class,
+                                String.class, Integer.class)),
                 methodTool(warehouseTools, "get_warehouse_status",
                         "Read warehouse capacity, inventory details, and recent operations, preferring a unique warehouseId when available.",
                         warehouseStatusSchema(),
@@ -74,6 +82,12 @@ public class ToolConfiguration {
     private static String inventoryOverviewSchema() {
         return """
                 {"type":"object","additionalProperties":false,"properties":{"productId":{"type":"integer","minimum":1,"description":"Preferred unique product id."},"productQuery":{"type":"string","minLength":1,"maxLength":100,"description":"Product query used only when productId is absent."},"productStatus":{"type":"string","minLength":1,"maxLength":50,"description":"Optional product status filter."},"page":{"type":"integer","minimum":1,"description":"Page number."},"size":{"type":"integer","minimum":1,"maximum":100,"description":"Page size."}}}
+                """;
+    }
+
+    private static String inventoryDistributionSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["productScope","warehouseScope","groupBy"],"properties":{"productScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["SINGLE_PRODUCT","EXACT_PRODUCT_NAME_GROUP","PRODUCT_TYPE_GROUP","ALL"]},"productId":{"type":"integer","minimum":1},"productName":{"type":"string","minLength":1,"maxLength":100},"productType":{"type":"string","minLength":1,"maxLength":50}}},"warehouseScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["ALL","SINGLE_WAREHOUSE"]},"warehouseId":{"type":"integer","minimum":1}}},"statusFilter":{"type":"object","additionalProperties":false,"properties":{"productStatuses":{"type":"array","maxItems":10,"items":{"type":"string","enum":["半成品","成品"]}},"warehouseStatuses":{"type":"array","maxItems":10,"items":{"type":"string","enum":["正常","空置","满仓","维护","临期预警"]}},"palletStatuses":{"type":"array","maxItems":10,"items":{"type":"string","enum":["FREE","PENDING","INSTOCK","INVALID","ORDER_RESERVED"]}},"assayStatus":{"type":"string","enum":["HAS_ASSAY","MISSING_ASSAY","PASS","FAIL","NO_STANDARD","MULTIPLE_CANDIDATES"]},"entryDateFrom":{"type":"string","format":"date"},"entryDateTo":{"type":"string","format":"date"}}},"groupBy":{"type":"string","enum":["warehouse","product","warehouse_product"]},"limit":{"type":"integer","minimum":1,"maximum":100,"default":20}}}
                 """;
     }
 

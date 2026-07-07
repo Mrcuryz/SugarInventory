@@ -15,6 +15,7 @@ ALLOWED_TOOLS = {
     "resolve_products",
     "resolve_warehouses",
     "get_inventory_overview",
+    "get_inventory_distribution",
     "get_warehouse_status",
     "get_pallet_status",
     "get_assay_status",

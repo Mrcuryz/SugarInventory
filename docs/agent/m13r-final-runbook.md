@@ -25,7 +25,7 @@ M1.3R-final 的前端验收入口为：
 最近一次验收结果为：
 
 ```text
-5 passed
+6 passed
 ```
 
 ## 必要服务
@@ -147,8 +147,8 @@ npm run test:e2e:agent-hitl
 期望结果：
 
 ```text
-Running 5 tests using 1 worker
-5 passed
+Running 6 tests using 1 worker
+6 passed
 ```
 
 ## 常见故障
@@ -219,6 +219,7 @@ M1.3R-final E2E 只验证 Agent HITL 交互链路、前端状态、上下文延�
 - `resolve_products`
 - `resolve_warehouses`
 - `get_inventory_overview`
+- `get_inventory_distribution`
 - `get_warehouse_status`
 - `get_pallet_status`
 - `get_assay_status`
@@ -240,4 +241,3 @@ npm run test:e2e:agent-hitl
 - `webpage/test-results/`
 - `webpage/playwright-report/`
 - 临时 Python/Java 服务日志
-

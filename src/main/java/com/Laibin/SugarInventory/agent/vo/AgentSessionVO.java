@@ -15,6 +15,7 @@ public class AgentSessionVO {
     private List<String> scopes;
     private String status;
     private LocalDateTime expiresAt;
+    private String modelDisplayName;
     private String mcpServerName;
     private String mcpTransport;
 }

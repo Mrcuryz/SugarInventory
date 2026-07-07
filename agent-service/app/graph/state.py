@@ -7,7 +7,7 @@ from typing import Any
 
 @dataclass
 class SelectedEntity:
-    internal_id: int
+    internal_id: int | None
     display_label: str
     source: str
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -33,6 +33,7 @@ class WarehouseAgentState:
     selected_product: SelectedEntity | None = None
     selected_warehouse: SelectedEntity | None = None
     last_inventory_result: dict[str, Any] | None = None
+    last_inventory_distribution: dict[str, Any] | None = None
     last_warehouse_result: dict[str, Any] | None = None
     last_assay_result: dict[str, Any] | None = None
     last_pallet_result: dict[str, Any] | None = None

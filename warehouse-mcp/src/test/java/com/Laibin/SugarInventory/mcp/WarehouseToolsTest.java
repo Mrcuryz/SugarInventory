@@ -6,13 +6,17 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.AmbiguityType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayLookupMode;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionFilter;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.MatchType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.OptionType;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveWarehousesRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolutionStatus;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseStatusRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
 import com.Laibin.SugarInventory.mcp.service.WarehouseReadService;
 import com.Laibin.SugarInventory.mcp.tool.WarehouseTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +30,8 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -174,11 +180,11 @@ class WarehouseToolsTest {
         assertThat(response.clarificationPrompt()).contains("黄冰糖");
         assertThat(response.options()).anySatisfy(option -> {
             assertThat(option.optionType()).isEqualTo(OptionType.PRODUCT_TYPE_GROUP);
-            assertThat(option.supported()).isFalse();
+            assertThat(option.supported()).isTrue();
         });
         assertThat(response.options()).anySatisfy(option -> {
             assertThat(option.optionType()).isEqualTo(OptionType.EXACT_PRODUCT_NAME_GROUP);
-            assertThat(option.supported()).isFalse();
+            assertThat(option.supported()).isTrue();
         });
         assertThat(response.options()).filteredOn(option -> option.optionType() == OptionType.SINGLE_PRODUCT)
                 .hasSize(2)
@@ -632,6 +638,74 @@ class WarehouseToolsTest {
         assertThat(request.getHeader("Authorization")).isEqualTo("Bearer test-token");
         assertThat(request.getHeader("X-Agent-Tool-Name")).isEqualTo("resolve_products");
         assertThat(request.getHeader("X-Agent-Session-Id")).isNull();
+    }
+
+    @Test
+    void inventoryDistributionForwardsControlledMultiScopeFilters() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "scopeLabel":"全部黄冰糖大类",
+                  "productLabel":"全部黄冰糖大类",
+                  "groupBy":"warehouse_product",
+                  "totalStockText":"700件（跨规格）",
+                  "totalEquivalentPieces":700,
+                  "warehouseCount":3,
+                  "productCount":2,
+                  "palletCount":14,
+                  "groups":[],
+                  "notes":[]
+                }
+                """)));
+        InventoryDistributionRequest request = new InventoryDistributionRequest(
+                new ProductScope("PRODUCT_TYPE_GROUP", null, null, "黄冰糖"),
+                new WarehouseScope("SINGLE_WAREHOUSE", 2),
+                new InventoryDistributionFilter(
+                        List.of("成品"), List.of("正常"), List.of("INSTOCK"), "PASS",
+                        LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 7)),
+                "warehouse_product",
+                50
+        );
+
+        var response = tools.getInventoryDistribution(request);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.groupBy()).isEqualTo("warehouse_product");
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/inventory/distribution");
+        String body = recorded.getBody().readUtf8();
+        assertThat(body).contains("\"type\":\"PRODUCT_TYPE_GROUP\"");
+        assertThat(body).contains("\"productType\":\"黄冰糖\"");
+        assertThat(body).contains("\"warehouseId\":2");
+        assertThat(body).contains("\"assayStatus\":\"PASS\"");
+        assertThat(body).doesNotContain("sql", "http");
+    }
+
+    @Test
+    void inventoryDistributionRejectsUnsupportedFilterBeforeBackendCall() {
+        InventoryDistributionRequest request = new InventoryDistributionRequest(
+                new ProductScope("ALL", null, null, null),
+                new WarehouseScope("ALL", null),
+                new InventoryDistributionFilter(List.of("已删除"), List.of(), List.of(), null, null, null),
+                "warehouse",
+                20
+        );
+
+        var response = tools.getInventoryDistribution(request);
+
+        assertThat(response.error()).isNotNull();
+        assertThat(response.error().code()).isEqualTo("INVALID_ARGUMENT");
+        assertThat(backend.getRequestCount()).isZero();
+
+        var missingScopeType = tools.getInventoryDistribution(new InventoryDistributionRequest(
+                new ProductScope(null, null, null, null),
+                new WarehouseScope("ALL", null),
+                null,
+                "warehouse",
+                20
+        ));
+        assertThat(missingScopeType.error().code()).isEqualTo("INVALID_ARGUMENT");
+        assertThat(backend.getRequestCount()).isZero();
     }
 
     @Test

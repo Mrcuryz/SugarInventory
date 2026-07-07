@@ -202,6 +202,21 @@ def test_followup_uses_selected_product_context() -> None:
                 "totalEquivalentPieces": 470,
                 "totalWeight": 11750.0,
             },
+            "get_inventory_distribution": {
+                "productLabel": "黄冰糖（袋）",
+                "totalStockText": "11板30件",
+                "totalEquivalentPieces": 470,
+                "warehouseCount": 1,
+                "palletCount": 11,
+                "groups": [{
+                    "warehouseLabel": "2号库位",
+                    "stockText": "11板30件",
+                    "totalEquivalentPieces": 470,
+                    "palletCount": 11,
+                    "percentageText": "100.0%",
+                    "riskLabels": [],
+                }],
+            },
         }
     )
     checkpointer = InMemoryCheckpointer()
@@ -215,10 +230,16 @@ def test_followup_uses_selected_product_context() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["needsUserSelection"] is False
-    assert "还不能准确返回按库位分布" in body["answer"]
+    assert "主要存放在以下库位" in body["answer"]
+    assert "2号库位" in body["answer"]
     assert "当前库存为" not in body["answer"]
-    assert tool_client.calls[-1]["toolName"] == "get_inventory_overview"
-    assert tool_client.calls[-1]["arguments"] == {"productId": 84}
+    assert tool_client.calls[-1]["toolName"] == "get_inventory_distribution"
+    assert tool_client.calls[-1]["arguments"] == {
+        "productScope": {"type": "SINGLE_PRODUCT", "productId": 84},
+        "warehouseScope": {"type": "ALL"},
+        "groupBy": "warehouse",
+        "limit": 20,
+    }
 
 
 def test_context_followup_without_state_requires_clarification() -> None:
@@ -425,6 +446,17 @@ def test_tool_argument_builder_generates_warehouse_query_phrase() -> None:
     assert arguments == {"query": "2号库位", "limit": 10}
 
 
+def test_tool_argument_builder_extracts_warehouse_name_from_inventory_sentence() -> None:
+    state = InMemoryCheckpointer().get("agt_test")
+    arguments = ToolArgumentBuilder().build(
+        tool_name="resolve_warehouses",
+        user_message="8号库位的库存情况",
+        state=state,
+    )
+
+    assert arguments == {"query": "8号库位", "limit": 10}
+
+
 class ScriptedModelClient:
     def __init__(self, plan: ModelPlanDecision) -> None:
         self.plan = plan
@@ -533,6 +565,57 @@ def test_warehouse_capacity_uses_model_arguments_and_resolver() -> None:
     assert "toolName" not in body_text
     assert "SUCCESS" not in body_text
     assert "warehouseId" not in body_text
+
+
+def test_warehouse_inventory_query_resolves_warehouse_then_calls_distribution() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 8, "displayLabel": "8号库位"}],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "8号库位",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "5板10件",
+                "totalEquivalentPieces": 210,
+                "warehouseCount": 1,
+                "productCount": 1,
+                "palletCount": 5,
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋）",
+                        "productLabel": "黄冰糖（袋）",
+                        "stockText": "5板10件",
+                        "totalEquivalentPieces": 210,
+                        "palletCount": 5,
+                        "warehouseCount": 1,
+                        "productCount": 1,
+                        "percentageText": "100.0%",
+                        "riskLabels": [],
+                    }
+                ],
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("8号库位的库存情况"))
+
+    assert response.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_warehouses", "get_inventory_distribution"]
+    assert tool_client.calls[0]["arguments"] == {"query": "8号库位", "limit": 10}
+    assert tool_client.calls[1]["arguments"] == {
+        "productScope": {"type": "ALL"},
+        "warehouseScope": {"type": "SINGLE_WAREHOUSE", "warehouseId": 8},
+        "groupBy": "product",
+        "limit": 20,
+    }
+    body = response.json()
+    assert "按产品分布" in body["answer"]
+    assert "黄冰糖（袋）" in json.dumps(body, ensure_ascii=False)
+    assert "warehouseId" not in json.dumps(body, ensure_ascii=False)
 
 class FakeGatewayServer:
     def __init__(self, response: dict[str, Any], status_code: int = 200) -> None:
@@ -752,16 +835,29 @@ def test_inventory_location_followup_uses_safe_distribution_when_available() -> 
                 "resolutionStatus": "UNIQUE",
                 "candidates": [{"productId": 84, "displayLabel": "黄冰糖（袋）"}],
             },
-            "get_inventory_overview": {
-                "summary": {"totalRecords": 1, "displayStockInfo": "11板30件"},
-                "records": [
+            "get_inventory_overview": {"summary": {"totalRecords": 1, "displayStockInfo": "11板30件"}},
+            "get_inventory_distribution": {
+                "productLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                "totalStockText": "11板30件",
+                "totalEquivalentPieces": 470,
+                "totalWeightText": "11750kg",
+                "warehouseCount": 1,
+                "palletCount": 11,
+                "groups": [
                     {
+                        "productId": 84,
                         "warehouseId": 2,
-                        "warehouseName": "2",
-                        "displayStockInfo": "11板30件",
+                        "warehouseLabel": "2号库位",
+                        "stockText": "11板30件",
                         "totalEquivalentPieces": 470,
+                        "palletCount": 11,
+                        "percentageText": "100.0%",
+                        "latestInboundTime": "2026-07-06",
+                        "riskLabels": [],
+                        "raw": {"sql": "hidden"},
                     }
                 ],
+                "notes": ["仅统计当前在库库存。"],
             },
         }
     )
@@ -773,7 +869,111 @@ def test_inventory_location_followup_uses_safe_distribution_when_available() -> 
     body = response.json()
     assert "主要存放在以下库位" in body["answer"]
     assert "2号库位" in body["answer"]
-    assert "warehouseId" not in json.dumps(body, ensure_ascii=False)
+    assert tool_client.calls[-1]["toolName"] == "get_inventory_distribution"
+    assert tool_client.calls[-1]["arguments"] == {
+        "productScope": {"type": "SINGLE_PRODUCT", "productId": 84},
+        "warehouseScope": {"type": "ALL"},
+        "groupBy": "warehouse",
+        "limit": 20,
+    }
+    body_text = json.dumps(body, ensure_ascii=False)
+    assert "warehouseId" not in body_text
+    assert "productId" not in body_text
+    assert "toolName" not in body_text
+    assert "raw" not in body_text
+    assert "hidden" not in body_text
+
+
+def test_inventory_distribution_without_selected_product_does_not_guess_id() -> None:
+    tool_client = MockToolClient()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat", json=chat_payload("这些主要存放在哪些库位？")
+    )
+
+    assert response.status_code == 200
+    assert response.json()["needsUserSelection"] is True
+    assert tool_client.calls == []
+
+
+def test_inventory_distribution_explicit_product_resolves_before_query() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"productId": 84, "displayLabel": "黄冰糖（袋）"}],
+            },
+            "get_inventory_distribution": {
+                "productLabel": "黄冰糖（袋）",
+                "totalStockText": "3板20件",
+                "totalEquivalentPieces": 140,
+                "warehouseCount": 1,
+                "palletCount": 3,
+                "groups": [{
+                    "warehouseLabel": "2号库位",
+                    "stockText": "3板20件",
+                    "totalEquivalentPieces": 140,
+                    "palletCount": 3,
+                    "percentageText": "100.0%",
+                    "riskLabels": [],
+                }],
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat", json=chat_payload("黄冰糖（袋）在哪些库位？")
+    )
+
+    assert response.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_products", "get_inventory_distribution"
+    ]
+    assert "2号库位" in response.json()["answer"]
+
+
+def test_forged_distribution_product_id_is_replaced_by_selected_product() -> None:
+    class ForgedDistributionModel:
+        def plan_next_action(self, request: ModelPlanRequest) -> ModelPlanDecision:
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="get_inventory_distribution",
+                arguments={
+                    "productScope": {"type": "SINGLE_PRODUCT", "productId": 999},
+                    "warehouseScope": {"type": "ALL"},
+                    "groupBy": "warehouse",
+                    "limit": 100,
+                },
+            )
+
+        def build_tool_arguments(self, request: ModelArgumentRequest) -> ModelArgumentDecision:
+            return ModelArgumentDecision(toolName=request.toolName, arguments={})
+
+        def stream_answer_deltas(self, answer: str):
+            yield answer
+
+    checkpointer = InMemoryCheckpointer()
+    checkpointer.get("agt_test").selected_product = SelectedEntity(
+        internal_id=84, display_label="黄冰糖（袋）", source="user_selection"
+    )
+    tool_client = MockToolClient({
+        "get_inventory_distribution": {
+            "productLabel": "黄冰糖（袋）", "totalStockText": "0板0件",
+            "totalEquivalentPieces": 0, "warehouseCount": 0, "palletCount": 0, "groups": [],
+        }
+    })
+    runtime = WarehouseAgentRuntime(
+        tool_client=tool_client,
+        checkpointer=checkpointer,
+        argument_builder=ToolArgumentBuilder(model_client=ForgedDistributionModel()),
+    )
+
+    runtime.chat(ChatRequest.model_validate(chat_payload("库存分布一下")))
+
+    assert tool_client.calls[0]["arguments"]["productScope"]["productId"] == 84
+    assert tool_client.calls[0]["arguments"]["limit"] == 100
 
 
 def test_sse_sanitizes_real_nested_results_and_sensitive_values() -> None:
@@ -1072,3 +1272,262 @@ def test_candidate_selected_can_use_chat_endpoint_as_same_conversation_event() -
     assert "productId" not in body_text
     assert "toolName" not in body_text
     assert "SUCCESS" not in body_text
+
+
+def test_distribution_accepts_resolved_product_type_group_without_exposing_ids() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "AMBIGUOUS",
+                "options": [
+                    {
+                        "optionType": "PRODUCT_TYPE_GROUP",
+                        "displayLabel": "全部冰糖大类",
+                        "productType": "冰糖",
+                        "supported": True,
+                    }
+                ],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "全部冰糖大类",
+                "productLabel": "全部冰糖大类",
+                "groupBy": "product",
+                "totalStockText": "700件（跨规格）",
+                "totalEquivalentPieces": 700,
+                "warehouseCount": 3,
+                "productCount": 2,
+                "palletCount": 14,
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                        "productLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                        "stockText": "13板30件",
+                        "totalEquivalentPieces": 550,
+                        "palletCount": 13,
+                        "warehouseCount": 2,
+                        "productCount": 1,
+                        "percentageText": "78.6%",
+                        "riskLabels": [],
+                    }
+                ],
+            },
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+    client = TestClient(app)
+
+    first = client.post("/internal/agent/chat", json=chat_payload("冰糖库存分布"))
+    assert first.json()["cards"][0]["options"][0]["supported"] is True
+    resumed = client.post("/internal/agent/resume", json=resume_payload(checkpointer))
+
+    call = tool_client.calls[-1]
+    assert call["toolName"] == "get_inventory_distribution"
+    assert call["arguments"]["productScope"] == {"type": "PRODUCT_TYPE_GROUP", "productType": "冰糖"}
+    assert resumed.json()["needsUserSelection"] is False
+    assert "按产品分布" in resumed.json()["answer"]
+    response_text = json.dumps(resumed.json(), ensure_ascii=False)
+    assert "productId" not in response_text
+    assert "warehouseId" not in response_text
+
+
+def test_explicit_all_product_distribution_supports_filters_and_grouping() -> None:
+    tool_client = MockToolClient(
+        {
+            "get_inventory_distribution": {
+                "scopeLabel": "全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "120件（跨规格）",
+                "totalEquivalentPieces": 120,
+                "warehouseCount": 2,
+                "productCount": 2,
+                "palletCount": 3,
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋）",
+                        "productLabel": "黄冰糖（袋）",
+                        "stockText": "2板10件",
+                        "totalEquivalentPieces": 90,
+                        "palletCount": 2,
+                        "warehouseCount": 2,
+                        "productCount": 1,
+                        "percentageText": "75.0%",
+                        "riskLabels": ["存在不合格化验库存"],
+                    },
+                    {
+                        "groupLabel": "白砂糖（袋）",
+                        "productLabel": "白砂糖（袋）",
+                        "stockText": "30件（跨规格）",
+                        "totalEquivalentPieces": 30,
+                        "palletCount": 1,
+                        "warehouseCount": 1,
+                        "productCount": 1,
+                        "percentageText": "25.0%",
+                        "riskLabels": ["存在不合格化验库存"],
+                    },
+                ],
+            }
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    checkpointer.get("agt_test").selected_product = SelectedEntity(
+        internal_id=84,
+        display_label="黄冰糖（袋）",
+        source="resolver",
+        metadata={"scopeType": "SINGLE_PRODUCT"},
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("帮我查全部产品中最近7天的不合格库存，按产品分类"),
+    )
+
+    assert response.status_code == 200
+    arguments = tool_client.calls[0]["arguments"]
+    assert arguments["productScope"] == {"type": "ALL"}
+    assert arguments["groupBy"] == "product"
+    assert arguments["statusFilter"]["assayStatus"] == "FAIL"
+    assert arguments["statusFilter"]["entryDateFrom"] <= arguments["statusFilter"]["entryDateTo"]
+    body = response.json()
+    assert "按产品分布" in body["answer"]
+    assert "黄冰糖（袋）：" not in body["answer"]
+    assert body["cards"][0]["cardType"] == "inventory_distribution"
+    risk_fields = [field for field in body["cards"][0]["fields"] if field.get("kind") == "risk_summary"]
+    assert risk_fields == [{"kind": "risk_summary", "label": "风险提示", "value": "存在不合格化验库存（2项）"}]
+
+
+def test_repeated_all_product_distribution_with_different_days_calls_tool_again() -> None:
+    seen_arguments: list[dict[str, Any]] = []
+
+    def distribution_response(arguments: dict[str, Any]) -> dict[str, Any]:
+        seen_arguments.append(arguments)
+        if len(seen_arguments) == 1:
+            return {
+                "scopeLabel": "全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "0件（跨规格）",
+                "totalEquivalentPieces": 0,
+                "warehouseCount": 0,
+                "productCount": 0,
+                "palletCount": 0,
+                "groups": [],
+            }
+        return {
+            "scopeLabel": "全部产品",
+            "productLabel": "全部产品",
+            "groupBy": "product",
+            "totalStockText": "80件（跨规格）",
+            "totalEquivalentPieces": 80,
+            "warehouseCount": 2,
+            "productCount": 1,
+            "palletCount": 2,
+            "groups": [
+                {
+                    "groupLabel": "黄冰糖（袋）",
+                    "productLabel": "黄冰糖（袋）",
+                    "stockText": "2板0件",
+                    "totalEquivalentPieces": 80,
+                    "palletCount": 2,
+                    "warehouseCount": 2,
+                    "productCount": 1,
+                    "percentageText": "100.0%",
+                    "riskLabels": ["存在不合格化验库存"],
+                }
+            ],
+        }
+
+    tool_client = MockToolClient({"get_inventory_distribution": distribution_response})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    client = TestClient(app)
+
+    first = client.post(
+        "/internal/agent/chat",
+        json=chat_payload("帮我查全部产品中最近7天的不合格库存，按产品分类"),
+    )
+    second = client.post(
+        "/internal/agent/chat",
+        json=chat_payload("帮我查全部产品中最近90天的不合格库存，按产品分类"),
+    )
+
+    distribution_calls = [call for call in tool_client.calls if call["toolName"] == "get_inventory_distribution"]
+    assert len(distribution_calls) == 2
+    assert first.json()["answer"] == "未查询到 全部产品 的当前在库库存分布。"
+    assert "黄冰糖（袋）" in json.dumps(second.json(), ensure_ascii=False)
+    assert distribution_calls[0]["arguments"]["statusFilter"]["entryDateFrom"] != distribution_calls[1]["arguments"]["statusFilter"]["entryDateFrom"]
+    assert distribution_calls[0]["arguments"]["statusFilter"]["assayStatus"] == "FAIL"
+    assert distribution_calls[1]["arguments"]["statusFilter"]["assayStatus"] == "FAIL"
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_status", "expected_group"),
+    [
+        ("所有产品近7天未通过库存按品种统计", "FAIL", "product"),
+        ("全部品种近7天检测失败库存按产品分类", "FAIL", "product"),
+        ("全部产品近7天无化验库存按库位分类", "MISSING_ASSAY", "warehouse"),
+        ("所有产品近7天未化验库存按库位统计", "MISSING_ASSAY", "warehouse"),
+        ("全部产品近7天无标准库存按库位和产品分类", "NO_STANDARD", "warehouse_product"),
+    ],
+)
+def test_all_product_distribution_aliases_map_to_controlled_filters(
+    message: str, expected_status: str, expected_group: str
+) -> None:
+    tool_client = MockToolClient(
+        {
+            "get_inventory_distribution": {
+                "scopeLabel": "全部产品",
+                "productLabel": "全部产品",
+                "groupBy": expected_group,
+                "totalStockText": "0件（跨规格）",
+                "totalEquivalentPieces": 0,
+                "warehouseCount": 0,
+                "productCount": 0,
+                "palletCount": 0,
+                "groups": [],
+            }
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload(message))
+
+    assert response.status_code == 200
+    arguments = tool_client.calls[0]["arguments"]
+    assert arguments["productScope"] == {"type": "ALL"}
+    assert arguments["groupBy"] == expected_group
+    assert arguments["statusFilter"]["assayStatus"] == expected_status
+    assert arguments["statusFilter"]["entryDateFrom"] <= arguments["statusFilter"]["entryDateTo"]
+
+
+def test_distribution_rejects_unselected_warehouse_id_from_model() -> None:
+    class ForgedWarehouseModel:
+        def plan_next_action(self, request: ModelPlanRequest) -> ModelPlanDecision:
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="get_inventory_distribution",
+                arguments={
+                    "productScope": {"type": "SINGLE_PRODUCT", "productId": 84},
+                    "warehouseScope": {"type": "SINGLE_WAREHOUSE", "warehouseId": 999},
+                    "groupBy": "warehouse",
+                },
+            )
+
+        def build_tool_arguments(self, request: ModelArgumentRequest) -> ModelArgumentDecision:
+            return ModelArgumentDecision(toolName=request.toolName, arguments={})
+
+        def stream_answer_deltas(self, answer: str):
+            yield answer
+
+    state = InMemoryCheckpointer().get("agt_test")
+    state.selected_product = SelectedEntity(
+        internal_id=84,
+        display_label="黄冰糖（袋）",
+        source="resolver",
+        metadata={"scopeType": "SINGLE_PRODUCT"},
+    )
+    builder = ToolArgumentBuilder(model_client=ForgedWarehouseModel())
+
+    with pytest.raises(ValueError, match="warehouseId"):
+        builder.plan(user_message="这个产品在这个库位的库存分布", state=state)

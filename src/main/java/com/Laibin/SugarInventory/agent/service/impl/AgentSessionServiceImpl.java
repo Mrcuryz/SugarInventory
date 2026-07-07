@@ -44,6 +44,9 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     private static final String MCP_SERVER_NAME = "smart_warehouse";
     private static final String DEFAULT_MCP_TRANSPORT = "STDIO";
     private static final Set<String> SUPPORTED_SCOPES = Set.of(SCOPE_WAREHOUSE_READ);
+    private static final Set<String> READ_ONLY_POST_PATHS = Set.of(
+            "/api/inventory/distribution"
+    );
 
     private final AgentSessionMapper agentSessionMapper;
     private final AgentApiAuditLogMapper apiAuditLogMapper;
@@ -52,6 +55,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     private final JwtUtils jwtUtils;
     private final UserDetailsService userDetailsService;
     private final long delegationTokenTtlMinutes;
+    private final String modelDisplayName;
 
     public AgentSessionServiceImpl(AgentSessionMapper agentSessionMapper,
                                    AgentApiAuditLogMapper apiAuditLogMapper,
@@ -59,6 +63,8 @@ public class AgentSessionServiceImpl implements AgentSessionService {
                                    AgentInterruptStateService interruptStateService,
                                    JwtUtils jwtUtils,
                                    UserDetailsService userDetailsService,
+                                   @Value("${agent.model.mode:llm}") String agentModelMode,
+                                   @Value("${agent.model.name:${openai.model:deepseek-v4-flash}}") String agentModelName,
                                    @Value("${agent.delegation-token-ttl-minutes:15}") long delegationTokenTtlMinutes) {
         this.agentSessionMapper = agentSessionMapper;
         this.apiAuditLogMapper = apiAuditLogMapper;
@@ -67,6 +73,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         this.jwtUtils = jwtUtils;
         this.userDetailsService = userDetailsService;
         this.delegationTokenTtlMinutes = delegationTokenTtlMinutes;
+        this.modelDisplayName = resolveModelDisplayName(agentModelMode, agentModelName);
     }
 
     @Override
@@ -179,6 +186,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         vo.setScopes(parseScopes(session.getScopes()));
         vo.setStatus(session.getStatus());
         vo.setExpiresAt(session.getExpiresAt());
+        vo.setModelDisplayName(modelDisplayName);
         vo.setMcpServerName(session.getMcpServerName());
         vo.setMcpTransport(session.getMcpTransport());
         return vo;
@@ -350,7 +358,8 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         if ("GET".equalsIgnoreCase(method)) {
             return true;
         }
-        return "POST".equalsIgnoreCase(method) && "/api/agent/audit/tool-calls".equals(uri);
+        return "POST".equalsIgnoreCase(method)
+                && ("/api/agent/audit/tool-calls".equals(uri) || READ_ONLY_POST_PATHS.contains(uri));
     }
 
     private void markLastError(AgentSession session, String errorCode) {
@@ -382,6 +391,13 @@ public class AgentSessionServiceImpl implements AgentSessionService {
 
     private String normalize(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private String resolveModelDisplayName(String mode, String modelName) {
+        if ("rule".equalsIgnoreCase(normalize(mode, "llm"))) {
+            return "规则解析器";
+        }
+        return limit(normalize(modelName, "模型未配置").replace('-', ' ').replace('_', ' '), 80);
     }
 
 

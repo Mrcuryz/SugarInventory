@@ -10,6 +10,12 @@ export const sendAgentMessage = (agentSessionId, data) => request.post(`/agent/s
 export const cancelAgentMessage = (agentSessionId, messageId) =>
   request.post(`/agent/sessions/${agentSessionId}/messages/${messageId}/cancel`)
 
+export const recordAgentMessageReview = (agentSessionId, data) =>
+  request.post(`/agent/sessions/${agentSessionId}/message-reviews`, data)
+
+export const submitAgentMessageReviewFeedback = (agentSessionId, messageId, data) =>
+  request.post(`/agent/sessions/${agentSessionId}/message-reviews/${messageId}/feedback`, data)
+
 export const streamAgentMessage = async (agentSessionId, data, onEvent, options = {}) => {
   await streamAgentSse(`/api/agent/sessions/${agentSessionId}/messages/stream`, data, onEvent, options)
 }

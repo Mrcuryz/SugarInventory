@@ -98,11 +98,15 @@ warehouse display name, status, maximum capacity, current occupancy, current
 pallet count, occupancy rate, and remaining capacity. Internal IDs and raw
 objects never reach ordinary answers.
 
-For follow-up questions such as `这些主要存放在哪些库位？`, the runtime uses
-safe warehouse distribution records when the inventory overview contains them.
-If the current read-only result has no location distribution, the assistant
-states the capability gap and does not present a total inventory summary as a
-location answer.
+For follow-up questions such as `这些主要存放在哪些库位？`, the runtime calls
+the allowlisted `get_inventory_distribution` tool only when structured state
+contains a resolver/HITL-confirmed product scope, or when the user explicitly
+requests all products. Supported product scopes are one product, an exact-name
+group, a product-type group, and all products. Warehouse scope, status/assay/
+pallet/date filters, and grouping use closed enums. Internal IDs must match
+structured selected state. Results pass through a distribution-specific safe
+adapter before messages/state/SSE/cards; model-supplied IDs are never accepted
+as the source of truth.
 
 SSE events apply a final recursive redaction pass. Ordinary responses and SSE
 events do not expose tool names, success markers, internal product or warehouse

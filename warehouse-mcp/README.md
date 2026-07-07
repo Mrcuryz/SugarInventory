@@ -9,6 +9,7 @@
 | `resolve_products` | Resolve a product name/id query into unique, ambiguous, or not-found candidates. | `GET /api/products/{id}`, `GET /api/products/product` |
 | `resolve_warehouses` | Resolve a warehouse name/id query into unique, ambiguous, or not-found candidates. | `GET /api/warehouse/{id}`, `GET /api/warehouse/query` |
 | `get_inventory_overview` | Read paged product inventory summary and calculated totals. | `GET /api/products/{id}`, `GET /api/inventory/stock/page` |
+| `get_inventory_distribution` | Read controlled product scopes with warehouse, status, assay, pallet, date, and grouping filters. | `POST /api/inventory/distribution` (read-only aggregate) |
 | `get_warehouse_status` | Read warehouse capacity, inventory details, and recent operations. | `GET /api/warehouse/{id}`, `GET /api/inventory/warehouses`, `POST /api/inventory/qualified-inventory/{warehouseId}/page`, `GET /api/inventory/warehouses/{warehouseId}/recent-operations` |
 | `get_pallet_status` | Read pallet code status, current inventory position, assay information, flow cycles, and flow details. | `GET /api/pallet-codes/parse`, `GET /api/pallet-codes/{code}/inventory`, `GET /api/pallet-codes/{code}/assay`, `GET /api/pallet-codes/{code}/flows/cycles`, `GET /api/pallet-codes/{code}/flows` |
 | `get_assay_status` | Read an assay by id, or by product and production date, including judge result, failed metrics, and applied standard details. | `GET /api/assay/{id}`, `GET /api/assay/by-product-date` |
@@ -68,7 +69,7 @@ WAREHOUSE_MCP_LOG_FILE=logs/mcp/warehouse-mcp-<agent-session-id>.log
 
 The STDIO one-user-one-process model is a transition path. Production multi-user deployments should move to HTTP/Streamable HTTP MCP with request-level delegated identity injection.
 
-M1.2 does not add a login tool and does not add any new business MCP tools. The server still exposes only the six read-only tools listed above.
+M1.2 did not add a login tool or new business MCP tools. M1.4a-1 adds only `get_inventory_distribution`, so the server now exposes seven read-only tools. It still exposes no login, preview, execute, SQL, arbitrary HTTP proxy, direct database, or write tools.
 ## Resolver Semantics
 
 Product resolver results always follow one of three paths:
@@ -79,8 +80,8 @@ Product resolver results always follow one of three paths:
 
 For ambiguous products, `options` may include:
 
-- `PRODUCT_TYPE_GROUP`: for example all products whose `productType` is `黄冰糖`. This is currently `supported=false` because `get_inventory_overview` does not yet support product-type group aggregation.
-- `EXACT_PRODUCT_NAME_GROUP`: all specifications under the same human product name. This is currently `supported=false` until a backend aggregate query is added.
+- `PRODUCT_TYPE_GROUP`: for example all products whose `productType` is `黄冰糖`. It is supported by `get_inventory_distribution`; `get_inventory_overview` still requires a concrete product.
+- `EXACT_PRODUCT_NAME_GROUP`: all specifications under the same human product name. It is supported by `get_inventory_distribution`; `get_inventory_overview` still requires a concrete product.
 - `SINGLE_PRODUCT`: a concrete `productId`; this is currently supported and can be used for follow-up inventory reads.
 
 Warehouse resolver normalizes common Chinese slot expressions before querying by warehouse name. Examples such as `2号库位`, `2号库`, `2号位`, `库位2`, `二号库位`, `十二号库位`, `2#`, and `2 号` are normalized to warehouse names like `2` or `12`. The normalized number is not treated as a `warehouseId`; it is sent to the existing read-only warehouse-name query endpoint and returned with `matchType=NORMALIZED_NAME` when matched.
@@ -105,6 +106,10 @@ The MCP output uses explicit quantity fields:
 - `displayStockInfo`: user-facing pallet/piece text.
 
 Agents should answer inventory questions using `normalizedPallets`, `normalizedLoosePieces`, and `totalEquivalentPieces` first. Raw fields are only the backend source quantities and must not be treated as the normalized inventory display.
+
+`get_inventory_distribution` accepts `SINGLE_PRODUCT`, `EXACT_PRODUCT_NAME_GROUP`, `PRODUCT_TYPE_GROUP`, or explicit `ALL`; warehouse scope is either all warehouses or one resolver-confirmed warehouse. Filters and grouping dimensions are closed enums. Product/warehouse IDs must come from resolver or user-selection state. Cross-specification totals use equivalent pieces and weight instead of inventing a common pallet scale. The backend response contains business labels and safe aggregate fields but no product, warehouse, or inventory IDs.
+
+The delegated warehouse-read scope explicitly allows this exact read-only POST path. Other business POST paths remain denied. The endpoint still requires an authenticated current user and does not bypass Spring Security.
 
 ## Run with STDIO
 

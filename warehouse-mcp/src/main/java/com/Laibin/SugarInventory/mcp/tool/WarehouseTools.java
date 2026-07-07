@@ -5,6 +5,11 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionFilter;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductResolutionResponse;
@@ -87,6 +92,28 @@ public class WarehouseTools {
             return InventoryOverviewResponse.error(ErrorMapper.upstream(e));
         } catch (RuntimeException e) {
             return InventoryOverviewResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    @Tool(name = "get_inventory_distribution", description = "Read filtered current inventory distribution for a controlled product and warehouse scope without modifying warehouse data.")
+    public InventoryDistributionResponse getInventoryDistribution(
+            @ToolParam(description = "Controlled product scope: one product, exact product-name group, product-type group, or all products.") ProductScope productScope,
+            @ToolParam(description = "Warehouse scope: all warehouses or one resolver-confirmed warehouse.") WarehouseScope warehouseScope,
+            @ToolParam(description = "Optional product, warehouse, pallet, assay, and entry-date filters.", required = false) InventoryDistributionFilter statusFilter,
+            @ToolParam(description = "Grouping dimension: warehouse, product, or warehouse_product.") String groupBy,
+            @ToolParam(description = "Maximum result groups. Range 1..100; defaults to 20.", required = false)
+            @Schema(minimum = "1", maximum = "100") @Min(1) @Max(100) Integer limit) {
+        return getInventoryDistribution(new InventoryDistributionRequest(productScope, warehouseScope, statusFilter, groupBy, limit));
+    }
+
+    public InventoryDistributionResponse getInventoryDistribution(InventoryDistributionRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("get_inventory_distribution",
+                    () -> readService.getInventoryDistribution(request));
+        } catch (WarehouseApiException e) {
+            return InventoryDistributionResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            return InventoryDistributionResponse.error(ErrorMapper.unexpected());
         }
     }
 

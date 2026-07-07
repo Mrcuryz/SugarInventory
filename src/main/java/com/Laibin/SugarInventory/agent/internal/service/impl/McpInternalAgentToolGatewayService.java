@@ -43,6 +43,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
             "resolve_products",
             "resolve_warehouses",
             "get_inventory_overview",
+            "get_inventory_distribution",
             "get_warehouse_status",
             "get_pallet_status",
             "get_assay_status"
@@ -51,6 +52,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
             "resolve_products", "/api/products/{id}; /api/products/product",
             "resolve_warehouses", "/api/warehouse/{id}; /api/warehouse/query",
             "get_inventory_overview", "/api/products/{id}; /api/inventory/stock/page",
+            "get_inventory_distribution", "/api/inventory/distribution",
             "get_warehouse_status", "/api/warehouse/{id}; /api/inventory/qualified-inventory/{id}/page; /api/inventory/warehouses/{id}/recent-operations",
             "get_pallet_status", "/api/pallet-codes/parse; /api/pallet-codes/{code}/inventory; /api/pallet-codes/{code}/assay; /api/pallet-codes/{code}/flows/cycles; /api/pallet-codes/{code}/flows",
             "get_assay_status", "/api/assay/{id}; /api/assay/by-product-date"

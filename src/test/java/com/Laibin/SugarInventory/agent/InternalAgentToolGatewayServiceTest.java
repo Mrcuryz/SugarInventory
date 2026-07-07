@@ -202,11 +202,12 @@ class InternalAgentToolGatewayServiceTest {
     }
 
     @Test
-    void whitelistContainsExactlySixReadOnlyToolsAndNeverDispatchesWriteToolNames() {
+    void whitelistContainsExactlySevenReadOnlyToolsAndNeverDispatchesWriteToolNames() {
         Set<String> expected = Set.of(
                 "resolve_products",
                 "resolve_warehouses",
                 "get_inventory_overview",
+                "get_inventory_distribution",
                 "get_warehouse_status",
                 "get_pallet_status",
                 "get_assay_status");
@@ -223,7 +224,7 @@ class InternalAgentToolGatewayServiceTest {
         }
 
         ArgumentCaptor<McpToolCall> callCaptor = ArgumentCaptor.forClass(McpToolCall.class);
-        verify(mcpSession, times(6)).callTool(callCaptor.capture());
+        verify(mcpSession, times(7)).callTool(callCaptor.capture());
         assertThat(callCaptor.getAllValues())
                 .extracting(McpToolCall::toolName)
                 .containsExactlyInAnyOrderElementsOf(expected)

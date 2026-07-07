@@ -57,6 +57,8 @@ class AgentSessionServiceImplTest {
                 interruptStateService,
                 jwtUtils,
                 userDetailsService,
+                "llm",
+                "deepseek-v4-flash",
                 15);
         User user = new User();
         user.setId(7);
@@ -77,6 +79,7 @@ class AgentSessionServiceImplTest {
 
         assertThat(response.getAgentSessionId()).isNotBlank();
         assertThat(response.getScopes()).containsExactly(AgentSessionService.SCOPE_WAREHOUSE_READ);
+        assertThat(response.getModelDisplayName()).isEqualTo("deepseek v4 flash");
         assertThat(response.getMcpServerName()).isEqualTo("smart_warehouse");
         String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(response);
         assertThat(json).doesNotContain("delegationToken", "token", "Authorization");
@@ -121,6 +124,19 @@ class AgentSessionServiceImplTest {
 
         assertThat(result.getId()).isEqualTo("session-1");
         verify(sessionMapper).selectById("session-1");
+    }
+
+    @Test
+    void validateDelegationAllowsInventoryDistributionReadOnlyPost() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/inventory/distribution");
+        AgentSession result = service.validateDelegation(claims, request, loginUser);
+
+        assertThat(result).isSameAs(session);
+        verify(sessionMapper).updateById(session);
     }
 
     @Test

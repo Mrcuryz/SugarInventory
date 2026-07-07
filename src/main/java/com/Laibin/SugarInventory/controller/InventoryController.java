@@ -3,15 +3,19 @@ package com.Laibin.SugarInventory.controller;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.InventoryQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.InventoryDistributionQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutProductQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutStockBatchQueryDTO;
 import com.Laibin.SugarInventory.domain.vo.OutProductVO;
+import com.Laibin.SugarInventory.domain.vo.InventoryDistributionVO;
 import com.Laibin.SugarInventory.domain.vo.OutWarehouseVO;
 import com.Laibin.SugarInventory.domain.vo.SemiPreparePoolBalanceVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
 import com.Laibin.SugarInventory.domain.vo.WarehouseRecentOperationVO;
 import com.Laibin.SugarInventory.service.InventoryService;
+import com.Laibin.SugarInventory.service.InventoryDistributionService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +31,15 @@ import java.time.LocalDate;
 @Tag(name = "库存详情查询", description = "库位中库存详情查询")
 public class InventoryController {
     private final InventoryService inventoryService;
+    private final InventoryDistributionService inventoryDistributionService;
+
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "受控库存分布分析", description = "按受控产品、库位、状态和分组维度查询当前在库库存分布")
+    @PostMapping("/distribution")
+    public Result<InventoryDistributionVO> getInventoryDistribution(
+            @Valid @RequestBody InventoryDistributionQueryDTO query) {
+        return Result.success(inventoryDistributionService.getDistribution(query));
+    }
 
     @PreAuthorize("hasAuthority('record:query')")
     @Operation(summary = "库存详情查询", description = "根据库位ID和产品名称查询库存详情")

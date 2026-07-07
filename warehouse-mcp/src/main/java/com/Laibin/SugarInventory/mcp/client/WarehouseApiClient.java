@@ -74,6 +74,16 @@ public class WarehouseApiClient {
         }
     }
 
+    public <T> T postData(String path, Object body, Class<T> responseType) {
+        JsonNode data = postData(path, body);
+        try {
+            return objectMapper.treeToValue(data, responseType);
+        } catch (IOException e) {
+            throw new WarehouseApiException("CLIENT_DESERIALIZATION_ERROR",
+                    "Unable to deserialize backend response.", null, false);
+        }
+    }
+
     private HttpRequest.Builder baseRequest(String path, Map<String, ?> query) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(buildUri(path, query))

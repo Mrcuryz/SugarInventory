@@ -1148,3 +1148,52 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 * 查询/分析可走受控只读数据访问层；
 * 写操作必须 `preview -> 用户确认 -> executionToken -> idempotencyKey -> execute`；
 * MCP Server 负责安全工具能力，不直接负责用户对话体验。
+
+---
+
+## 17. M1.4a 库存分布工具
+
+### `get_inventory_distribution`
+
+状态：已实现（M1.4a-1 单品首版；M1.4a-2 多范围、多过滤完整形态）
+
+风险等级：L1，只读
+
+用途：查询已确认产品范围的当前库存分布，并按库位、产品或库位和产品组合聚合。
+
+受控输入：
+
+```json
+{
+  "productScope": {"type": "PRODUCT_TYPE_GROUP", "productType": "黄冰糖"},
+  "warehouseScope": {"type": "SINGLE_WAREHOUSE", "warehouseId": 2},
+  "statusFilter": {
+    "productStatuses": ["成品"],
+    "warehouseStatuses": ["正常"],
+    "palletStatuses": ["INSTOCK"],
+    "assayStatus": "PASS",
+    "entryDateFrom": "2026-07-01",
+    "entryDateTo": "2026-07-07"
+  },
+  "groupBy": "warehouse_product",
+  "limit": 50
+}
+```
+
+约束：
+
+* `productId` 只能来自 `resolve_products` 唯一结果、用户候选选择或 Python structured state 中的 `selectedProduct`；
+* `productScope` 支持 `SINGLE_PRODUCT`、`EXACT_PRODUCT_NAME_GROUP`、`PRODUCT_TYPE_GROUP` 和显式 `ALL`；产品名称组和产品大类必须来自 resolver/HITL 结构化候选，不能由模型自行构造；
+* `warehouseScope` 支持 `ALL` 和 `SINGLE_WAREHOUSE`；`warehouseId` 必须与已确认 `selectedWarehouse` 一致；
+* 前端 resume 仍只提交 `optionId`，不得提交 `productId`；
+* `statusFilter` 仅允许白名单产品状态、库位状态、托盘状态、化验判断状态和入库日期范围；
+* `groupBy` 仅允许 `warehouse`、`product`、`warehouse_product`；
+* `limit` 默认 20，范围 1 到 100；
+* 权限沿用当前用户 Agent session 委托身份、`mcp:warehouse:read` scope 和后端已认证只读查询边界；
+* Java 通过 `POST /api/inventory/distribution` 完成只读聚合，Python 不连接数据库；
+* 单一板件规格输出 `normalizedPallets` / `normalizedLoosePieces`；跨规格汇总不虚构统一板数，改用 `totalEquivalentPieces`、总重量和“跨规格”展示文本；
+* 普通回答、SSE 和卡片只接收 safe adapter 白名单字段，不显示内部 ID、工具名或原始 JSON。
+
+当前 internal agent gateway 白名单共有 7 个只读工具。除原有 6 个工具外，仅新增本工具；仍未增加 login、`preview_*`、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
+
+仍不支持：库区范围、任意状态字段、库龄分桶、明细下钻和报表导出。这些能力需要独立工具或后续规格评审，不扩展为任意 SQL/HTTP 能力。

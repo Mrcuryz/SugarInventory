@@ -21,6 +21,8 @@ from app.schemas import (
     ChatRequest,
     ChatResponse,
     ResumeRequest,
+    SafeInventoryDistributionGroup,
+    SafeInventoryDistributionResult,
     SafeInventoryLocation,
     SafeInventoryResult,
     SafeWarehouseResult,
@@ -166,8 +168,9 @@ class WarehouseAgentRuntime:
         pending.status = "RESUMED"
         state.interrupt_status[pending.interrupt_id] = pending.status
         if pending.kind == "product":
+            option_type = str(option.get("optionType") or "SINGLE_PRODUCT")
             product_id = self._int_value(internal, "productId")
-            if product_id is None:
+            if option_type == "SINGLE_PRODUCT" and product_id is None:
                 response = ChatResponse(
                     agentSessionId=request.agentSessionId,
                     answer="该产品候选缺少可校验的内部映射，请重新查询。",
@@ -181,6 +184,11 @@ class WarehouseAgentRuntime:
                 internal_id=product_id,
                 display_label=self._safe_display_label(str(option.get("displayLabel") or "所选产品")),
                 source="user_selection",
+                metadata={
+                    "scopeType": option_type,
+                    "productName": internal.get("productName"),
+                    "productType": internal.get("productType"),
+                },
             )
             state.pending_clarification = None
             response = self._continue_product_intent(
@@ -208,12 +216,33 @@ class WarehouseAgentRuntime:
                 source="user_selection",
             )
             state.pending_clarification = None
-            response = self._answer_warehouse_status(
-                request.agentSessionId,
-                state,
-                request.client.traceId,
-                request.client.requestId,
-            )
+            if intent == "inventory_distribution":
+                distribution_args = self.argument_builder.distribution_arguments_for_state(
+                    {
+                        "productScope": {"type": "ALL"},
+                        "warehouseScope": {
+                            "type": "SINGLE_WAREHOUSE",
+                            "warehouseId": warehouse_id,
+                        },
+                        "groupBy": "product",
+                        "limit": 20,
+                    },
+                    state,
+                )
+                response = self._answer_inventory_distribution(
+                    request.agentSessionId,
+                    state,
+                    request.client.traceId,
+                    request.client.requestId,
+                    distribution_args,
+                )
+            else:
+                response = self._answer_warehouse_status(
+                    request.agentSessionId,
+                    state,
+                    request.client.traceId,
+                    request.client.requestId,
+                )
         else:
             response = ChatResponse(agentSessionId=request.agentSessionId, answer="已记录你的选择。")
 
@@ -263,7 +292,7 @@ class WarehouseAgentRuntime:
         if plan.toolName == "resolve_products":
             return self._resolve_product_and_continue(request, state, plan.arguments, plan.intent or "inventory")
         if plan.toolName == "resolve_warehouses":
-            return self._resolve_warehouse_and_continue(request, state, plan.arguments)
+            return self._resolve_warehouse_and_continue(request, state, plan.arguments, plan.intent or "warehouse_status")
         if plan.toolName == "get_inventory_overview":
             if state.selected_product is None:
                 return ChatResponse(
@@ -280,6 +309,20 @@ class WarehouseAgentRuntime:
                     plan.arguments,
                 )
             return self._answer_inventory(
+                request.agentSessionId,
+                state,
+                request.client.traceId,
+                request.client.requestId,
+                plan.arguments,
+            )
+        if plan.toolName == "get_inventory_distribution":
+            if state.selected_product is None and plan.arguments.get("productScope", {}).get("type") != "ALL":
+                return ChatResponse(
+                    agentSessionId=request.agentSessionId,
+                    answer="你想查哪个产品？请先选择或输入一个明确的产品名称。",
+                    needsUserSelection=True,
+                )
+            return self._answer_inventory_distribution(
                 request.agentSessionId,
                 state,
                 request.client.traceId,
@@ -375,6 +418,8 @@ class WarehouseAgentRuntime:
         request_id: str | None,
     ) -> ChatResponse:
         if intent == "assay":
+            if state.selected_product is None or state.selected_product.internal_id is None:
+                return ChatResponse(agentSessionId=agent_session_id, answer="化验查询需要选择一个具体产品规格。", needsUserSelection=True)
             result = self._call_tool_values(
                 agent_session_id=agent_session_id,
                 tool_name="get_assay_status",
@@ -389,6 +434,10 @@ class WarehouseAgentRuntime:
                 agentSessionId=agent_session_id,
                 answer=self._format_assay_answer(state.selected_product.display_label, result),
             )
+        if intent == "inventory_distribution":
+            return self._answer_inventory_distribution(agent_session_id, state, trace_id, request_id)
+        if state.selected_product is None or state.selected_product.internal_id is None:
+            return ChatResponse(agentSessionId=agent_session_id, answer="库存概览需要选择一个具体产品规格。", needsUserSelection=True)
         return self._answer_inventory(agent_session_id, state, trace_id, request_id)
 
     def _answer_inventory(
@@ -458,15 +507,51 @@ class WarehouseAgentRuntime:
             answer=self._format_inventory_locations(state.selected_product.display_label, safe_result),
         )
 
+    def _answer_inventory_distribution(
+        self,
+        agent_session_id: str,
+        state: WarehouseAgentState,
+        trace_id: str | None,
+        request_id: str | None,
+        arguments: dict[str, Any] | None = None,
+    ) -> ChatResponse:
+        if arguments is None:
+            arguments = self.argument_builder.distribution_arguments_for_state({}, state)
+        raw = self._call_tool_values(
+            agent_session_id=agent_session_id,
+            tool_name="get_inventory_distribution",
+            arguments=arguments,
+            trace_id=trace_id,
+            request_id=request_id,
+        )
+        safe_result = self._adapt_inventory_distribution(raw)
+        self._raise_if_cancelled()
+        state.last_inventory_distribution = safe_result.model_dump(exclude_none=True)
+        state.tool_results.append(
+            {"kind": "inventory_distribution", "summary": self._distribution_summary(safe_result)}
+        )
+        self._record_tool_message(
+            state,
+            "get_inventory_distribution",
+            self._safe_tool_summary(
+                "get_inventory_distribution", safe_result.model_dump(exclude_none=True)
+            ),
+        )
+        return ChatResponse(
+            agentSessionId=agent_session_id,
+            answer=self._format_inventory_distribution(safe_result),
+            cards=[self._inventory_distribution_card(safe_result)] if safe_result.groups else [],
+        )
+
     def _resolve_warehouse_and_continue(
-        self, request: ChatRequest, state: WarehouseAgentState, arguments: dict[str, Any]
+        self, request: ChatRequest, state: WarehouseAgentState, arguments: dict[str, Any], intent: str = "warehouse_status"
     ) -> ChatResponse:
         result = self._call_tool(request, "resolve_warehouses", arguments)
         self._raise_if_cancelled()
         self._record_tool_message(state, "resolve_warehouses", self._safe_tool_summary("resolve_warehouses", result))
         status = str(result.get("resolutionStatus") or "").upper()
         if status == "AMBIGUOUS":
-            pending = self._warehouse_clarification(result, request)
+            pending = self._warehouse_clarification(result, request, intent)
             self._raise_if_cancelled()
             state.pending_clarification = pending
             state.interrupt_status[pending.interrupt_id] = pending.status
@@ -487,6 +572,26 @@ class WarehouseAgentRuntime:
             )
         self._raise_if_cancelled()
         state.selected_warehouse = entity
+        if intent == "inventory_distribution":
+            distribution_args = self.argument_builder.distribution_arguments_for_state(
+                {
+                    "productScope": {"type": "ALL"},
+                    "warehouseScope": {
+                        "type": "SINGLE_WAREHOUSE",
+                        "warehouseId": entity.internal_id,
+                    },
+                    "groupBy": "product",
+                    "limit": 20,
+                },
+                state,
+            )
+            return self._answer_inventory_distribution(
+                request.agentSessionId,
+                state,
+                request.client.traceId,
+                request.client.requestId,
+                distribution_args,
+            )
         return self._answer_warehouse_status(
             request.agentSessionId,
             state,
@@ -573,15 +678,25 @@ class WarehouseAgentRuntime:
                 str(option.get("displayLabel") or option.get("productName") or option.get("name") or "候选产品")
             )
             product_id = self._int_value(option, "productId") or self._int_value(option, "id")
+            option_type = str(option.get("optionType") or "SINGLE_PRODUCT")
+            group_supported = intent == "inventory_distribution" and (
+                (option_type == "PRODUCT_TYPE_GROUP" and bool(option.get("productType")))
+                or (option_type == "EXACT_PRODUCT_NAME_GROUP" and bool(option.get("productName")))
+            )
+            supported = product_id is not None if option_type == "SINGLE_PRODUCT" else group_supported
             options.append(
                 {
                     "optionId": f"opt_{idx:03d}",
-                    "optionType": str(option.get("optionType") or "SINGLE_PRODUCT"),
+                    "optionType": option_type,
                     "displayLabel": label,
                     "description": self._product_description(option),
-                    "supported": bool(option.get("supported", product_id is not None)),
-                    "disabledReason": option.get("disabledReason"),
-                    "_internal": {"productId": product_id},
+                    "supported": supported,
+                    "disabledReason": None if supported else option.get("disabledReason") or "当前查询需要选择具体产品规格。",
+                    "_internal": {
+                        "productId": product_id,
+                        "productName": option.get("productName"),
+                        "productType": option.get("productType"),
+                    },
                 }
             )
         prompt = str(result.get("clarificationPrompt") or "该产品名称存在多个匹配项，请选择要查询的具体产品。")
@@ -598,7 +713,7 @@ class WarehouseAgentRuntime:
             user_id=request.user.userId if request.user else None,
         )
 
-    def _warehouse_clarification(self, result: dict[str, Any], request: ChatRequest) -> PendingClarification:
+    def _warehouse_clarification(self, result: dict[str, Any], request: ChatRequest, intent: str = "warehouse_status") -> PendingClarification:
         raw_options = result.get("options") or result.get("candidates") or []
         options = []
         for idx, option in enumerate(raw_options[:10], start=1):
@@ -620,7 +735,7 @@ class WarehouseAgentRuntime:
         token = self._new_resume_token()
         return PendingClarification(
             kind="warehouse",
-            intent="warehouse_status",
+            intent=intent,
             prompt=prompt,
             options=options,
             interrupt_id=self._new_interrupt_id(),
@@ -742,7 +857,12 @@ class WarehouseAgentRuntime:
                 or "所选产品"
             )
         )
-        return SelectedEntity(internal_id=product_id, display_label=label, source="resolver")
+        return SelectedEntity(
+            internal_id=product_id,
+            display_label=label,
+            source="resolver",
+            metadata={"scopeType": "SINGLE_PRODUCT"},
+        )
 
     def _single_warehouse_entity(self, result: dict[str, Any]) -> SelectedEntity | None:
         candidate = self._first_candidate(result)
@@ -800,6 +920,60 @@ class WarehouseAgentRuntime:
             items.append(f"{index}. {self._warehouse_display_name(location.warehouseName)}{suffix}")
         return f"{label}目前主要存放在以下库位：\n" + "\n".join(items)
 
+    def _format_inventory_distribution(self, result: SafeInventoryDistributionResult) -> str:
+        if not result.groups:
+            return f"未查询到 {result.scopeLabel} 的当前在库库存分布。"
+        if result.groupBy == "warehouse":
+            heading = f"{result.scopeLabel}当前库存主要存放在以下库位："
+        elif result.groupBy == "product":
+            heading = f"{result.scopeLabel}当前库存按产品分布如下："
+        else:
+            heading = f"{result.scopeLabel}当前库存按库位和产品分布如下："
+        top_groups = "、".join(group.groupLabel for group in result.groups[:3])
+        summary = (
+            f"{heading}\n"
+            f"共 {len(result.groups)} 个分组，合计 {result.totalStockText}"
+            f"，涉及 {result.palletCount} 个托盘。"
+        )
+        if top_groups:
+            summary += f"主要分组：{top_groups}。"
+        risk_summary = self._distribution_risk_summary(result)
+        if risk_summary:
+            summary += "\n存在风险提示，详见卡片。"
+        summary += "\n详细分布见下方卡片。"
+        return summary
+
+    def _inventory_distribution_card(self, result: SafeInventoryDistributionResult) -> BusinessCard:
+        fields = []
+        for index, group in enumerate(result.groups):
+            field = {
+                "kind": "distribution_group",
+                "label": f"{index + 1}. {group.groupLabel}",
+                "value": group.stockText,
+                "percentage": str(group.percentageText),
+                "palletCount": f"{group.palletCount}个托盘",
+            }
+            if group.latestInboundTime:
+                field["latestInboundTime"] = f"最近入库 {group.latestInboundTime}"
+            fields.append(field)
+        risk_summary = self._distribution_risk_summary(result)
+        if risk_summary:
+            fields.append({"kind": "risk_summary", "label": "风险提示", "value": risk_summary})
+        return BusinessCard(
+            cardType="inventory_distribution",
+            title=f"{result.scopeLabel}库存分布",
+            fields=fields,
+        )
+
+    def _distribution_risk_summary(self, result: SafeInventoryDistributionResult) -> str | None:
+        risk_counts: dict[str, int] = {}
+        for group in result.groups:
+            for risk in group.riskLabels:
+                risk_counts[risk] = risk_counts.get(risk, 0) + 1
+        if not risk_counts:
+            return None
+        return "；".join(f"{risk}（{count}项）" for risk, count in sorted(risk_counts.items()))
+
     def _format_warehouse_answer(self, label: str, result: SafeWarehouseResult) -> str:
         display_name = self._warehouse_display_name(result.warehouseName or label)
         fields = []
@@ -845,6 +1019,66 @@ class WarehouseAgentRuntime:
         if result.totalEquivalentPieces is not None:
             return f"折合 {result.totalEquivalentPieces} 件"
         return "缺少可展示的库存数量字段"
+
+    def _distribution_summary(self, result: SafeInventoryDistributionResult) -> str:
+        return f"{result.totalStockText}，分布于 {result.warehouseCount} 个库位"
+
+    def _adapt_inventory_distribution(self, raw: dict[str, Any]) -> SafeInventoryDistributionResult:
+        root = raw if isinstance(raw, dict) else {}
+        groups = []
+        for raw_group in root.get("groups") if isinstance(root.get("groups"), list) else []:
+            group = self._dict_value(raw_group)
+            warehouse_label = self._first_safe_text([group], "warehouseLabel")
+            product_label = self._first_safe_text([group], "productLabel")
+            group_label = self._first_safe_text([group], "groupLabel") or warehouse_label or product_label
+            stock_text = self._first_safe_text([group], "stockText")
+            percentage = self._first_safe_text([group], "percentageText")
+            equivalent = self._first_scalar([group], "totalEquivalentPieces")
+            pallet_count = self._first_scalar([group], "palletCount")
+            if not group_label or not stock_text or percentage is None or equivalent is None or pallet_count is None:
+                continue
+            risk_labels = [
+                text for value in group.get("riskLabels", [])
+                if (text := self._safe_text(value)) is not None
+            ] if isinstance(group.get("riskLabels"), list) else []
+            groups.append(
+                SafeInventoryDistributionGroup(
+                    groupLabel=group_label,
+                    warehouseLabel=warehouse_label,
+                    productLabel=product_label,
+                    stockText=stock_text,
+                    totalEquivalentPieces=equivalent,
+                    palletCount=pallet_count,
+                    warehouseCount=self._first_scalar([group], "warehouseCount") or 0,
+                    productCount=self._first_scalar([group], "productCount") or 0,
+                    percentageText=percentage,
+                    latestInboundTime=self._first_safe_text([group], "latestInboundTime"),
+                    riskLabels=risk_labels,
+                )
+            )
+        product_label = self._first_safe_text([root], "productLabel") or "所选产品"
+        scope_label = self._first_safe_text([root], "scopeLabel") or product_label
+        group_by = self._first_safe_text([root], "groupBy")
+        if group_by not in {"warehouse", "product", "warehouse_product"}:
+            group_by = "warehouse"
+        total_stock = self._first_safe_text([root], "totalStockText") or "0板0件"
+        notes = [
+            text for value in root.get("notes", [])
+            if (text := self._safe_text(value)) is not None
+        ] if isinstance(root.get("notes"), list) else []
+        return SafeInventoryDistributionResult(
+            scopeLabel=scope_label,
+            productLabel=product_label,
+            groupBy=group_by,
+            totalStockText=total_stock,
+            totalEquivalentPieces=self._first_scalar([root], "totalEquivalentPieces") or 0,
+            totalWeightText=self._first_safe_text([root], "totalWeightText"),
+            warehouseCount=self._first_scalar([root], "warehouseCount") or 0,
+            productCount=self._first_scalar([root], "productCount") or 0,
+            palletCount=self._first_scalar([root], "palletCount") or 0,
+            groups=groups,
+            notes=notes,
+        )
 
     def _adapt_inventory_result(self, raw: dict[str, Any]) -> SafeInventoryResult:
         root = raw if isinstance(raw, dict) else {}
@@ -955,6 +1189,14 @@ class WarehouseAgentRuntime:
                 "totalEquivalentPieces": self._first_scalar([source], "totalEquivalentPieces"),
                 "totalWeight": self._first_scalar([source], "totalWeight"),
                 "locationCount": self._list_size(source.get("locations") or source.get("records")),
+            }
+        if tool_name == "get_inventory_distribution":
+            source = result if isinstance(result, dict) else {}
+            return {
+                "productLabel": self._safe_text(source.get("productLabel")),
+                "totalStockText": self._safe_text(source.get("totalStockText")),
+                "warehouseCount": self._first_scalar([source], "warehouseCount"),
+                "groupCount": self._list_size(source.get("groups")),
             }
         if tool_name == "get_warehouse_status":
             source = result if isinstance(result, dict) else {}

@@ -28,11 +28,12 @@ class WarehouseMcpApplicationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void startsAndListsSixTools() {
+    void startsAndListsSevenTools() {
         List<String> names = toolSchemas().keySet().stream().sorted().toList();
 
         assertThat(names).containsExactly(
                 "get_assay_status",
+                "get_inventory_distribution",
                 "get_inventory_overview",
                 "get_pallet_status",
                 "get_warehouse_status",
@@ -48,6 +49,7 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("resolve_products"));
         assertObjectClosed(schemas.get("resolve_warehouses"));
         assertObjectClosed(schemas.get("get_inventory_overview"));
+        assertObjectClosed(schemas.get("get_inventory_distribution"));
         assertObjectClosed(schemas.get("get_warehouse_status"));
         assertObjectClosed(schemas.get("get_pallet_status"));
         assertObjectClosed(schemas.get("get_assay_status"));
@@ -56,6 +58,9 @@ class WarehouseMcpApplicationTest {
         assertRequired(schemas.get("resolve_warehouses"), "query");
         assertRequired(schemas.get("get_pallet_status"), "code");
         assertNoRequiredFields(schemas.get("get_inventory_overview"));
+        assertRequired(schemas.get("get_inventory_distribution"), "productScope");
+        assertRequired(schemas.get("get_inventory_distribution"), "warehouseScope");
+        assertRequired(schemas.get("get_inventory_distribution"), "groupBy");
         assertNoRequiredFields(schemas.get("get_warehouse_status"));
         assertNoRequiredFields(schemas.get("get_assay_status"));
 
@@ -65,6 +70,7 @@ class WarehouseMcpApplicationTest {
         assertIntegerBounds(schemas.get("resolve_warehouses"), "limit", 1, 100);
         assertIntegerBounds(schemas.get("get_inventory_overview"), "page", 1, null);
         assertIntegerBounds(schemas.get("get_inventory_overview"), "size", 1, 100);
+        assertIntegerBounds(schemas.get("get_inventory_distribution"), "limit", 1, 100);
         assertIntegerBounds(schemas.get("get_warehouse_status"), "page", 1, null);
         assertIntegerBounds(schemas.get("get_warehouse_status"), "size", 1, 100);
         assertStringBounds(schemas.get("get_pallet_status"), "code", 1, 100);
