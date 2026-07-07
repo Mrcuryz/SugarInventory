@@ -1,4 +1,4 @@
-import { expect, test, type Page, type APIRequestContext } from '@playwright/test'
+import { expect, test, type Page, type APIRequestContext, type APIResponse } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
 type SseEvent = {
@@ -40,11 +40,16 @@ const forbiddenUiTerms = [
 ]
 
 test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
-  test.beforeEach(async ({ page, request }) => {
-    const token = await resolveToken(request)
+  let authToken = ''
+
+  test.beforeAll(async ({ request }) => {
+    authToken = await resolveToken(request)
+  })
+
+  test.beforeEach(async ({ page }) => {
     await page.addInitScript((jwt) => {
       window.localStorage.setItem('pinia-token', JSON.stringify({ token: jwt }))
-    }, token)
+    }, authToken)
     await installSseCapture(page)
   })
 
@@ -53,10 +58,11 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await clearCapturedSse(page)
 
     await sendAssistantMessage(page, '帮我查黄冰糖当前库存')
-    await expect(page.getByText('等待你选择').last()).toBeVisible()
-    await expect(page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ })).toBeVisible()
 
     const pendingStream = await lastSse(page)
+    expectNativeInterrupt(pendingStream)
+    await expect(page.getByText('等待你选择').last()).toBeVisible()
+    await expect(page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ })).toBeEnabled()
     const pendingEnd = terminalPayload(pendingStream)
     expect(pendingEnd.finishReason).toBe('interrupt_required')
     expect(pendingEnd.interruptId).toMatch(/^intr_/)
@@ -150,7 +156,9 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await clearCapturedSse(page)
     await sendAssistantMessage(page, '帮我查黄冰糖当前库存')
 
-    const pendingEnd = terminalPayload(await lastSse(page))
+    const pendingStream = await lastSse(page)
+    expectNativeInterrupt(pendingStream)
+    const pendingEnd = terminalPayload(pendingStream)
     expect(pendingEnd.interruptId).toMatch(/^intr_/)
 
     await page.reload()
@@ -197,13 +205,30 @@ async function resolveToken(request: APIRequestContext) {
     throw new Error('Set AGENT_E2E_TOKEN or AGENT_E2E_USERNAME/AGENT_E2E_PASSWORD before running agent HITL E2E tests.')
   }
 
-  const response = await request.post(`${appBaseUrl}/api/auth/web-login`, {
-    data: { username, password }
-  })
-  expect(response.ok()).toBe(true)
+  let response: APIResponse
+  try {
+    response = await request.post(`${appBaseUrl}/api/auth/web-login`, {
+      data: { name: username, password }
+    })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `Cannot reach ${appBaseUrl}/api/auth/web-login. Start the backend on 8080 and let Playwright start Vite on 5173, or set AGENT_E2E_BASE_URL to an already running frontend. Detail: ${detail}`
+    )
+  }
+  if (!response.ok()) {
+    const body = await response.text().catch(() => '')
+    throw new Error(
+      `Login failed via ${appBaseUrl}/api/auth/web-login with status ${response.status()}. Ensure the Java backend is running on 8080 and can reach its database. Body: ${body.slice(0, 500)}`
+    )
+  }
   const body = await response.json()
   const token = body?.data?.token
-  if (!token) throw new Error('Login response did not include data.token.')
+  if (!token) {
+    throw new Error(
+      `Login response did not include data.token. Ensure AGENT_E2E_USERNAME maps to the web-login "name" field. Body: ${JSON.stringify(body).slice(0, 500)}`
+    )
+  }
   return token
 }
 
@@ -241,7 +266,8 @@ async function sendAssistantMessage(page: Page, message: string) {
 async function selectHuangBingtangBag(page: Page) {
   await clearCapturedSse(page)
   await sendAssistantMessage(page, '帮我查黄冰糖当前库存')
-  await expect(page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ })).toBeVisible()
+  await expectNativeInterruptFromPage(page)
+  await expect(page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ })).toBeEnabled()
   await clearCapturedSse(page)
   await page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ }).click()
   await expect(page.getByText(/当前库存为 .*折合/)).toBeVisible()
@@ -286,6 +312,33 @@ function terminalPayload(record: SseRecord) {
   const terminal = record.events.findLast((event) => event.event === 'message_end')
   expect(terminal, `stream ${record.url} should include message_end`).toBeTruthy()
   return terminal!.payload
+}
+
+async function expectNativeInterruptFromPage(page: Page) {
+  const record = await lastSse(page)
+  expectNativeInterrupt(record)
+  await expect(page.getByText('等待你选择').last()).toBeVisible()
+}
+
+function expectNativeInterrupt(record: SseRecord) {
+  const errorEvent = record.events.findLast((event) => event.event === 'error')
+  const terminal = terminalPayload(record)
+  if (errorEvent || ['error', 'timeout', 'fallback'].includes(String(terminal.finishReason || ''))) {
+    const message = errorEvent?.payload?.message || terminal.message || JSON.stringify(terminal)
+    throw new Error(
+      `Agent stream ended before native HITL interrupt. finishReason=${terminal.finishReason || 'unknown'}; message=${message}. Ensure Java runs with AGENT_RUNTIME_MODE=python and Python runs with the same non-empty AGENT_PYTHON_SERVICE_KEY as Java. Also set AGENT_INTERNAL_TOOL_SERVICE_KEY for Python -> Java internal tools.`
+    )
+  }
+  if (terminal.finishReason === 'clarification_required' && !terminal.interruptId) {
+    throw new Error(
+      'Backend returned LEGACY_CLARIFICATION without interruptId. Restart Java with AGENT_RUNTIME_MODE=python and ensure Python agent-service is reachable at AGENT_PYTHON_BASE_URL.'
+    )
+  }
+  if (terminal.finishReason !== 'interrupt_required' || !terminal.interruptId) {
+    throw new Error(
+      `Expected native HITL interrupt_required with interruptId, got finishReason=${terminal.finishReason || 'unknown'} payload=${JSON.stringify(terminal).slice(0, 500)}.`
+    )
+  }
 }
 
 async function assertNoForbiddenUiTerms(page: Page, allowed: string[] = []) {
