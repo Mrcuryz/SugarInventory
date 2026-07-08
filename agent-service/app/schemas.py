@@ -120,7 +120,7 @@ class BusinessCard(BaseModel):
     resumeToken: str | None = None
     expiresAt: str | None = None
     options: list[UserOption] = Field(default_factory=list)
-    fields: list[dict[str, str]] = Field(default_factory=list)
+    fields: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentError(BaseModel):
@@ -189,6 +189,7 @@ class SafeInventoryDistributionResult(BaseModel):
     palletCount: int | float | str
     groups: list[SafeInventoryDistributionGroup] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    filterSummary: str | None = None
 
 
 class SafeWarehouseResult(BaseModel):

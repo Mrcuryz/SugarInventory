@@ -269,11 +269,24 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
                 summary.put(field, result.get(field));
             }
         }
+        for (String field : List.of("code", "isError", "message")) {
+            if (result.has(field)) {
+                summary.put(field, result.get(field));
+            }
+        }
         if (result.path("candidates").isArray()) {
             summary.put("candidateCount", result.path("candidates").size());
         }
         if (result.path("options").isArray()) {
             summary.put("optionCount", result.path("options").size());
+        }
+        for (String field : List.of("scopeLabel", "groupBy", "totalStockText", "warehouseCount", "productCount", "palletCount")) {
+            if (result.has(field)) {
+                summary.put(field, result.get(field));
+            }
+        }
+        if (result.path("groups").isArray()) {
+            summary.put("groupCount", result.path("groups").size());
         }
         return summary;
     }
@@ -331,7 +344,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
                 .replaceAll("(?i)bearer\\s+[^\\s,;]+", "Bearer <redacted>")
                 .replaceAll("(?i)(delegation[_-]?token|refresh[_-]?token|token|api[_-]?key|password|secret)\\s*[:=]\\s*[^\\s,;]+", "$1=<redacted>")
                 .replaceAll("(?i)jdbc:[^\\s,;]+", "jdbc:<redacted>")
-                .replaceAll("(?i)([A-Za-z0-9_$.]+Exception|[A-Za-z0-9_$.]+Error)(:\\s*[^\\r\\n]*)?", "<exception redacted>")
+                .replaceAll("(?<![A-Za-z0-9_$.])([A-Z][A-Za-z0-9_$.]*(Exception|Error))(?![A-Za-z0-9_$.])(:\\s*[^\\r\\n]*)?", "<exception redacted>")
                 .replaceAll("(?<![A-Za-z0-9])(/[A-Za-z0-9._-]+){2,}", "<path redacted>")
                 .replaceAll("[A-Za-z]:\\\\[^\\r\\n\\t ]+", "<path redacted>")
                 .replaceAll("(?m)^\\s*at\\s+.+$", "<stack redacted>");

@@ -34,6 +34,9 @@ class InventoryDistributionSqlProviderTest {
         assertThat(sql).contains("#{query.productScope.productType}", "#{query.warehouseScope.warehouseId}");
         assertThat(sql).contains("#{query.statusFilter.productStatuses[0]}");
         assertThat(sql).contains("a.judge_result = #{query.statusFilter.assayStatus}");
+        assertThat(sql).contains("a.sample_date >= #{query.statusFilter.entryDateFrom}");
+        assertThat(sql).contains("a.sample_date <= #{query.statusFilter.entryDateTo}");
+        assertThat(sql).doesNotContain("i.entry_date >= #{query.statusFilter.entryDateFrom}");
         assertThat(sql).doesNotContain("黄冰糖' OR 1=1 --");
     }
 
@@ -48,6 +51,54 @@ class InventoryDistributionSqlProviderTest {
         assertThat(sql).contains("GROUP BY i.product_id");
         assertThat(sql).doesNotContain("productScope.productId", "warehouseScope.warehouseId");
         assertThat(sql).doesNotContain("${");
+    }
+
+    @Test
+    void warehouseScopedAllProductDistributionKeepsWarehouseIdBound() {
+        InventoryDistributionQueryDTO query = query();
+        query.getProductScope().setType("ALL");
+        query.getWarehouseScope().setType("SINGLE_WAREHOUSE");
+        query.getWarehouseScope().setWarehouseId(8);
+        query.setGroupBy("product");
+
+        String sql = provider.selectGroups(Map.of("query", query));
+
+        assertThat(sql).contains("GROUP BY i.product_id");
+        assertThat(sql).contains("i.warehouse_id = #{query.warehouseScope.warehouseId}");
+        assertThat(sql).doesNotContain("productScope.productId");
+        assertThat(sql).doesNotContain("warehouse_id = 8", "${");
+    }
+
+    @Test
+    void assayStatusDateFilterUsesAssaySampleDate() {
+        InventoryDistributionQueryDTO query = query();
+        query.getProductScope().setType("ALL");
+        query.getStatusFilter().setAssayStatus("FAIL");
+        query.getStatusFilter().setEntryDateFrom(LocalDate.of(2026, 1, 1));
+        query.getStatusFilter().setEntryDateTo(LocalDate.of(2026, 6, 30));
+
+        String sql = provider.selectAggregate(Map.of("query", query));
+
+        assertThat(sql).contains("a.judge_result = #{query.statusFilter.assayStatus}");
+        assertThat(sql).contains("a.sample_date >= #{query.statusFilter.entryDateFrom}");
+        assertThat(sql).contains("a.sample_date <= #{query.statusFilter.entryDateTo}");
+        assertThat(sql).doesNotContain("i.entry_date >= #{query.statusFilter.entryDateFrom}");
+    }
+
+    @Test
+    void missingAssayDateFilterUsesInventoryEntryDate() {
+        InventoryDistributionQueryDTO query = query();
+        query.getProductScope().setType("ALL");
+        query.getStatusFilter().setAssayStatus("MISSING_ASSAY");
+        query.getStatusFilter().setEntryDateFrom(LocalDate.of(2026, 1, 1));
+        query.getStatusFilter().setEntryDateTo(LocalDate.of(2026, 6, 30));
+
+        String sql = provider.selectAggregate(Map.of("query", query));
+
+        assertThat(sql).contains("i.assay_id IS NULL");
+        assertThat(sql).contains("i.entry_date >= #{query.statusFilter.entryDateFrom}");
+        assertThat(sql).contains("i.entry_date <= #{query.statusFilter.entryDateTo}");
+        assertThat(sql).doesNotContain("a.sample_date >= #{query.statusFilter.entryDateFrom}");
     }
 
     @Test

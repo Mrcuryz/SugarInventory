@@ -9,9 +9,28 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits(['card-action'])
 const isDistribution = computed(() => isDistributionCard(props.card))
 const rows = computed(() => distributionRows(props.card))
 const riskSummary = computed(() => distributionRiskSummary(props.card))
+
+const inferActionProductName = (field) => {
+  const source = field?.actionProductName || field?.productName || field?.label || field?.name || ''
+  return String(source)
+    .replace(/^\s*\d+\.\s*/, '')
+    .replace(/\s+\d+(?:\.\d+)?\s*kg\/件.*$/i, '')
+    .replace(/\s+\d+\s*件\/板.*$/i, '')
+    .trim()
+}
+
+const openCreateAssay = (field) => {
+  if (field?.actionKind !== 'create_assay') return
+  emit('card-action', {
+    actionKind: field.actionKind,
+    productName: inferActionProductName(field),
+    sampleDate: field.actionSampleDate || ''
+  })
+}
 </script>
 
 <template>
@@ -37,6 +56,18 @@ const riskSummary = computed(() => distributionRiskSummary(props.card))
             <span v-if="field.percentage">{{ field.percentage }}</span>
             <span v-if="field.palletCount">{{ field.palletCount }}</span>
             <span v-if="field.latestInboundTime">{{ field.latestInboundTime }}</span>
+          </div>
+          <div v-if="field.riskText || field.actionKind" class="distribution-row-risk">
+            <span v-if="field.riskText">{{ field.riskText }}</span>
+            <el-button
+              v-if="field.actionKind === 'create_assay'"
+              size="small"
+              type="warning"
+              plain
+              @click.stop="openCreateAssay(field)"
+            >
+              {{ field.actionLabel || '去补充' }}
+            </el-button>
           </div>
         </div>
       </div>
@@ -194,6 +225,28 @@ const riskSummary = computed(() => distributionRiskSummary(props.card))
   overflow-wrap: anywhere;
 }
 
+.distribution-row-risk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+
+  span {
+    min-width: 0;
+  }
+
+  .el-button {
+    flex: none;
+  }
+}
+
 @media (max-width: 520px) {
   .distribution-main {
     display: grid;
@@ -202,6 +255,11 @@ const riskSummary = computed(() => distributionRiskSummary(props.card))
     strong {
       text-align: left;
     }
+  }
+
+  .distribution-row-risk {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

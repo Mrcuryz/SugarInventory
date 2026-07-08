@@ -829,10 +829,42 @@ function openCreateDialog() {
   dialogVisible.value = true
 }
 
+function normalizeProductNameForMatch(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^\s*\d+\.\s*/, '')
+    .replace(/\s+/g, '')
+    .replace(/[（]/g, '(')
+    .replace(/[）]/g, ')')
+    .toLowerCase()
+}
+
+function stripProductSpec(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^\s*\d+\.\s*/, '')
+    .replace(/\s+\d+(?:\.\d+)?\s*kg\/件.*$/i, '')
+    .replace(/\s+\d+\s*件\/板.*$/i, '')
+    .trim()
+}
+
 function findProductIdByName(productName) {
   if (!productName) return undefined
+  const normalizedTarget = normalizeProductNameForMatch(productName)
+  const normalizedBaseTarget = normalizeProductNameForMatch(stripProductSpec(productName))
   const allProducts = [...stProductList.value, ...semiProductList.value]
-  return allProducts.find(item => item.productName === productName)?.productId
+  const matched = allProducts.find(item => {
+    const itemName = item.productName || ''
+    const normalizedItem = normalizeProductNameForMatch(itemName)
+    const normalizedBaseItem = normalizeProductNameForMatch(stripProductSpec(itemName))
+    return normalizedItem === normalizedTarget ||
+      normalizedItem === normalizedBaseTarget ||
+      normalizedBaseItem === normalizedTarget ||
+      normalizedBaseItem === normalizedBaseTarget ||
+      (normalizedBaseTarget && normalizedItem.startsWith(normalizedBaseTarget)) ||
+      (normalizedBaseItem && normalizedTarget.startsWith(normalizedBaseItem))
+  })
+  return matched?.productId || matched?.id
 }
 
 function openCreateDialogFromRoute() {

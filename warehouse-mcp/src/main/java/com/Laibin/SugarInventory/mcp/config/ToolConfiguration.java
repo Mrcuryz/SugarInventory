@@ -1,6 +1,8 @@
 package com.Laibin.SugarInventory.mcp.config;
 
 import com.Laibin.SugarInventory.mcp.tool.WarehouseTools;
+import com.Laibin.SugarInventory.mcp.tool.InventoryDistributionToolCallback;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.tool.StaticToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -17,7 +19,7 @@ import java.util.List;
 public class ToolConfiguration {
 
     @Bean
-    ToolCallbackProvider warehouseToolCallbackProvider(WarehouseTools warehouseTools) throws NoSuchMethodException {
+    ToolCallbackProvider warehouseToolCallbackProvider(WarehouseTools warehouseTools, ObjectMapper objectMapper) throws NoSuchMethodException {
         return new StaticToolCallbackProvider(List.of(
                 methodTool(warehouseTools, "resolve_products",
                         "Resolve a natural-language product query to unique or ambiguous product candidates without modifying warehouse data.",
@@ -31,14 +33,7 @@ public class ToolConfiguration {
                         "Read paged inventory overview and totals, preferring a unique productId when available.",
                         inventoryOverviewSchema(),
                         WarehouseTools.class.getMethod("getInventoryOverview", Integer.class, String.class, String.class, Integer.class, Integer.class)),
-                methodTool(warehouseTools, "get_inventory_distribution",
-                        "Read filtered current inventory distribution for a controlled product and warehouse scope without modifying warehouse data.",
-                        inventoryDistributionSchema(),
-                        WarehouseTools.class.getMethod("getInventoryDistribution",
-                                com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope.class,
-                                com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope.class,
-                                com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionFilter.class,
-                                String.class, Integer.class)),
+                new InventoryDistributionToolCallback(warehouseTools, objectMapper, inventoryDistributionSchema()),
                 methodTool(warehouseTools, "get_warehouse_status",
                         "Read warehouse capacity, inventory details, and recent operations, preferring a unique warehouseId when available.",
                         warehouseStatusSchema(),

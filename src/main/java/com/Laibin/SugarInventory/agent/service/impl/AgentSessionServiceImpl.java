@@ -397,7 +397,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         if ("rule".equalsIgnoreCase(normalize(mode, "llm"))) {
             return "规则解析器";
         }
-        return limit(normalize(modelName, "模型未配置").replace('-', ' ').replace('_', ' '), 80);
+        return limit(normalize(modelName, "模型运行中").replace('-', ' ').replace('_', ' '), 80);
     }
 
 

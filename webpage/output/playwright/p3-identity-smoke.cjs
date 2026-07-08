@@ -77,12 +77,24 @@ async function main() {
         scopes: ['mcp:warehouse:read'],
         status: 'ACTIVE',
         expiresAt: '2026-07-07T16:39:36',
-        modelDisplayName: 'deepseek v4 flash',
         mcpServerName: 'smart_warehouse',
         mcpTransport: 'STDIO'
       }))
     })
   })
+
+  await page.route('**/api/agent/sessions/visual-session-1/messages/stream', route => route.fulfill({
+    contentType: 'text/event-stream',
+    body: [
+      'data: {"eventId":"smoke-1","messageId":"msg_smoke","agentSessionId":"visual-session-1","type":"message_start","sequence":1,"payload":{"role":"assistant"}}',
+      '',
+      'data: {"eventId":"smoke-2","messageId":"msg_smoke","agentSessionId":"visual-session-1","type":"text_delta","sequence":2,"payload":{"text":"已收到测试消息。"}}',
+      '',
+      'data: {"eventId":"smoke-3","messageId":"msg_smoke","agentSessionId":"visual-session-1","type":"message_end","sequence":3,"payload":{"finishReason":"completed"}}',
+      '',
+      ''
+    ].join('\n')
+  }))
 
   await page.goto(`${baseUrl}/home`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1000)
@@ -94,18 +106,26 @@ async function main() {
   await page.locator('.agent-button').click()
   await page.waitForTimeout(700)
 
-  const identity = page.getByLabel('AI 助手会话身份')
-  await expect(identity).toBeVisible()
-  await expect(identity.getByText('智能仓储助手')).toBeVisible()
-  await expect(identity.getByText('deepseek v4 flash')).toBeVisible()
+  await expect(page.getByLabel('AI 助手会话身份')).toHaveCount(0)
+  await expect(page.locator('.assistant-header')).toContainText('会话已连接')
+  await expect(page.locator('.assistant-header')).not.toContainText('模型运行中')
+  await expect(page.locator('.assistant-header')).not.toContainText('调试')
   await expect(page.getByText('陈思聪').first()).toBeVisible()
-  await expect(page.getByText('管理员').first()).toBeVisible()
-  await expect(page.locator('.model-badge', { hasText: 'deepseek v4 flash' })).toBeVisible()
+  await expect(page.locator('.model-badge')).toHaveCount(0)
+
+  const textarea = page.locator('.composer textarea')
+  await textarea.fill('第一行')
+  await textarea.press('Shift+Enter')
+  await textarea.type('第二行')
+  await expect(textarea).toHaveValue('第一行\n第二行')
+  await textarea.press('Enter')
+  await expect(page.locator('.message-row.user').filter({ hasText: '第一行' })).toBeVisible()
+  await expect(page.getByText('已收到测试消息。')).toBeVisible()
 
   const layout = await page.evaluate(() => {
     const drawer = document.querySelector('.agent-assistant-drawer')
-    const identityStrip = document.querySelector('.identity-strip')
-    const targets = drawer ? [drawer, identityStrip, ...drawer.querySelectorAll('button, textarea, input')] : []
+    const header = document.querySelector('.assistant-header')
+    const targets = drawer ? [drawer, header, ...drawer.querySelectorAll('button, textarea, input')] : []
     const overflowing = targets.filter(Boolean).filter((element) => {
       const rect = element.getBoundingClientRect()
       return rect.left < -1 || rect.right > window.innerWidth + 1 || element.scrollWidth > element.clientWidth + 1

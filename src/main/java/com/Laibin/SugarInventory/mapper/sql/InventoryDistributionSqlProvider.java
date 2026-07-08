@@ -80,13 +80,21 @@ public class InventoryDistributionSqlProvider {
         } else if (filter.getAssayStatus() != null) {
             sql.append(" AND a.judge_result = #{query.statusFilter.assayStatus}");
         }
+        String dateColumn = dateFilterColumn(filter);
         if (filter.getEntryDateFrom() != null) {
-            sql.append(" AND i.entry_date >= #{query.statusFilter.entryDateFrom}");
+            sql.append(" AND ").append(dateColumn).append(" >= #{query.statusFilter.entryDateFrom}");
         }
         if (filter.getEntryDateTo() != null) {
-            sql.append(" AND i.entry_date <= #{query.statusFilter.entryDateTo}");
+            sql.append(" AND ").append(dateColumn).append(" <= #{query.statusFilter.entryDateTo}");
         }
         return sql.toString();
+    }
+
+    private String dateFilterColumn(InventoryDistributionQueryDTO.StatusFilter filter) {
+        if (filter == null || filter.getAssayStatus() == null || "MISSING_ASSAY".equals(filter.getAssayStatus())) {
+            return "i.entry_date";
+        }
+        return "a.sample_date";
     }
 
     private void appendIn(StringBuilder sql, String column, String property, List<String> values) {

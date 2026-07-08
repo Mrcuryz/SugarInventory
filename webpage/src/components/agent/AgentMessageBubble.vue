@@ -19,7 +19,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['chooseOption', 'feedback'])
+const emit = defineEmits(['choose-option', 'feedback', 'card-action'])
 
 const cards = computed(() => visibleCards(props.item))
 const canSendFeedback = computed(() => (
@@ -52,6 +52,7 @@ const bubbleClasses = computed(() => ({
         v-for="(card, cardIndex) in cards"
         :key="`${card.cardType || 'card'}-${card.title || cardIndex}`"
         :card="card"
+        @card-action="emit('card-action', $event)"
       />
     </div>
 
@@ -61,7 +62,7 @@ const bubbleClasses = computed(() => ({
         :key="`${option.optionId || option.optionType}-${option.displayLabel}`"
         :option="option"
         :disabled="option.supported === false || item.optionSubmitting || item.selectionCompleted"
-        @choose="emit('chooseOption', option)"
+        @choose="emit('choose-option', option)"
       />
     </div>
 

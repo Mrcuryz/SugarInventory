@@ -251,6 +251,35 @@ class InternalAgentToolGatewayServiceTest {
         assertThat(json).doesNotContain("hidden-token", "Bearer hidden-token", "stackTrace", "delegationToken");
     }
 
+    @Test
+    void auditsMcpToolErrorResultAsErrorNotEmptySuccess() {
+        ObjectNode result = objectMapper.createObjectNode();
+        result.put("code", "MCP_TOOL_ERROR");
+        result.put("message", "Conversion from JSON to ProductScope failed");
+        result.put("isError", true);
+        when(mcpSession.callTool(any())).thenReturn(new McpToolResult(
+                "get_inventory_distribution", result, "ERROR", "MCP_TOOL_ERROR", 4L));
+
+        InternalAgentToolResponseVO response = gateway.invoke(
+                SERVICE_KEY,
+                "get_inventory_distribution",
+                request(Map.of(
+                        "productScope", Map.of("type", "ALL"),
+                        "warehouseScope", Map.of("type", "SINGLE_WAREHOUSE", "warehouseId", 8),
+                        "groupBy", "product")));
+
+        assertThat(response.getStatus()).isEqualTo("ERROR");
+        assertThat(response.getError().getCode()).isEqualTo("MCP_TOOL_ERROR");
+
+        ArgumentCaptor<AgentToolAuditDTO> auditCaptor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
+        verify(agentSessionService).recordToolAudit(anyString(), anyInt(), auditCaptor.capture());
+        AgentToolAuditDTO audit = auditCaptor.getValue();
+        assertThat(audit.getResultCode()).isEqualTo("ERROR");
+        assertThat(audit.getErrorCode()).isEqualTo("MCP_TOOL_ERROR");
+        assertThat(audit.getResponseSummary()).contains("MCP_TOOL_ERROR", "isError");
+        assertThat(audit.getResponseSummary()).doesNotContain("stackTrace", "Authorization", "Bearer");
+    }
+
     private InternalAgentToolRequestDTO request(Map<String, Object> arguments) {
         InternalAgentToolClientDTO client = new InternalAgentToolClientDTO();
         client.setTraceId("trace_001");

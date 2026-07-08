@@ -61,11 +61,15 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 - 产品范围支持已确认 `SINGLE_PRODUCT`、`EXACT_PRODUCT_NAME_GROUP`、`PRODUCT_TYPE_GROUP`，以及用户显式要求的 `ALL`。
 - 库位范围支持 `ALL` 和 resolver/结构化状态确认的 `SINGLE_WAREHOUSE`。
 - 支持产品状态、库位状态、托盘状态、化验判断状态、入库起止日期白名单过滤。
+- 化验状态过滤下的日期范围语义已拆分：`PASS`、`FAIL`、`NO_STANDARD`、`MULTIPLE_CANDIDATES` 和 `HAS_ASSAY` 按化验 `sample_date` 过滤；`MISSING_ASSAY` 因无化验记录，按库存 `entry_date` 过滤。
 - 支持 `warehouse`、`product`、`warehouse_product` 三种固定分组，默认 20 条、最多 100 条。
 - Java 业务端执行只读聚合；权限与现有库存概览一致，要求当前用户已认证，同时保留 `mcp:warehouse:read` delegation scope 和精确只读 POST 路径限制。
 - Python 从 resolver/HITL 的 `selectedProduct` 构造单品、产品名称组或产品大类范围；模型伪造产品/库位 ID 会被替换或拒绝。显式“全部产品”不需要内部 ID。
+- “8号库位库存情况”等库位自然语言查询应先经 `resolve_warehouses` 归一化和确认，再用 `warehouseScope=SINGLE_WAREHOUSE` 查询分布；模型不得把“8”直接当作 `warehouseId`。
 - 跨规格聚合不输出误导性的统一板数，以等价件数和总重量为准。
 - 普通 UI 不显示 `productId`、`warehouseId`、`inventoryId`、`toolName` 或 raw JSON。
+- 空结果回答需要保留安全过滤摘要，例如“全部产品中符合最近7天、化验不合格条件”，避免用户误判为未识别意图或未调用工具。
+- Java STDIO MCP 会优先抽取工具返回的 `structuredContent`，再回退到 `content[0].text`；否则 `get_inventory_distribution` 这类结构化结果可能被误判为空结果。
 - 未增加任何写工具、任意 SQL 或任意 HTTP 代理。
 
 仍未实现库区范围、库龄分桶、库存明细下钻和导出；这些能力不继续堆入本工具。

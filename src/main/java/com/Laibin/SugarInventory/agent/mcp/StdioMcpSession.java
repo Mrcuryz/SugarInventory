@@ -3,6 +3,8 @@ package com.Laibin.SugarInventory.agent.mcp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -15,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class StdioMcpSession implements McpSession {
+    private static final Logger log = LoggerFactory.getLogger(StdioMcpSession.class);
+
     private final String agentSessionId;
     private final Process process;
     private final ObjectMapper objectMapper;
@@ -50,8 +54,15 @@ public class StdioMcpSession implements McpSession {
             if (!error.isMissingNode() && !error.isNull()) {
                 return new McpToolResult(call.toolName(), error, "ERROR", "MCP_TOOL_ERROR", elapsedMs(start));
             }
-            return new McpToolResult(call.toolName(), extractToolResult(response.path("result")), "SUCCESS", null, elapsedMs(start));
+            JsonNode result = response.path("result");
+            if (result.path("isError").asBoolean(false)) {
+                return new McpToolResult(call.toolName(), extractToolError(result), "ERROR", "MCP_TOOL_ERROR", elapsedMs(start));
+            }
+            return new McpToolResult(call.toolName(), extractToolResult(result), "SUCCESS", null, elapsedMs(start));
         } catch (RuntimeException | IOException e) {
+            log.warn("MCP tool call failed; session={}, tool={}, errorType={}, message={}",
+                    safeLogValue(agentSessionId), safeLogValue(call.toolName()),
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
             return new McpToolResult(call.toolName(), objectMapper.createObjectNode().put("message", "MCP tool call failed."), "ERROR", "MCP_CALL_FAILED", elapsedMs(start));
         }
     }
@@ -131,6 +142,10 @@ public class StdioMcpSession implements McpSession {
     }
 
     private JsonNode extractToolResult(JsonNode result) {
+        JsonNode structuredContent = result.path("structuredContent");
+        if (structuredContent.isObject() && !structuredContent.isEmpty()) {
+            return structuredContent;
+        }
         JsonNode content = result.path("content");
         if (content.isArray() && !content.isEmpty()) {
             String text = content.get(0).path("text").asText(null);
@@ -145,7 +160,40 @@ public class StdioMcpSession implements McpSession {
         return result;
     }
 
+    private JsonNode extractToolError(JsonNode result) {
+        ObjectNode error = objectMapper.createObjectNode();
+        error.put("code", "MCP_TOOL_ERROR");
+        error.put("message", safeLogValue(extractFirstText(result)));
+        error.put("isError", true);
+        return error;
+    }
+
+    private String extractFirstText(JsonNode result) {
+        JsonNode content = result.path("content");
+        if (content.isArray() && !content.isEmpty()) {
+            String text = content.get(0).path("text").asText(null);
+            if (text != null && !text.isBlank()) {
+                return text;
+            }
+        }
+        return "MCP tool returned an error.";
+    }
+
     private long elapsedMs(long start) {
         return (System.nanoTime() - start) / 1_000_000L;
+    }
+
+    private static String safeLogValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String safe = value
+                .replaceAll("(?i)authorization\\s*[:=]\\s*bearer\\s+[^\\s,;]+", "Authorization: <redacted>")
+                .replaceAll("(?i)bearer\\s+[^\\s,;]+", "Bearer <redacted>")
+                .replaceAll("(?i)(delegation[_-]?token|refresh[_-]?token|token|api[_-]?key|password|secret)\\s*[:=]\\s*[^\\s,;]+", "$1=<redacted>")
+                .replaceAll("(?i)jdbc:[^\\s,;]+", "jdbc:<redacted>")
+                .replaceAll("(?m)^\\s*at\\s+.+$", "<stack redacted>")
+                .replaceAll("[\\r\\n\\t]+", " ");
+        return safe.length() <= 200 ? safe : safe.substring(0, 200);
     }
 }

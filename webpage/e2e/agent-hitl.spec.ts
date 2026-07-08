@@ -147,6 +147,21 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await assertNoForbiddenUiTerms(page)
   })
 
+  test('warehouse inventory distribution resolves natural slot name and renders data', async ({ page }) => {
+    await openAssistant(page)
+    await clearCapturedSse(page)
+
+    await sendAssistantMessage(page, '帮我查8号库位的库存情况')
+    await expect(page.getByText(/8号库位.*按产品分布|8号库位.*库存分布/).last()).toBeVisible()
+    await expect(page.getByText(/2板20件/).last()).toBeVisible()
+    await expect(page.getByText(/黄冰糖（袋）/).last()).toBeVisible()
+    await expect(page.getByText(/无化验库存/).last()).toBeVisible()
+
+    const distributionStream = await lastSse(page)
+    expect(terminalPayload(distributionStream).finishReason).toBe('completed')
+    await assertNoForbiddenUiTerms(page)
+  })
+
   test('mobile drawer does not overflow horizontally', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openAssistant(page)

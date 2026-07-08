@@ -18,7 +18,9 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolutionStatus;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
 import com.Laibin.SugarInventory.mcp.service.WarehouseReadService;
+import com.Laibin.SugarInventory.mcp.tool.InventoryDistributionToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.WarehouseTools;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -682,6 +684,44 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void inventoryDistributionForwardsWarehouseScopedAllProductGrouping() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "scopeLabel":"全部产品",
+                  "productLabel":"全部产品",
+                  "groupBy":"product",
+                  "totalStockText":"100件（跨规格）",
+                  "totalEquivalentPieces":100,
+                  "warehouseCount":1,
+                  "productCount":2,
+                  "palletCount":4,
+                  "groups":[],
+                  "notes":[]
+                }
+                """)));
+        InventoryDistributionRequest request = new InventoryDistributionRequest(
+                new ProductScope("ALL", null, null, null),
+                new WarehouseScope("SINGLE_WAREHOUSE", 8),
+                null,
+                "product",
+                20
+        );
+
+        var response = tools.getInventoryDistribution(request);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.groupBy()).isEqualTo("product");
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/inventory/distribution");
+        String body = recorded.getBody().readUtf8();
+        assertThat(body).contains("\"productScope\":{\"type\":\"ALL\"");
+        assertThat(body).contains("\"warehouseScope\":{\"type\":\"SINGLE_WAREHOUSE\",\"warehouseId\":8}");
+        assertThat(body).contains("\"groupBy\":\"product\"");
+        assertThat(body).doesNotContain("sql", "http");
+    }
+
+    @Test
     void inventoryDistributionRejectsUnsupportedFilterBeforeBackendCall() {
         InventoryDistributionRequest request = new InventoryDistributionRequest(
                 new ProductScope("ALL", null, null, null),
@@ -706,6 +746,56 @@ class WarehouseToolsTest {
         ));
         assertThat(missingScopeType.error().code()).isEqualTo("INVALID_ARGUMENT");
         assertThat(backend.getRequestCount()).isZero();
+    }
+
+    @Test
+    void inventoryDistributionToolCallbackAcceptsNestedScopeArguments() throws Exception {
+        backend.enqueue(json(result("""
+                {
+                  "scopeLabel":"全部产品",
+                  "groupBy":"product",
+                  "totalStockText":"2板20件",
+                  "totalEquivalentPieces":100,
+                  "warehouseCount":1,
+                  "productCount":1,
+                  "palletCount":2,
+                  "groups":[
+                    {
+                      "groupLabel":"黄冰糖（袋）",
+                      "productLabel":"黄冰糖（袋） 25kg/件 40件/板",
+                      "stockText":"2板20件",
+                      "totalEquivalentPieces":100,
+                      "palletCount":2,
+                      "warehouseCount":1,
+                      "productCount":1,
+                      "percentageText":"100.0%",
+                      "riskLabels":["存在无化验库存"]
+                    }
+                  ],
+                  "notes":[]
+                }
+                """)));
+        InventoryDistributionToolCallback callback = new InventoryDistributionToolCallback(
+                tools, new ObjectMapper().findAndRegisterModules(), "{}");
+
+        String output = callback.call("""
+                {
+                  "productScope": {"type": "ALL"},
+                  "warehouseScope": {"type": "SINGLE_WAREHOUSE", "warehouseId": 8},
+                  "groupBy": "product",
+                  "limit": 20
+                }
+                """);
+
+        JsonNode json = new ObjectMapper().readTree(output);
+        assertThat(json.path("error").isMissingNode() || json.path("error").isNull()).isTrue();
+        assertThat(json.path("totalStockText").asText()).isEqualTo("2板20件");
+        assertThat(json.path("groups").get(0).path("productLabel").asText()).contains("黄冰糖（袋）");
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/inventory/distribution");
+        String body = recorded.getBody().readUtf8();
+        assertThat(body).contains("\"warehouseScope\":{\"type\":\"SINGLE_WAREHOUSE\",\"warehouseId\":8}");
     }
 
     @Test

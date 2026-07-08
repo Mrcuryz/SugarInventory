@@ -212,7 +212,7 @@ class WarehouseAgentRuntime:
             self._raise_if_cancelled()
             state.selected_warehouse = SelectedEntity(
                 internal_id=warehouse_id,
-                display_label=self._safe_display_label(str(option.get("displayLabel") or "所选库位")),
+                display_label=self._warehouse_display_name(str(option.get("displayLabel") or "所选库位")),
                 source="user_selection",
             )
             state.pending_clarification = None
@@ -524,7 +524,8 @@ class WarehouseAgentRuntime:
             trace_id=trace_id,
             request_id=request_id,
         )
-        safe_result = self._adapt_inventory_distribution(raw)
+        self._raise_if_tool_error_payload(raw)
+        safe_result = self._adapt_inventory_distribution(raw, arguments, state)
         self._raise_if_cancelled()
         state.last_inventory_distribution = safe_result.model_dump(exclude_none=True)
         state.tool_results.append(
@@ -873,7 +874,7 @@ class WarehouseAgentRuntime:
         )
         if warehouse_id is None:
             return None
-        label = self._safe_display_label(
+        label = self._warehouse_display_name(
             str(
                 result.get("displayLabel")
                 or candidate.get("displayLabel")
@@ -922,7 +923,9 @@ class WarehouseAgentRuntime:
 
     def _format_inventory_distribution(self, result: SafeInventoryDistributionResult) -> str:
         if not result.groups:
-            return f"未查询到 {result.scopeLabel} 的当前在库库存分布。"
+            if result.filterSummary:
+                return f"未查询到{result.scopeLabel}中符合{result.filterSummary}条件的当前在库库存分布。"
+            return f"未查询到{result.scopeLabel}的当前在库库存分布。"
         if result.groupBy == "warehouse":
             heading = f"{result.scopeLabel}当前库存主要存放在以下库位："
         elif result.groupBy == "product":
@@ -955,6 +958,16 @@ class WarehouseAgentRuntime:
             }
             if group.latestInboundTime:
                 field["latestInboundTime"] = f"最近入库 {group.latestInboundTime}"
+            if group.riskLabels:
+                field["riskText"] = "；".join(group.riskLabels)
+            if any("无化验" in risk for risk in group.riskLabels):
+                product_name = self._distribution_group_product_name(group)
+                if product_name:
+                    field["actionKind"] = "create_assay"
+                    field["actionLabel"] = "去补充"
+                    field["actionProductName"] = product_name
+                    if group.latestInboundTime:
+                        field["actionSampleDate"] = str(group.latestInboundTime)
             fields.append(field)
         risk_summary = self._distribution_risk_summary(result)
         if risk_summary:
@@ -973,6 +986,16 @@ class WarehouseAgentRuntime:
         if not risk_counts:
             return None
         return "；".join(f"{risk}（{count}项）" for risk, count in sorted(risk_counts.items()))
+
+    def _distribution_group_product_name(self, group: SafeInventoryDistributionGroup) -> str | None:
+        source = group.productLabel or group.groupLabel
+        text = self._safe_text(source)
+        if not text:
+            return None
+        text = re.split(r"\s+\d+(?:\.\d+)?kg/件\b", text, maxsplit=1)[0].strip()
+        text = re.split(r"\s+\d+件/板\b", text, maxsplit=1)[0].strip()
+        text = re.sub(r"^\d+\.\s*", "", text).strip()
+        return text or None
 
     def _format_warehouse_answer(self, label: str, result: SafeWarehouseResult) -> str:
         display_name = self._warehouse_display_name(result.warehouseName or label)
@@ -1023,8 +1046,14 @@ class WarehouseAgentRuntime:
     def _distribution_summary(self, result: SafeInventoryDistributionResult) -> str:
         return f"{result.totalStockText}，分布于 {result.warehouseCount} 个库位"
 
-    def _adapt_inventory_distribution(self, raw: dict[str, Any]) -> SafeInventoryDistributionResult:
+    def _adapt_inventory_distribution(
+        self,
+        raw: dict[str, Any],
+        arguments: dict[str, Any] | None = None,
+        state: WarehouseAgentState | None = None,
+    ) -> SafeInventoryDistributionResult:
         root = raw if isinstance(raw, dict) else {}
+        self._raise_if_tool_error_payload(root)
         groups = []
         for raw_group in root.get("groups") if isinstance(root.get("groups"), list) else []:
             group = self._dict_value(raw_group)
@@ -1056,9 +1085,19 @@ class WarehouseAgentRuntime:
                     riskLabels=risk_labels,
                 )
             )
-        product_label = self._first_safe_text([root], "productLabel") or "所选产品"
-        scope_label = self._first_safe_text([root], "scopeLabel") or product_label
+        fallback_scope_label = self._distribution_scope_label_from_arguments(arguments)
+        warehouse_scope_label = self._distribution_warehouse_scope_label_from_arguments(arguments, state)
+        product_label = self._first_safe_text([root], "productLabel")
+        if product_label is None or (fallback_scope_label and product_label in {"所选产品", "该产品"}):
+            product_label = fallback_scope_label or "所选产品"
+        scope_label = self._first_safe_text([root], "scopeLabel")
+        if scope_label is None or (fallback_scope_label and scope_label in {"所选产品", "该产品"}):
+            scope_label = fallback_scope_label or product_label
+        if warehouse_scope_label:
+            scope_label = self._combine_distribution_scope_label(scope_label, warehouse_scope_label)
         group_by = self._first_safe_text([root], "groupBy")
+        if group_by is None and isinstance(arguments, dict):
+            group_by = self._safe_text(arguments.get("groupBy"))
         if group_by not in {"warehouse", "product", "warehouse_product"}:
             group_by = "warehouse"
         total_stock = self._first_safe_text([root], "totalStockText") or "0板0件"
@@ -1078,7 +1117,136 @@ class WarehouseAgentRuntime:
             palletCount=self._first_scalar([root], "palletCount") or 0,
             groups=groups,
             notes=notes,
+            filterSummary=self._distribution_filter_summary_from_arguments(arguments),
         )
+
+    def _raise_if_tool_error_payload(self, raw: Any) -> None:
+        if not isinstance(raw, dict):
+            return
+        error = raw.get("error")
+        if isinstance(error, dict):
+            code = str(error.get("code") or "MCP_TOOL_ERROR")
+            raise ToolGatewayError(code, self._safe_tool_error_message(code), bool(error.get("retryable", False)))
+        if raw.get("isError") is True:
+            code = str(raw.get("code") or "MCP_TOOL_ERROR")
+            raise ToolGatewayError(code, self._safe_tool_error_message(code), bool(raw.get("retryable", False)))
+
+    def _safe_tool_error_message(self, code: str) -> str:
+        if code in {"UPSTREAM_UNAUTHORIZED", "SERVICE_AUTHENTICATION_FAILED"}:
+            return "当前查询认证失败。"
+        if code in {"UPSTREAM_PERMISSION_DENIED", "AGENT_SCOPE_DENIED"}:
+            return "当前用户没有执行该只读查询的权限。"
+        if code == "UPSTREAM_TIMEOUT":
+            return "查询仓储数据超时。"
+        if code == "UPSTREAM_NOT_FOUND":
+            return "未找到符合条件的业务数据。"
+        if code == "UPSTREAM_SERVER_ERROR":
+            return "仓储后端暂时无法完成查询。"
+        return "只读仓储工具调用失败。"
+
+    def _distribution_scope_label_from_arguments(self, arguments: dict[str, Any] | None) -> str | None:
+        if not isinstance(arguments, dict):
+            return None
+        product_scope = arguments.get("productScope")
+        if not isinstance(product_scope, dict):
+            return None
+        scope_type = product_scope.get("type")
+        if scope_type == "ALL":
+            return "全部产品"
+        if scope_type == "EXACT_PRODUCT_NAME_GROUP":
+            product_name = self._safe_text(product_scope.get("productName"))
+            return f"产品名称为“{product_name}”的全部规格" if product_name else None
+        if scope_type == "PRODUCT_TYPE_GROUP":
+            product_type = self._safe_text(product_scope.get("productType"))
+            return f"全部{product_type}大类" if product_type else None
+        return None
+
+    def _distribution_warehouse_scope_label_from_arguments(
+        self, arguments: dict[str, Any] | None, state: WarehouseAgentState | None
+    ) -> str | None:
+        if not isinstance(arguments, dict):
+            return None
+        warehouse_scope = arguments.get("warehouseScope")
+        if not isinstance(warehouse_scope, dict) or warehouse_scope.get("type") != "SINGLE_WAREHOUSE":
+            return None
+        requested_id = self._int_value(warehouse_scope, "warehouseId")
+        selected = state.selected_warehouse if state is not None else None
+        if selected is not None and requested_id is not None and selected.internal_id == requested_id:
+            return selected.display_label
+        return "所选库位"
+
+    def _combine_distribution_scope_label(self, scope_label: str, warehouse_label: str) -> str:
+        if scope_label == "全部产品":
+            return f"{warehouse_label}的全部产品"
+        if warehouse_label in scope_label:
+            return scope_label
+        return f"{warehouse_label}内{scope_label}"
+
+    def _distribution_filter_summary_from_arguments(self, arguments: dict[str, Any] | None) -> str | None:
+        if not isinstance(arguments, dict):
+            return None
+        filter_args = arguments.get("statusFilter")
+        if not isinstance(filter_args, dict):
+            return None
+        parts = []
+        date_summary = self._distribution_date_filter_summary(
+            self._safe_text(filter_args.get("entryDateFrom")),
+            self._safe_text(filter_args.get("entryDateTo")),
+        )
+        if date_summary:
+            parts.append(date_summary)
+        assay_status = self._safe_text(filter_args.get("assayStatus"))
+        assay_labels = {
+            "PASS": "化验合格",
+            "FAIL": "化验不合格",
+            "NO_STANDARD": "无标准化验",
+            "MULTIPLE_CANDIDATES": "化验标准多候选",
+            "HAS_ASSAY": "有化验记录",
+            "MISSING_ASSAY": "无化验",
+        }
+        if assay_status in assay_labels:
+            parts.append(assay_labels[assay_status])
+        product_statuses = self._safe_filter_values(filter_args.get("productStatuses"))
+        if product_statuses:
+            parts.append("产品状态为" + "、".join(product_statuses))
+        warehouse_statuses = self._safe_filter_values(filter_args.get("warehouseStatuses"))
+        if warehouse_statuses:
+            parts.append("库位状态为" + "、".join(warehouse_statuses))
+        pallet_statuses = self._safe_filter_values(filter_args.get("palletStatuses"))
+        pallet_labels = {
+            "INSTOCK": "托盘在库",
+            "FREE": "托盘空闲",
+            "PENDING": "托盘待处理",
+            "INVALID": "托盘作废",
+            "ORDER_RESERVED": "托盘已预留",
+        }
+        labeled_pallet_statuses = [pallet_labels.get(value, value) for value in pallet_statuses]
+        if labeled_pallet_statuses:
+            parts.append("托盘状态为" + "、".join(labeled_pallet_statuses))
+        return "、".join(parts) if parts else None
+
+    def _distribution_date_filter_summary(self, start: str | None, end: str | None) -> str | None:
+        if not start and not end:
+            return None
+        try:
+            start_date = date.fromisoformat(start) if start else None
+            end_date = date.fromisoformat(end) if end else None
+        except ValueError:
+            start_date = None
+            end_date = None
+        if start_date and end_date:
+            days = (end_date - start_date).days + 1
+            if days > 0:
+                return f"最近{days}天"
+            return f"{start}至{end}"
+        if start:
+            return f"{start}之后"
+        return f"{end}之前"
+
+    def _safe_filter_values(self, values: Any) -> list[str]:
+        if not isinstance(values, list):
+            return []
+        return [text for value in values if (text := self._safe_text(value)) is not None][:10]
 
     def _adapt_inventory_result(self, raw: dict[str, Any]) -> SafeInventoryResult:
         root = raw if isinstance(raw, dict) else {}

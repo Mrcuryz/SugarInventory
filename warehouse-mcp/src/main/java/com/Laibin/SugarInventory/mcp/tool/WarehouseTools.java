@@ -26,12 +26,16 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 
 @Service
 public class WarehouseTools {
+    private static final Logger log = LoggerFactory.getLogger(WarehouseTools.class);
+
     private final WarehouseReadService readService;
 
     public WarehouseTools(WarehouseReadService readService) {
@@ -113,6 +117,12 @@ public class WarehouseTools {
         } catch (WarehouseApiException e) {
             return InventoryDistributionResponse.error(ErrorMapper.upstream(e));
         } catch (RuntimeException e) {
+            log.warn("get_inventory_distribution failed; productScope={}, warehouseScope={}, groupBy={}, errorType={}, message={}",
+                    request == null || request.productScope() == null ? null : request.productScope().type(),
+                    request == null || request.warehouseScope() == null ? null : request.warehouseScope().type(),
+                    request == null ? null : request.groupBy(),
+                    e.getClass().getSimpleName(),
+                    safeLogValue(e.getMessage()));
             return InventoryDistributionResponse.error(ErrorMapper.unexpected());
         }
     }
@@ -177,6 +187,19 @@ public class WarehouseTools {
         } catch (RuntimeException e) {
             return AssayStatusResponse.error(ErrorMapper.unexpected());
         }
+    }
+
+    private static String safeLogValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String safe = value
+                .replaceAll("(?i)authorization\\s*[:=]\\s*bearer\\s+[^\\s,;]+", "Authorization: <redacted>")
+                .replaceAll("(?i)bearer\\s+[^\\s,;]+", "Bearer <redacted>")
+                .replaceAll("(?i)(delegation[_-]?token|refresh[_-]?token|token|api[_-]?key|password|secret)\\s*[:=]\\s*[^\\s,;]+", "$1=<redacted>")
+                .replaceAll("(?m)^\\s*at\\s+.+$", "<stack redacted>")
+                .replaceAll("[\\r\\n\\t]+", " ");
+        return safe.length() <= 200 ? safe : safe.substring(0, 200);
     }
 }
 

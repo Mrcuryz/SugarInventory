@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cancelAgentMessage,
@@ -12,10 +13,10 @@ import {
 } from '@/api/agent'
 import { useAuthStore } from '@/stores/auth'
 import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
-import AgentSessionPanel from '@/components/agent/AgentSessionPanel.vue'
 import { cleanOptionLabel } from '@/components/agent/agentDisplay'
 
 const visible = ref(false)
+const router = useRouter()
 const loadingSession = ref(false)
 const sending = ref(false)
 const cancelling = ref(false)
@@ -30,30 +31,28 @@ let activeStreamController = null
 let activeAssistantMessage = null
 
 const sessionStatus = computed(() => session.value?.status || '未启动')
+const sessionStatusLabel = computed(() => {
+  const labels = {
+    ACTIVE: '已连接',
+    REVOKED: '已撤销',
+    EXPIRED: '已过期',
+    '未启动': '未启动'
+  }
+  return labels[sessionStatus.value] || sessionStatus.value
+})
+const sessionStatusClass = computed(() => ({
+  active: sessionStatus.value === 'ACTIVE',
+  inactive: sessionStatus.value !== 'ACTIVE'
+}))
 const isAdmin = computed(() => ['ADMIN', 'SUPER_ADMIN'].includes(session.value?.roleCode || authStore.roleCode))
 const currentUserName = computed(() => session.value?.name || authStore.name || authStore.employeeId || '当前用户')
-const currentUserRole = computed(() => roleLabel(session.value?.roleCode || authStore.roleCode))
 const assistantName = computed(() => '智能仓储助手')
-const assistantModelName = computed(() => (
-  session.value?.modelDisplayName ||
-  '模型未配置'
-))
-const assistantModelState = computed(() => (session.value?.modelDisplayName ? 'running' : 'missing'))
 const userAvatarText = computed(() => avatarText(currentUserName.value, '用'))
 
 const avatarText = (name, fallback) => {
   const normalized = String(name || '').trim()
   if (!normalized) return fallback
   return normalized.slice(0, 1).toUpperCase()
-}
-
-const roleLabel = (roleCode) => {
-  const labels = {
-    SUPER_ADMIN: '超级管理员',
-    ADMIN: '管理员',
-    USER: '业务用户'
-  }
-  return labels[roleCode] || roleCode || '登录用户'
 }
 
 const open = async () => {
@@ -168,6 +167,12 @@ const send = async (options = {}) => {
     recordAssistantReview(text, assistantMessage, selectedOption)
   }
   return assistantMessage.finishReason
+}
+
+const handleComposerKeydown = (event) => {
+  if (event.isComposing || event.key !== 'Enter' || event.shiftKey) return
+  event.preventDefault()
+  send()
 }
 
 const recordAssistantReview = async (userQuestion, assistantMessage, selectedOption) => {
@@ -420,6 +425,18 @@ const scrollToBottom = async () => {
 }
 
 defineExpose({ open })
+const handleCardAction = async (action) => {
+  if (action?.actionKind !== 'create_assay') return
+  await router.push({
+    path: '/assay',
+    query: {
+      create: '1',
+      productName: action.productName || '',
+      sampleDate: action.sampleDate || ''
+    }
+  })
+  visible.value = false
+}
 </script>
 
 <template>
@@ -438,26 +455,21 @@ defineExpose({ open })
           <el-icon><ChatDotRound /></el-icon>
         </div>
         <div class="assistant-heading">
-          <div class="assistant-title">AI 助手</div>
-          <div class="assistant-subtitle">库存、库位、托盘和化验查询</div>
+          <div class="assistant-title-row">
+            <div class="assistant-title">AI 助手</div>
+            <span class="header-status" :class="sessionStatusClass">
+              <span class="status-dot" />
+              会话{{ sessionStatusLabel }}
+            </span>
+          </div>
+          <div class="assistant-subtitle">
+            <span>库存、库位、托盘和化验查询</span>
+          </div>
         </div>
       </div>
     </template>
 
     <div class="assistant-shell" v-loading="loadingSession">
-      <AgentSessionPanel
-        v-model:debug-mode="debugMode"
-        :status="sessionStatus"
-        :expires-at="session?.expiresAt"
-        :is-admin="isAdmin"
-        :assistant-name="assistantName"
-        :model-display-name="assistantModelName"
-        :model-state="assistantModelState"
-        :user-name="currentUserName"
-        :user-role="currentUserRole"
-        :user-avatar-text="userAvatarText"
-      />
-
       <el-scrollbar ref="scrollRef" class="message-list">
         <div
           v-for="(item, index) in messages"
@@ -472,7 +484,6 @@ defineExpose({ open })
             <div class="message-speaker" :class="item.role">
               <template v-if="item.role === 'assistant'">
                 <span class="speaker-name">{{ assistantName }}</span>
-                <span class="model-badge">{{ assistantModelName }}</span>
               </template>
               <template v-else>
                 <span class="speaker-name">{{ currentUserName }}</span>
@@ -484,6 +495,7 @@ defineExpose({ open })
               :sending="sending"
               @choose-option="chooseOption($event, item)"
               @feedback="submitMessageFeedback"
+              @card-action="handleCardAction"
             />
           </div>
           <div v-if="item.role === 'user'" class="user-avatar">
@@ -500,7 +512,7 @@ defineExpose({ open })
           maxlength="500"
           show-word-limit
           placeholder="例如：查黄冰糖（袋）库存，或问这些主要放在哪些库位"
-          @keydown.ctrl.enter.prevent="send"
+          @keydown="handleComposerKeydown"
         />
         <div class="composer-actions">
           <button type="button" class="plain-action" @click="closeSession">关闭</button>
@@ -556,6 +568,8 @@ defineExpose({ open })
   align-items: center;
   gap: 12px;
   min-width: 0;
+  width: 100%;
+  padding-right: 34px;
 }
 
 .assistant-mark {
@@ -572,23 +586,67 @@ defineExpose({ open })
 }
 
 .assistant-heading {
+  flex: 1 1 auto;
   min-width: 0;
   display: grid;
   gap: 3px;
 }
 
+.assistant-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
 .assistant-title {
+  flex: none;
   color: var(--app-text);
   font-size: 17px;
   font-weight: 700;
   line-height: 22px;
 }
 
+.header-status {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a6afbf;
+  box-shadow: 0 0 0 3px rgba(166, 175, 191, 0.13);
+}
+
+.header-status.active .status-dot {
+  background: #12b76a;
+  box-shadow: 0 0 0 3px rgba(18, 183, 106, 0.14);
+}
+
 .assistant-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   color: var(--app-text-tertiary);
   font-size: 12px;
   line-height: 16px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-subtitle > span:first-child {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -694,25 +752,6 @@ defineExpose({ open })
   white-space: nowrap;
 }
 
-.model-badge {
-  flex: none;
-  max-width: 150px;
-  min-height: 20px;
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 7px;
-  border: 1px solid #d7e4ff;
-  border-radius: 999px;
-  background: #f2f6ff;
-  color: #4267b2;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 16px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .composer {
   flex: 0 0 auto;
   padding: 14px 18px 16px;
@@ -809,6 +848,15 @@ defineExpose({ open })
     height: 34px;
   }
 
+  .assistant-header {
+    gap: 10px;
+    padding-right: 30px;
+  }
+
+  .assistant-title-row {
+    gap: 7px;
+  }
+
   .message-list :deep(.el-scrollbar__view) {
     padding: 12px 12px 14px;
   }
@@ -828,10 +876,6 @@ defineExpose({ open })
 
   .message-row.user .message-stack {
     max-width: calc(100% - 38px);
-  }
-
-  .model-badge {
-    max-width: 120px;
   }
 
   .composer {

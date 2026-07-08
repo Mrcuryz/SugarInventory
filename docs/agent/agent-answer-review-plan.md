@@ -30,6 +30,8 @@
   - 每轮流式回答完成后，提交用户可见安全文本、页面路径、卡片是否生成、实际工具名摘要。
   - Review 写入为非阻塞旁路，不影响候选选择、resume 和继续对话。
   - 助手消息下方提供“没解决 / 答非所问 / 数据不对 / 展示问题”反馈入口。
+- 相关回归修复：
+  - `get_inventory_distribution` 的空结果 safe adapter 会从已验证工具参数推断展示范围，避免 ALL 查询被展示成“所选产品”。
 - 测试：
   - `AgentMessageReviewServiceImplTest`
   - `mvn -q "-Dtest=AgentMessageReviewServiceImplTest,AgentSessionServiceImplTest,RuntimeRoutingAgentGatewayServiceTest" test`

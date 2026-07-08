@@ -1187,6 +1187,7 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 * `warehouseScope` 支持 `ALL` 和 `SINGLE_WAREHOUSE`；`warehouseId` 必须与已确认 `selectedWarehouse` 一致；
 * 前端 resume 仍只提交 `optionId`，不得提交 `productId`；
 * `statusFilter` 仅允许白名单产品状态、库位状态、托盘状态、化验判断状态和入库日期范围；
+* 当 `assayStatus` 为 `PASS`、`FAIL`、`NO_STANDARD`、`MULTIPLE_CANDIDATES` 或 `HAS_ASSAY` 时，日期范围按化验 `sample_date` 理解；当 `assayStatus` 为 `MISSING_ASSAY` 时，因为不存在化验记录，日期范围按库存 `entry_date` 理解；
 * `groupBy` 仅允许 `warehouse`、`product`、`warehouse_product`；
 * `limit` 默认 20，范围 1 到 100；
 * 权限沿用当前用户 Agent session 委托身份、`mcp:warehouse:read` scope 和后端已认证只读查询边界；

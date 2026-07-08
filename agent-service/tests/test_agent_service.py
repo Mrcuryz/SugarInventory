@@ -593,7 +593,8 @@ def test_warehouse_inventory_query_resolves_warehouse_then_calls_distribution() 
                         "warehouseCount": 1,
                         "productCount": 1,
                         "percentageText": "100.0%",
-                        "riskLabels": [],
+                        "latestInboundTime": "2026-05-22",
+                        "riskLabels": ["存在无化验库存"],
                     }
                 ],
             },
@@ -614,8 +615,103 @@ def test_warehouse_inventory_query_resolves_warehouse_then_calls_distribution() 
     }
     body = response.json()
     assert "按产品分布" in body["answer"]
+    assert "8号库位" in body["answer"]
+    assert body["cards"][0]["title"].startswith("8号库位")
+    assert body["cards"][0]["fields"][0]["riskText"] == "存在无化验库存"
+    assert body["cards"][0]["fields"][0]["actionKind"] == "create_assay"
+    assert body["cards"][0]["fields"][0]["actionLabel"] == "去补充"
+    assert body["cards"][0]["fields"][0]["actionProductName"] == "黄冰糖（袋）"
+    assert body["cards"][0]["fields"][0]["actionSampleDate"] == "2026-05-22"
     assert "黄冰糖（袋）" in json.dumps(body, ensure_ascii=False)
     assert "warehouseId" not in json.dumps(body, ensure_ascii=False)
+    assert "productId" not in json.dumps(body, ensure_ascii=False)
+
+
+def test_warehouse_inventory_empty_distribution_keeps_warehouse_scope_in_answer() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 8, "displayLabel": "8号库位"}],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "0件（跨规格）",
+                "totalEquivalentPieces": 0,
+                "warehouseCount": 0,
+                "productCount": 0,
+                "palletCount": 0,
+                "groups": [],
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("帮我查8号库位的库存情况"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "未查询到8号库位的全部产品的当前在库库存分布。"
+    assert tool_client.calls[1]["arguments"]["warehouseScope"] == {
+        "type": "SINGLE_WAREHOUSE",
+        "warehouseId": 8,
+    }
+    assert "warehouseId" not in json.dumps(body, ensure_ascii=False)
+
+
+def test_warehouse_inventory_tool_error_is_not_reported_as_empty_distribution() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 8, "displayLabel": "8号库位"}],
+            },
+            "get_inventory_distribution": ToolGatewayError(
+                "MCP_TOOL_ERROR",
+                "只读仓储工具调用失败。",
+                retryable=False,
+            ),
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("帮我查8号库位的库存情况"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "只读仓储工具调用失败。"
+    assert body["error"]["code"] == "MCP_TOOL_ERROR"
+    assert "未查询到" not in body["answer"]
+    assert "warehouseId" not in json.dumps(body, ensure_ascii=False)
+
+
+def test_distribution_error_payload_is_not_reported_as_empty_distribution() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 8, "displayLabel": "8号库位"}],
+            },
+            "get_inventory_distribution": {
+                "code": "MCP_TOOL_ERROR",
+                "message": "Conversion from JSON to ProductScope failed",
+                "isError": True,
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("帮我查8号库位的库存情况"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "只读仓储工具调用失败。"
+    assert body["error"]["code"] == "MCP_TOOL_ERROR"
+    assert "未查询到" not in body["answer"]
+    assert "ProductScope" not in json.dumps(body, ensure_ascii=False)
+
 
 class FakeGatewayServer:
     def __init__(self, response: dict[str, Any], status_code: int = 200) -> None:
@@ -1454,11 +1550,38 @@ def test_repeated_all_product_distribution_with_different_days_calls_tool_again(
 
     distribution_calls = [call for call in tool_client.calls if call["toolName"] == "get_inventory_distribution"]
     assert len(distribution_calls) == 2
-    assert first.json()["answer"] == "未查询到 全部产品 的当前在库库存分布。"
+    assert first.json()["answer"] == "未查询到全部产品中符合最近7天、化验不合格条件的当前在库库存分布。"
     assert "黄冰糖（袋）" in json.dumps(second.json(), ensure_ascii=False)
     assert distribution_calls[0]["arguments"]["statusFilter"]["entryDateFrom"] != distribution_calls[1]["arguments"]["statusFilter"]["entryDateFrom"]
     assert distribution_calls[0]["arguments"]["statusFilter"]["assayStatus"] == "FAIL"
     assert distribution_calls[1]["arguments"]["statusFilter"]["assayStatus"] == "FAIL"
+
+
+def test_all_product_empty_distribution_uses_scope_from_verified_arguments() -> None:
+    tool_client = MockToolClient(
+        {
+            "get_inventory_distribution": {
+                "groupBy": "product",
+                "totalStockText": "0件（跨规格）",
+                "totalEquivalentPieces": 0,
+                "warehouseCount": 0,
+                "productCount": 0,
+                "palletCount": 0,
+                "groups": [],
+            }
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("帮我查全部产品中最近7天的不合格库存，按产品分类"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "未查询到全部产品中符合最近7天、化验不合格条件的当前在库库存分布。"
+    assert tool_client.calls[0]["arguments"]["productScope"] == {"type": "ALL"}
 
 
 @pytest.mark.parametrize(
