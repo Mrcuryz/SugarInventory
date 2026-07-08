@@ -1,0 +1,366 @@
+version: m1.4r-k2
+scope: "Agent Runtime Playbook + Tool Capability Registry + LLM Wiki Lite"
+principles:
+  - "本 registry 描述业务能力和工具选择边界，不替代 MCP schema。"
+  - "实时库存、库位、托盘、化验事实必须通过 MCP / 后端只读工具查询。"
+  - "resolver 只确认业务对象，不能作为最终业务答案。"
+  - "普通用户回答不得展示 toolName、productId、warehouseId、raw JSON、SUCCESS、token、Authorization、堆栈或 chain-of-thought。"
+  - "当前阶段不执行入库、出库、调拨、改库存、化验写入、基础资料修改或生产订单写入。"
+
+tools:
+  resolve_products:
+    business_name: "产品解析"
+    risk_level: "L1"
+    can_answer:
+      - "把用户输入的产品名称解析为候选产品、具体规格或受控产品范围。"
+      - "判断产品名称是否唯一、是否存在多候选或未找到。"
+    cannot_answer:
+      - "不能直接回答库存数量、库存位置或化验结果。"
+      - "不能替用户选择产品内部 ID。"
+      - "不能创建、修改或删除产品。"
+    use_when:
+      - "用户提供产品名称，但当前会话还没有唯一确认的产品或产品范围。"
+      - "后续主查询需要产品上下文，例如产品库存、产品分布、产品化验。"
+    do_not_use_when:
+      - "用户只是问助手身份、能力、闲聊或无关问题。"
+      - "用户问某库位有什么，且没有产品范围要求。"
+      - "用户要求出库、入库、调拨等写操作且没有明确只读检查对象。"
+    required_slots:
+      - "product_query"
+    optional_slots:
+      - "product_type"
+      - "product_status"
+      - "limit"
+    resolver_for:
+      - "get_inventory_overview"
+      - "get_inventory_distribution"
+      - "get_assay_status"
+    main_query_for: []
+    default_behavior: "唯一匹配后才继续主查询；多候选必须让用户选择；未找到时说明未找到并给出可改写的查询示例。"
+    examples:
+      - input: "查黄冰糖（袋）库存"
+        chain: "resolve_products -> get_inventory_overview"
+      - input: "黄冰糖在哪些库位"
+        chain: "resolve_products -> get_inventory_distribution(groupBy=warehouse)"
+      - input: "黄冰糖今天有没有化验"
+        chain: "resolve_products -> get_assay_status"
+    anti_examples:
+      - input: "你能干嘛？"
+        reason: "能力询问不应调用产品解析。"
+      - input: "1号库位有什么？"
+        reason: "这是库位内容查询，应解析库位并查库存分布。"
+    safe_result_summary:
+      - "resolutionStatus"
+      - "candidateCount"
+      - "safeCandidateLabels"
+      - "clarificationPrompt"
+    unsupported_alternatives:
+      - "请用户选择具体产品规格或受支持的产品范围。"
+
+  resolve_warehouses:
+    business_name: "库位解析"
+    risk_level: "L1"
+    can_answer:
+      - "把 1号库位、1号库、库位1 等自然语言表达解析为候选库位。"
+      - "判断库位名称是否唯一、是否多候选或未找到。"
+    cannot_answer:
+      - "不能直接回答库位库存、容量、占用率或状态。"
+      - "不能把用户输入的数字当内部 warehouseId 使用。"
+      - "不能创建、修改或删除库位。"
+    use_when:
+      - "用户提到库位名称，后续需要查库位状态、容量或该库位库存内容。"
+      - "用户问“某库位有什么”“某库位满了吗”“某库位还有多少容量”。"
+    do_not_use_when:
+      - "用户没有库位语义。"
+      - "用户只是问助手身份、能力或无关问题。"
+      - "用户问产品库存且没有库位范围。"
+    required_slots:
+      - "warehouse_query"
+    optional_slots:
+      - "only_available"
+      - "limit"
+    resolver_for:
+      - "get_warehouse_status"
+      - "get_inventory_distribution"
+    main_query_for: []
+    default_behavior: "解析成功后必须继续调用主查询工具；多候选时暂停并让用户选择；未找到时不得编造库位。"
+    examples:
+      - input: "8号库位有什么库存？"
+        chain: "resolve_warehouses -> get_inventory_distribution(productScope=ALL, warehouseScope=已确认库位, groupBy=product)"
+      - input: "8号库位满了吗？"
+        chain: "resolve_warehouses -> get_warehouse_status"
+    anti_examples:
+      - input: "8号库位有什么库存？"
+        wrong_chain: "resolve_warehouses"
+        reason: "只调用 resolver 没有回答库存内容。"
+      - input: "查黄冰糖库存"
+        reason: "没有库位语义，不应解析库位。"
+    safe_result_summary:
+      - "resolutionStatus"
+      - "candidateCount"
+      - "safeWarehouseLabels"
+      - "matchReason"
+    unsupported_alternatives:
+      - "请用户换一个库位名称或选择候选库位。"
+
+  get_inventory_overview:
+    business_name: "单产品库存概览"
+    risk_level: "L1"
+    can_answer:
+      - "某个已确认产品的当前库存数量、板件展示、等价总件数和重量摘要。"
+      - "单产品库存是否有库存、库存规模大致多少。"
+    cannot_answer:
+      - "不能查询全部产品库存。"
+      - "不能按库位聚合展示库存分布。"
+      - "不能回答某库位有什么产品。"
+      - "不能执行出入库、调拨或库存修改。"
+    use_when:
+      - "产品已经唯一确认，用户问该产品当前库存。"
+      - "用户追问“这个产品还有多少”，且上下文有唯一产品。"
+    do_not_use_when:
+      - "产品名称有歧义或未确认。"
+      - "用户问“某库位有什么”。"
+      - "用户要求库存分布、趋势、导出或写操作。"
+    required_slots:
+      - "product"
+    optional_slots: []
+    resolver_for: []
+    main_query_for:
+      - "resolve_products"
+    default_behavior: "只使用已确认产品；回答优先使用业务展示库存、等价总件数和重量，不向普通用户展示 raw 字段。"
+    examples:
+      - input: "黄冰糖（袋）库存"
+        chain: "resolve_products -> get_inventory_overview"
+      - input: "刚才那个产品还有多少？"
+        chain: "get_inventory_overview"
+    anti_examples:
+      - input: "1号库位有什么？"
+        reason: "应查库存分布，不是单产品概览。"
+      - input: "帮我把库存改成 10 板"
+        reason: "写操作当前不支持。"
+    safe_result_summary:
+      - "productLabel"
+      - "displayStockInfo"
+      - "totalEquivalentPieces"
+      - "totalWeight"
+      - "riskLabels"
+    unsupported_alternatives:
+      - "如果用户问库位内容，改用 get_inventory_distribution。"
+      - "如果产品不明确，先用 resolve_products 消歧。"
+
+  get_inventory_distribution:
+    business_name: "库存分布查询"
+    risk_level: "L1"
+    can_answer:
+      - "已确认产品主要存放在哪些库位。"
+      - "某个已确认库位当前有什么产品和托盘分布。"
+      - "受控范围内按产品、库位、产品+库位聚合的当前库存分布。"
+      - "无化验、不合格等受控状态过滤下的库存风险摘要。"
+    cannot_answer:
+      - "不能任意下钻全部明细。"
+      - "不能导出报表或生成文件。"
+      - "不能修改库存、移动托盘或执行出入库。"
+      - "不能绕过 resolver 使用模型猜测的产品或库位内部 ID。"
+    use_when:
+      - "用户问产品在哪些库位、库存分布、按库位/产品聚合。"
+      - "用户问某库位有什么、有啥、放了什么、有哪些产品。"
+      - "用户明确问全部产品受控聚合，或已确认库位下的全部产品。"
+    do_not_use_when:
+      - "用户只问某库位容量、占用率或是否满仓。"
+      - "用户只问单产品总库存且不关心分布。"
+      - "缺少产品范围且也没有库位范围。"
+      - "用户要求写操作或报表导出。"
+    required_slots:
+      - "product_scope"
+      - "warehouse_scope"
+      - "group_by"
+    optional_slots:
+      - "status_filter"
+      - "limit"
+    resolver_for: []
+    main_query_for:
+      - "resolve_products"
+      - "resolve_warehouses"
+    default_behavior: "库位内容查询使用 productScope=ALL、已确认 warehouseScope、groupBy=product；单产品位置查询使用已确认产品范围、warehouseScope=ALL、groupBy=warehouse。"
+    examples:
+      - input: "1号库位有什么？"
+        chain: "resolve_warehouses -> get_inventory_distribution(productScope=ALL, warehouseScope=已确认库位, groupBy=product)"
+      - input: "黄冰糖（袋）在哪些库位？"
+        chain: "resolve_products -> get_inventory_distribution(productScope=已确认产品, warehouseScope=ALL, groupBy=warehouse)"
+      - input: "全部产品无化验库存统计"
+        chain: "get_inventory_distribution(productScope=ALL, warehouseScope=ALL, statusFilter.assayStatus=MISSING_ASSAY, groupBy=product)"
+    anti_examples:
+      - input: "1号库位满了吗？"
+        reason: "应使用 get_warehouse_status。"
+      - input: "导出库存报表"
+        reason: "当前没有导出工具。"
+    safe_result_summary:
+      - "scopeLabel"
+      - "totalStockText"
+      - "warehouseCount"
+      - "productCount"
+      - "palletCount"
+      - "riskLabels"
+      - "cards"
+    unsupported_alternatives:
+      - "可先做受控库存分布摘要。"
+      - "导出和任意明细下钻需要后续单独工具。"
+
+  get_warehouse_status:
+    business_name: "库位状态查询"
+    risk_level: "L1"
+    can_answer:
+      - "已确认库位的状态、最大容量、当前占用、剩余容量和占用率。"
+      - "某库位是否满仓、是否可继续放货的只读参考。"
+    cannot_answer:
+      - "不能列出该库位全部产品库存分布。"
+      - "不能执行调拨、入库、移库或修改库位容量。"
+      - "不能替代人工库位分配规则。"
+    use_when:
+      - "用户问库位容量、剩余容量、占用率、满没满、库位状态。"
+      - "写操作前的只读容量检查。"
+    do_not_use_when:
+      - "用户问某库位有什么、有哪些产品、放了什么。"
+      - "用户没有唯一确认库位。"
+    required_slots:
+      - "warehouse"
+    optional_slots: []
+    resolver_for: []
+    main_query_for:
+      - "resolve_warehouses"
+    default_behavior: "必须由库位解析或用户候选选择确认库位；回答中只展示业务状态和容量摘要。"
+    examples:
+      - input: "1号库位还有多少容量？"
+        chain: "resolve_warehouses -> get_warehouse_status"
+      - input: "这个库位满了吗？"
+        chain: "get_warehouse_status"
+    anti_examples:
+      - input: "1号库位有什么？"
+        reason: "这是库存分布问题，不是容量状态。"
+    safe_result_summary:
+      - "warehouseLabel"
+      - "status"
+      - "maxCapacity"
+      - "currentPalletCount"
+      - "remainingCapacity"
+      - "occupancyRate"
+    unsupported_alternatives:
+      - "如需查看库位内容，改用 get_inventory_distribution。"
+
+  get_pallet_status:
+    business_name: "托盘状态查询"
+    risk_level: "L1"
+    can_answer:
+      - "明确托盘码的当前状态、所在库位、产品、数量、化验和流转摘要。"
+      - "扫码后核对托盘是否在库、是否有异常提示。"
+    cannot_answer:
+      - "不能作废、恢复、确认任务或出库托盘。"
+      - "不能在没有托盘码时猜测托盘。"
+      - "不能修改托盘状态或流转记录。"
+    use_when:
+      - "用户提供明确托盘码或扫码结果。"
+      - "用户问某托盘在哪、是什么产品、能否做出库前检查。"
+    do_not_use_when:
+      - "没有托盘码，且上下文没有唯一托盘。"
+      - "用户要求真实出库、调拨、作废或恢复二维码。"
+    required_slots:
+      - "pallet"
+    optional_slots:
+      - "include_inventory"
+      - "include_assay"
+      - "include_flows"
+    resolver_for: []
+    main_query_for: []
+    default_behavior: "缺托盘码时只问托盘码；有托盘码时可查询位置、产品、数量、化验和流转安全摘要。"
+    examples:
+      - input: "查托盘 P202606130001"
+        chain: "get_pallet_status"
+      - input: "这个托盘能出库吗？"
+        chain: "get_pallet_status"
+        note: "只做出库前检查，不执行出库。"
+    anti_examples:
+      - input: "帮我出库"
+        reason: "没有明确只读检查对象时应判为写操作，不应要求补托盘码作为执行前提。"
+      - input: "作废这个二维码"
+        reason: "作废是写操作，当前不支持。"
+    safe_result_summary:
+      - "palletCodeMaskedOrLabel"
+      - "status"
+      - "productLabel"
+      - "warehouseLabel"
+      - "quantityText"
+      - "assaySummary"
+      - "warnings"
+    unsupported_alternatives:
+      - "请提供托盘码，我可以做只读状态查询。"
+      - "如果要执行出库或作废，需要未来写操作安全链路。"
+
+  get_assay_status:
+    business_name: "单产品/单日期化验状态查询"
+    risk_level: "L1"
+    can_answer:
+      - "已确认产品在指定日期的化验记录和判定状态。"
+      - "明确化验记录的合格、不合格、无标准、多候选或无化验风险摘要。"
+      - "出库前质量状态的只读参考。"
+    cannot_answer:
+      - "不能批量趋势分析或生成化验报表。"
+      - "不能导入、更新、删除化验。"
+      - "不能修改质量指标或质量标准。"
+      - "不能最终审批是否允许出库。"
+    use_when:
+      - "用户问某产品今天、昨天或某日期是否有化验、是否合格。"
+      - "库存或托盘结果提示无化验风险，用户要求查看原因。"
+    do_not_use_when:
+      - "产品未确认且没有明确化验记录。"
+      - "用户要求修改指标、补化验或导出化验报表。"
+    required_slots:
+      - "product_or_assay"
+    optional_slots:
+      - "production_date"
+      - "assay_record"
+    resolver_for: []
+    main_query_for:
+      - "resolve_products"
+    default_behavior: "产品不明确时先解析产品；日期缺失但用户问“今天”时按今天；无法确定日期时只问日期。"
+    examples:
+      - input: "黄冰糖（袋）今天有没有化验？"
+        chain: "resolve_products -> get_assay_status"
+      - input: "刚才那个产品今天合格吗？"
+        chain: "get_assay_status"
+    anti_examples:
+      - input: "修改这个产品的质量指标"
+        reason: "这是写操作，当前不支持。"
+      - input: "导出最近30天化验趋势"
+        reason: "当前没有批量分析和导出工具。"
+    safe_result_summary:
+      - "productLabel"
+      - "productionDate"
+      - "judgeResult"
+      - "needsAssay"
+      - "failedMetricCount"
+      - "warnings"
+    unsupported_alternatives:
+      - "可查询单产品单日期化验状态。"
+      - "批量趋势和报表导出需要后续新增受控工具。"
+
+write_operation_boundary:
+  current_behavior: "识别写操作并说明边界，不执行写入。"
+  future_required_flow:
+    - "resolver / 信息补全"
+    - "preview"
+    - "用户确认"
+    - "executionToken"
+    - "idempotencyKey"
+    - "execute"
+    - "审计"
+  forbidden_now:
+    - "入库"
+    - "出库"
+    - "调拨"
+    - "改库存"
+    - "新增或修改产品"
+    - "写入或修改化验"
+    - "修改质量指标或质量标准"
+    - "创建或修改生产订单"
+    - "任意 SQL"
+    - "任意 HTTP 代理"

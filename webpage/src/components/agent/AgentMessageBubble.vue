@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AgentBusinessCard from './AgentBusinessCard.vue'
 import AgentOptionCard from './AgentOptionCard.vue'
 import { hasDistributionCard, visibleCards } from './agentDisplay'
@@ -21,6 +21,7 @@ const props = defineProps({
 
 const emit = defineEmits(['choose-option', 'feedback', 'card-action'])
 
+const feedbackExpanded = ref(false)
 const cards = computed(() => visibleCards(props.item))
 const canSendFeedback = computed(() => (
   props.item.role === 'assistant' &&
@@ -29,6 +30,8 @@ const canSendFeedback = computed(() => (
   !props.item.needsUserSelection &&
   !props.item.feedbackSubmitted
 ))
+const showFeedbackTrigger = computed(() => canSendFeedback.value && !props.debugMode && !feedbackExpanded.value)
+const showFeedbackOptions = computed(() => canSendFeedback.value && (props.debugMode || feedbackExpanded.value))
 const bubbleClasses = computed(() => ({
   user: props.item.role === 'user',
   'wide-card-bubble': hasDistributionCard(props.item),
@@ -37,6 +40,11 @@ const bubbleClasses = computed(() => ({
   'is-interrupt': props.item.needsUserSelection || ['clarification_required', 'interrupt_required'].includes(props.item.finishReason),
   'is-streaming': Boolean(props.item.progress && !props.item.finishReason)
 }))
+
+const sendFeedback = (feedbackType) => {
+  feedbackExpanded.value = false
+  emit('feedback', { item: props.item, feedbackType })
+}
 </script>
 
 <template>
@@ -79,12 +87,23 @@ const bubbleClasses = computed(() => ({
       </div>
     </div>
 
-    <div v-if="canSendFeedback" class="feedback-actions" aria-label="回答反馈">
+    <div v-if="showFeedbackTrigger" class="feedback-entry">
+      <button
+        type="button"
+        :disabled="item.feedbackSubmitting"
+        title="展开回答反馈"
+        @click="feedbackExpanded = true"
+      >
+        反馈
+      </button>
+    </div>
+
+    <div v-if="showFeedbackOptions" class="feedback-actions" aria-label="回答反馈">
       <button
         type="button"
         :disabled="item.feedbackSubmitting"
         title="这次没有解决问题"
-        @click="emit('feedback', { item, feedbackType: 'NO_TOOL' })"
+        @click="sendFeedback('NO_TOOL')"
       >
         没解决
       </button>
@@ -92,7 +111,7 @@ const bubbleClasses = computed(() => ({
         type="button"
         :disabled="item.feedbackSubmitting"
         title="理解错了用户意图"
-        @click="emit('feedback', { item, feedbackType: 'WRONG_INTENT' })"
+        @click="sendFeedback('WRONG_INTENT')"
       >
         答非所问
       </button>
@@ -100,7 +119,7 @@ const bubbleClasses = computed(() => ({
         type="button"
         :disabled="item.feedbackSubmitting"
         title="数据或展示不正确"
-        @click="emit('feedback', { item, feedbackType: 'DATA_WRONG' })"
+        @click="sendFeedback('DATA_WRONG')"
       >
         数据不对
       </button>
@@ -108,9 +127,17 @@ const bubbleClasses = computed(() => ({
         type="button"
         :disabled="item.feedbackSubmitting"
         title="卡片或移动端展示有问题"
-        @click="emit('feedback', { item, feedbackType: 'CARD_BAD' })"
+        @click="sendFeedback('CARD_BAD')"
       >
         展示问题
+      </button>
+      <button
+        type="button"
+        :disabled="item.feedbackSubmitting"
+        title="填写其他反馈内容"
+        @click="sendFeedback('OTHER')"
+      >
+        其他
       </button>
     </div>
     <div v-else-if="item.feedbackSubmitted" class="feedback-recorded">已记录反馈</div>
@@ -233,6 +260,15 @@ const bubbleClasses = computed(() => ({
   border-top: 1px solid #eef2f7;
 }
 
+.feedback-entry {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #eef2f7;
+}
+
+.feedback-entry button,
 .feedback-actions button {
   height: 26px;
   padding: 0 8px;
@@ -246,12 +282,14 @@ const bubbleClasses = computed(() => ({
   cursor: pointer;
 }
 
+.feedback-entry button:hover:not(:disabled),
 .feedback-actions button:hover:not(:disabled) {
   border-color: #c7d7fe;
   color: var(--app-primary);
   background: #f7fbff;
 }
 
+.feedback-entry button:disabled,
 .feedback-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.6;

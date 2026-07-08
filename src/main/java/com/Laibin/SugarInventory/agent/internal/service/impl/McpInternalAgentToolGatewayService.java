@@ -154,6 +154,10 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
             return toolError("INVALID_ARGUMENT", "toolCallId 不能为空且长度不能超过 100。",
                     "toolCallId", false, List.of("为每次工具调用提供唯一标识。"), null);
         }
+        if (tooLong(request.getMessageId(), 100)) {
+            return toolError("INVALID_ARGUMENT", "messageId 长度不能超过 100。",
+                    "messageId", false, List.of("使用当前助手消息 ID。"), null);
+        }
         if (request.getArguments() == null) {
             return toolError("INVALID_ARGUMENT", "arguments 不能为空。", "arguments", false,
                     List.of("没有参数时传递空对象。"), null);
@@ -231,6 +235,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
         AgentToolAuditDTO audit = new AgentToolAuditDTO();
         audit.setToolName(safeIdentifier(toolName, 100));
         audit.setToolCallId(safeIdentifier(request.getToolCallId(), 100));
+        audit.setMessageId(safeIdentifier(request.getMessageId(), 100));
         audit.setUpstreamPath(UPSTREAM_PATHS.get(toolName));
         audit.setArgumentsSummary(limit(sanitizeText(toJson(request.getArguments())), 1000));
         audit.setRequestSummary(limit(sanitizeText(toJson(requestSummary(request))), 1000));
@@ -251,6 +256,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
     private Map<String, Object> requestSummary(InternalAgentToolRequestDTO request) {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("toolCallId", request.getToolCallId());
+        summary.put("messageId", request.getMessageId());
         if (request.getClient() != null) {
             summary.put("traceId", request.getClient().getTraceId());
             summary.put("requestId", request.getClient().getRequestId());

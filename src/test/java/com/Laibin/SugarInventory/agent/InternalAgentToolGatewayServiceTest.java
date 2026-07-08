@@ -108,6 +108,7 @@ class InternalAgentToolGatewayServiceTest {
         AgentToolAuditDTO audit = auditCaptor.getValue();
         assertThat(audit.getToolName()).isEqualTo("resolve_products");
         assertThat(audit.getToolCallId()).isEqualTo("tool_001");
+        assertThat(audit.getMessageId()).isEqualTo("msg_001");
         assertThat(audit.getResultCode()).isEqualTo("SUCCESS");
         assertThat(audit.getErrorCode()).isNull();
         assertThat(audit.getDurationMs()).isNotNegative();
@@ -288,6 +289,7 @@ class InternalAgentToolGatewayServiceTest {
         InternalAgentToolRequestDTO request = new InternalAgentToolRequestDTO();
         request.setAgentSessionId("agt_001");
         request.setToolCallId("tool_001");
+        request.setMessageId("msg_001");
         request.setArguments(new LinkedHashMap<>(arguments));
         request.setClient(client);
         return request;

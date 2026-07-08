@@ -91,7 +91,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
                     legacyGateway.handleMessage(loginUser, agentSessionId, request), loginUser);
             Integer userId = loginUser == null || loginUser.getUser() == null
                     ? null : loginUser.getUser().getId();
-            recordRuntimeAudit(agentSessionId, userId, requestId, traceId, request,
+            recordRuntimeAudit(agentSessionId, userId, null, requestId, traceId, request,
                     "legacy", "SUCCESS", null, legacyFallbackSessions.contains(agentSessionId),
                     legacyResponse, elapsedMillis(legacyStartedAt));
             return legacyResponse;
@@ -101,6 +101,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         AgentSessionVO sessionVO = agentSessionService.toSessionVO(session, loginUser);
         String requestId = UUID.randomUUID().toString();
         String traceId = UUID.randomUUID().toString();
+        String messageId = "msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         long startedAt = System.nanoTime();
         boolean fallbackUsed = false;
         String resultCode = "SUCCESS";
@@ -111,7 +112,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         String invalidResumeStatus = invalidResumeStatus(sessionVO, request);
         if (invalidResumeStatus != null) {
             result = invalidResumeResponse(sessionVO, invalidResumeStatus);
-            recordRuntimeAudit(agentSessionId, sessionVO.getUserId(), requestId, traceId, request,
+            recordRuntimeAudit(agentSessionId, sessionVO.getUserId(), messageId, requestId, traceId, request,
                     "python", "INVALID", "HITL_INTERRUPT_NOT_PENDING", false, result, elapsedMillis(startedAt));
             return result;
         }
@@ -122,6 +123,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             }
             PythonAgentChatRequestDTO pythonRequest = buildPythonRequest(
                     loginUser, sessionVO, request, requestId, traceId);
+            pythonRequest.setMessageId(messageId);
             PythonAgentChatResponseDTO pythonResponse = pythonAgentClient.chat(pythonRequest);
             pythonContextSessions.add(agentSessionId);
             result = mapPythonResponse(pythonResponse, sessionVO, loginUser);
@@ -147,7 +149,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             result = unavailableResponse(sessionVO);
         }
 
-        recordRuntimeAudit(agentSessionId, sessionVO.getUserId(), requestId, traceId, request,
+        recordRuntimeAudit(agentSessionId, sessionVO.getUserId(), messageId, requestId, traceId, request,
                 path, resultCode, errorCode, fallbackUsed, result, elapsedMillis(startedAt));
         return result;
     }
@@ -269,7 +271,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
                 resultCode = "CLIENT_CANCELLED";
                 errorCode = "CLIENT_CANCELLED";
             }
-            recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), requestId, traceId, request,
+            recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), activeStream.messageId(), requestId, traceId, request,
                     "python_stream", resultCode, errorCode, fallbackUsed, auditResponse, elapsedMillis(startedAt));
             activeStreams.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()), activeStream);
             cancelledMessageKeys.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()));
@@ -517,7 +519,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         } catch (RuntimeException e) {
             emitter.completeWithError(e);
         } finally {
-            recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), requestId, traceId, request,
+            recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), messageId, requestId, traceId, request,
                     "python_stream", "INVALID", "HITL_INTERRUPT_NOT_PENDING", false,
                     response, elapsedMillis(startedAt));
         }
@@ -837,6 +839,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
 
     private void recordRuntimeAudit(String agentSessionId,
                                     Integer userId,
+                                    String messageId,
                                     String requestId,
                                     String traceId,
                                     AgentMessageRequestDTO request,
@@ -851,6 +854,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             AgentToolAuditDTO audit = new AgentToolAuditDTO();
             audit.setToolName("agent_runtime");
             audit.setToolCallId(requestId);
+            audit.setMessageId(messageId);
             audit.setUpstreamPath(switch (path) {
                 case "python" -> "/internal/agent/chat";
                 case "python_stream" -> "/internal/agent/chat/stream";

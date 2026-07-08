@@ -46,7 +46,7 @@
 
 ### M1.4-review-2：自动纠正检测与证据增强
 
-状态：部分完成。
+状态：已完成证据增强基础版。
 
 范围：
 
@@ -59,11 +59,30 @@
 
 - 前端检测下一轮纠正表达，并调用 feedback API 标记上一轮回答。
 - 后端新增 `USER_CORRECTION` 分类，落为 `USER_INPUT / USER_CORRECTION_DETECTED`，并将 `test_case_status` 标记为 `NEEDED`。
+- 新增审计关联迁移：`migrations/2026-07-08-add-agent-review-evidence-correlation.sql`。
+- `agent_tool_audit_log` 新增 `message_id`，Java runtime 审计、Python 内部工具调用和 Java 内部工具网关统一透传当前助手消息 ID。
+- `agent_message_review` 新增：
+  - `answer_trace_summary`：短文本 trace 摘要。
+  - `agent_decision_snapshot`：安全结构化决策快照，不记录 chain-of-thought。
+- 后端自动关联本轮：
+  - `TOOL_AUDIT`
+  - `RUNTIME_AUDIT`
+  - `INTERRUPT_STATE`
+- 后端自动生成 evidence summary，覆盖未调用工具、仅调用 resolver、主查询有数据但回答无数据、runtime 异常、HITL 状态等常见审查线索。
+- 后端补强自动归因：
+  - `PLANNER / TOOL_NOT_CALLED`
+  - `PLANNER / RESOLVER_ONLY`
+  - `DATA / NO_MATCH_OR_FALLBACK`
+  - `SAFE_ADAPTER / NON_EMPTY_RESULT_RENDERED_AS_EMPTY`
+  - `USER_INPUT / USER_CORRECTION_DETECTED`
+  - `PLANNER / INTENT_MISS`
+  - `CONTEXT / CONTEXT_NOT_USED`
 
 未完成：
 
-- 尚未自动关联 tool audit / runtime audit / interrupt state。
-- 尚未自动生成“实际只调用了哪个工具”的证据摘要。
+- 尚未做管理员审查台。
+- 尚未自动生成回归测试文件。
+- 历史测试数据如果没有 `message_id`，只能按会话和时间窗口弱关联，证据摘要会标明“按时间窗口弱关联”。
 
 ### M1.4-review-3：审查台与修复流转
 
@@ -103,6 +122,8 @@
 - `expected_capability`：预期业务能力，例如“全部产品不合格库存按产品分组”。
 - `assistant_answer_text_safe`：普通 UI 展示给用户的安全文本。
 - `assistant_answer_summary`：后端生成或前端提供的短摘要。
+- `answer_trace_summary`：业务级 trace 摘要，例如 intent、实际工具、finishReason、卡片生成和归因。
+- `agent_decision_snapshot`：结构化安全决策快照，包含 intent、business domain、recognized entities、missing slots、actual tools、finishReason、answer type 等。
 - `suggested_fix_type`：`ADD_TOOL`、`FIX_PLANNER`、`FIX_TOOL_SCHEMA`、`FIX_SAFE_ADAPTER`、`FIX_UI_RENDER`、`FIX_PERMISSION`、`FIX_DATA_MODEL`、`FIX_PROMPT`、`FIX_TEST_CASE`、`USER_TRAINING`、`WONT_FIX`。
 - `test_case_status`：`NONE`、`NEEDED`、`CREATED`、`PASSING`。
 - `review_source`：`AUTO`、`USER_FEEDBACK`、`ADMIN`。
@@ -121,11 +142,14 @@
 第一阶段只做保守规则：
 
 - 用户问库存、库位、托盘、化验等业务问题，但本轮未记录实际工具调用：`LOW_CONFIDENCE / PLANNER / TOOL_NOT_CALLED`。
+- 用户问业务问题，本轮只调用 `resolve_products` 或 `resolve_warehouses`，未继续调用主查询工具：`LOW_CONFIDENCE / PLANNER / RESOLVER_ONLY`。
 - 回答包含“未找到匹配”“暂不支持”“无法准确”“请换一个更准确”等兜底话术：`LOW_CONFIDENCE / DATA / NO_MATCH_OR_FALLBACK`。
+- 主查询工具审计摘要显示非空，但助手回答为无数据：`NEEDS_REVIEW / SAFE_ADAPTER / NON_EMPTY_RESULT_RENDERED_AS_EMPTY`。
 - 用户反馈“答非所问”：`NEEDS_REVIEW / PLANNER / INTENT_MISS`。
 - 用户反馈“展示问题”：`NEEDS_REVIEW / UI / CARD_RENDER_BAD`。
-
-后续阶段再接入 tool audit 和下一轮用户纠正规则。
+- 下一轮用户纠正表达：`NEEDS_REVIEW / USER_INPUT / USER_CORRECTION_DETECTED`。
+- 闲聊或能力询问被误判为业务缺参：`NEEDS_REVIEW / PLANNER / INTENT_MISS`。
+- 上下文追问未沿用上下文：`LOW_CONFIDENCE / CONTEXT / CONTEXT_NOT_USED`。
 
 ## 安全边界
 

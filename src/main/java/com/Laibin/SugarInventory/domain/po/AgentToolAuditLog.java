@@ -16,6 +16,7 @@ public class AgentToolAuditLog {
     private Integer userId;
     private String toolName;
     private String toolCallId;
+    private String messageId;
     private String upstreamPath;
     private String argumentsSummary;
     private String requestSummary;

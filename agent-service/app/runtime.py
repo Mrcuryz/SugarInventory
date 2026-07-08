@@ -197,6 +197,7 @@ class WarehouseAgentRuntime:
                 intent,
                 request.client.traceId,
                 request.client.requestId,
+                request.messageId,
             )
         elif pending.kind == "warehouse":
             warehouse_id = self._int_value(internal, "warehouseId")
@@ -234,6 +235,7 @@ class WarehouseAgentRuntime:
                     state,
                     request.client.traceId,
                     request.client.requestId,
+                    request.messageId,
                     distribution_args,
                 )
             else:
@@ -242,6 +244,7 @@ class WarehouseAgentRuntime:
                     state,
                     request.client.traceId,
                     request.client.requestId,
+                    request.messageId,
                 )
         else:
             response = ChatResponse(agentSessionId=request.agentSessionId, answer="已记录你的选择。")
@@ -258,7 +261,7 @@ class WarehouseAgentRuntime:
         except ValueError:
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
-                answer="当前我只能使用受控的只读仓储工具。请补充要查询的产品、库位、托盘码或生产日期。",
+                answer="当前我只能使用受控的只读仓储工具。你可以换成库存、库位、托盘或化验状态查询。",
                 needsUserSelection=True,
             )
         state.messages.append(
@@ -268,9 +271,14 @@ class WarehouseAgentRuntime:
                 "toolName": plan.toolName,
                 "intent": plan.intent,
                 "responseMode": plan.responseMode,
+                "intentRouter": plan.routeSnapshot,
             }
         )
-        return self._execute_plan(request, state, plan)
+        response = self._execute_plan(request, state, plan)
+        response.reviewTrace = plan.routeSnapshot
+        if request.client.debug and plan.routeSnapshot:
+            response.debug = {"intentRouter": plan.routeSnapshot}
+        return response
 
     def _execute_plan(self, request: ChatRequest, state: WarehouseAgentState, plan: Any) -> ChatResponse:
         if plan.action == "ask_user":
@@ -285,7 +293,7 @@ class WarehouseAgentRuntime:
         if plan.action != "call_tool" or not plan.toolName:
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
-                answer="当前我只能使用受控的只读仓储工具。请补充要查询的产品、库位、托盘码或生产日期。",
+                answer="当前我只能使用受控的只读仓储工具。你可以换成库存、库位、托盘或化验状态查询。",
                 needsUserSelection=True,
             )
 
@@ -306,6 +314,7 @@ class WarehouseAgentRuntime:
                     state,
                     request.client.traceId,
                     request.client.requestId,
+                    request.messageId,
                     plan.arguments,
                 )
             return self._answer_inventory(
@@ -313,6 +322,7 @@ class WarehouseAgentRuntime:
                 state,
                 request.client.traceId,
                 request.client.requestId,
+                request.messageId,
                 plan.arguments,
             )
         if plan.toolName == "get_inventory_distribution":
@@ -327,6 +337,7 @@ class WarehouseAgentRuntime:
                 state,
                 request.client.traceId,
                 request.client.requestId,
+                request.messageId,
                 plan.arguments,
             )
         if plan.toolName == "get_warehouse_status":
@@ -341,6 +352,7 @@ class WarehouseAgentRuntime:
                 state,
                 request.client.traceId,
                 request.client.requestId,
+                request.messageId,
                 plan.arguments,
             )
         if plan.toolName == "get_assay_status":
@@ -407,6 +419,7 @@ class WarehouseAgentRuntime:
             intent,
             request.client.traceId,
             request.client.requestId,
+            request.messageId,
         )
 
     def _continue_product_intent(
@@ -416,6 +429,7 @@ class WarehouseAgentRuntime:
         intent: str,
         trace_id: str | None,
         request_id: str | None,
+        message_id: str | None,
     ) -> ChatResponse:
         if intent == "assay":
             if state.selected_product is None or state.selected_product.internal_id is None:
@@ -426,6 +440,7 @@ class WarehouseAgentRuntime:
                 arguments={"productId": state.selected_product.internal_id, "productionDate": date.today().isoformat()},
                 trace_id=trace_id,
                 request_id=request_id,
+                message_id=message_id,
             )
             self._raise_if_cancelled()
             state.last_assay_result = result
@@ -435,10 +450,10 @@ class WarehouseAgentRuntime:
                 answer=self._format_assay_answer(state.selected_product.display_label, result),
             )
         if intent == "inventory_distribution":
-            return self._answer_inventory_distribution(agent_session_id, state, trace_id, request_id)
+            return self._answer_inventory_distribution(agent_session_id, state, trace_id, request_id, message_id)
         if state.selected_product is None or state.selected_product.internal_id is None:
             return ChatResponse(agentSessionId=agent_session_id, answer="库存概览需要选择一个具体产品规格。", needsUserSelection=True)
-        return self._answer_inventory(agent_session_id, state, trace_id, request_id)
+        return self._answer_inventory(agent_session_id, state, trace_id, request_id, message_id)
 
     def _answer_inventory(
         self,
@@ -446,6 +461,7 @@ class WarehouseAgentRuntime:
         state: WarehouseAgentState,
         trace_id: str | None,
         request_id: str | None,
+        message_id: str | None,
         arguments: dict[str, Any] | None = None,
     ) -> ChatResponse:
         tool_arguments = arguments or {"productId": state.selected_product.internal_id}
@@ -455,6 +471,7 @@ class WarehouseAgentRuntime:
             arguments=tool_arguments,
             trace_id=trace_id,
             request_id=request_id,
+            message_id=message_id,
         )
         safe_result = self._adapt_inventory_result(result)
         self._raise_if_cancelled()
@@ -476,6 +493,7 @@ class WarehouseAgentRuntime:
         state: WarehouseAgentState,
         trace_id: str | None,
         request_id: str | None,
+        message_id: str | None,
         arguments: dict[str, Any] | None = None,
     ) -> ChatResponse:
         safe_result = None
@@ -492,6 +510,7 @@ class WarehouseAgentRuntime:
                 arguments=tool_arguments,
                 trace_id=trace_id,
                 request_id=request_id,
+                message_id=message_id,
             )
             safe_result = self._adapt_inventory_result(result)
             self._raise_if_cancelled()
@@ -513,6 +532,7 @@ class WarehouseAgentRuntime:
         state: WarehouseAgentState,
         trace_id: str | None,
         request_id: str | None,
+        message_id: str | None,
         arguments: dict[str, Any] | None = None,
     ) -> ChatResponse:
         if arguments is None:
@@ -523,6 +543,7 @@ class WarehouseAgentRuntime:
             arguments=arguments,
             trace_id=trace_id,
             request_id=request_id,
+            message_id=message_id,
         )
         self._raise_if_tool_error_payload(raw)
         safe_result = self._adapt_inventory_distribution(raw, arguments, state)
@@ -591,6 +612,7 @@ class WarehouseAgentRuntime:
                 state,
                 request.client.traceId,
                 request.client.requestId,
+                request.messageId,
                 distribution_args,
             )
         return self._answer_warehouse_status(
@@ -598,6 +620,7 @@ class WarehouseAgentRuntime:
             state,
             request.client.traceId,
             request.client.requestId,
+            request.messageId,
         )
 
     def _answer_warehouse_status(
@@ -606,6 +629,7 @@ class WarehouseAgentRuntime:
         state: WarehouseAgentState,
         trace_id: str | None,
         request_id: str | None,
+        message_id: str | None,
         arguments: dict[str, Any] | None = None,
     ) -> ChatResponse:
         tool_arguments = arguments or {"warehouseId": state.selected_warehouse.internal_id}
@@ -615,6 +639,7 @@ class WarehouseAgentRuntime:
             arguments=tool_arguments,
             trace_id=trace_id,
             request_id=request_id,
+            message_id=message_id,
         )
         safe_result = self._adapt_warehouse_result(result)
         self._raise_if_cancelled()
@@ -636,6 +661,7 @@ class WarehouseAgentRuntime:
             arguments=arguments,
             trace_id=request.client.traceId,
             request_id=request.client.requestId,
+            message_id=request.messageId,
         )
 
     def _call_tool_values(
@@ -646,10 +672,12 @@ class WarehouseAgentRuntime:
         arguments: dict[str, Any],
         trace_id: str | None,
         request_id: str | None,
+        message_id: str | None,
     ) -> dict[str, Any]:
         self._raise_if_cancelled()
         result = self.tool_client.call_tool(
             agent_session_id=agent_session_id,
+            message_id=message_id,
             tool_name=tool_name,
             arguments=arguments,
             trace_id=trace_id,
@@ -929,6 +957,8 @@ class WarehouseAgentRuntime:
         if result.groupBy == "warehouse":
             heading = f"{result.scopeLabel}当前库存主要存放在以下库位："
         elif result.groupBy == "product":
+            if self._is_warehouse_scope_distribution(result):
+                return self._format_warehouse_inventory_summary(result)
             heading = f"{result.scopeLabel}当前库存按产品分布如下："
         else:
             heading = f"{result.scopeLabel}当前库存按库位和产品分布如下："
@@ -969,14 +999,64 @@ class WarehouseAgentRuntime:
                     if group.latestInboundTime:
                         field["actionSampleDate"] = str(group.latestInboundTime)
             fields.append(field)
-        risk_summary = self._distribution_risk_summary(result)
-        if risk_summary:
-            fields.append({"kind": "risk_summary", "label": "风险提示", "value": risk_summary})
+        if not self._is_warehouse_scope_distribution(result):
+            risk_summary = self._distribution_risk_summary(result)
+            if risk_summary:
+                fields.append({"kind": "risk_summary", "label": "风险提示", "value": risk_summary})
         return BusinessCard(
             cardType="inventory_distribution",
             title=f"{result.scopeLabel}库存分布",
             fields=fields,
         )
+
+    def _is_warehouse_scope_distribution(self, result: SafeInventoryDistributionResult) -> bool:
+        return result.groupBy == "product" and "库位" in self._safe_text(result.scopeLabel)
+
+    def _format_warehouse_inventory_summary(self, result: SafeInventoryDistributionResult) -> str:
+        label = self._safe_text(result.scopeLabel).replace("的全部产品", "").strip() or result.scopeLabel
+        product_count = self._display_count(result.productCount, len(result.groups))
+        pallet_count = self._display_count(result.palletCount, 0)
+        names = self._top_distribution_names(result, limit=2)
+
+        summary = f"{label}当前有 {product_count} 类产品，共 {pallet_count} 个托盘"
+        if names:
+            connector = "和" if len(names) == 2 else ""
+            summary += f"，主要是{connector.join(names)}"
+        summary += "。"
+
+        risk_summary = self._warehouse_inventory_risk_sentence(result)
+        if risk_summary:
+            summary += risk_summary
+        summary += "详情见下方卡片。"
+        return summary
+
+    def _top_distribution_names(self, result: SafeInventoryDistributionResult, limit: int) -> list[str]:
+        names: list[str] = []
+        seen: set[str] = set()
+        for group in result.groups:
+            name = self._distribution_group_product_name(group) or self._safe_text(group.groupLabel)
+            if not name or name in seen:
+                continue
+            names.append(name)
+            seen.add(name)
+            if len(names) >= limit:
+                break
+        return names
+
+    def _warehouse_inventory_risk_sentence(self, result: SafeInventoryDistributionResult) -> str:
+        risk_labels = [risk for group in result.groups for risk in group.riskLabels]
+        if not risk_labels:
+            return ""
+        if any("无化验" in risk for risk in risk_labels):
+            return "其中存在无化验库存，出库前建议先核对化验状态。"
+        return "其中存在库存风险提示，出库前建议先核对相关状态。"
+
+    def _display_count(self, value: int | float | str | None, fallback: int) -> str:
+        if value is None or value == "":
+            return str(fallback)
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
 
     def _distribution_risk_summary(self, result: SafeInventoryDistributionResult) -> str | None:
         risk_counts: dict[str, int] = {}

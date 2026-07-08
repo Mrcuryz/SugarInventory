@@ -31,7 +31,7 @@ const breadcrumbs = computed(() => route.matched
   })))
 
 const activeMenu = computed(() => route.path)
-const visibleMenus = computed(() => filterMenuByPermissions(menuList, authStore.permissionCodes))
+const visibleMenus = computed(() => filterMenuByPermissions(menuList, authStore.permissionCodes, authStore.roleCode))
 const displayName = computed(() => authStore.name || authStore.employeeId || '当前账号')
 
 watch(

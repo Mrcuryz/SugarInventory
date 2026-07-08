@@ -35,6 +35,7 @@ class AgentToolClient(Protocol):
         self,
         *,
         agent_session_id: str,
+        message_id: str | None = None,
         tool_name: str,
         arguments: dict[str, Any],
         trace_id: str | None = None,
@@ -53,6 +54,7 @@ class JavaGatewayToolClient:
         self,
         *,
         agent_session_id: str,
+        message_id: str | None = None,
         tool_name: str,
         arguments: dict[str, Any],
         trace_id: str | None = None,
@@ -65,6 +67,7 @@ class JavaGatewayToolClient:
 
         payload = {
             "agentSessionId": agent_session_id,
+            "messageId": message_id,
             "toolCallId": f"py_{uuid.uuid4().hex[:16]}",
             "arguments": arguments,
             "client": {"traceId": trace_id, "requestId": request_id},
@@ -135,6 +138,7 @@ class MockToolClient:
         self,
         *,
         agent_session_id: str,
+        message_id: str | None = None,
         tool_name: str,
         arguments: dict[str, Any],
         trace_id: str | None = None,
@@ -145,6 +149,7 @@ class MockToolClient:
         self.calls.append(
             {
                 "agentSessionId": agent_session_id,
+                "messageId": message_id,
                 "toolName": tool_name,
                 "arguments": arguments,
                 "traceId": trace_id,

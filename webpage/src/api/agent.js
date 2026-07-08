@@ -16,6 +16,12 @@ export const recordAgentMessageReview = (agentSessionId, data) =>
 export const submitAgentMessageReviewFeedback = (agentSessionId, messageId, data) =>
   request.post(`/agent/sessions/${agentSessionId}/message-reviews/${messageId}/feedback`, data)
 
+export const pageAgentMessageReviews = (params = {}) => request.get('/agent/reviews', { params })
+
+export const getAgentMessageReviewDetail = id => request.get(`/agent/reviews/${id}`)
+
+export const updateAgentMessageReviewStatus = (id, data) => request.patch(`/agent/reviews/${id}/status`, data)
+
 export const streamAgentMessage = async (agentSessionId, data, onEvent, options = {}) => {
   await streamAgentSse(`/api/agent/sessions/${agentSessionId}/messages/stream`, data, onEvent, options)
 }

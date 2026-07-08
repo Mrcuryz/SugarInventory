@@ -13,6 +13,9 @@ public class AgentToolAuditDTO {
     @Size(max = 100)
     private String toolCallId;
 
+    @Size(max = 100)
+    private String messageId;
+
     @Size(max = 500)
     private String upstreamPath;
 

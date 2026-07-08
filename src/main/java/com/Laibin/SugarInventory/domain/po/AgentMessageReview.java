@@ -20,6 +20,8 @@ public class AgentMessageReview {
     private String userQuestion;
     private String assistantAnswerTextSafe;
     private String assistantAnswerSummary;
+    private String answerTraceSummary;
+    private String agentDecisionSnapshot;
     private String answerStatus;
     private String confidenceLevel;
     private String failureDomain;

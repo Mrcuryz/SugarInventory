@@ -54,6 +54,7 @@ def sse_for_request(
                 response = resume_handler(
                     ResumeRequest(
                         agentSessionId=request.agentSessionId,
+                        messageId=request.messageId,
                         resumeToken=request.message.resumeToken,
                         user=request.user,
                         event=ResumeEvent(
@@ -143,6 +144,7 @@ def events_for_response(
     answer_delta_streamer: AnswerDeltaStreamer | None = None,
     terminal_context: EventPayload | None = None,
 ) -> Iterator[str]:
+    terminal_payload = _terminal_context(response, terminal_context)
     if include_start:
         yield _event(builder.next("message_start", {"role": "assistant"}))
     interrupt_card = next(
@@ -179,6 +181,7 @@ def events_for_response(
                     "finishReason": "interrupt_required",
                     "interruptId": interrupt_card.interruptId,
                     "interruptKind": interrupt_card.interruptKind or "CLARIFICATION",
+                    **terminal_payload,
                 },
             )
         )
@@ -194,8 +197,10 @@ def events_for_response(
                 },
             )
         )
-        yield _event(builder.next("message_end", _finish_payload(finish_reason, terminal_context)))
+        yield _event(builder.next("message_end", _finish_payload(finish_reason, terminal_payload)))
     else:
+        if response.debug:
+            yield _event(builder.next("debug", response.debug))
         yield _event(builder.next("progress", {"stage": "answer", "text": "正在整理查询结果。"}))
         for card in response.cards:
             if card.cardType == "candidate_selection":
@@ -204,7 +209,7 @@ def events_for_response(
         if response.answer:
             for delta in _answer_deltas(response.answer, answer_delta_streamer):
                 yield _event(builder.next("text_delta", {"text": delta}))
-        yield _event(builder.next("message_end", _finish_payload("completed", terminal_context)))
+        yield _event(builder.next("message_end", _finish_payload("completed", terminal_payload)))
 
 
 class StreamEventBuilder:
@@ -239,6 +244,13 @@ def _cancelled_events(
 
 def _finish_payload(finish_reason: str, terminal_context: EventPayload | None) -> EventPayload:
     return {"finishReason": finish_reason, **(terminal_context or {})}
+
+
+def _terminal_context(response: ChatResponse, terminal_context: EventPayload | None) -> EventPayload:
+    payload: EventPayload = dict(terminal_context or {})
+    if response.reviewTrace:
+        payload["reviewTrace"] = response.reviewTrace
+    return payload
 
 
 def _answer_deltas(answer: str, streamer: AnswerDeltaStreamer | None) -> Iterator[str]:

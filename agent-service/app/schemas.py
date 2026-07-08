@@ -77,6 +77,7 @@ class ResumeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     agentSessionId: str = Field(min_length=1, max_length=64)
+    messageId: str | None = Field(default=None, min_length=1, max_length=64)
     resumeToken: str | None = Field(default=None, max_length=200)
     user: UserSummary | None = None
     event: ResumeEvent
@@ -214,6 +215,7 @@ class ChatResponse(BaseModel):
     needsUserSelection: bool = False
     cards: list[BusinessCard] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
+    reviewTrace: dict[str, Any] | None = None
     debug: dict[str, Any] | None = None
     error: AgentError | None = None
 

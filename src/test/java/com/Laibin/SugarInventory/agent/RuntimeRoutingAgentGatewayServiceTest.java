@@ -95,11 +95,15 @@ class RuntimeRoutingAgentGatewayServiceTest {
         assertThat(forwarded.getMessage().getType()).isEqualTo("user_message");
         assertThat(forwarded.getMessage().getContent()).isEqualTo("查黄冰糖库存");
         assertThat(forwarded.getAgentSessionId()).isEqualTo("agt_001");
+        assertThat(forwarded.getMessageId()).startsWith("msg_");
         assertThat(forwarded.getUser().getPermissionCodes()).containsExactly("inventory:view");
         String json = new ObjectMapper().writeValueAsString(forwarded);
         assertThat(json).doesNotContain("delegationToken", "Authorization", "refreshToken", "password", "service-secret");
         assertThat(json).doesNotContain("\"selection\"");
         assertThat(response.getAnswer()).contains("11板30件");
+        ArgumentCaptor<AgentToolAuditDTO> auditCaptor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
+        verify(sessionService).recordToolAudit(eq("agt_001"), eq(2), auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getMessageId()).isEqualTo(forwarded.getMessageId());
     }
 
     @Test
@@ -274,6 +278,7 @@ class RuntimeRoutingAgentGatewayServiceTest {
         verify(sessionService, timeout(3000)).recordToolAudit(eq("agt_001"), eq(2), captor.capture());
         assertThat(captor.getValue().getResultCode()).isEqualTo("CLIENT_CANCELLED");
         assertThat(captor.getValue().getErrorCode()).isEqualTo("CLIENT_CANCELLED");
+        assertThat(captor.getValue().getMessageId()).isEqualTo(messageId.get());
     }
 
     @Test

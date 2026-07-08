@@ -19,6 +19,12 @@ const routes = [
         meta: { title: '操作日志', keepAlive: true, permCode: 'log:view' },
         component: () => import('@/components/OperationLogs.vue')
       },
+      {
+        path: 'agent-review',
+        name: 'AgentReviewLite',
+        meta: { title: 'AI Review Lite', keepAlive: true, permCode: 'agent:review:view' },
+        component: () => import('@/components/AgentReviewLite.vue')
+      },
       { path: 'product', name: 'Product', meta: { title: '产品管理', keepAlive: true, permCode: 'product:view' }, component: () => import('@/components/Product.vue') },
       { path: 'productStock', name: 'ProductStock', meta: { title: '库存汇总', keepAlive: true, permCode: 'inventory:view' }, component: () => import('@/components/ProductStock.vue') },
       { path: 'auto-inbound', name: 'AutoInbound', meta: { title: '智能报数处理', keepAlive: true, permCode: 'inventory:view' }, component: () => import('@/components/AutoInbound.vue') },
@@ -83,7 +89,7 @@ router.beforeEach(async to => {
     if (!tokenStore.token) return true
     try {
       await authStore.ensureLoaded()
-      return findFirstAccessiblePath(authStore.permissionCodes)
+      return findFirstAccessiblePath(authStore.permissionCodes, authStore.roleCode)
     } catch (error) {
       tokenStore.removeToken()
       authStore.clearAuth()
@@ -106,7 +112,7 @@ router.beforeEach(async to => {
 
   const permCode = to.meta?.permCode
   if (permCode && !authStore.hasPermission(permCode)) {
-    return findFirstAccessiblePath(authStore.permissionCodes)
+    return findFirstAccessiblePath(authStore.permissionCodes, authStore.roleCode)
   }
 
   return true

@@ -284,6 +284,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         log.setUserId(userId);
         log.setToolName(limit(dto.getToolName(), 100));
         log.setToolCallId(limit(dto.getToolCallId(), 100));
+        log.setMessageId(limit(dto.getMessageId(), 100));
         log.setUpstreamPath(limit(dto.getUpstreamPath(), 500));
         log.setArgumentsSummary(limit(sanitizeSummary(dto.getArgumentsSummary()), 1000));
         log.setRequestSummary(limit(sanitizeSummary(withUpstreamPath(dto.getUpstreamPath(), dto.getRequestSummary())), 1000));

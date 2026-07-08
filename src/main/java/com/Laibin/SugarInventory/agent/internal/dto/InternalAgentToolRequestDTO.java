@@ -21,6 +21,9 @@ public class InternalAgentToolRequestDTO {
     @Size(max = 100)
     private String toolCallId;
 
+    @Size(max = 100)
+    private String messageId;
+
     @NotNull
     private Map<String, Object> arguments;
 

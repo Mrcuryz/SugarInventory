@@ -107,7 +107,8 @@ const send = async (options = {}) => {
     interruptKind: null,
     resumeToken: null,
     expiresAt: null,
-    finishReason: null
+    finishReason: null,
+    intentTrace: null
   })
   activeAssistantMessage = assistantMessage
   messages.value.push(assistantMessage)
@@ -186,9 +187,10 @@ const recordAssistantReview = async (userQuestion, assistantMessage, selectedOpt
       assistantAnswerTextSafe: assistantMessage.content,
       assistantAnswerSummary: assistantMessage.content,
       pagePath: window.location.pathname,
-      actualIntentSummary: selectedOption?.displayLabel
+      ...intentReviewPayload(assistantMessage.intentTrace),
+      actualIntentSummary: formatIntentTrace(assistantMessage.intentTrace) || (selectedOption?.displayLabel
         ? `用户选择候选项后继续：${selectedOption.displayLabel}`
-        : null,
+        : null),
       actualToolNames: extractToolNames(assistantMessage.toolCalls),
       hasCards: Boolean(assistantMessage.cards?.length),
       finishReason: assistantMessage.finishReason
@@ -198,12 +200,75 @@ const recordAssistantReview = async (userQuestion, assistantMessage, selectedOpt
   }
 }
 
+const intentReviewPayload = (trace) => {
+  if (!trace?.intent_type) return {}
+  return {
+    intent_type: safeReviewScalar(trace.intent_type),
+    intent_subtype: safeReviewScalar(trace.intent_subtype),
+    business_domain: safeReviewScalar(trace.business_domain),
+    business_objects: safeBusinessObjects(trace.business_objects),
+    missing_slots: safeReviewList(trace.missing_slots),
+    support_status: safeReviewScalar(trace.support_status),
+    next_action: safeReviewScalar(trace.next_action),
+    planned_tools: safeReviewList(trace.planned_tools)
+  }
+}
+
+const safeReviewScalar = (value, maxLength = 120) => {
+  const text = String(value || '').trim()
+  if (!text || /(authorization|bearer\s+|token|password|secret|stacktrace|jdbc:|chain[-_ ]?of[-_ ]?thought)/i.test(text)) {
+    return null
+  }
+  return text.slice(0, maxLength)
+}
+
+const safeReviewList = (values = []) => {
+  if (!Array.isArray(values)) return []
+  return Array.from(new Set(values.map(item => safeReviewScalar(item, 100)).filter(Boolean))).slice(0, 20)
+}
+
+const safeBusinessObjects = (objects) => {
+  if (!objects || typeof objects !== 'object' || Array.isArray(objects)) return {}
+  return Object.entries(objects).reduce((result, [key, value]) => {
+    const safeKey = safeReviewScalar(key, 80)
+    if (!safeKey || safeKey.toLowerCase().endsWith('id') || /(authorization|token|password|secret|stacktrace)/i.test(safeKey)) {
+      return result
+    }
+    if (Array.isArray(value)) {
+      const list = safeReviewList(value)
+      if (list.length) result[safeKey] = list
+      return result
+    }
+    const safeValue = safeReviewScalar(value, 120)
+    if (safeValue) result[safeKey] = safeValue
+    return result
+  }, {})
+}
+
 const extractToolNames = (toolCalls = []) => {
   const names = new Set()
   toolCalls.forEach(call => {
     if (call?.toolName) names.add(call.toolName)
   })
   return Array.from(names)
+}
+
+const formatIntentTrace = (trace) => {
+  if (!trace?.intent_type) return null
+  const parts = [
+    `intent=${trace.intent_type}`,
+    trace.intent_subtype ? `subtype=${trace.intent_subtype}` : null,
+    trace.business_domain ? `domain=${trace.business_domain}` : null,
+    trace.support_status ? `support=${trace.support_status}` : null,
+    trace.next_action ? `next=${trace.next_action}` : null
+  ].filter(Boolean)
+  if (trace.missing_slots?.length) {
+    parts.push(`missing=${trace.missing_slots.join('|')}`)
+  }
+  if (trace.planned_tools?.length) {
+    parts.push(`planned=${trace.planned_tools.join('|')}`)
+  }
+  return parts.join('; ')
 }
 
 const correctionPatterns = [
@@ -278,6 +343,9 @@ const applyStreamEvent = (message, event) => {
     case 'tool_start':
     case 'tool_end':
     case 'debug':
+      if (payload.intentRouter) {
+        message.intentTrace = payload.intentRouter
+      }
       message.toolCalls.push(payload)
       break
     case 'cancelled':
@@ -287,6 +355,11 @@ const applyStreamEvent = (message, event) => {
       break
     case 'message_end':
       message.finishReason = payload.finishReason || 'completed'
+      if (payload.reviewTrace?.intent_type) {
+        message.intentTrace = payload.reviewTrace
+      } else if (payload.intentRouter?.intent_type) {
+        message.intentTrace = payload.intentRouter
+      }
       message.interruptId = payload.interruptId || message.interruptId
       message.interruptKind = payload.interruptKind || message.interruptKind
       if (message.finishReason === 'completed') {
@@ -367,10 +440,30 @@ const chooseOption = async (option, sourceMessage) => {
 
 const submitMessageFeedback = async ({ item, feedbackType }) => {
   if (!session.value?.agentSessionId || !item?.messageId || item.feedbackSubmitting) return
+  const normalizedType = feedbackType || 'OTHER'
+  let feedbackNote = null
+  if (normalizedType === 'OTHER') {
+    const result = await ElMessageBox.prompt('请描述这次回答的问题，便于后续复盘。', '其他反馈', {
+      confirmButtonText: '提交',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '例如：遗漏了上一轮选择的产品，或回答没有覆盖我关心的范围。',
+      inputValidator: (value) => {
+        const text = String(value || '').trim()
+        if (!text) return '请填写反馈内容'
+        if (text.length > 1000) return '反馈内容不能超过 1000 字'
+        return true
+      }
+    }).catch(() => null)
+    if (!result) return
+    feedbackNote = String(result.value || '').trim()
+    if (!feedbackNote) return
+  }
   item.feedbackSubmitting = true
   try {
     await submitAgentMessageReviewFeedback(session.value.agentSessionId, item.messageId, {
-      feedbackType
+      feedbackType: normalizedType,
+      ...(feedbackNote ? { feedbackNote } : {})
     })
     item.feedbackSubmitted = true
     ElMessage.success('已记录反馈')
@@ -387,9 +480,17 @@ const messageStateClass = (item) => ({
   'is-interrupt': item.needsUserSelection || ['clarification_required', 'interrupt_required'].includes(item.finishReason),
   'is-streaming': Boolean(item.progress && !item.finishReason)
 })
-const handleBeforeClose = async (done) => {
-  const closed = await closeSession()
-  if (closed && done) done()
+
+const suspendAssistant = () => {
+  visible.value = false
+}
+
+const handleBeforeClose = (done) => {
+  if (done) {
+    done()
+    return
+  }
+  suspendAssistant()
 }
 
 const closeSession = async () => {
@@ -397,14 +498,14 @@ const closeSession = async () => {
     visible.value = false
     return true
   }
-  const confirmed = await ElMessageBox.confirm('关闭后将撤销当前 Agent 会话，是否继续？', '关闭 AI 助手', {
+  const confirmed = await ElMessageBox.confirm('结束后将撤销当前 Agent 会话，并清理本次对话上下文，是否继续？', '结束 AI 助手会话', {
     type: 'warning',
-    confirmButtonText: '关闭',
+    confirmButtonText: '结束会话',
     cancelButtonText: '取消'
   }).catch(() => false)
   if (!confirmed) return false
   try {
-    await revokeAgentSession(session.value.agentSessionId, { revokedReason: 'USER_CLOSED_ASSISTANT' })
+    await revokeAgentSession(session.value.agentSessionId, { revokedReason: 'USER_ENDED_ASSISTANT_SESSION' })
     ElMessage.success('Agent 会话已撤销')
   } finally {
     session.value = null
@@ -435,7 +536,7 @@ const handleCardAction = async (action) => {
       sampleDate: action.sampleDate || ''
     }
   })
-  visible.value = false
+  suspendAssistant()
 }
 </script>
 
@@ -515,7 +616,8 @@ const handleCardAction = async (action) => {
           @keydown="handleComposerKeydown"
         />
         <div class="composer-actions">
-          <button type="button" class="plain-action" @click="closeSession">关闭</button>
+          <button type="button" class="plain-action" @click="suspendAssistant">收起</button>
+          <button type="button" class="plain-action danger-action" @click="closeSession">结束会话</button>
           <button v-if="sending" type="button" class="plain-action" :disabled="cancelling" @click="cancelStream">
             {{ cancelling ? '取消中' : '取消' }}
           </button>
@@ -816,6 +918,16 @@ const handleCardAction = async (action) => {
     border-color: #c7d7fe;
     background: #f7fbff;
     color: var(--app-primary);
+  }
+}
+
+.danger-action {
+  color: #b42318;
+
+  &:hover:not(:disabled) {
+    border-color: #fecdca;
+    background: #fffbfa;
+    color: #b42318;
   }
 }
 

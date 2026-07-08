@@ -19,6 +19,7 @@ import {
 export const menuList = [
   { path: '/home', title: '首页', icon: House, permCode: 'dashboard:view' },
   { path: '/operationlogs', title: '操作日志', icon: Document, permCode: 'log:view' },
+  { path: '/agent-review', title: 'AI Review Lite', icon: Document, permCode: 'agent:review:view' },
   { path: '/product', title: '产品管理', icon: Histogram, permCode: 'product:view' },
   {
     path: '/warehouse-management',
@@ -125,15 +126,16 @@ const menuByPath = new Map(flattenMenu(menuList).map(item => [item.path, item]))
 
 export const getMenuIconByPath = path => menuByPath.get(path)?.icon || Document
 
-export const filterMenuByPermissions = (items, permissionCodes = []) => {
+export const filterMenuByPermissions = (items, permissionCodes = [], roleCode = '') => {
   const codeSet = new Set(permissionCodes || [])
-  const canVisit = item => !item.permCode || codeSet.has(item.permCode)
+  const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(roleCode)
+  const canVisit = item => !item.permCode || isAdmin || codeSet.has(item.permCode)
 
   return (items || [])
     .map(item => {
       const next = { ...item }
       if (item.children?.length) {
-        next.children = filterMenuByPermissions(item.children, permissionCodes)
+        next.children = filterMenuByPermissions(item.children, permissionCodes, roleCode)
       }
       return next
     })
@@ -148,8 +150,8 @@ export const filterMenuByPermissions = (items, permissionCodes = []) => {
     })
 }
 
-export const findFirstAccessiblePath = permissionCodes => {
-  const visibleMenus = filterMenuByPermissions(menuList, permissionCodes)
+export const findFirstAccessiblePath = (permissionCodes, roleCode = '') => {
+  const visibleMenus = filterMenuByPermissions(menuList, permissionCodes, roleCode)
   const flat = flattenMenu(visibleMenus)
   const firstLeaf = flat.find(item => !item.children?.length)
   return firstLeaf?.path || '/login'

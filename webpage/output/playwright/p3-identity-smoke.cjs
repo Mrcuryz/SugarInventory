@@ -12,6 +12,8 @@ async function main() {
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
   const browserMessages = []
+  let createSessionCount = 0
+  let revokeSessionCount = 0
   page.on('console', message => browserMessages.push(`${message.type()}: ${message.text()}`))
   page.on('pageerror', error => browserMessages.push(`pageerror: ${error.message}`))
 
@@ -66,6 +68,7 @@ async function main() {
         body: JSON.stringify(success([]))
       })
     }
+    createSessionCount += 1
     return route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify(success({
@@ -80,6 +83,16 @@ async function main() {
         mcpServerName: 'smart_warehouse',
         mcpTransport: 'STDIO'
       }))
+    })
+  })
+
+  await page.route('**/api/agent/sessions/visual-session-1', route => {
+    if (route.request().method() === 'DELETE') {
+      revokeSessionCount += 1
+    }
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(success({}))
     })
   })
 
@@ -121,6 +134,8 @@ async function main() {
   await textarea.press('Enter')
   await expect(page.locator('.message-row.user').filter({ hasText: '第一行' })).toBeVisible()
   await expect(page.getByText('已收到测试消息。')).toBeVisible()
+  await expect(page.getByRole('button', { name: '收起' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '结束会话' })).toBeVisible()
 
   const layout = await page.evaluate(() => {
     const drawer = document.querySelector('.agent-assistant-drawer')
@@ -153,6 +168,20 @@ async function main() {
   }
 
   await page.screenshot({ path: 'output/playwright/p3-identity-mobile.png', fullPage: true })
+
+  await page.setViewportSize({ width: 900, height: 720 })
+  await page.mouse.click(24, 120)
+  await expect(page.locator('.agent-assistant-drawer')).toBeHidden()
+  if (revokeSessionCount !== 0) {
+    throw new Error(`Backdrop suspend should not revoke session, got revokeSessionCount=${revokeSessionCount}`)
+  }
+  await page.locator('.agent-button').click()
+  await expect(page.locator('.agent-assistant-drawer')).toBeVisible()
+  await expect(page.getByText('已收到测试消息。')).toBeVisible()
+  if (createSessionCount !== 1) {
+    throw new Error(`Reopening a suspended assistant should reuse session, got createSessionCount=${createSessionCount}`)
+  }
+
   await browser.close()
 }
 

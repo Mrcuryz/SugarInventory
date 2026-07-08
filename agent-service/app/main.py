@@ -87,6 +87,7 @@ def create_app(
             return runtime.resume(
                 ResumeRequest(
                     agentSessionId=request.agentSessionId,
+                    messageId=request.messageId,
                     resumeToken=request.message.resumeToken,
                     user=request.user,
                     event=ResumeEvent(

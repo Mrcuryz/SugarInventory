@@ -74,6 +74,203 @@ def test_health() -> None:
     assert body["dependencies"]["memory"] == "UP"
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "你是什么？",
+        "你是谁？",
+        "你能干嘛？",
+        "你能做什么？",
+        "你现在能做什么？",
+        "你可以做什么？",
+        "你支持什么？",
+        "你有哪些功能？",
+        "你能帮我什么？",
+        "这个助手有什么用？",
+    ],
+)
+def test_capability_questions_do_not_call_tools_or_ask_business_slots(question: str) -> None:
+    tool_client = MockToolClient()
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+    client = TestClient(app)
+
+    response = client.post("/internal/agent/chat", json=chat_payload(question))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "智能仓储助手" in body["answer"] or "仓储只读查询" in body["answer"]
+    if question == "你是谁？":
+        assert "我是智能仓储助手" in body["answer"]
+    assert "请补充要查询的产品、库位、托盘码或生产日期" not in body["answer"]
+    assert tool_client.calls == []
+    planner = next(message for message in checkpointer.get("agt_test").messages if message.get("role") == "planner")
+    assert planner["intentRouter"]["intent_type"] == "capability"
+    assert planner["intentRouter"]["next_action"] == "answer_directly"
+    assert planner["intentRouter"]["planned_tools"] == []
+
+
+def test_vague_inventory_query_asks_one_key_clarification_without_tool() -> None:
+    tool_client = MockToolClient()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查一下库存"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["needsUserSelection"] is True
+    assert body["answer"].count("？") == 1
+    assert "按产品查" in body["answer"]
+    assert "按库位查" in body["answer"]
+    assert "黄冰糖（袋）库存" in body["answer"]
+    assert "1号库位有什么" in body["answer"]
+    assert body["suggestions"] == ["按产品查", "按库位查", "查托盘", "查化验"]
+    assert tool_client.calls == []
+
+
+def test_write_operation_is_not_executed_and_offers_readonly_alternative() -> None:
+    tool_client = MockToolClient()
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("帮我出库"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "不能直接替你创建或执行出库操作" in body["answer"]
+    assert "不会假装已经完成" in body["answer"]
+    assert "库存是否充足" in body["answer"]
+    assert "出库前检查" in body["answer"]
+    assert tool_client.calls == []
+    planner = next(message for message in checkpointer.get("agt_test").messages if message.get("role") == "planner")
+    assert planner["intentRouter"]["intent_type"] == "write_operation"
+    assert planner["intentRouter"]["business_domain"] == "outbound"
+    assert planner["intentRouter"]["support_status"] == "unsupported"
+    assert planner["intentRouter"]["next_action"] == "explain_unsupported"
+    assert planner["intentRouter"]["planned_tools"] == []
+
+
+@pytest.mark.parametrize(
+    "question,expected_intents",
+    [
+        ("最近有没有化验异常？", {"report_analysis", "unsupported"}),
+        ("最近30天化验趋势怎么样？", {"report_analysis", "unsupported"}),
+        ("哪些产品化验不合格？", {"report_analysis", "unsupported"}),
+        ("帮我导出库存报表", {"report_analysis", "unsupported"}),
+        ("查一下生产订单", {"unsupported", "report_analysis"}),
+    ],
+)
+def test_unsupported_business_capabilities_use_direct_answer_without_no_match(
+    question: str, expected_intents: set[str]
+) -> None:
+    tool_client = MockToolClient()
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload(question))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "未找到匹配产品" not in body["answer"]
+    assert "请换一个更准确的产品名称或编号" not in body["answer"]
+    assert any(
+        phrase in body["answer"]
+        for phrase in ["未接入", "还没接入", "还没有接入", "还没有对应", "当前还没有", "暂不支持", "不能直接"]
+    )
+    assert any(phrase in body["answer"] for phrase in ["库存", "库位", "托盘", "化验"])
+    assert tool_client.calls == []
+    planner = next(message for message in checkpointer.get("agt_test").messages if message.get("role") == "planner")
+    router = planner["intentRouter"]
+    assert router["intent_type"] in expected_intents
+    assert router["support_status"] == "unsupported"
+    assert router["next_action"] in {"explain_unsupported", "answer_directly"}
+    assert router["planned_tools"] == []
+
+
+def test_stream_message_end_carries_review_trace_in_normal_mode() -> None:
+    tool_client = MockToolClient()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat/stream", json=chat_payload("帮我出库"))
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+    assert events[-1]["type"] == "message_end"
+    review_trace = events[-1]["payload"]["reviewTrace"]
+    assert review_trace["intent_type"] == "write_operation"
+    assert review_trace["next_action"] == "explain_unsupported"
+    assert review_trace["planned_tools"] == []
+    assert "debug" not in [event["type"] for event in events]
+
+
+def test_unrelated_and_feedback_messages_do_not_call_tools() -> None:
+    tool_client = MockToolClient()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    client = TestClient(app)
+
+    unrelated = client.post("/internal/agent/chat", json=chat_payload("今天天气怎么样？"))
+    feedback = client.post("/internal/agent/chat", json=chat_payload("数据不对，没解决"))
+
+    assert "智能仓储助手能力范围" in unrelated.json()["answer"]
+    assert "收到反馈" in feedback.json()["answer"]
+    assert "请补充要查询的产品、库位、托盘码或生产日期" not in feedback.json()["answer"]
+    assert tool_client.calls == []
+
+
+def test_colloquial_warehouse_contents_uses_resolver_then_distribution() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 8, "displayLabel": "8号库位"}],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "8号库位的全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "3板20件",
+                "totalEquivalentPieces": 140,
+                "warehouseCount": 1,
+                "productCount": 1,
+                "palletCount": 3,
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋）",
+                        "productLabel": "黄冰糖（袋）",
+                        "stockText": "3板20件",
+                        "totalEquivalentPieces": 140,
+                        "palletCount": 3,
+                        "warehouseCount": 1,
+                        "productCount": 1,
+                        "percentageText": "100.0%",
+                        "riskLabels": [],
+                    }
+                ],
+            },
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("8号库位有什么？"))
+
+    assert response.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_warehouses", "get_inventory_distribution"]
+    assert tool_client.calls[0]["arguments"] == {"query": "8号库位", "limit": 10}
+    assert tool_client.calls[1]["arguments"] == {
+        "productScope": {"type": "ALL"},
+        "warehouseScope": {"type": "SINGLE_WAREHOUSE", "warehouseId": 8},
+        "groupBy": "product",
+        "limit": 20,
+    }
+    assert "当前有 1 类产品" in response.json()["answer"]
+    assert "共 3 个托盘" in response.json()["answer"]
+    assert "黄冰糖（袋）" in response.json()["answer"]
+    assert "详情见下方卡片" in response.json()["answer"]
+    planner = next(message for message in checkpointer.get("agt_test").messages if message.get("role") == "planner")
+    assert planner["intentRouter"]["planned_tools"] == ["resolve_warehouses", "get_inventory_distribution"]
+
+
 def test_resolve_products_ambiguous_returns_business_candidates_without_internal_fields() -> None:
     tool_client = MockToolClient(
         {
@@ -174,6 +371,7 @@ def test_java_gateway_client_can_call_real_gateway_endpoint() -> None:
         )
         result = client.call_tool(
             agent_session_id="agt_test",
+            message_id="msg_001",
             tool_name="get_inventory_overview",
             arguments={"productId": 84},
             trace_id="trace_001",
@@ -186,6 +384,7 @@ def test_java_gateway_client_can_call_real_gateway_endpoint() -> None:
     assert server.last_path == "/internal/agent/tools/get_inventory_overview"
     assert server.last_headers.get("X-Agent-Service-Key") == "test-key"
     assert server.last_body["agentSessionId"] == "agt_test"
+    assert server.last_body["messageId"] == "msg_001"
 
 
 def test_followup_uses_selected_product_context() -> None:
@@ -410,6 +609,61 @@ def test_stream_answer_uses_openai_compatible_model_text_deltas() -> None:
     assert model_server.last_headers.get("Authorization") == "Bearer model-key"
 
 
+def test_direct_capability_answer_uses_openai_compatible_model_generation() -> None:
+    model_server = FakeModelStreamServer([], direct_answer="我是模型生成的智能仓储助手身份回答。")
+    model_server.start()
+    tool_client = MockToolClient()
+    try:
+        app = create_app(
+            Settings(
+                tool_mode="mock",
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_api_key="model-key",
+                model_name="test-model",
+                model_timeout_ms=2000,
+            ),
+            tool_client=tool_client,
+            checkpointer=InMemoryCheckpointer(),
+        )
+        response = TestClient(app).post("/internal/agent/chat", json=chat_payload("你是谁？"))
+    finally:
+        model_server.stop()
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "我是模型生成的智能仓储助手身份回答。"
+    assert tool_client.calls == []
+    assert model_server.last_body["stream"] is False
+    prompt_text = json.dumps(model_server.last_body["messages"], ensure_ascii=False)
+    assert "你是谁" in prompt_text
+    assert "assistant_identity" in prompt_text
+    assert "planned_tools" in prompt_text
+
+
+def test_direct_capability_answer_falls_back_when_model_generation_fails() -> None:
+    model_server = FakeModelStreamServer([], status_code=500)
+    model_server.start()
+    try:
+        app = create_app(
+            Settings(
+                tool_mode="mock",
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_api_key="model-key",
+                model_name="test-model",
+                model_timeout_ms=2000,
+            ),
+            tool_client=MockToolClient(),
+            checkpointer=InMemoryCheckpointer(),
+        )
+        response = TestClient(app).post("/internal/agent/chat", json=chat_payload("你是谁？"))
+    finally:
+        model_server.stop()
+
+    assert response.status_code == 200
+    assert "我是智能仓储助手" in response.json()["answer"]
+
+
 
 
 def test_context_builder_adds_warehouse_domain_pack() -> None:
@@ -614,7 +868,8 @@ def test_warehouse_inventory_query_resolves_warehouse_then_calls_distribution() 
         "limit": 20,
     }
     body = response.json()
-    assert "按产品分布" in body["answer"]
+    assert "按产品分布" not in body["answer"]
+    assert "当前有 1 类产品" in body["answer"]
     assert "8号库位" in body["answer"]
     assert body["cards"][0]["title"].startswith("8号库位")
     assert body["cards"][0]["fields"][0]["riskText"] == "存在无化验库存"
@@ -622,6 +877,7 @@ def test_warehouse_inventory_query_resolves_warehouse_then_calls_distribution() 
     assert body["cards"][0]["fields"][0]["actionLabel"] == "去补充"
     assert body["cards"][0]["fields"][0]["actionProductName"] == "黄冰糖（袋）"
     assert body["cards"][0]["fields"][0]["actionSampleDate"] == "2026-05-22"
+    assert all(field.get("kind") != "risk_summary" for field in body["cards"][0]["fields"])
     assert "黄冰糖（袋）" in json.dumps(body, ensure_ascii=False)
     assert "warehouseId" not in json.dumps(body, ensure_ascii=False)
     assert "productId" not in json.dumps(body, ensure_ascii=False)
@@ -758,10 +1014,17 @@ class FakeGatewayServer:
 
 
 class FakeModelStreamServer:
-    def __init__(self, deltas: list[str], reasoning_delta: str | None = None, status_code: int = 200) -> None:
+    def __init__(
+        self,
+        deltas: list[str],
+        reasoning_delta: str | None = None,
+        status_code: int = 200,
+        direct_answer: str | None = None,
+    ) -> None:
         self.deltas = deltas
         self.reasoning_delta = reasoning_delta
         self.status_code = status_code
+        self.direct_answer = direct_answer
         self.last_path: str | None = None
         self.last_headers: dict[str, str] = {}
         self.last_body: dict[str, Any] = {}
@@ -779,6 +1042,18 @@ class FakeModelStreamServer:
                 owner.last_path = self.path
                 owner.last_headers = {key: value for key, value in self.headers.items()}
                 owner.last_body = json.loads(body.decode("utf-8"))
+                if not owner.last_body.get("stream"):
+                    answer = owner.direct_answer if owner.direct_answer is not None else "".join(owner.deltas)
+                    payload = json.dumps(
+                        {"choices": [{"message": {"content": answer}}]},
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    self.send_response(owner.status_code)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 self.send_response(owner.status_code)
                 self.send_header("Content-Type", "text/event-stream; charset=utf-8")
                 self.end_headers()

@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { getCurrentUserInfo } from '@/api/user'
 
+let loadedInCurrentPage = false
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     name: '',
@@ -23,15 +25,18 @@ export const useAuthStore = defineStore('auth', {
       this.roleCode = ''
       this.permissionCodes = []
       this.loaded = false
+      loadedInCurrentPage = false
     },
     async ensureLoaded(force = false) {
-      if (this.loaded && !force) return this
+      if (this.loaded && loadedInCurrentPage && !force) return this
       const res = await getCurrentUserInfo()
       this.setUserInfo(res.data || {})
+      loadedInCurrentPage = true
       return this
     },
     hasPermission(code) {
       if (!code) return true
+      if (['ADMIN', 'SUPER_ADMIN'].includes(this.roleCode)) return true
       return this.permissionCodes.includes(code)
     },
     hasAnyPermission(codes = []) {

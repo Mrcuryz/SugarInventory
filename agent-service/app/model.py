@@ -55,6 +55,16 @@ class ModelPlanRequest:
 
 
 @dataclass(frozen=True)
+class ModelDirectAnswerRequest:
+    userMessage: str
+    messages: list[dict[str, Any]]
+    state: WarehouseAgentState
+    domainContext: list[DomainContextPack]
+    routeSnapshot: dict[str, Any]
+    fallbackAnswer: str | None = None
+
+
+@dataclass(frozen=True)
 class ModelPlanDecision:
     action: Literal["call_tool", "ask_user", "answer"]
     toolName: str | None = None
@@ -65,6 +75,7 @@ class ModelPlanDecision:
     prompt: str | None = None
     suggestions: list[str] = field(default_factory=list)
     confidenceNote: str | None = None
+    routeSnapshot: dict[str, Any] | None = None
 
 
 class ModelClient(Protocol):
@@ -72,6 +83,9 @@ class ModelClient(Protocol):
         ...
 
     def build_tool_arguments(self, request: ModelArgumentRequest) -> ModelArgumentDecision:
+        ...
+
+    def generate_direct_answer(self, request: ModelDirectAnswerRequest) -> str:
         ...
 
     def stream_answer_deltas(self, answer: str) -> Iterator[str]:
@@ -316,6 +330,28 @@ class BasicModelClient:
                 arguments={"code": self._extract_after_terms(request.userMessage, ["托盘码", "托盘"])},
             )
         return ModelArgumentDecision(toolName=request.toolName, arguments={})
+
+    def generate_direct_answer(self, request: ModelDirectAnswerRequest) -> str:
+        route = request.routeSnapshot or {}
+        intent_type = str(route.get("intent_type") or "")
+        intent_subtype = str(route.get("intent_subtype") or "")
+        if intent_type == "capability":
+            if intent_subtype == "assistant_identity":
+                return (
+                    "我是智能仓储助手，负责帮你理解和查询仓储业务信息。"
+                    "当前我可以做库存、库位、托盘和化验状态的只读查询；"
+                    "不会直接执行入库、出库、调拨或修改数据。"
+                )
+            return (
+                "我现在主要能帮你做仓储只读查询，比如查库存、看某个库位里有什么、"
+                "查托盘状态、查产品或批次的化验情况。暂时不能直接替你入库、出库、"
+                "调拨或修改基础资料，但可以先帮你查清楚相关库存、库位和化验状态。"
+            )
+        if intent_type == "smalltalk":
+            return "你好，我是智能仓储助手，可以帮你做库存、库位、托盘和化验状态的只读查询。"
+        if request.fallbackAnswer:
+            return request.fallbackAnswer
+        return "我可以继续帮你处理库存、库位、托盘或化验相关的只读查询。"
 
     def stream_answer_deltas(self, answer: str) -> Iterator[str]:
         if answer:
@@ -579,6 +615,64 @@ class OpenAICompatibleModelClient(BasicModelClient):
         self._model = settings.model_name
         self._timeout = settings.model_timeout_ms / 1000
 
+    def generate_direct_answer(self, request: ModelDirectAnswerRequest) -> str:
+        if not self._base_url or not self._model:
+            return super().generate_direct_answer(request)
+        payload = {
+            "model": self._model,
+            "stream": False,
+            "temperature": 0.2,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是智能仓储助手的最终回答生成器。根据用户问题和 Intent Router 的安全决策生成自然回答。"
+                        "Router/Planner 已经决定 intent_type、next_action、planned_tools 和写操作边界，你不得改变这些安全决策。"
+                        "不要调用工具，不要输出推理过程、chain-of-thought、工具名、内部 ID、raw JSON、SUCCESS、token 或 Authorization。"
+                        "实时库存、库位、托盘、化验事实只有工具结果才能确认；如果本轮 next_action 是 answer_directly，只回答能力、身份、说明或边界。"
+                        "如果 intent_subtype 是 assistant_identity，应先回答你是谁，再简短说明能做什么。"
+                        "如果是写操作或不支持能力，必须说明当前不能执行，并给出可替代的只读查询路径。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "user_question": request.userMessage,
+                            "intent_router_snapshot": request.routeSnapshot,
+                            "safe_fallback_answer": request.fallbackAnswer,
+                            "domain_context": [
+                                {"name": pack.name, "instructions": pack.instructions}
+                                for pack in request.domainContext
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+        }
+        http_request = Request(
+            self._chat_completions_url(),
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers=self._headers(),
+        )
+        token = current_cancellation_token()
+        if token is not None:
+            token.raise_if_cancelled()
+        try:
+            with urlopen(http_request, timeout=self._timeout) as response:  # noqa: S310 - configured model endpoint
+                if token is not None:
+                    token.raise_if_cancelled()
+                body = json.loads(response.read().decode("utf-8", errors="replace"))
+        except (socket.timeout, HTTPError, URLError, json.JSONDecodeError):
+            return super().generate_direct_answer(request)
+        content = _visible_text_delta(body)
+        if not content:
+            return super().generate_direct_answer(request)
+        safe = _safe_model_delta(content).strip()
+        return safe or super().generate_direct_answer(request)
+
     def stream_answer_deltas(self, answer: str) -> Iterator[str]:
         if not answer:
             return
@@ -694,7 +788,8 @@ def _visible_text_delta(chunk: dict[str, Any]) -> str | None:
 def _safe_model_delta(delta: str) -> str:
     if re.search(
         r"(?i)(authorization|bearer\s+|delegationtoken|refresh[_ -]?token|stack\s*trace|jdbc:|"
-        r"chain[- ]?of[- ]?thought|reasoning_content|reasoning|tool_calls|"
+        r"chain[- ]?of[- ]?thought|reasoning_content|reasoning|tool_calls|toolname|"
+        r"productid|warehouseid|raw\s*json|success|"
         r"(?:[a-z]:\\|/)(?:users|home|var|opt|srv|windows)(?:\\|/))",
         delta,
     ):

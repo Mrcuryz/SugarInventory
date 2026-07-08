@@ -6,7 +6,16 @@ from datetime import date
 
 from app.context import ContextBuilder
 from app.graph.state import WarehouseAgentState
-from app.model import BasicModelClient, ModelArgumentRequest, ModelClient, ModelPlanDecision, ModelPlanRequest
+from app.knowledge import IntentRoute, IntentRouter
+from app.model import (
+    BasicModelClient,
+    ModelArgumentRequest,
+    ModelClient,
+    ModelDirectAnswerRequest,
+    ModelPlanDecision,
+    ModelPlanRequest,
+    ModelStreamError,
+)
 from app.tools.client import ALLOWED_TOOLS
 
 
@@ -115,9 +124,11 @@ class ToolArgumentBuilder:
         self,
         model_client: ModelClient | None = None,
         context_builder: ContextBuilder | None = None,
+        intent_router: IntentRouter | None = None,
     ) -> None:
         self._model_client = model_client or BasicModelClient()
         self._context_builder = context_builder or ContextBuilder()
+        self._intent_router = intent_router or IntentRouter()
 
     def build(self, *, tool_name: str, user_message: str, state: WarehouseAgentState) -> dict[str, Any]:
         if tool_name not in ALLOWED_TOOLS:
@@ -140,6 +151,11 @@ class ToolArgumentBuilder:
         return self._validate(tool_name, arguments)
 
     def plan(self, *, user_message: str, state: WarehouseAgentState) -> ModelPlanDecision:
+        route = self._intent_router.route(user_message, state)
+        routed_decision = self._plan_from_route(user_message, state, route)
+        if routed_decision is not None:
+            return routed_decision
+
         decision = self._model_client.plan_next_action(
             ModelPlanRequest(
                 userMessage=user_message,
@@ -150,7 +166,18 @@ class ToolArgumentBuilder:
             )
         )
         if decision.action != "call_tool":
-            return decision
+            return ModelPlanDecision(
+                action=decision.action,
+                toolName=decision.toolName,
+                arguments=decision.arguments,
+                intent=decision.intent or route.intent_type,
+                responseMode=decision.responseMode,
+                answer=decision.answer,
+                prompt=decision.prompt,
+                suggestions=decision.suggestions,
+                confidenceNote=decision.confidenceNote,
+                routeSnapshot=route.to_snapshot(),
+            )
         if not decision.toolName or decision.toolName not in ALLOWED_TOOLS:
             raise ValueError("planned tool is not allowed")
         arguments = decision.arguments
@@ -178,7 +205,94 @@ class ToolArgumentBuilder:
             prompt=decision.prompt,
             suggestions=decision.suggestions,
             confidenceNote=decision.confidenceNote,
+            routeSnapshot=route.to_snapshot(),
         )
+
+    def _plan_from_route(self, user_message: str, state: WarehouseAgentState, route: IntentRoute) -> ModelPlanDecision | None:
+        snapshot = route.to_snapshot()
+        if route.next_action == "answer_directly":
+            return ModelPlanDecision(
+                action="answer",
+                answer=self._generate_direct_answer(user_message, state, route, "已处理。"),
+                intent=route.intent_type,
+                responseMode=route.intent_subtype,
+                routeSnapshot=snapshot,
+            )
+        if route.next_action == "ask_clarification":
+            return ModelPlanDecision(
+                action="ask_user",
+                prompt=route.clarification_prompt or "请补充更明确的查询条件。",
+                suggestions=route.suggestions,
+                intent=route.intent_type,
+                responseMode=route.intent_subtype,
+                routeSnapshot=snapshot,
+            )
+        if route.next_action == "explain_unsupported":
+            if route.intent_subtype == "no_supported_business_intent":
+                return None
+            return ModelPlanDecision(
+                action="answer",
+                answer=self._generate_direct_answer(user_message, state, route, "当前能力暂不支持这个操作。"),
+                intent=route.intent_type,
+                responseMode=route.intent_subtype,
+                routeSnapshot=snapshot,
+            )
+        if route.next_action != "call_tool":
+            return None
+
+        objects = route.business_objects
+        if route.intent_subtype == "warehouse_inventory_contents" and objects.warehouse:
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="resolve_warehouses",
+                arguments=self._validate("resolve_warehouses", {"query": objects.warehouse, "limit": 10}),
+                intent="inventory_distribution",
+                responseMode="inventory_distribution",
+                confidenceNote="intent router selected warehouse resolver before inventory distribution",
+                routeSnapshot=snapshot,
+            )
+        if route.intent_subtype == "warehouse_status" and objects.warehouse:
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="resolve_warehouses",
+                arguments=self._validate("resolve_warehouses", {"query": objects.warehouse, "limit": 10}),
+                intent="warehouse_status",
+                responseMode="warehouse_status",
+                confidenceNote="intent router selected warehouse status chain",
+                routeSnapshot=snapshot,
+            )
+        if route.intent_subtype == "pallet_status" and objects.pallet:
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="get_pallet_status",
+                arguments=self._validate("get_pallet_status", {"code": objects.pallet}),
+                intent="pallet_status",
+                responseMode="pallet_status",
+                routeSnapshot=snapshot,
+            )
+        return None
+
+    def _generate_direct_answer(
+        self, user_message: str, state: WarehouseAgentState, route: IntentRoute, default_answer: str
+    ) -> str:
+        fallback = route.answer or default_answer
+        generator = getattr(self._model_client, "generate_direct_answer", None)
+        if generator is None:
+            return fallback
+        try:
+            answer = generator(
+                ModelDirectAnswerRequest(
+                    userMessage=user_message,
+                    messages=state.messages,
+                    state=state,
+                    domainContext=self._context_builder.build(user_message, state),
+                    routeSnapshot=route.to_snapshot(),
+                    fallbackAnswer=fallback,
+                )
+            )
+        except ModelStreamError:
+            return fallback
+        return answer or fallback
 
     def context_packs(self, user_message: str, state: WarehouseAgentState) -> list[str]:
         return [pack.name for pack in self._context_builder.build(user_message, state)]
