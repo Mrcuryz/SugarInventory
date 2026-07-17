@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.agent.mcp.McpProcessFactory;
 import com.Laibin.SugarInventory.agent.mcp.McpSession;
 import com.Laibin.SugarInventory.agent.mcp.StdioMcpSessionManager;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
+import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.domain.po.AgentSession;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,9 +19,15 @@ import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +40,7 @@ class StdioMcpSessionManagerTest {
         session.setId("session-1");
         session.setExpiresAt(LocalDateTime.now().plusMinutes(10));
         when(sessionService.issueDelegationTokenForInternalUse(loginUser, "session-1")).thenReturn("delegated.jwt.secret");
+        when(sessionService.requireOwnedActiveSession(loginUser, "session-1")).thenReturn(session);
 
         AtomicReference<List<String>> commandRef = new AtomicReference<>();
         AtomicReference<Map<String, String>> envRef = new AtomicReference<>();
@@ -57,6 +65,83 @@ class StdioMcpSessionManagerTest {
                 .containsEntry("WAREHOUSE_API_BASE_URL", "http://localhost:8080");
         assertThat(envRef.get().get("WAREHOUSE_MCP_LOG_FILE")).contains("warehouse-mcp-session-1.log");
         assertThat(String.join(" ", commandRef.get())).doesNotContain("delegated.jwt.secret", "Authorization");
+    }
+
+    @Test
+    void concurrentWarmupAndFirstToolBindingShareOneProcess() throws Exception {
+        AgentSessionService sessionService = mock(AgentSessionService.class);
+        LoginUser loginUser = loginUser();
+        AgentSession session = new AgentSession();
+        session.setId("session-1");
+        session.setExpiresAt(LocalDateTime.now().plusMinutes(10));
+        when(sessionService.issueDelegationTokenForInternalUse(loginUser, "session-1")).thenReturn("delegated.jwt.secret");
+        when(sessionService.requireOwnedActiveSession(loginUser, "session-1")).thenReturn(session);
+
+        AtomicInteger processStarts = new AtomicInteger();
+        CountDownLatch factoryEntered = new CountDownLatch(1);
+        CountDownLatch allowFactoryReturn = new CountDownLatch(1);
+        McpProcessFactory factory = (command, environment) -> {
+            processStarts.incrementAndGet();
+            factoryEntered.countDown();
+            try {
+                if (!allowFactoryReturn.await(5, TimeUnit.SECONDS)) {
+                    throw new java.io.IOException("Timed out waiting for concurrent binding test.");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new java.io.IOException("Concurrent binding test was interrupted.", e);
+            }
+            return new FakeProcess();
+        };
+        StdioMcpSessionManager manager = new StdioMcpSessionManager(
+                sessionService,
+                factory,
+                new ObjectMapper(),
+                "warehouse-mcp/target/warehouse-mcp-0.1.0.jar",
+                "http://localhost:8080",
+                "logs/mcp");
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            var warmup = executor.submit(() -> manager.bindSession(loginUser, session));
+            assertThat(factoryEntered.await(5, TimeUnit.SECONDS)).isTrue();
+            var firstToolBinding = executor.submit(() -> manager.bindSession(loginUser, session));
+            allowFactoryReturn.countDown();
+
+            assertThat(firstToolBinding.get(5, TimeUnit.SECONDS)).isSameAs(warmup.get(5, TimeUnit.SECONDS));
+            assertThat(processStarts).hasValue(1);
+        } finally {
+            manager.closeAllSessions();
+        }
+    }
+
+    @Test
+    void closesStartedProcessWhenSessionIsRevokedDuringWarmup() {
+        AgentSessionService sessionService = mock(AgentSessionService.class);
+        LoginUser loginUser = loginUser();
+        AgentSession session = new AgentSession();
+        session.setId("session-1");
+        session.setExpiresAt(LocalDateTime.now().plusMinutes(10));
+        when(sessionService.issueDelegationTokenForInternalUse(loginUser, "session-1")).thenReturn("delegated.jwt.secret");
+        when(sessionService.requireOwnedActiveSession(loginUser, "session-1"))
+                .thenThrow(new BusinessException(401, "Agent session is not active."));
+        AtomicReference<FakeProcess> processRef = new AtomicReference<>();
+        McpProcessFactory factory = (command, environment) -> {
+            FakeProcess process = new FakeProcess();
+            processRef.set(process);
+            return process;
+        };
+        StdioMcpSessionManager manager = new StdioMcpSessionManager(
+                sessionService,
+                factory,
+                new ObjectMapper(),
+                "warehouse-mcp/target/warehouse-mcp-0.1.0.jar",
+                "http://localhost:8080",
+                "logs/mcp");
+
+        assertThatThrownBy(() -> manager.bindSession(loginUser, session))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not active");
+        assertThat(processRef.get().isAlive()).isFalse();
     }
 
     private LoginUser loginUser() {

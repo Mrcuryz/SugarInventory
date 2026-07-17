@@ -1352,3 +1352,19 @@ Python Agent Runtime 已加入第一版主 Agent / 专家 Agent handoff 骨架�
 当前专家运行在同一 Python 进程内，默认共享现有模型客户端；已预留按专家注入不同 `ModelClient` 和参数策略的扩展点。详细设计见 `docs/agent/modular-agent-architecture.md`。
 
 生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、47 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。9 个专家的精确白名单和主 Agent 空工具集必须由确定性测试锁定；专家映射 hash 尚未纳入启动握手时，应作为上线阻断项处理。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
+
+---
+
+## 20. 业务时间与相对日期约定
+
+北京时间属于 Agent 每轮推理的受信运行时上下文，不属于需要模型自行决定是否调用的业务工具。当前不新增 `get_system_time` MCP Tool，避免模型漏调时间工具、增加延迟或在得到时间前先生成错误业务参数。
+
+调用 MCP 前必须遵守：
+
+* Agent Runtime 使用服务端时钟和固定业务时区 `Asia/Shanghai` 解析“今天、昨天、前天、本周、上周、本月、上月、本季度、上季度、今年、去年”等表达；
+* 主模型和专家模型只把 `selectedContext.BUSINESS_TIME` 作为当前日期来源，不得使用训练记忆或自行猜测当前年份；
+* Runtime 必须在工具调用前再次根据用户原话归一化日期，不能只信任模型生成的 `productionDate`、`dateRange`、`startDate/endDate` 或日志时间窗口；
+* “最近 N 天”继续使用 `LAST_DAYS`，由 MCP 后端在调用时按业务系统日期解析；日历周、月、季度和年度转换为确定的 `RANGE`；
+* 如果用户请求日期范围而模型选择只接受单日的工具，Runtime 必须拒绝该计划并重新选择范围工具，不得静默缩成一天。
+
+该约定适用于化验、库存日期过滤、托盘/二维码生命周期、生产单据、备料池、操作日志和审计等所有带日期参数的只读工具。未来如果开放独立 MCP 给不具备可靠系统时钟的第三方 Host，可增加 L0 `get_business_time_context` 互操作工具；它不能替代 Runtime 的强制日期归一化。

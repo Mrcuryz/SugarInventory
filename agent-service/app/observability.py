@@ -18,6 +18,9 @@ COUNTERS = (
     "expert_tool_not_allowed_total",
     "gateway_rejection_total",
     "model_token_usage",
+    "model_decision_total",
+    "llm_safe_fallback_total",
+    "llm_fast_completion_total",
 )
 
 HISTOGRAMS = (
@@ -27,6 +30,8 @@ HISTOGRAMS = (
     "product_fan_out_count",
     "session_lock_wait_duration",
     "model_cost",
+    "model_decision_duration",
+    "agent_turn_duration",
 )
 
 

@@ -425,6 +425,10 @@ const chooseOption = async (option, sourceMessage) => {
     sourceMessage.optionSubmitting = true
     sourceMessage.needsUserSelection = false
     sourceMessage.progress = '正在继续查询……'
+    sourceMessage.selectedOption = {
+      displayLabel: selectedOption.displayLabel,
+      optionType: selectedOption.optionType
+    }
   }
   pendingSelection.value = selectedOption
   const finishReason = await send({
@@ -437,7 +441,10 @@ const chooseOption = async (option, sourceMessage) => {
     sourceMessage.optionSubmitting = false
     sourceMessage.selectionCompleted = finishReason === 'completed'
     sourceMessage.needsUserSelection = finishReason !== 'completed'
-    sourceMessage.progress = finishReason === 'completed' ? '已处理' : ''
+    sourceMessage.progress = ''
+    if (finishReason !== 'completed') {
+      sourceMessage.selectedOption = null
+    }
   }
 }
 

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.agents import MAIN_AGENT, AgentHandoffRouter
 from app.config import Settings
 from app.context import ContextBuilder
-from app.cancellation import current_cancellation_token
+from app.cancellation import AgentRunRegistry, current_cancellation_token
 from app.execution import AgentExecutionContext, bind_execution_context
 from app.graph.state import InMemoryCheckpointer, SelectedEntity
 from app.main import create_app
@@ -31,9 +31,10 @@ from app.model import (
     take_model_decision_diagnostics,
 )
 from app.orchestration import CompoundExecutionPlan, OrchestrationStep
+from app.progress import registered_progress_tools
 from app.runtime import WarehouseAgentRuntime
 from app.schemas import AgentError, ChatRequest, ChatResponse, GoalDraftV1, ResultReasoningDraftV1
-from app.streaming import sse_for_response
+from app.streaming import sse_for_request, sse_for_response
 from app.tool_arguments import ToolArgumentBuilder
 from app.tools.client import ALLOWED_TOOLS, JavaGatewayToolClient, MockToolClient, ToolGatewayError
 
@@ -1569,7 +1570,10 @@ def test_candidate_selected_writes_state_and_queries_inventory() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"] == "黄冰糖（袋）当前库存为 11板30件，折合 470 件，总重量 11750.0kg。"
+    assert body["answer"] == (
+        "黄冰糖（袋）当前库存为 11板30件，折合 470 件，总重量 11750.0kg。\n"
+        "需要我帮你查库存分布吗？"
+    )
     state = checkpointer.get("agt_test")
     assert state.selected_product is not None
     assert state.selected_product.internal_id == 84
@@ -2731,6 +2735,7 @@ def test_stream_clarification_ends_with_required_finish_reason() -> None:
     assert [event["type"] for event in events] == [
         "message_start",
         "progress",
+        "progress",
         "audit",
         "progress",
         "clarification",
@@ -2745,6 +2750,52 @@ def test_stream_clarification_ends_with_required_finish_reason() -> None:
     assert events[-1]["payload"]["interruptId"] == clarification["interruptId"]
     assert events[-1]["payload"]["interruptKind"] == "CLARIFICATION"
     assert "productId" not in response.text
+
+
+def test_business_progress_registry_covers_every_allowed_tool() -> None:
+    assert registered_progress_tools() == frozenset(ALLOWED_TOOLS)
+
+
+def test_stream_emits_real_tool_stage_before_blocked_tool_finishes() -> None:
+    release_tool = threading.Event()
+
+    def blocking_resolver(arguments: dict[str, Any]) -> dict[str, Any]:
+        assert release_tool.wait(2)
+        return {"resolutionStatus": "NOT_FOUND"}
+
+    runtime = WarehouseAgentRuntime(
+        tool_client=MockToolClient({"resolve_products": blocking_resolver}),
+        checkpointer=InMemoryCheckpointer(),
+    )
+    request = ChatRequest.model_validate(chat_payload("查黄冰糖库存"))
+    stream = sse_for_request(
+        request,
+        runtime.chat,
+        runtime.resume,
+        AgentRunRegistry(),
+        None,
+        5_000,
+    )
+
+    try:
+        assert parse_sse_events(next(stream))[0]["type"] == "message_start"
+        understanding = parse_sse_events(next(stream))[0]
+        assert understanding["payload"]["stage"] == "understanding"
+        tool_progress_chunk = next(stream)
+        tool_progress = parse_sse_events(tool_progress_chunk)[0]
+
+        assert tool_progress["type"] == "progress"
+        assert tool_progress["payload"] == {
+            "stage": "resolving_product",
+            "text": "正在确认产品范围。",
+        }
+        assert "resolve_products" not in tool_progress_chunk
+    finally:
+        release_tool.set()
+
+    remaining = parse_sse_events("".join(stream))
+    assert remaining[-1]["type"] == "message_end"
+    assert remaining[-1]["payload"]["finishReason"] == "completed"
 
 
 def test_security_negative_request_does_not_generate_interrupt() -> None:
@@ -2776,6 +2827,22 @@ def test_selection_without_interrupt_card_completes_as_plain_answer() -> None:
     assert [event["type"] for event in events] == ["message_start", "progress", "text_delta", "message_end"]
     assert events[-1]["payload"]["finishReason"] == "completed"
     assert "interrupt_required" not in json.dumps(events, ensure_ascii=False)
+
+
+def test_validated_final_answer_is_emitted_as_bounded_incremental_deltas() -> None:
+    answer = (
+        "黄冰糖（袋）当前库存共550件，总重量13750千克。"
+        "库存分布在8个库位，需要我继续展开具体库位吗？"
+    )
+    response = ChatResponse(agentSessionId="agt_test", answer=answer)
+
+    events = parse_sse_events("".join(sse_for_response(response)))
+    deltas = [event["payload"]["text"] for event in events if event["type"] == "text_delta"]
+
+    assert len(deltas) > 1
+    assert "".join(deltas) == answer
+    assert all(0 < len(delta) <= 28 for delta in deltas)
+    assert events[-1]["payload"]["finishReason"] == "completed"
 
 
 def test_cancelled_pending_interrupt_resume_is_rejected_without_tool_call() -> None:
@@ -2974,7 +3041,10 @@ def test_candidate_selected_can_use_chat_endpoint_as_same_conversation_event() -
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"] == "黄冰糖（袋）当前库存为 11板30件，折合 470 件，总重量 11750.0kg。"
+    assert body["answer"] == (
+        "黄冰糖（袋）当前库存为 11板30件，折合 470 件，总重量 11750.0kg。\n"
+        "需要我帮你查库存分布吗？"
+    )
     assert checkpointer.get("agt_test").selected_product is not None
     body_text = json.dumps(body, ensure_ascii=False)
     assert "productId" not in body_text
@@ -3356,9 +3426,216 @@ def test_get_assay_report_detail_uses_prior_record_ref() -> None:
         "includeMetrics": True,
         "includeStandardSnapshot": True,
     }
-    assert "主要异常指标为色值" in second.json()["answer"]
-    assert "实测 120" in second.json()["answer"]
-    assert "标准 ≤ 100" in second.json()["answer"]
+    detail_body = second.json()
+    assert "化验判定为不合格" in detail_body["answer"]
+    assert detail_body["cards"][0]["cardType"] == "assay_report"
+    metric = next(field for field in detail_body["cards"][0]["fields"] if field["kind"] == "assay_metric")
+    assert metric["actualValueText"] == "120"
+    assert metric["standardRangeText"] == "≤ 100"
+
+
+def test_assay_report_detail_hides_internal_reference_note_and_irrelevant_no_standard_note() -> None:
+    runtime = WarehouseAgentRuntime(tool_client=MockToolClient(), checkpointer=InMemoryCheckpointer())
+
+    report = runtime._adapt_assay_report_detail(
+        {
+            "productLabel": "黄冰糖（袋）",
+            "sampleDate": "2026-07-17",
+            "judgeStatus": "PASS",
+            "judgeLabel": "合格",
+            "standardLabel": "黄冰糖 v1",
+            "metrics": [],
+            "notes": [
+                "详情来自受控 reportRef，不要求用户提供内部化验 ID。",
+                "无标准表示无法自动判定，不等同于不合格。",
+            ],
+        }
+    )
+
+    assert report.notes == []
+
+
+def test_model_answer_layout_breaks_obvious_inline_numbered_list_without_forcing_plain_prose() -> None:
+    runtime = WarehouseAgentRuntime(tool_client=MockToolClient(), checkpointer=InMemoryCheckpointer())
+
+    formatted = runtime._sanitize_llm_answer(
+        "最近180天共有3条记录。1. 2026-07-17，合格 2. 2026-07-14，暂无法判定 3. 2026-04-23，暂无法判定"
+    )
+    plain = runtime._sanitize_llm_answer("黄冰糖（袋）今天的化验结果合格。")
+
+    assert formatted == (
+        "最近180天共有3条记录。\n\n"
+        "1. 2026-07-17，合格\n"
+        "2. 2026-07-14，暂无法判定\n"
+        "3. 2026-04-23，暂无法判定"
+    )
+    assert plain == "黄冰糖（袋）今天的化验结果合格。"
+
+
+def test_assay_status_returns_full_report_card_without_exposing_internal_enum() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "needsUserSelection": False,
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    }
+                ],
+            },
+            "get_assay_status": {
+                "judgeResult": "NO_STANDARD",
+                "needsAssay": False,
+                "assay": {
+                    "productName": "黄冰糖（袋）",
+                    "sampleDate": "2026-07-14",
+                    "judgeResult": "NO_STANDARD",
+                    "colorValue": 12,
+                    "reducingSugar": 3,
+                    "dryWeight": 4,
+                    "conductivityAsh": 5,
+                    "sucrose": 75,
+                    "insolubleImpurity": 12,
+                    "phValue": 7,
+                    "standardSnapshot": None,
+                },
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查询黄冰糖（袋）2026-07-14的化验情况", "agt_assay_card"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    body_text = json.dumps(body, ensure_ascii=False)
+    assert "NO_STANDARD" not in body_text
+    assert "暂时不能判定合格或不合格" in body["answer"]
+    assert body["cards"][0]["cardType"] == "assay_report"
+    summary = next(field for field in body["cards"][0]["fields"] if field["kind"] == "assay_summary")
+    assert summary["sampleDate"] == "2026-07-14"
+    assert summary["judgeLabel"] == "暂无法判定"
+    assert summary["standardLabel"] == "未配置适用标准"
+    metrics = [field for field in body["cards"][0]["fields"] if field["kind"] == "assay_metric"]
+    assert len(metrics) == 7
+    assert metrics[0]["metricName"] == "色值"
+    assert metrics[0]["actualValueText"] == "12"
+    assert metrics[0]["standardRangeText"] == "未配置适用标准"
+    assert metrics[0]["resultLabel"] == "未判定"
+
+
+def test_assay_status_links_canonical_dry_weight_loss_and_ph_standard_codes() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "needsUserSelection": False,
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    }
+                ],
+            },
+            "get_assay_status": {
+                "judgeResult": "PASS",
+                "assay": {
+                    "productName": "黄冰糖（袋）",
+                    "sampleDate": "2026-07-17",
+                    "judgeResult": "PASS",
+                    "dryWeight": 1.3,
+                    "phValue": 7.2,
+                    "appliedStandardName": "黄冰糖",
+                    "appliedStandardVersion": 1,
+                    "standardSnapshot": {
+                        "items": [
+                            {
+                                "metricCode": "dry_weight_loss",
+                                "minValue": 1.2,
+                                "maxValue": 1.4,
+                                "unit": "g/100g",
+                                "compareType": "range",
+                            },
+                            {
+                                "metricCode": "ph",
+                                "minValue": 6,
+                                "maxValue": 9,
+                                "unit": "",
+                                "compareType": "range",
+                            },
+                        ]
+                    },
+                },
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查询黄冰糖（袋）2026-07-17的化验情况", "agt_assay_metric_aliases"),
+    )
+
+    assert response.status_code == 200
+    metrics = [field for field in response.json()["cards"][0]["fields"] if field["kind"] == "assay_metric"]
+    dry_weight = next(metric for metric in metrics if metric["metricName"] == "干燥失重")
+    ph = next(metric for metric in metrics if metric["metricName"] == "pH")
+    assert dry_weight["standardRangeText"] == "1.2 - 1.4g/100g"
+    assert dry_weight["resultLabel"] == "合格"
+    assert ph["standardRangeText"] == "6 - 9"
+    assert ph["resultLabel"] == "合格"
+
+
+def test_assay_history_translates_internal_status_and_returns_collapsible_card_data() -> None:
+    tool_client = MockToolClient(
+        {
+            "query_assay_records": {
+                "scopeLabel": "黄冰糖（袋）",
+                "dateRangeLabel": "最近180天",
+                "total": 2,
+                "summaryText": "最近180天共有2条记录，均为无标准（NO_STANDARD）。",
+                "records": [
+                    {
+                        "recordRef": "assay_report_first",
+                        "productLabel": "黄冰糖（袋）",
+                        "sampleDate": "2026-07-14",
+                        "judgeStatus": "NO_STANDARD",
+                        "judgeLabel": "无标准",
+                    },
+                    {
+                        "recordRef": "assay_report_second",
+                        "productLabel": "黄冰糖（袋）",
+                        "sampleDate": "2026-06-01",
+                        "judgeStatus": "NO_STANDARD",
+                        "judgeLabel": "无标准",
+                    },
+                ],
+            }
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("最近180天有哪些化验记录？", "agt_assay_history_card"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "NO_STANDARD" not in json.dumps(body, ensure_ascii=False)
+    assert "无标准（无标准）" not in body["answer"]
+    assert body["cards"][0]["cardType"] == "assay_history"
+    records = [field for field in body["cards"][0]["fields"] if field["kind"] == "assay_history_record"]
+    assert len(records) == 2
+    assert records[0]["judgeLabel"] == "无标准"
+    assert records[0]["standardLabel"] == "未配置适用标准"
 
 
 def test_query_assay_abnormalities_recent_all_products() -> None:

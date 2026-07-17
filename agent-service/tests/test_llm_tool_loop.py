@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.agents import AgentHandoffRouter
 from app.config import Settings
 from app.graph.state import InMemoryCheckpointer, SelectedEntity
-from app.model import BasicModelClient, ExpertLoopRequest, MainAgentRouteRequest
+from app.model import BasicModelClient, ExpertLoopRequest, MainAgentRouteRequest, ModelDecisionError
 from app.runtime import WarehouseAgentRuntime
 from app.schemas import (
     ChatRequest,
@@ -97,6 +97,7 @@ def runtime_for(
     model: ScriptedLlmModel,
     tool_client: MockToolClient,
     checkpointer: InMemoryCheckpointer | None = None,
+    allowed_experts: tuple[str, ...] = ("inventory_expert", "warehouse_expert", "assay_expert"),
 ) -> tuple[WarehouseAgentRuntime, InMemoryCheckpointer]:
     store = checkpointer or InMemoryCheckpointer()
     builder = ToolArgumentBuilder(model_client=model)
@@ -107,7 +108,7 @@ def runtime_for(
             argument_builder=builder,
             model_client=model,
             planning_mode="llm",
-            llm_allowed_experts=("inventory_expert", "warehouse_expert", "assay_expert"),
+            llm_allowed_experts=allowed_experts,
             llm_max_tool_calls=3,
             llm_max_tool_retries=1,
         ),
@@ -119,6 +120,10 @@ def test_llm_planning_mode_is_disabled_by_default(monkeypatch: pytest.MonkeyPatc
     monkeypatch.delenv("AGENT_PLANNING_MODE", raising=False)
 
     assert Settings.from_env().planning_mode == "deterministic"
+
+
+def test_pallet_expert_remains_outside_default_llm_pilot_scope() -> None:
+    assert "pallet_expert" not in Settings().llm_allowed_experts
 
 
 def test_llm_limits_are_hard_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -189,7 +194,248 @@ def test_model_visible_schema_replaces_database_ids_with_state_refs() -> None:
     assert "CURRENT_WAREHOUSE" in serialized
 
 
-def test_main_model_cannot_directly_answer_realtime_business_facts() -> None:
+def test_model_visible_schema_uses_controlled_assay_and_pallet_refs() -> None:
+    builder = ToolArgumentBuilder()
+    assay_schemas = builder.llm_visible_tool_schemas(
+        AgentHandoffRouter().handoff_for_agent("assay_expert")
+    )
+    pallet_schemas = builder.llm_visible_tool_schemas(
+        AgentHandoffRouter().handoff_for_agent("pallet_expert")
+    )
+
+    assert assay_schemas["get_assay_report_detail"]["properties"]["reportRef"]["const"] == (
+        "CURRENT_ASSAY_REPORT"
+    )
+    pallet_status = pallet_schemas["get_pallet_status"]
+    assert pallet_status["properties"]["palletRef"]["const"] == "CURRENT_PALLET"
+    assert "code" not in pallet_status.get("required", [])
+    assert pallet_status["oneOf"] == [
+        {"required": ["code"]},
+        {"required": ["palletRef"]},
+    ]
+
+
+def test_llm_assay_pilot_keeps_report_ref_runtime_controlled_across_three_turns() -> None:
+    report_ref = "assay_report_testref"
+    model = ScriptedLlmModel(
+        [main_delegate("assay_expert")],
+        [
+            call("resolve_products", {"query": "黄冰糖（袋）", "limit": 10}),
+            call(
+                "get_assay_status",
+                {"productRef": "CURRENT_PRODUCT", "productionDate": "2026-07-09"},
+            ),
+            call(
+                "query_assay_records",
+                {
+                    "productScope": {
+                        "type": "SINGLE_PRODUCT",
+                        "productRef": "CURRENT_PRODUCT",
+                    },
+                    "dateRange": {"type": "LAST_DAYS", "days": 30},
+                    "judgeStatus": "ANY",
+                    "sortBy": "sampleDate",
+                    "sortDirection": "DESC",
+                    "page": 1,
+                    "size": 20,
+                },
+            ),
+            call(
+                "get_assay_report_detail",
+                {
+                    "reportRef": "CURRENT_ASSAY_REPORT",
+                    "includeMetrics": True,
+                    "includeStandardSnapshot": True,
+                },
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    }
+                ],
+            },
+            "get_assay_status": {
+                "judgeResult": "NO_STANDARD",
+                "assay": {
+                    "productName": "黄冰糖（袋）",
+                    "sampleDate": "2026-07-09",
+                    "judgeResult": "NO_STANDARD",
+                    "colorValue": 12,
+                    "reducingSugar": 3,
+                    "dryWeight": 4,
+                    "conductivityAsh": 5,
+                    "sucrose": 75,
+                    "insolubleImpurity": 12,
+                    "phValue": 7,
+                },
+            },
+            "query_assay_records": {
+                "scopeLabel": "黄冰糖（袋）",
+                "dateRangeLabel": "最近30天",
+                "total": 1,
+                "records": [
+                    {
+                        "recordRef": report_ref,
+                        "productLabel": "黄冰糖（袋）",
+                        "sampleDate": "2026-07-09",
+                        "judgeLabel": "不合格",
+                    }
+                ],
+            },
+            "get_assay_report_detail": {
+                "reportRef": report_ref,
+                "productLabel": "黄冰糖（袋）",
+                "sampleDate": "2026-07-09",
+                "judgeLabel": "不合格",
+                "metrics": [
+                    {
+                        "metricName": "色值",
+                        "actualValueText": "120",
+                        "standardRangeText": "不大于100",
+                        "resultLabel": "不合格",
+                    }
+                ],
+            },
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+
+    first = runtime.chat(chat_request("查询黄冰糖（袋）2026-07-09的化验情况"))
+    second = runtime.chat(chat_request("再看最近30天历史化验"))
+    third = runtime.chat(chat_request("再展开第一条具体指标"))
+
+    assert first.error is None
+    assert second.error is None
+    assert third.error is None
+    assert len(model.main_requests) == 1
+    assert [item["toolName"] for item in tools.calls] == [
+        "resolve_products",
+        "get_assay_status",
+        "query_assay_records",
+        "get_assay_report_detail",
+    ]
+    assert tools.calls[-1]["arguments"]["reportRef"] == report_ref
+    assert store.get("agt_llm").last_assay_records["records"][0]["recordRef"] == report_ref
+    model_context = repr(model.expert_requests)
+    assert "CURRENT_ASSAY_REPORT" in model_context
+    assert report_ref not in model_context
+    assert report_ref not in third.answer
+    assert "NO_STANDARD" not in first.answer
+    assert first.cards[0].cardType == "assay_report"
+    assert second.cards[0].cardType == "assay_history"
+    assert third.cards[0].cardType == "assay_report"
+
+
+def test_llm_pallet_pilot_reuses_current_pallet_without_guessing_code() -> None:
+    pallet_code = "P202607090001"
+    model = ScriptedLlmModel(
+        [main_delegate("pallet_expert")],
+        [
+            call("get_pallet_status", {"code": pallet_code}),
+            final("该托盘当前在库。", "obs_1"),
+            call(
+                "query_pallet_flow_records",
+                {"palletRef": "CURRENT_PALLET", "page": 1, "size": 20},
+            ),
+            final("该托盘最近一次登记流转为入库。", "obs_1"),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "get_pallet_status": {
+                "palletInfo": {"code": pallet_code, "status": "在库"},
+            },
+            "query_pallet_flow_records": {
+                "scopeLabel": f"托盘 {pallet_code}",
+                "total": 1,
+                "records": [
+                    {
+                        "time": "2026-07-09 10:00:00",
+                        "eventLabel": "入库",
+                        "codeLabel": pallet_code,
+                    }
+                ],
+            },
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=(
+            "inventory_expert",
+            "warehouse_expert",
+            "assay_expert",
+            "pallet_expert",
+        ),
+    )
+
+    first = runtime.chat(chat_request(f"查询托盘 {pallet_code} 现状"))
+    second = runtime.chat(chat_request("再看它的历史流转"))
+
+    assert first.error is None
+    assert second.error is None
+    assert len(model.main_requests) == 1
+    assert [item["toolName"] for item in tools.calls] == [
+        "get_pallet_status",
+        "query_pallet_flow_records",
+    ]
+    assert tools.calls[1]["arguments"]["code"] == pallet_code
+    assert store.get("agt_llm").selected_pallet is not None
+    assert store.get("agt_llm").selected_pallet.metadata["code"] == pallet_code
+
+
+def test_llm_rejects_pallet_code_not_in_user_message_or_controlled_state() -> None:
+    builder = ToolArgumentBuilder()
+    state = InMemoryCheckpointer().get("agt_unbound_pallet")
+
+    with pytest.raises(ValueError, match="neither user-provided nor bound"):
+        builder.validate_llm_arguments(
+            tool_name="get_pallet_status",
+            arguments={"code": "P_FORGED_BY_MODEL"},
+            state=state,
+            user_message="查询这个托盘现状",
+        )
+
+
+def test_llm_requires_current_pallet_ref_when_code_is_only_in_prior_state() -> None:
+    builder = ToolArgumentBuilder()
+    state = InMemoryCheckpointer().get("agt_prior_pallet")
+    state.selected_pallet = SelectedEntity(
+        None,
+        "P202607090001",
+        "tool_result",
+        {"code": "P202607090001"},
+        entity_type="PALLET",
+        entity_ref="CURRENT_PALLET",
+        canonical_name="P202607090001",
+    )
+
+    with pytest.raises(ValueError, match="neither user-provided nor bound"):
+        builder.validate_llm_arguments(
+            tool_name="query_pallet_flow_records",
+            arguments={"code": "P202607090001", "page": 1, "size": 20},
+            state=state,
+            user_message="再看它的历史流转",
+        )
+
+    validated = builder.validate_llm_arguments(
+        tool_name="query_pallet_flow_records",
+        arguments={"palletRef": "CURRENT_PALLET", "page": 1, "size": 20},
+        state=state,
+        user_message="再看它的历史流转",
+    )
+    assert validated["code"] == "P202607090001"
+
+
+def test_main_model_realtime_answer_is_discarded_and_recovered_to_expert() -> None:
     model = ScriptedLlmModel(
         [
             MainAgentDecisionV1(
@@ -199,15 +445,134 @@ def test_main_model_cannot_directly_answer_realtime_business_facts() -> None:
                 confidence=0.99,
             )
         ],
-        [],
+        [call("resolve_products", {"query": "黄冰糖", "limit": 10})],
     )
-    runtime, _ = runtime_for(model, MockToolClient())
+    tools = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "AMBIGUOUS",
+                "needsUserSelection": True,
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    },
+                    {
+                        "productId": 85,
+                        "productName": "黄冰糖（箱）",
+                        "displayLabel": "黄冰糖（箱） 20kg/件 30件/板",
+                    },
+                ],
+            }
+        }
+    )
+    runtime, _ = runtime_for(model, tools)
 
     response = runtime.chat(chat_request("黄冰糖还有多少库存"))
 
-    assert response.error is not None
-    assert response.error.code == "LLM_RUNTIME_BOUNDARY_REJECTED"
+    assert response.error is None
+    assert response.needsUserSelection is True
     assert "100件" not in response.answer
+    assert response.reviewTrace["mainRouteGuard"] == {
+        "status": "RECOVERED_AS_DELEGATE",
+        "rejectedAction": "DIRECT_ANSWER",
+        "expertAgent": "inventory_expert",
+        "reason": "REALTIME_BUSINESS_FACT_REQUIRES_EXPERT",
+    }
+    assert tools.calls[0]["toolName"] == "resolve_products"
+
+
+def test_bounded_inventory_followup_reuses_active_expert_without_main_model_call() -> None:
+    model = ScriptedLlmModel(
+        [],
+        [call("resolve_products", {"query": "黄冰糖", "limit": 10})],
+    )
+    tools = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "AMBIGUOUS",
+                "needsUserSelection": True,
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    },
+                    {
+                        "productId": 85,
+                        "productName": "黄冰糖（箱）",
+                        "displayLabel": "黄冰糖（箱） 20kg/件 30件/板",
+                    },
+                ],
+            }
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+    state = store.get("agt_llm")
+    state.active_agent = "inventory_expert"
+    state.last_agent_handoff = AgentHandoffRouter().handoff_for_agent(
+        "inventory_expert",
+        mode="llm_delegate",
+    ).to_snapshot()
+    state.selected_warehouse = SelectedEntity(2, "2号库位", "resolver")
+
+    response = runtime.chat(chat_request("只看黄冰糖"))
+
+    assert response.error is None
+    assert response.needsUserSelection is True
+    assert model.main_requests == []
+    assert model.expert_requests[0].expertAgent == "inventory_expert"
+    assert response.reviewTrace["mainRouteOptimization"] == {
+        "status": "REUSED_ACTIVE_EXPERT",
+        "expertAgent": "inventory_expert",
+        "reason": "BOUNDED_CONTEXT_FOLLOWUP",
+    }
+    turn_metric = runtime.metrics.snapshot()["histograms"][
+        'agent_turn_duration{mode="llm",operation="chat"}'
+    ]
+    assert turn_metric["count"] == 1
+
+
+def test_context_bound_inventory_query_reuses_expert_and_fast_formats_result() -> None:
+    model = ScriptedLlmModel(
+        [],
+        [call("get_inventory_overview", {"productRef": "CURRENT_PRODUCT"})],
+    )
+    tools = MockToolClient(
+        {
+            "get_inventory_overview": {
+                "displayStockInfo": "13板30件",
+                "totalEquivalentPieces": 550,
+                "totalWeight": 13750,
+            }
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+    state = store.get("agt_llm")
+    state.active_agent = "inventory_expert"
+    state.last_agent_handoff = AgentHandoffRouter().handoff_for_agent(
+        "inventory_expert",
+        mode="llm_delegate",
+    ).to_snapshot()
+    state.selected_product = SelectedEntity(
+        84,
+        "黄冰糖小颗粒（袋） 25kg/件 40件/板",
+        "user_selection",
+        {"productName": "黄冰糖小颗粒（袋）"},
+    )
+
+    response = runtime.chat(chat_request("查询黄冰糖当前库存总览"))
+
+    assert response.error is None
+    assert model.main_requests == []
+    assert len(model.expert_requests) == 1
+    assert "13板30件" in response.answer
+    assert "需要我帮你查库存分布吗" in response.answer
+    assert response.reviewTrace["expertLoop"]["completionMode"] == "SAFE_FACT_FORMATTER"
+    assert runtime.metrics.snapshot()["counters"][
+        'llm_fast_completion_total{tool="get_inventory_overview"}'
+    ] == 1
 
 
 def test_llm_loop_resolves_product_then_uses_runtime_bound_product() -> None:
@@ -216,7 +581,6 @@ def test_llm_loop_resolves_product_then_uses_runtime_bound_product() -> None:
         [
             call("resolve_products", {"query": "黄冰糖（袋）", "limit": 10}),
             call("get_inventory_overview", {"productRef": "CURRENT_PRODUCT"}),
-            final("黄冰糖（袋）当前库存为13板30件，折合550件。", "obs_1", "obs_2"),
         ],
     )
     tools = MockToolClient(
@@ -242,7 +606,9 @@ def test_llm_loop_resolves_product_then_uses_runtime_bound_product() -> None:
 
     response = runtime.chat(chat_request("查询黄冰糖（袋）的库存"))
 
-    assert response.answer.startswith("黄冰糖（袋）当前库存")
+    assert "黄冰糖（袋）" in response.answer
+    assert "当前库存为 13板30件" in response.answer
+    assert "需要我帮你查库存分布吗" in response.answer
     assert [item["toolName"] for item in tools.calls] == ["resolve_products", "get_inventory_overview"]
     assert tools.calls[1]["arguments"] == {"productId": 84}
     assert tools.calls[1]["expertAgent"] == "inventory_expert"
@@ -250,6 +616,43 @@ def test_llm_loop_resolves_product_then_uses_runtime_bound_product() -> None:
     assert second_request.selectedContext["PRODUCT"]["canonicalName"] == "黄冰糖（袋）"
     assert "84" not in json.dumps(second_request.selectedContext, ensure_ascii=False)
     assert "25kg/件" not in json.dumps(second_request.selectedContext, ensure_ascii=False)
+
+
+def test_expert_timeout_safely_falls_back_to_registered_inventory_query() -> None:
+    class TimeoutExpertModel(ScriptedLlmModel):
+        def decide_expert_action(self, request: ExpertLoopRequest) -> ExpertLoopDecisionV1 | None:
+            self.expert_requests.append(request)
+            raise ModelDecisionError("MODEL_TIMEOUT", "模型结构化决策响应超时。", retryable=True)
+
+    model = TimeoutExpertModel([main_delegate("inventory_expert")], [])
+    tools = MockToolClient(
+        {
+            "get_inventory_overview": {
+                "displayStockInfo": "13板30件",
+                "totalEquivalentPieces": 550,
+            }
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+    store.get("agt_llm").selected_product = SelectedEntity(
+        84,
+        "黄冰糖（袋）",
+        "user_selection",
+        {"productName": "黄冰糖（袋）"},
+    )
+
+    response = runtime.chat(chat_request("查这个产品库存"))
+
+    assert response.error is None
+    assert "13板30件" in response.answer
+    assert response.reviewTrace["expertModelFallback"] == {
+        "status": "SAFE_DETERMINISTIC_RECOVERY",
+        "reason": "MODEL_TIMEOUT",
+        "action": "call_tool",
+        "toolName": "get_inventory_overview",
+    }
+    assert tools.calls[0]["toolName"] == "get_inventory_overview"
+    assert tools.calls[0]["expertAgent"] == "inventory_expert"
 
 
 def test_explicit_warehouse_query_may_drop_old_product_filter_without_expanding_permissions() -> None:
@@ -661,7 +1064,6 @@ def test_llm_stream_uses_expert_final_answer_without_second_model_call(
         [
             call("resolve_products", {"query": "黄冰糖（袋）", "limit": 10}),
             call("get_inventory_overview", {"productRef": "CURRENT_PRODUCT"}),
-            final("黄冰糖（袋）当前库存为13板30件。", "obs_1", "obs_2"),
         ],
     )
     tools = MockToolClient(
@@ -695,5 +1097,7 @@ def test_llm_stream_uses_expert_final_answer_without_second_model_call(
     )
 
     assert response.status_code == 200
-    assert "黄冰糖（袋）当前库存为13板30件" in response.text
+    assert "黄冰糖（袋）当前库存为 13板30件" in response.text
+    assert "需要我帮你查库存分布吗" in response.text
+    assert len(model.expert_requests) == 2
     assert model.stream_call_count == 0

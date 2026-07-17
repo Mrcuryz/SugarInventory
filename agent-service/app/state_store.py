@@ -223,6 +223,7 @@ def deserialize_state(payload: str) -> WarehouseAgentState:
     selected_product = _selected_entity(values.pop("selected_product", None))
     selected_warehouse = _selected_entity(values.pop("selected_warehouse", None))
     selected_production_order = _selected_entity(values.pop("selected_production_order", None))
+    selected_pallet = _selected_entity(values.pop("selected_pallet", None))
     pending = _pending(values.pop("pending_clarification", None))
     state = WarehouseAgentState()
     for key, value in values.items():
@@ -231,6 +232,7 @@ def deserialize_state(payload: str) -> WarehouseAgentState:
     state.selected_product = selected_product
     state.selected_warehouse = selected_warehouse
     state.selected_production_order = selected_production_order
+    state.selected_pallet = selected_pallet
     state.pending_clarification = pending
     return state
 

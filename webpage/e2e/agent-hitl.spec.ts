@@ -99,7 +99,8 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await candidate.click()
 
     await expect(page.getByText(/当前库存为 .*折合/)).toBeVisible()
-    await expect(candidate).toBeDisabled()
+    await expect(candidate).toHaveCount(0)
+    await expect(page.getByText(/用户已选择.*黄冰糖（袋）.*/)).toBeVisible()
 
     const resumeStream = await lastSse(page)
     const resumeEnd = terminalPayload(resumeStream)

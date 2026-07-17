@@ -27,11 +27,11 @@ public class AssayReportDetailServiceImpl implements AssayReportDetailService {
     private static final List<MetricDefinition> METRICS = List.of(
             new MetricDefinition("color_value", "色值"),
             new MetricDefinition("reducing_sugar", "还原糖分"),
-            new MetricDefinition("dry_weight", "干燥失重"),
+            new MetricDefinition("dry_weight_loss", "干燥失重"),
             new MetricDefinition("conductivity_ash", "电导灰分"),
             new MetricDefinition("sucrose", "蔗糖分"),
             new MetricDefinition("insoluble_impurity", "不溶于水杂质"),
-            new MetricDefinition("ph_value", "pH")
+            new MetricDefinition("ph", "pH")
     );
 
     private final AssayService assayService;
@@ -77,13 +77,21 @@ public class AssayReportDetailServiceImpl implements AssayReportDetailService {
                 && assay.getStandardSnapshot().getItems() != null
                 ? assay.getStandardSnapshot().getItems().stream()
                 .filter(item -> item.getMetricCode() != null)
-                .collect(Collectors.toMap(QualityStandardItemVO::getMetricCode, Function.identity(), (left, right) -> left))
+                .collect(Collectors.toMap(
+                        item -> normalizeMetricCode(item.getMetricCode()),
+                        Function.identity(),
+                        (left, right) -> left
+                ))
                 : Map.of();
         Map<String, AssayFailedMetricVO> failedMetrics = assay.getFailedMetrics() == null
                 ? Map.of()
                 : assay.getFailedMetrics().stream()
                 .filter(metric -> metric.getMetricCode() != null)
-                .collect(Collectors.toMap(AssayFailedMetricVO::getMetricCode, Function.identity(), (left, right) -> left));
+                .collect(Collectors.toMap(
+                        metric -> normalizeMetricCode(metric.getMetricCode()),
+                        Function.identity(),
+                        (left, right) -> left
+                ));
 
         List<AssayReportMetricVO> result = new ArrayList<>();
         for (MetricDefinition metric : METRICS) {
@@ -106,12 +114,23 @@ public class AssayReportDetailServiceImpl implements AssayReportDetailService {
         return switch (metricCode) {
             case "color_value" -> assay.getColorValue();
             case "reducing_sugar" -> assay.getReducingSugar();
-            case "dry_weight" -> assay.getDryWeight();
+            case "dry_weight_loss" -> assay.getDryWeight();
             case "conductivity_ash" -> assay.getConductivityAsh();
             case "sucrose" -> assay.getSucrose();
             case "insoluble_impurity" -> assay.getInsolubleImpurity();
-            case "ph_value" -> assay.getPhValue();
+            case "ph" -> assay.getPhValue();
             default -> null;
+        };
+    }
+
+    private String normalizeMetricCode(String metricCode) {
+        if (metricCode == null) {
+            return null;
+        }
+        return switch (metricCode) {
+            case "dry_weight" -> "dry_weight_loss";
+            case "ph_value" -> "ph";
+            default -> metricCode;
         };
     }
 
@@ -194,10 +213,11 @@ public class AssayReportDetailServiceImpl implements AssayReportDetailService {
 
     private List<String> notes(AssayVO assay) {
         List<String> notes = new ArrayList<>();
-        notes.add("详情来自受控 reportRef，不要求用户提供内部化验 ID。");
-        notes.add("无标准表示无法自动判定，不等同于不合格。");
+        if ("NO_STANDARD".equals(assay.getJudgeResult())) {
+            notes.add("当前没有适用的化验标准，因此暂时无法自动判定；这不代表产品不合格。");
+        }
         if (assay.getStandardSnapshot() == null) {
-            notes.add("本报告没有可展示的标准快照。");
+            notes.add("本次化验未保存可展示的标准信息。");
         }
         return notes;
     }

@@ -65,6 +65,7 @@ class WarehouseAgentState:
     selected_product: SelectedEntity | None = None
     selected_warehouse: SelectedEntity | None = None
     selected_production_order: SelectedEntity | None = None
+    selected_pallet: SelectedEntity | None = None
     active_goal_type: str | None = None
     fact_envelopes: list[dict[str, Any]] = field(default_factory=list)
     last_goal_completion: dict[str, Any] | None = None

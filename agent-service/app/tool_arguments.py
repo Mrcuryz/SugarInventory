@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 from collections.abc import Iterator
-from datetime import date, timedelta
+from datetime import date
 import re
 import time
 
 from app.agents import MAIN_AGENT, AgentHandoff, AgentHandoffRouter
+from app.business_time import BusinessClock
 from app.cancellation import RunCancelledError
 from app.context import ContextBuilder
 from app.goal_contracts import registered_goal_for_plan
@@ -549,6 +550,13 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_quality_standard_catalog": "查询质量标准目录，不代表某产品或批次已经适用该标准。",
     "get_quality_standard_detail": "使用受控标准引用查询质量标准详情。",
     "query_product_standard_relations": "按产品规范名查询当前产品与质量标准的配置关系。",
+    "get_pallet_status": "查询用户明确提供或当前已确认托盘的状态、库存、化验和已登记流转。",
+    "query_qr_code_lifecycle": "查询一个明确二维码或托盘码的已登记生命周期；不执行任何码状态变更。",
+    "query_printed_not_inbound_codes": "查询已打印但尚未完成入库的二维码分组；只读且不创建任务。",
+    "query_pallet_anomalies": "查询托盘状态、库存和流转之间的已登记异常事实。",
+    "query_pallet_flow_records": "分页查询明确托盘或受控范围的已登记流转记录；不是完整操作日志。",
+    "query_qr_batch_inbound_completion": "查询二维码批次的入库完成情况；不确认或补录入库。",
+    "query_fixed_product_qr_pool": "查询固定产品二维码池当前状态；不打印、启用、作废或恢复二维码。",
 }
 
 
@@ -562,6 +570,7 @@ class ToolArgumentBuilder:
         expert_model_clients: dict[str, ModelClient] | None = None,
         compound_planner: CompoundIntentPlanner | None = None,
         goal_draft_shadow_enabled: bool = False,
+        business_clock: BusinessClock | None = None,
     ) -> None:
         self._model_client = model_client or BasicModelClient()
         self._context_builder = context_builder or ContextBuilder()
@@ -570,6 +579,7 @@ class ToolArgumentBuilder:
         self._expert_model_clients = dict(expert_model_clients or {})
         self._compound_planner = compound_planner or CompoundIntentPlanner(self._agent_router)
         self._goal_draft_shadow_enabled = goal_draft_shadow_enabled
+        self.business_clock = business_clock or BusinessClock()
 
     def llm_visible_tool_schemas(self, handoff: AgentHandoff) -> dict[str, dict[str, Any]]:
         """Return model-facing schemas with internal database IDs replaced by state refs."""
@@ -578,6 +588,30 @@ class ToolArgumentBuilder:
         result: dict[str, dict[str, Any]] = {}
         for tool_name, schema in visible.items():
             model_schema = self._llm_visible_schema(schema)
+            if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
+                properties = model_schema.get("properties")
+                if isinstance(properties, dict) and "code" in properties:
+                    properties["palletRef"] = {
+                        "type": "string",
+                        "const": "CURRENT_PALLET",
+                        "description": "Runtime 绑定的当前已确认托盘；不是数据库 ID 或可猜测的托盘码。",
+                    }
+                    if tool_name in {"get_pallet_status", "query_qr_code_lifecycle"}:
+                        required = model_schema.get("required")
+                        if isinstance(required, list):
+                            model_schema["required"] = [key for key in required if key != "code"]
+                        model_schema["oneOf"] = [
+                            {"required": ["code"]},
+                            {"required": ["palletRef"]},
+                        ]
+            if tool_name == "get_assay_report_detail":
+                properties = model_schema.get("properties")
+                if isinstance(properties, dict):
+                    properties["reportRef"] = {
+                        "type": "string",
+                        "const": "CURRENT_ASSAY_REPORT",
+                        "description": "上一轮化验记录列表中的第一条受控报告引用；真实引用不提供给模型。",
+                    }
             description = LLM_TOOL_DESCRIPTIONS.get(tool_name)
             if description:
                 model_schema["description"] = description
@@ -599,6 +633,19 @@ class ToolArgumentBuilder:
         self._reject_model_generated_ids(arguments)
         self._reject_display_label_execution(tool_name, arguments, state, user_message)
         materialized = self._materialize_state_refs(arguments, state)
+        materialized = self.business_clock.normalize_tool_arguments(
+            tool_name,
+            materialized,
+            user_message,
+            TOOL_SCHEMAS.get(tool_name),
+        )
+        self._reject_unbound_pallet_code(
+            tool_name,
+            arguments,
+            materialized,
+            state,
+            user_message,
+        )
         if tool_name == "get_inventory_distribution":
             product_scope = materialized.get("productScope")
             warehouse_scope = materialized.get("warehouseScope")
@@ -615,6 +662,18 @@ class ToolArgumentBuilder:
                 materialized,
                 self._assay_records_all_scope_allowed(user_message),
             )
+            product_scope = materialized.get("productScope")
+            date_range = materialized.get("dateRange")
+            if (
+                isinstance(product_scope, dict)
+                and product_scope.get("type") == "SINGLE_PRODUCT"
+                and isinstance(date_range, dict)
+                and date_range.get("type") == "EXACT"
+                and self._prefers_single_assay_report(user_message)
+            ):
+                raise ValueError(
+                    "single-product exact-date assay query must use get_assay_status"
+                )
         if tool_name == "query_assay_abnormalities":
             self._require_allowed_all_scope(
                 materialized,
@@ -709,8 +768,59 @@ class ToolArgumentBuilder:
                     raise ValueError("CURRENT_WAREHOUSE is not available")
                 result["warehouseId"] = state.selected_warehouse.internal_id
                 continue
+            if key == "palletRef":
+                code = self._selected_pallet_code(state)
+                if item != "CURRENT_PALLET" or code is None:
+                    raise ValueError("CURRENT_PALLET is not available")
+                result["code"] = code
+                continue
+            if key == "reportRef" and item == "CURRENT_ASSAY_REPORT":
+                report_ref = self._current_assay_report_ref(state)
+                if report_ref is None:
+                    raise ValueError("CURRENT_ASSAY_REPORT is not available")
+                result["reportRef"] = report_ref
+                continue
             result[key] = self._materialize_state_refs(item, state)
         return result
+
+    def _reject_unbound_pallet_code(
+        self,
+        tool_name: str,
+        source_arguments: dict[str, Any],
+        materialized_arguments: dict[str, Any],
+        state: WarehouseAgentState,
+        user_message: str,
+    ) -> None:
+        if tool_name not in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
+            return
+        source_code = str(source_arguments.get("code") or "").strip()
+        if source_code:
+            if source_code not in user_message:
+                raise ValueError("pallet code is neither user-provided nor bound to CURRENT_PALLET")
+            return
+        code = str(materialized_arguments.get("code") or "").strip()
+        if code and code != self._selected_pallet_code(state):
+            raise ValueError("pallet code is neither user-provided nor bound to CURRENT_PALLET")
+
+    @staticmethod
+    def _selected_pallet_code(state: WarehouseAgentState) -> str | None:
+        if state.selected_pallet is None:
+            return None
+        code = str(state.selected_pallet.metadata.get("code") or "").strip()
+        return code or None
+
+    @staticmethod
+    def _current_assay_report_ref(state: WarehouseAgentState) -> str | None:
+        records = (state.last_assay_records or {}).get("records")
+        if not isinstance(records, list):
+            return None
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            report_ref = str(record.get("recordRef") or "").strip()
+            if report_ref:
+                return report_ref
+        return None
 
     def _require_allowed_all_scope(self, arguments: dict[str, Any], allowed: bool) -> None:
         scope = arguments.get("productScope")
@@ -2816,15 +2926,26 @@ class ToolArgumentBuilder:
         return any(phrase in user_message for phrase in ["全部产品", "所有产品", "全产品", "全部品种", "所有品种"])
 
     def _assay_date_range_from_message(self, user_message: str) -> dict[str, Any] | None:
+        resolved = self.business_clock.resolve(user_message)
+        return resolved.to_tool_date_range() if resolved is not None else None
+
+    def _prefers_single_assay_report(self, user_message: str) -> bool:
         text = user_message or ""
-        if "今天" in text:
-            return {"type": "EXACT", "date": date.today().isoformat()}
-        if "昨天" in text:
-            return {"type": "EXACT", "date": (date.today() - timedelta(days=1)).isoformat()}
-        match = re.search(r"(?:最近|近)\s*(\d{1,3})\s*天", text)
-        if match:
-            return {"type": "LAST_DAYS", "days": int(match.group(1))}
-        return None
+        if any(marker in text for marker in ("全部版本", "所有版本", "历史版本", "版本列表")):
+            return False
+        resolved = self.business_clock.resolve(text)
+        if resolved is not None and resolved.is_exact:
+            return True
+        return bool(
+            re.search(
+                r"\b20\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])\b",
+                text,
+            )
+            or re.search(
+                r"20\d{2}年(?:0?[1-9]|1[0-2])月(?:0?[1-9]|[12]\d|3[01])日",
+                text,
+            )
+        )
 
     def _assay_judge_status_from_message(self, user_message: str) -> str:
         text = user_message or ""

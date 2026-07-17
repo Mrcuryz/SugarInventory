@@ -1,6 +1,16 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { distributionRiskSummary, distributionRows, isDistributionCard } from './agentDisplay'
+import {
+  assayHistoryRecords,
+  assayMetrics,
+  assayNotes,
+  assayResultTone,
+  assaySummary,
+  isAssayCard,
+  isAssayHistoryCard,
+  isAssayReportCard
+} from './assayCardPresentation.mjs'
 
 const props = defineProps({
   card: {
@@ -13,6 +23,14 @@ const emit = defineEmits(['card-action'])
 const isDistribution = computed(() => isDistributionCard(props.card))
 const rows = computed(() => distributionRows(props.card))
 const riskSummary = computed(() => distributionRiskSummary(props.card))
+const isAssay = computed(() => isAssayCard(props.card))
+const isAssayReport = computed(() => isAssayReportCard(props.card))
+const isAssayHistory = computed(() => isAssayHistoryCard(props.card))
+const reportSummary = computed(() => assaySummary(props.card))
+const reportMetrics = computed(() => assayMetrics(props.card))
+const reportNotes = computed(() => assayNotes(props.card))
+const historyRecords = computed(() => assayHistoryRecords(props.card))
+const expanded = ref(true)
 
 const inferActionProductName = (field) => {
   const source = field?.actionProductName || field?.productName || field?.label || field?.name || ''
@@ -34,14 +52,88 @@ const openCreateAssay = (field) => {
 </script>
 
 <template>
-  <div class="business-card" :class="{ 'distribution-card': isDistribution }">
+  <div class="business-card" :class="{ 'distribution-card': isDistribution, 'assay-card': isAssay }">
     <div class="business-card-head">
       <span class="business-card-icon">
         <el-icon><DataAnalysis /></el-icon>
       </span>
       <span class="business-card-title">{{ card.title || '查询结果' }}</span>
+      <button
+        v-if="isAssay"
+        type="button"
+        class="business-card-toggle"
+        :aria-expanded="expanded"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? '收起' : '展开' }}
+      </button>
     </div>
-    <div v-if="isDistribution" class="distribution-card-body">
+    <div v-if="isAssay" class="assay-card-body">
+      <template v-if="expanded">
+        <div v-if="isAssayReport && reportSummary" class="assay-summary">
+          <div class="assay-summary-main">
+            <span>{{ reportSummary.sampleDate }}</span>
+            <strong :class="`assay-result-${assayResultTone(reportSummary.judgeLabel)}`">
+              {{ reportSummary.judgeLabel }}
+            </strong>
+          </div>
+          <div class="assay-summary-standard">
+            <span>采用标准</span>
+            <strong>{{ reportSummary.standardLabel }}</strong>
+          </div>
+          <p v-if="reportSummary.judgeExplanation">{{ reportSummary.judgeExplanation }}</p>
+        </div>
+
+        <div v-if="isAssayReport && reportMetrics.length" class="assay-metric-list">
+          <div class="assay-metric-head" aria-hidden="true">
+            <span>指标</span><span>实测值</span><span>对应标准</span><span>结果</span>
+          </div>
+          <div
+            v-for="(metric, metricIndex) in reportMetrics"
+            :key="`${metric.metricName || metricIndex}-${metric.actualValueText || metricIndex}`"
+            class="assay-metric-row"
+          >
+            <strong>{{ metric.metricName }}</strong>
+            <span data-label="实测值">{{ metric.actualValueText }}</span>
+            <span data-label="对应标准">{{ metric.standardRangeText }}</span>
+            <span
+              data-label="结果"
+              class="assay-result"
+              :class="`assay-result-${assayResultTone(metric.resultLabel)}`"
+            >
+              {{ metric.resultLabel }}
+            </span>
+            <small v-if="metric.reason">{{ metric.reason }}</small>
+          </div>
+        </div>
+
+        <div v-if="isAssayHistory" class="assay-history-list">
+          <div
+            v-for="(record, recordIndex) in historyRecords"
+            :key="`${record.sampleDate || recordIndex}-${record.productLabel || recordIndex}`"
+            class="assay-history-row"
+          >
+            <div class="assay-history-main">
+              <strong>{{ record.sampleDate }}</strong>
+              <span :class="`assay-result-${assayResultTone(record.judgeLabel)}`">{{ record.judgeLabel }}</span>
+            </div>
+            <div>{{ record.productLabel }}</div>
+            <div class="assay-history-meta">
+              <span>标准：{{ record.standardLabel }}</span>
+              <span v-if="record.failedMetricText">异常指标：{{ record.failedMetricText }}</span>
+              <span v-if="record.testerLabel">化验员：{{ record.testerLabel }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="reportNotes.length" class="assay-notes">
+          <div v-for="(note, noteIndex) in reportNotes" :key="`${note.value}-${noteIndex}`">
+            {{ note.value }}
+          </div>
+        </div>
+      </template>
+    </div>
+    <div v-else-if="isDistribution" class="distribution-card-body">
       <div class="distribution-list">
         <div
           v-for="(field, fieldIndex) in rows"
@@ -122,6 +214,17 @@ const openCreateAssay = (field) => {
   font-weight: 700;
   line-height: 20px;
   word-break: break-word;
+}
+
+.business-card-toggle {
+  flex: none;
+  margin-left: auto;
+  border: 0;
+  padding: 3px 6px;
+  background: transparent;
+  color: var(--app-primary);
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .business-card-fields {
@@ -247,7 +350,159 @@ const openCreateAssay = (field) => {
   }
 }
 
+.assay-card {
+  padding: 12px;
+}
+
+.assay-card-body {
+  display: grid;
+  gap: 10px;
+}
+
+.assay-summary {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.assay-summary-main,
+.assay-summary-standard,
+.assay-history-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assay-summary-standard {
+  color: var(--app-text-tertiary);
+  font-size: 12px;
+
+  strong {
+    color: var(--app-text);
+    text-align: right;
+  }
+}
+
+.assay-summary p {
+  margin: 0;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.assay-metric-list {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #edf1f7;
+  border-radius: 8px;
+  background: #edf1f7;
+}
+
+.assay-metric-head,
+.assay-metric-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(64px, 0.8fr) minmax(110px, 1.2fr) minmax(64px, 0.8fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 9px;
+}
+
+.assay-metric-head {
+  background: #f1f5f9;
+  color: var(--app-text-tertiary);
+  font-size: 11px;
+}
+
+.assay-metric-row {
+  background: #ffffff;
+  color: var(--app-text);
+  font-size: 12px;
+
+  small {
+    grid-column: 1 / -1;
+    color: #b91c1c;
+  }
+}
+
+.assay-result {
+  font-weight: 650;
+}
+
+.assay-result-pass {
+  color: #15803d;
+}
+
+.assay-result-fail {
+  color: #b91c1c;
+}
+
+.assay-result-review {
+  color: #b45309;
+}
+
+.assay-result-unknown {
+  color: #64748b;
+}
+
+.assay-history-list {
+  display: grid;
+  gap: 7px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.assay-history-row {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid #edf1f7;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--app-text);
+  font-size: 12px;
+}
+
+.assay-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: var(--app-text-tertiary);
+}
+
+.assay-notes {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @media (max-width: 520px) {
+  .assay-metric-head {
+    display: none;
+  }
+
+  .assay-metric-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+
+    > span::before {
+      content: attr(data-label) '：';
+      color: var(--app-text-tertiary);
+      font-weight: 400;
+    }
+
+    > span {
+      grid-column: 1 / -1;
+    }
+  }
+
   .distribution-main {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

@@ -4,6 +4,8 @@ import json
 import re
 import uuid
 from collections.abc import Callable
+from queue import Queue
+from threading import Thread
 from typing import Any, Iterator
 
 from app.cancellation import (
@@ -13,6 +15,7 @@ from app.cancellation import (
     set_current_cancellation_token,
 )
 from app.model import ModelStreamError, ModelStreamTimeout
+from app.progress import reset_business_progress_reporter, set_business_progress_reporter
 from app.schemas import CandidateSelectedMessage, ChatRequest, ChatResponse, ResumeEvent, ResumeRequest
 
 
@@ -38,6 +41,8 @@ def sse_for_request(
     )
     run_token = run_registry.start(builder.agent_session_id, builder.message_id, run_timeout_ms) if run_registry else None
     context_token = set_current_cancellation_token(run_token)
+    runtime_worker: Thread | None = None
+    runtime_finished = False
     try:
         if _is_cancelled(run_registry, builder):
             yield from _cancelled_events(builder, terminal_context)
@@ -47,28 +52,29 @@ def sse_for_request(
         yield _event(builder.next("message_start", {"role": "assistant"}))
         yield _event(builder.next("progress", {"stage": "understanding", "text": _progress_text(request)}))
         try:
-            set_current_cancellation_token(run_token)
-            if run_token is not None:
-                run_token.raise_if_cancelled()
-            if isinstance(request.message, CandidateSelectedMessage):
-                response = resume_handler(
-                    ResumeRequest(
-                        agentSessionId=request.agentSessionId,
-                        messageId=request.messageId,
-                        resumeToken=request.message.resumeToken,
-                        user=request.user,
-                        event=ResumeEvent(
-                            type="candidate_selected",
-                            interruptId=request.message.interruptId,
-                            action=request.message.action,
-                            selection=request.message.selection,
-                            clientRequestId=request.message.clientRequestId,
-                        ),
-                        client=request.client,
-                    )
-                )
-            else:
-                response = chat_handler(request)
+            runtime_events: Queue[tuple[str, Any]] = Queue()
+            runtime_worker = Thread(
+                target=_run_runtime,
+                args=(request, chat_handler, resume_handler, run_token, runtime_events),
+                name="agent-stream-runtime",
+                daemon=True,
+            )
+            runtime_worker.start()
+            last_progress: tuple[str, str] | None = ("understanding", _progress_text(request))
+            while True:
+                event_type, payload = runtime_events.get()
+                if event_type == "progress":
+                    stage, text = payload
+                    if (stage, text) != last_progress:
+                        yield _event(builder.next("progress", {"stage": stage, "text": text}))
+                        last_progress = (stage, text)
+                    continue
+                if event_type == "error":
+                    runtime_finished = True
+                    raise payload
+                response = payload
+                runtime_finished = True
+                break
             if run_token is not None:
                 run_token.raise_if_cancelled()
             response_events = events_for_response(
@@ -128,9 +134,62 @@ def sse_for_request(
             )
             yield _event(builder.next("message_end", _finish_payload("error", terminal_context)))
     finally:
+        if runtime_worker is not None and runtime_worker.is_alive() and not runtime_finished and run_token is not None:
+            run_token.cancel("CLIENT_DISCONNECTED")
         reset_current_cancellation_token(context_token)
         if run_registry is not None:
             run_registry.finish(builder.agent_session_id, builder.message_id)
+
+
+def _run_runtime(
+    request: ChatRequest,
+    chat_handler: RuntimeHandler,
+    resume_handler: ResumeHandler,
+    run_token: Any,
+    runtime_events: Queue[tuple[str, Any]],
+) -> None:
+    cancellation_context = set_current_cancellation_token(run_token)
+
+    def publish_progress(stage: str, text: str) -> None:
+        if run_token is None or not run_token.is_cancelled():
+            runtime_events.put(("progress", (stage, text)))
+
+    progress_context = set_business_progress_reporter(publish_progress)
+    try:
+        if run_token is not None:
+            run_token.raise_if_cancelled()
+        response = _dispatch_runtime(request, chat_handler, resume_handler)
+        runtime_events.put(("response", response))
+    except Exception as exc:
+        runtime_events.put(("error", exc))
+    finally:
+        reset_business_progress_reporter(progress_context)
+        reset_current_cancellation_token(cancellation_context)
+
+
+def _dispatch_runtime(
+    request: ChatRequest,
+    chat_handler: RuntimeHandler,
+    resume_handler: ResumeHandler,
+) -> ChatResponse:
+    if not isinstance(request.message, CandidateSelectedMessage):
+        return chat_handler(request)
+    return resume_handler(
+        ResumeRequest(
+            agentSessionId=request.agentSessionId,
+            messageId=request.messageId,
+            resumeToken=request.message.resumeToken,
+            user=request.user,
+            event=ResumeEvent(
+                type="candidate_selected",
+                interruptId=request.message.interruptId,
+                action=request.message.action,
+                selection=request.message.selection,
+                clientRequestId=request.message.clientRequestId,
+            ),
+            client=request.client,
+        )
+    )
 
 
 def sse_for_response(response: ChatResponse) -> Iterator[str]:
@@ -271,12 +330,27 @@ def _terminal_context(response: ChatResponse, terminal_context: EventPayload | N
 
 def _answer_deltas(answer: str, streamer: AnswerDeltaStreamer | None) -> Iterator[str]:
     if streamer is None:
-        yield answer
+        yield from _validated_answer_chunks(answer)
         return
     for delta in streamer(answer):
         if not delta:
             continue
         yield delta
+
+
+def _validated_answer_chunks(answer: str, max_chars: int = 28) -> Iterator[str]:
+    """Split only the already validated public answer; never stream unvalidated model output."""
+    if not answer:
+        return
+    start = 0
+    boundaries = {"。", "！", "？", "；", "\n"}
+    for index, character in enumerate(answer):
+        length = index - start + 1
+        if length >= max_chars or (character in boundaries and length >= 8):
+            yield answer[start : index + 1]
+            start = index + 1
+    if start < len(answer):
+        yield answer[start:]
 
 
 _BLOCKED_KEYS = {
@@ -319,13 +393,4 @@ def _sanitize_event_value(value: Any) -> Any:
 def _progress_text(request: ChatRequest) -> str:
     if isinstance(request.message, CandidateSelectedMessage):
         return "正在根据你的选择继续查询。"
-    text = request.message.content
-    if any(keyword in text for keyword in ("化验", "检验", "质量")):
-        return "正在确认产品和化验日期。"
-    if any(keyword in text for keyword in ("库位", "仓库", "容量")):
-        return "正在确认库位范围。"
-    if any(keyword in text for keyword in ("托盘", "码")):
-        return "正在确认托盘范围。"
-    if any(keyword in text for keyword in ("库存", "剩余", "还有", "查")):
-        return "正在确认产品范围。"
-    return "正在理解问题并准备查询。"
+    return "正在理解你的问题。"

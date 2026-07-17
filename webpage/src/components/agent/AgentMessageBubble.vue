@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import AgentBusinessCard from './AgentBusinessCard.vue'
 import AgentOptionCard from './AgentOptionCard.vue'
-import { hasDistributionCard, visibleCards } from './agentDisplay'
+import { cleanOptionLabel, hasWideBusinessCard, selectedOptionKindLabel, visibleCards } from './agentDisplay'
 
 const props = defineProps({
   item: {
@@ -58,7 +58,7 @@ const showFeedbackTrigger = computed(() => canSendFeedback.value && !props.debug
 const showFeedbackOptions = computed(() => canSendFeedback.value && (props.debugMode || feedbackExpanded.value))
 const bubbleClasses = computed(() => ({
   user: props.item.role === 'user',
-  'wide-card-bubble': hasDistributionCard(props.item),
+  'wide-card-bubble': hasWideBusinessCard(props.item),
   'is-error': props.item.finishReason === 'error',
   'is-cancelled': props.item.cancelled || props.item.finishReason === 'cancelled',
   'is-interrupt': props.item.needsUserSelection || ['clarification_required', 'interrupt_required'].includes(props.item.finishReason),
@@ -88,7 +88,15 @@ const sendFeedback = (feedbackType) => {
       />
     </div>
 
-    <div v-if="item.options?.length" class="option-card-list">
+    <div v-if="item.selectedOption" class="selection-summary" aria-label="用户选择结果">
+      <span class="selection-check" aria-hidden="true">✓</span>
+      <span>
+        用户已选择 <strong>{{ cleanOptionLabel(item.selectedOption.displayLabel) }}</strong>
+        （{{ selectedOptionKindLabel(item.selectedOption.optionType) }}）
+      </span>
+    </div>
+
+    <div v-else-if="item.options?.length" class="option-card-list">
       <AgentOptionCard
         v-for="option in item.options"
         :key="`${option.optionId || option.optionType}-${option.displayLabel}`"
@@ -265,6 +273,39 @@ const sendFeedback = (feedbackType) => {
 
 .option-card-list {
   gap: 9px;
+}
+
+.selection-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 11px;
+  padding: 8px 10px;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #f7faff;
+  color: #475467;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.selection-summary strong {
+  color: #344054;
+  font-weight: 700;
+}
+
+.selection-check {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: var(--app-primary);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .tool-summary {

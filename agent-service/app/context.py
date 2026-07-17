@@ -64,6 +64,17 @@ class ContextBuilder:
                     ],
                 )
             )
+        if state.selected_pallet is not None:
+            packs.append(
+                DomainContextPack(
+                    name="selected_pallet",
+                    triggerReason="current conversation has selected pallet",
+                    instructions=[
+                        f"最近已确认托盘：{state.selected_pallet.display_label}。",
+                        "涉及‘这个托盘、它、刚才的托盘’时，只能沿用 CURRENT_PALLET，不得猜测托盘码。",
+                    ],
+                )
+            )
         return packs
 
     def _safety_pack(self) -> DomainContextPack:

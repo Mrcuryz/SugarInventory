@@ -448,6 +448,33 @@ class SafeWarehouseResult(BaseModel):
     remainingCapacity: int | float | str | None = None
 
 
+class SafeAssayMetric(BaseModel):
+    """One allowlisted assay metric prepared for user-facing presentation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    metricName: str
+    actualValueText: str
+    standardRangeText: str
+    resultLabel: str
+    reason: str | None = None
+
+
+class SafeAssayReport(BaseModel):
+    """Display-safe assay report; raw enums, IDs and control refs are excluded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hasAssay: bool = True
+    productLabel: str
+    sampleDate: str | None = None
+    judgeLabel: str
+    judgeExplanation: str | None = None
+    standardLabel: str
+    metrics: list[SafeAssayMetric] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class ChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

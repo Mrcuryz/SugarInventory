@@ -13,6 +13,7 @@ from typing import Any
 
 from app.cancellation import current_cancellation_token
 from app.agents import MAIN_AGENT, AgentHandoffRouter, ExpertBoundaryError
+from app.business_time import BusinessClock
 from app.execution import (
     AgentExecutionContext,
     bind_execution_context,
@@ -40,6 +41,8 @@ from app.schemas import (
     ExpertLoopDecisionV1,
     MainAgentDecisionV1,
     ResumeRequest,
+    SafeAssayMetric,
+    SafeAssayReport,
     SafeInventoryDistributionGroup,
     SafeInventoryDistributionResult,
     SafeInventoryLocation,
@@ -65,6 +68,8 @@ from app.orchestration import (
     validate_restored_plan,
 )
 from app.observability import MetricsRegistry
+from app.policies import FastCompletionPolicy, NextActionPolicy, SafeFallbackPolicy
+from app.progress import report_business_progress, report_tool_progress
 
 
 class OrchestrationBudgetExceeded(RuntimeError):
@@ -75,6 +80,15 @@ class WarehouseAgentRuntime:
     """Minimal LangGraph-compatible runtime for M1.3R."""
 
     RESUME_TOKEN_TTL = timedelta(minutes=10)
+    ASSAY_METRICS = (
+        ("color_value", "colorValue", "色值"),
+        ("reducing_sugar", "reducingSugar", "还原糖分"),
+        ("dry_weight_loss", "dryWeight", "干燥失重"),
+        ("conductivity_ash", "conductivityAsh", "电导灰分"),
+        ("sucrose", "sucrose", "蔗糖分"),
+        ("insoluble_impurity", "insolubleImpurity", "不溶于水杂质"),
+        ("ph", "phValue", "pH"),
+    )
 
     def __init__(
         self,
@@ -88,10 +102,18 @@ class WarehouseAgentRuntime:
         llm_max_tool_calls: int = 3,
         llm_max_tool_retries: int = 1,
         agent_router: AgentHandoffRouter | None = None,
+        fast_completion_policy: FastCompletionPolicy | None = None,
+        safe_fallback_policy: SafeFallbackPolicy | None = None,
+        next_action_policy: NextActionPolicy | None = None,
+        business_clock: BusinessClock | None = None,
     ) -> None:
         self.tool_client = tool_client
         self.checkpointer = checkpointer or InMemoryCheckpointer()
-        self.argument_builder = argument_builder or ToolArgumentBuilder()
+        inherited_clock = getattr(argument_builder, "business_clock", None)
+        self.business_clock = business_clock or inherited_clock or BusinessClock()
+        self.argument_builder = argument_builder or ToolArgumentBuilder(
+            business_clock=self.business_clock
+        )
         self.metrics = metrics or MetricsRegistry()
         self.model_client = model_client
         self.planning_mode = planning_mode if planning_mode in {"deterministic", "llm"} else "deterministic"
@@ -100,10 +122,22 @@ class WarehouseAgentRuntime:
         self.llm_allowed_experts = frozenset(llm_allowed_experts) & known_experts
         self.llm_max_tool_calls = min(3, max(1, llm_max_tool_calls))
         self.llm_max_tool_retries = min(1, max(0, llm_max_tool_retries))
+        self.fast_completion_policy = fast_completion_policy or FastCompletionPolicy.default()
+        self.safe_fallback_policy = safe_fallback_policy or SafeFallbackPolicy.default()
+        self.next_action_policy = next_action_policy or NextActionPolicy()
 
     def chat(self, request: ChatRequest) -> ChatResponse:
-        with self.checkpointer.session(request.agentSessionId) as state:
-            return self._chat_locked(request, state)
+        started = time.monotonic()
+        try:
+            with self.checkpointer.session(request.agentSessionId) as state:
+                return self._chat_locked(request, state)
+        finally:
+            self.metrics.observe(
+                "agent_turn_duration",
+                time.monotonic() - started,
+                mode=self.planning_mode,
+                operation="chat",
+            )
 
     def _chat_locked(self, request: ChatRequest, state: WarehouseAgentState) -> ChatResponse:
         text = request.message.content.strip()
@@ -127,10 +161,19 @@ class WarehouseAgentRuntime:
         self.checkpointer.clear(agent_session_id)
 
     def resume(self, request: ResumeRequest) -> ChatResponse:
-        with self.checkpointer.session(request.agentSessionId) as state:
-            context = self._pending_execution_context(state.pending_clarification)
-            with bind_execution_context(context):
-                return self._resume_locked(request, state)
+        started = time.monotonic()
+        try:
+            with self.checkpointer.session(request.agentSessionId) as state:
+                context = self._pending_execution_context(state.pending_clarification)
+                with bind_execution_context(context):
+                    return self._resume_locked(request, state)
+        finally:
+            self.metrics.observe(
+                "agent_turn_duration",
+                time.monotonic() - started,
+                mode=self.planning_mode,
+                operation="resume",
+            )
 
     def _resume_locked(self, request: ResumeRequest, state: WarehouseAgentState) -> ChatResponse:
         selection = request.event.selection
@@ -580,9 +623,24 @@ class WarehouseAgentRuntime:
             "planningMode": "llm",
             "executionInfluence": True,
         }
+        fast_followup_expert = self._llm_context_followup_expert(state, text)
         decision: MainAgentDecisionV1 | None = None
+        if fast_followup_expert is not None:
+            decision = MainAgentDecisionV1(
+                action="DELEGATE",
+                expertAgent=fast_followup_expert,
+                semanticReason="FOLLOWUP_QUERY",
+                confidence=1.0,
+            )
+            trace["mainRouteOptimization"] = {
+                "status": "REUSED_ACTIVE_EXPERT",
+                "expertAgent": fast_followup_expert,
+                "reason": "BOUNDED_CONTEXT_FOLLOWUP",
+            }
+            trace["mainDecision"] = self._safe_main_decision_trace(decision)
         registered_recipe_plan: Any | None = None
-        for route_attempt in range(2):
+        for route_attempt in (range(2) if decision is None else ()):
+            report_business_progress("routing")
             selected_context = self._llm_selected_context(state)
             registered_recipes = [CompoundIntentPlanner.WAREHOUSE_INVENTORY_ASSAY]
             if route_attempt == 1:
@@ -637,17 +695,32 @@ class WarehouseAgentRuntime:
             return self._llm_model_error(request.agentSessionId, "主模型没有生成路由决策。", trace)
         if decision.action == "DIRECT_ANSWER":
             if decision.semanticReason not in {"SMALLTALK", "CAPABILITY", "SECURITY_REFUSAL"}:
-                return self._llm_boundary_rejection(
-                    request.agentSessionId,
-                    trace,
-                    "实时业务问题不能由主模型直接回答。",
+                recovery_expert = self._llm_business_recovery_expert(state, text)
+                if recovery_expert is None:
+                    return self._llm_boundary_rejection(
+                        request.agentSessionId,
+                        trace,
+                        "实时业务问题不能由主模型直接回答，且当前无法安全确定应委派的业务专家。",
+                    )
+                trace["mainRouteGuard"] = {
+                    "status": "RECOVERED_AS_DELEGATE",
+                    "rejectedAction": "DIRECT_ANSWER",
+                    "expertAgent": recovery_expert,
+                    "reason": "REALTIME_BUSINESS_FACT_REQUIRES_EXPERT",
+                }
+                decision = MainAgentDecisionV1(
+                    action="DELEGATE",
+                    expertAgent=recovery_expert,
+                    semanticReason=decision.semanticReason,
+                    confidence=decision.confidence,
                 )
-            response = ChatResponse(
-                agentSessionId=request.agentSessionId,
-                answer=self._sanitize_llm_answer(decision.answer or ""),
-            )
-            response.reviewTrace = trace
-            return response
+            else:
+                response = ChatResponse(
+                    agentSessionId=request.agentSessionId,
+                    answer=self._sanitize_llm_answer(decision.answer or ""),
+                )
+                response.reviewTrace = trace
+                return response
         if decision.action == "UNSUPPORTED":
             response = ChatResponse(
                 agentSessionId=request.agentSessionId,
@@ -767,6 +840,7 @@ class WarehouseAgentRuntime:
 
         while True:
             self._raise_if_cancelled()
+            report_business_progress("expert_planning")
             reset_model_decision_diagnostics()
             try:
                 decision = self.model_client.decide_expert_action(
@@ -784,6 +858,18 @@ class WarehouseAgentRuntime:
                 ) if self.model_client is not None else None
             except ModelDecisionError as exc:
                 self._append_llm_model_diagnostics(trace)
+                fallback = self._llm_safe_expert_failure_fallback(
+                    request=request,
+                    state=state,
+                    user_message=user_message,
+                    expert_agent=expert_agent,
+                    observations=observations,
+                    tool_call_count=tool_call_count,
+                    trace=trace,
+                    error=exc,
+                )
+                if fallback is not None:
+                    return self._finish_llm_response(fallback, trace, request)
                 response = self._llm_model_failure(request.agentSessionId, trace, exc)
                 return self._finish_llm_response(response, trace, request)
             self._append_llm_model_diagnostics(trace)
@@ -933,6 +1019,7 @@ class WarehouseAgentRuntime:
 
             if previous_error is not None:
                 previous_error["resolved"] = True
+            report_business_progress("analyzing")
             pending = self._llm_resolver_interrupt(
                 request=request,
                 state=state,
@@ -961,6 +1048,131 @@ class WarehouseAgentRuntime:
             loop_trace["events"].append(
                 {"action": "TOOL_RESULT", "toolName": decision.toolName, "status": observation["status"]}
             )
+            fast_completion = self._llm_fast_complete_after_tool(
+                request=request,
+                state=state,
+                user_message=user_message,
+                tool_name=decision.toolName,
+                observation=observation,
+                cards=latest_cards,
+                trace=trace,
+            )
+            if fast_completion is not None:
+                return self._finish_llm_response(fast_completion, trace, request)
+
+    def _llm_fast_complete_after_tool(
+        self,
+        *,
+        request: ChatRequest | ResumeRequest,
+        state: WarehouseAgentState,
+        user_message: str,
+        tool_name: str,
+        observation: dict[str, Any],
+        cards: list[BusinessCard],
+        trace: dict[str, Any],
+    ) -> ChatResponse | None:
+        if not self.fast_completion_policy.allows(tool_name, user_message):
+            return None
+        data = observation.get("data")
+        if not isinstance(data, dict):
+            return None
+
+        answer: str | None = None
+        suggestions: list[str] = []
+        try:
+            if tool_name == "get_inventory_overview":
+                result = SafeInventoryResult.model_validate(data)
+                label = state.selected_product.display_label if state.selected_product else "所选产品"
+                answer = self._format_inventory_answer(label, result)
+                suggestions = self.next_action_policy.suggestions(tool_name, result.model_dump(exclude_none=True))
+            elif tool_name == "get_inventory_distribution":
+                result = SafeInventoryDistributionResult.model_validate(data)
+                answer = self._format_inventory_distribution(result)
+            elif tool_name == "get_warehouse_status" and state.selected_warehouse is not None:
+                result = SafeWarehouseResult.model_validate(data)
+                answer = self._format_warehouse_answer(state.selected_warehouse.display_label, result)
+            elif tool_name == "get_assay_status":
+                label = state.selected_product.display_label if state.selected_product else "所选产品"
+                answer = self._format_assay_answer(label, data)
+            elif tool_name == "query_assay_records":
+                answer = self._format_assay_records_answer(data)
+            elif tool_name == "get_assay_report_detail":
+                answer = self._format_assay_report_detail_answer(data)
+        except ValueError:
+            return None
+        if not answer:
+            return None
+
+        completion = self._evaluate_registered_goal(state)
+        if completion is not None:
+            trace["goalCompletion"] = completion
+        loop_trace = trace.setdefault("expertLoop", {"events": []})
+        loop_trace["completionMode"] = "SAFE_FACT_FORMATTER"
+        loop_trace.setdefault("events", []).append(
+            {
+                "action": "SAFE_FINAL_ANSWER",
+                "toolName": tool_name,
+                "observationId": observation.get("observationId"),
+            }
+        )
+        self.metrics.increment("llm_fast_completion_total", tool=tool_name)
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=answer,
+            cards=cards,
+            suggestions=suggestions,
+        )
+
+    def _llm_safe_expert_failure_fallback(
+        self,
+        *,
+        request: ChatRequest | ResumeRequest,
+        state: WarehouseAgentState,
+        user_message: str,
+        expert_agent: str,
+        observations: list[dict[str, Any]],
+        tool_call_count: int,
+        trace: dict[str, Any],
+        error: ModelDecisionError,
+    ) -> ChatResponse | None:
+        if not self.safe_fallback_policy.can_attempt(
+            error_code=error.code,
+            tool_call_count=tool_call_count,
+            max_tool_calls=self.llm_max_tool_calls,
+            observations=observations,
+        ):
+            return None
+        try:
+            plan = self.argument_builder.plan(user_message=user_message, state=state)
+        except (ExpertBoundaryError, TypeError, ValueError):
+            return None
+        handoff = (plan.routeSnapshot or {}).get("agent_handoff") or {}
+        if str(handoff.get("target_agent") or "") != expert_agent:
+            return None
+        if not self.safe_fallback_policy.allows_plan(plan.action, plan.toolName):
+            return None
+        if plan.action == "call_tool":
+            try:
+                self.agent_router.authorize_tool(expert_agent, str(plan.toolName))
+            except ExpertBoundaryError:
+                return None
+
+        trace["expertModelFallback"] = {
+            "status": "SAFE_DETERMINISTIC_RECOVERY",
+            "reason": error.code,
+            "action": plan.action,
+            "toolName": plan.toolName,
+        }
+        self.metrics.increment(
+            "llm_safe_fallback_total",
+            expert=expert_agent,
+            reason=error.code,
+        )
+        response = self._execute_plan(request, state, plan)
+        completion = self._attach_goal_completion(response, state)
+        if completion is not None:
+            trace["goalCompletion"] = completion
+        return response
 
     def _finish_llm_response(
         self,
@@ -1089,6 +1301,111 @@ class WarehouseAgentRuntime:
         diagnostics = take_model_decision_diagnostics()
         if diagnostics:
             trace.setdefault("modelDecisions", []).extend(diagnostics)
+            for diagnostic in diagnostics:
+                phase = str(diagnostic.get("phase") or "UNKNOWN")
+                outcome = str(diagnostic.get("outcome") or "UNKNOWN")
+                self.metrics.increment("model_decision_total", phase=phase, outcome=outcome)
+                latency_ms = diagnostic.get("latencyMs")
+                if isinstance(latency_ms, (int, float)):
+                    self.metrics.observe(
+                        "model_decision_duration",
+                        float(latency_ms) / 1000,
+                        phase=phase,
+                        outcome=outcome,
+                    )
+
+    def _llm_context_followup_expert(
+        self,
+        state: WarehouseAgentState,
+        text: str,
+    ) -> str | None:
+        normalized = re.sub(r"\s+", "", text or "").strip()
+        if not normalized or len(normalized) > 60:
+            return None
+        followup_prefixes = (
+            "只看",
+            "仅看",
+            "只查",
+            "仅查",
+            "筛选",
+            "其中",
+            "这些",
+            "这个",
+            "该",
+            "它",
+            "那",
+            "再看",
+            "再查",
+            "再展开",
+            "展开",
+            "换成",
+            "改看",
+        )
+        active_expert = str(state.active_agent or "")
+        handoff = state.last_agent_handoff if isinstance(state.last_agent_handoff, dict) else {}
+        if (
+            active_expert not in self.llm_allowed_experts
+            or handoff.get("target_agent") != active_expert
+            or handoff.get("mode") != "llm_delegate"
+        ):
+            return None
+        if self._llm_followup_crosses_expert_boundary(active_expert, normalized):
+            return None
+        if not normalized.startswith(followup_prefixes):
+            if not normalized.startswith(("查", "查询", "帮我查", "看看")):
+                return None
+            try:
+                plan = self.argument_builder.plan(user_message=text, state=state)
+            except (ExpertBoundaryError, TypeError, ValueError):
+                return None
+            route_handoff = (plan.routeSnapshot or {}).get("agent_handoff") or {}
+            if str(route_handoff.get("target_agent") or "") != active_expert:
+                return None
+        return active_expert
+
+    @staticmethod
+    def _llm_followup_crosses_expert_boundary(active_expert: str, text: str) -> bool:
+        if active_expert == "inventory_expert":
+            return any(word in text for word in ("化验", "质检", "指标", "合格", "标准", "生产订单", "煮糖", "领料", "托盘流转"))
+        if active_expert == "warehouse_expert":
+            return text.startswith(("只看", "仅看", "筛选")) or any(
+                word in text for word in ("化验", "指标", "产品库存", "托盘", "生产")
+            )
+        if active_expert == "assay_expert":
+            return any(word in text for word in ("库存", "库位", "仓库", "托盘", "生产订单", "煮糖"))
+        if active_expert == "pallet_expert":
+            return any(word in text for word in ("产品库存", "库位容量", "化验趋势", "生产订单", "煮糖", "领料"))
+        return True
+
+    def _llm_business_recovery_expert(
+        self,
+        state: WarehouseAgentState,
+        text: str,
+    ) -> str | None:
+        try:
+            deterministic_plan = self.argument_builder.plan(user_message=text, state=state)
+        except (TypeError, ValueError):
+            deterministic_plan = None
+        if deterministic_plan is not None:
+            handoff = (deterministic_plan.routeSnapshot or {}).get("agent_handoff") or {}
+            target = str(handoff.get("target_agent") or "")
+            if target in self.llm_allowed_experts:
+                return target
+
+        bounded_followup = self._llm_context_followup_expert(state, text)
+        if bounded_followup is not None:
+            return bounded_followup
+
+        active_expert = str(state.active_agent or "")
+        handoff = state.last_agent_handoff if isinstance(state.last_agent_handoff, dict) else {}
+        if (
+            active_expert in self.llm_allowed_experts
+            and handoff.get("target_agent") == active_expert
+            and handoff.get("mode") == "llm_delegate"
+            and not self._llm_followup_crosses_expert_boundary(active_expert, text)
+        ):
+            return active_expert
+        return None
 
     def _llm_boundary_rejection(
         self,
@@ -1119,7 +1436,7 @@ class WarehouseAgentRuntime:
         return values
 
     def _llm_selected_context(self, state: WarehouseAgentState) -> dict[str, Any]:
-        context: dict[str, Any] = {}
+        context: dict[str, Any] = {"BUSINESS_TIME": self.business_clock.context()}
         if state.selected_product is not None:
             canonical_name = self._safe_text(state.selected_product.metadata.get("productName"))
             context["PRODUCT"] = {
@@ -1138,6 +1455,21 @@ class WarehouseAgentRuntime:
                 "entityRef": order_ref,
                 "displayCode": self._safe_display_label(state.selected_production_order.display_label),
             }
+        if state.selected_pallet is not None:
+            context["PALLET"] = {
+                "stateRef": "CURRENT_PALLET",
+                "displayLabel": self._safe_display_label(state.selected_pallet.display_label),
+            }
+        if state.last_assay_records:
+            records = state.last_assay_records.get("records")
+            first_record = records[0] if isinstance(records, list) and records and isinstance(records[0], dict) else None
+            if first_record is not None and self._safe_text(first_record.get("recordRef")):
+                context["LAST_ASSAY_RECORD"] = {
+                    "stateRef": "CURRENT_ASSAY_REPORT",
+                    "sampleDate": self._safe_text(first_record.get("sampleDate")),
+                    "productLabel": self._safe_text(first_record.get("productLabel")),
+                    "judgeLabel": self._safe_text(first_record.get("judgeLabel")),
+                }
         if state.last_inventory_distribution:
             groups = state.last_inventory_distribution.get("groups")
             product_names: list[str] = []
@@ -1202,7 +1534,7 @@ class WarehouseAgentRuntime:
     def _sanitize_llm_answer(self, answer: str) -> str:
         value = self._sanitize_llm_context_text(answer)[:2500]
         if re.search(
-            r"(?i)(productId|warehouseId|assayId|toolCallId|raw\s*json|chain[- ]?of[- ]?thought|"
+            r"(?i)(productId|warehouseId|assayId|toolCallId|recordRef|reportRef|raw\s*json|chain[- ]?of[- ]?thought|"
             r"reasoning_content|jdbc:|delegationToken|refresh[_ -]?token)",
             value,
         ):
@@ -1210,7 +1542,23 @@ class WarehouseAgentRuntime:
         if any(tool_name in value for tool_name in ALLOWED_TOOLS):
             return "模型回答包含不应向用户展示的内部工具信息，本次回答已被 Runtime 拦截。"
         value = re.sub(r"\b[a-z_]+_expert\b", "业务专家", value)
+        value = self._sanitize_assay_business_text(value)
+        value = self._normalize_user_facing_layout(value)
         return value or "模型没有生成可安全展示的回答。"
+
+    def _normalize_user_facing_layout(self, value: str) -> str:
+        """Add only obvious list breaks without imposing a rigid answer template."""
+        text = value.replace("\r\n", "\n").replace("\r", "\n")
+        inline_markers = re.findall(r"(?:^|[ \t]|[。！？；])\d{1,2}[.、][ \t]+", text)
+        if len(inline_markers) < 2:
+            return text
+        text = re.sub(
+            r"(?<=[。！？；])[ \t]*(?=\d{1,2}[.、][ \t]+)",
+            "\n\n",
+            text,
+        )
+        text = re.sub(r"[ \t]+(?=\d{1,2}[.、][ \t]+)", "\n", text)
+        return text
 
     def _llm_call_signature(self, tool_name: str, arguments: dict[str, Any]) -> str:
         payload = json.dumps(
@@ -1348,11 +1696,39 @@ class WarehouseAgentRuntime:
             adapted_warehouse = self._adapt_warehouse_result(result)
             safe_data = adapted_warehouse.model_dump(exclude_none=True)
             state.last_warehouse_result = dict(safe_data)
+        elif tool_name == "get_assay_status":
+            raw_safe_value = self._llm_safe_tool_data(result)
+            raw_safe = raw_safe_value if isinstance(raw_safe_value, dict) else {}
+            state.last_assay_result = dict(raw_safe)
+            label = state.selected_product.display_label if state.selected_product else "所选产品"
+            report = self._adapt_assay_status(raw_safe, label)
+            safe_data = report.model_dump(exclude_none=True)
+            card = self._assay_report_card(report)
+            cards = [card] if card is not None else []
+        elif tool_name == "query_assay_records":
+            raw_safe_value = self._llm_safe_tool_data(result)
+            raw_safe = raw_safe_value if isinstance(raw_safe_value, dict) else {}
+            state.last_assay_records = dict(raw_safe)
+            safe_data = self._adapt_assay_records(raw_safe)
+            card = self._assay_history_card(safe_data)
+            cards = [card] if card is not None else []
+        elif tool_name == "get_assay_report_detail":
+            raw_safe_value = self._llm_safe_tool_data(result)
+            raw_safe = raw_safe_value if isinstance(raw_safe_value, dict) else {}
+            state.last_assay_report_detail = dict(raw_safe)
+            report = self._adapt_assay_report_detail(raw_safe)
+            safe_data = report.model_dump(exclude_none=True)
+            card = self._assay_report_card(report)
+            cards = [card] if card is not None else []
         else:
             safe_value = self._llm_safe_tool_data(result)
             safe_data = safe_value if isinstance(safe_value, dict) else {"value": safe_value}
-            if tool_name == "get_assay_status":
-                state.last_assay_result = dict(safe_data)
+            if tool_name == "get_pallet_status":
+                state.last_pallet_result = dict(safe_data)
+                self._remember_pallet(state, arguments.get("code"))
+            elif tool_name == "query_pallet_flow_records":
+                state.last_pallet_flow_records = dict(safe_data)
+            safe_data = self._redact_control_refs(safe_data)
         self._record_registered_goal_fact(
             state=state,
             tool_name=tool_name,
@@ -1410,6 +1786,17 @@ class WarehouseAgentRuntime:
         if value is None or isinstance(value, (bool, int, float)):
             return value
         return str(value)[:200]
+
+    def _redact_control_refs(self, value: Any) -> Any:
+        if isinstance(value, list):
+            return [self._redact_control_refs(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        return {
+            key: self._redact_control_refs(item)
+            for key, item in value.items()
+            if key not in {"recordRef", "reportRef"}
+        }
 
     def _execute_plan(self, request: ChatRequest, state: WarehouseAgentState, plan: Any) -> ChatResponse:
         if plan.action == "orchestrate":
@@ -1500,21 +1887,39 @@ class WarehouseAgentRuntime:
             state.last_assay_result = result
             self._record_tool_message(state, "get_assay_status", self._safe_tool_summary("get_assay_status", result))
             label = state.selected_product.display_label if state.selected_product else "该产品"
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_assay_answer(label, result))
+            report = self._adapt_assay_status(result, label)
+            card = self._assay_report_card(report)
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_assay_answer(label, report.model_dump(exclude_none=True)),
+                cards=[card] if card is not None else [],
+            )
         if plan.toolName == "query_assay_records":
             result = self._call_tool(request, "query_assay_records", plan.arguments)
             self._raise_if_cancelled()
             self._raise_if_tool_error_payload(result)
             state.last_assay_records = result
             self._record_tool_message(state, "query_assay_records", self._safe_tool_summary("query_assay_records", result))
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_assay_records_answer(result))
+            safe_result = self._adapt_assay_records(result)
+            card = self._assay_history_card(safe_result)
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_assay_records_answer(safe_result),
+                cards=[card] if card is not None else [],
+            )
         if plan.toolName == "get_assay_report_detail":
             result = self._call_tool(request, "get_assay_report_detail", plan.arguments)
             self._raise_if_cancelled()
             self._raise_if_tool_error_payload(result)
             state.last_assay_report_detail = result
             self._record_tool_message(state, "get_assay_report_detail", self._safe_tool_summary("get_assay_report_detail", result))
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_assay_report_detail_answer(result))
+            report = self._adapt_assay_report_detail(result)
+            card = self._assay_report_card(report)
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_assay_report_detail_answer(report.model_dump(exclude_none=True)),
+                cards=[card] if card is not None else [],
+            )
         if plan.toolName == "query_assay_abnormalities":
             result = self._call_tool(request, "query_assay_abnormalities", plan.arguments)
             self._raise_if_cancelled()
@@ -1739,6 +2144,7 @@ class WarehouseAgentRuntime:
             result = self._call_tool(request, "get_pallet_status", plan.arguments)
             self._raise_if_cancelled()
             state.last_pallet_result = result
+            self._remember_pallet(state, plan.arguments.get("code"))
             self._record_tool_message(state, "get_pallet_status", self._safe_tool_summary("get_pallet_status", result))
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_pallet_answer(result))
 
@@ -1746,6 +2152,20 @@ class WarehouseAgentRuntime:
             agentSessionId=request.agentSessionId,
             answer="当前工具不在只读白名单内，无法执行。",
             needsUserSelection=True,
+        )
+
+    def _remember_pallet(self, state: WarehouseAgentState, value: Any) -> None:
+        code = self._safe_text(value)
+        if not code:
+            return
+        state.selected_pallet = SelectedEntity(
+            internal_id=None,
+            display_label=code,
+            source="tool_result",
+            metadata={"code": code},
+            entity_type="PALLET",
+            entity_ref="CURRENT_PALLET",
+            canonical_name=code,
         )
 
     def _execute_compound_plan(
@@ -2362,7 +2782,10 @@ class WarehouseAgentRuntime:
             result = self._call_tool_values(
                 agent_session_id=agent_session_id,
                 tool_name="get_assay_status",
-                arguments={"productId": state.selected_product.internal_id, "productionDate": date.today().isoformat()},
+                arguments={
+                    "productId": state.selected_product.internal_id,
+                    "productionDate": self.business_clock.today().isoformat(),
+                },
                 trace_id=trace_id,
                 request_id=request_id,
                 message_id=message_id,
@@ -2370,9 +2793,15 @@ class WarehouseAgentRuntime:
             self._raise_if_cancelled()
             state.last_assay_result = result
             self._record_tool_message(state, "get_assay_status", self._safe_tool_summary("get_assay_status", result))
+            report = self._adapt_assay_status(result, state.selected_product.display_label)
+            card = self._assay_report_card(report)
             return ChatResponse(
                 agentSessionId=agent_session_id,
-                answer=self._format_assay_answer(state.selected_product.display_label, result),
+                answer=self._format_assay_answer(
+                    state.selected_product.display_label,
+                    report.model_dump(exclude_none=True),
+                ),
+                cards=[card] if card is not None else [],
             )
         if intent == "assay_records":
             if state.selected_product is None:
@@ -2393,7 +2822,13 @@ class WarehouseAgentRuntime:
             self._raise_if_tool_error_payload(result)
             state.last_assay_records = result
             self._record_tool_message(state, "query_assay_records", self._safe_tool_summary("query_assay_records", result))
-            return ChatResponse(agentSessionId=agent_session_id, answer=self._format_assay_records_answer(result))
+            safe_result = self._adapt_assay_records(result)
+            card = self._assay_history_card(safe_result)
+            return ChatResponse(
+                agentSessionId=agent_session_id,
+                answer=self._format_assay_records_answer(safe_result),
+                cards=[card] if card is not None else [],
+            )
         if intent == "assay_abnormalities":
             if state.selected_product is None:
                 return ChatResponse(agentSessionId=agent_session_id, answer="化验异常查询需要先确认产品范围。", needsUserSelection=True)
@@ -2882,6 +3317,7 @@ class WarehouseAgentRuntime:
             ) from exc
         started = time.monotonic()
         try:
+            report_tool_progress(tool_name)
             result = self.tool_client.call_tool(
                 agent_session_id=agent_session_id,
                 message_id=message_id,
@@ -3253,7 +3689,7 @@ class WarehouseAgentRuntime:
             parts.append(f"折合 {result.totalEquivalentPieces} 件")
         if result.totalWeight is not None:
             parts.append(f"总重量 {result.totalWeight}kg")
-        return "，".join(parts) + "。"
+        return "，".join(parts) + "。\n需要我帮你查库存分布吗？"
 
     def _format_inventory_locations(self, label: str, result: SafeInventoryResult) -> str:
         if not result.locations:
@@ -3440,16 +3876,375 @@ class WarehouseAgentRuntime:
             return f"该托盘当前状态为 {status}，当前位置在 {location}。"
         return f"该托盘当前状态为 {status}。"
 
+    def _adapt_assay_status(self, result: dict[str, Any], label: str) -> SafeAssayReport:
+        if "hasAssay" in result and "judgeLabel" in result and "standardLabel" in result:
+            return SafeAssayReport.model_validate(result)
+
+        assay = self._dict_value(result.get("assay"))
+        product_label = self._safe_text(label)
+        if not product_label or product_label in {"所选产品", "该产品"}:
+            product_label = self._safe_text(result.get("productLabel") or assay.get("productName")) or "所选产品"
+        sample_date = self._safe_text(result.get("sampleDate") or assay.get("sampleDate")) or None
+        result_status = self._safe_text(result.get("status")) or ""
+        if result.get("needsAssay") is True or result_status.upper() in {"NO_DATA", "NOT_FOUND"}:
+            return SafeAssayReport(
+                hasAssay=False,
+                productLabel=product_label,
+                sampleDate=sample_date,
+                judgeLabel="未查询到化验记录",
+                judgeExplanation="对应产品和生产日期暂无化验数据，当前不能判断合格或不合格。",
+                standardLabel="—",
+            )
+
+        judge_status = self._safe_text(
+            result.get("judgeResult") or result.get("result") or assay.get("judgeResult") or assay.get("isQualified")
+        )
+        judge_label = self._assay_status_label(judge_status)
+        standard_label = self._assay_standard_label(result, assay)
+        metrics = self._assay_metrics_from_status(result, assay, judge_status)
+        explanation = self._assay_judge_explanation(judge_status, self._safe_text(assay.get("judgeMessage")))
+        notes: list[str] = []
+        if self._canonical_assay_status(judge_status) == "NO_STANDARD":
+            notes.append("未配置适用标准不等同于化验不合格。")
+        elif self._canonical_assay_status(judge_status) == "MULTIPLE_CANDIDATES":
+            notes.append("匹配到多个候选标准，需要人工确认采用哪一个标准。")
+        return SafeAssayReport(
+            productLabel=product_label,
+            sampleDate=sample_date,
+            judgeLabel=judge_label,
+            judgeExplanation=explanation or None,
+            standardLabel=standard_label,
+            metrics=metrics,
+            notes=notes,
+        )
+
+    def _adapt_assay_report_detail(self, result: dict[str, Any]) -> SafeAssayReport:
+        product_label = self._safe_text(result.get("productLabel")) or "所选产品"
+        judge_status = self._safe_text(result.get("judgeStatus"))
+        source_judge_label = self._safe_text(result.get("judgeLabel"))
+        judge_label = self._assay_status_label(judge_status or source_judge_label or "")
+        standard_label = self._safe_text(result.get("standardLabel"))
+        if not standard_label:
+            standard_label = "未配置适用标准" if judge_label in {"无标准", "暂无法判定"} else "未提供标准快照"
+        metrics: list[SafeAssayMetric] = []
+        for index, raw_metric in enumerate(result.get("metrics") or []):
+            metric = self._dict_value(raw_metric)
+            metric_name = self._safe_text(metric.get("metricName")) or f"指标{index + 1}"
+            actual = self._safe_text(metric.get("actualValueText")) or "未填写"
+            standard = self._safe_text(metric.get("standardRangeText")) or (
+                "未配置适用标准" if standard_label == "未配置适用标准" else "未提供"
+            )
+            metric_result = self._safe_text(metric.get("resultLabel")) or "未判定"
+            if metric_result in {"无标准", "NO_STANDARD"}:
+                metric_result = "未判定"
+            metrics.append(
+                SafeAssayMetric(
+                    metricName=metric_name,
+                    actualValueText=actual,
+                    standardRangeText=standard,
+                    resultLabel=self._sanitize_assay_business_text(metric_result),
+                    reason=self._safe_text(metric.get("reason")) or None,
+                )
+            )
+        raw_notes = result.get("notes") if isinstance(result.get("notes"), list) else []
+        canonical_status = self._canonical_assay_status(judge_status or source_judge_label)
+        notes: list[str] = []
+        for item in raw_notes:
+            note = self._safe_text(item)
+            if not note or re.search(r"(?i)(reportRef|内部化验\s*ID|受控.*引用)", note):
+                continue
+            if "无标准" in note and canonical_status != "NO_STANDARD":
+                continue
+            notes.append(self._sanitize_assay_business_text(note))
+            if len(notes) == 3:
+                break
+        return SafeAssayReport(
+            productLabel=product_label,
+            sampleDate=self._safe_text(result.get("sampleDate")) or None,
+            judgeLabel=self._sanitize_assay_business_text(judge_label),
+            judgeExplanation=self._assay_judge_explanation(
+                judge_status or judge_label,
+                self._safe_text(result.get("judgeMessage")),
+            ) or None,
+            standardLabel=standard_label,
+            metrics=metrics,
+            notes=notes,
+        )
+
+    def _assay_metrics_from_status(
+        self,
+        result: dict[str, Any],
+        assay: dict[str, Any],
+        judge_status: str,
+    ) -> list[SafeAssayMetric]:
+        snapshot = self._dict_value(assay.get("standardSnapshot"))
+        standard_items = snapshot.get("items") if isinstance(snapshot.get("items"), list) else []
+        items_by_code = {
+            self._normalize_assay_metric_code(
+                self._safe_text(self._dict_value(item).get("metricCode"))
+            ): self._dict_value(item)
+            for item in standard_items
+            if self._safe_text(self._dict_value(item).get("metricCode"))
+        }
+        raw_failed = result.get("failedMetrics") if isinstance(result.get("failedMetrics"), list) else assay.get("failedMetrics")
+        failed_metrics = raw_failed if isinstance(raw_failed, list) else []
+        failed_codes = {
+            self._normalize_assay_metric_code(
+                self._safe_text(self._dict_value(item).get("metricCode") or self._dict_value(item).get("metric"))
+            )
+            for item in failed_metrics
+        }
+        failed_by_code = {
+            self._normalize_assay_metric_code(
+                self._safe_text(self._dict_value(item).get("metricCode") or self._dict_value(item).get("metric"))
+            ): self._dict_value(item)
+            for item in failed_metrics
+        }
+        canonical_status = self._canonical_assay_status(judge_status)
+        metrics: list[SafeAssayMetric] = []
+        for metric_code, value_key, metric_name in self.ASSAY_METRICS:
+            actual_value = assay.get(value_key)
+            standard = items_by_code.get(metric_code)
+            unit = self._safe_text(standard.get("unit")) if standard else ""
+            actual_text = self._assay_scalar_text(actual_value, unit) or "未填写"
+            standard_text = self._assay_standard_range_text(standard) if standard else "未配置适用标准"
+            if actual_value is None or actual_value == "":
+                metric_result = "未填写"
+            elif metric_code in failed_codes:
+                metric_result = "不合格"
+            elif canonical_status == "NO_STANDARD" or standard is None:
+                metric_result = "未判定"
+            elif canonical_status == "MULTIPLE_CANDIDATES":
+                metric_result = "待人工确认"
+            else:
+                metric_result = "合格"
+            failed = failed_by_code.get(metric_code, {})
+            metrics.append(
+                SafeAssayMetric(
+                    metricName=metric_name,
+                    actualValueText=actual_text,
+                    standardRangeText=standard_text or "未提供",
+                    resultLabel=metric_result,
+                    reason=self._safe_text(failed.get("reason")) or None,
+                )
+            )
+        return metrics
+
+    def _adapt_assay_records(self, result: dict[str, Any]) -> dict[str, Any]:
+        records = result.get("records") if isinstance(result.get("records"), list) else []
+        safe_records: list[dict[str, Any]] = []
+        for raw_record in records[:50]:
+            record = self._dict_value(raw_record)
+            judge_label = self._safe_text(record.get("judgeLabel")) or self._assay_status_label(
+                self._safe_text(record.get("judgeStatus"))
+            )
+            standard_label = self._safe_text(record.get("standardLabel"))
+            if not standard_label and judge_label in {"无标准", "暂无法判定"}:
+                standard_label = "未配置适用标准"
+            safe_records.append(
+                {
+                    "productLabel": self._safe_text(record.get("productLabel")) or "产品未明",
+                    "sampleDate": self._safe_text(record.get("sampleDate")) or "日期未明",
+                    "judgeLabel": self._sanitize_assay_business_text(judge_label or "结论未明"),
+                    "failedMetricText": self._safe_text(record.get("failedMetricText")),
+                    "standardLabel": standard_label,
+                    "testerLabel": self._safe_text(record.get("testerLabel")),
+                }
+            )
+        safe_result = {
+            "scopeLabel": self._safe_text(result.get("scopeLabel")),
+            "dateRangeLabel": self._safe_text(result.get("dateRangeLabel")),
+            "total": self._first_scalar([result], "total") or 0,
+            "passCount": self._first_scalar([result], "passCount") or 0,
+            "failedCount": self._first_scalar([result], "failedCount") or 0,
+            "noStandardCount": self._first_scalar([result], "noStandardCount") or 0,
+            "multipleCandidatesCount": self._first_scalar([result], "multipleCandidatesCount") or 0,
+            "summaryText": self._sanitize_assay_business_text(self._safe_text(result.get("summaryText"))),
+            "records": safe_records,
+        }
+        return safe_result
+
+    def _assay_status_label(self, value: str) -> str:
+        canonical = self._canonical_assay_status(value)
+        labels = {
+            "PASS": "合格",
+            "FAIL": "不合格",
+            "NO_STANDARD": "暂无法判定",
+            "MULTIPLE_CANDIDATES": "待人工确认",
+            "NO_ASSAY": "未查询到化验记录",
+        }
+        if canonical in labels:
+            return labels[canonical]
+        safe = self._sanitize_assay_business_text(self._safe_text(value))
+        if safe and not re.fullmatch(r"[A-Z][A-Z0-9_]*", safe):
+            return safe
+        return "未知"
+
+    def _canonical_assay_status(self, value: str) -> str:
+        normalized = (self._safe_text(value) or "").upper()
+        aliases = {
+            "QUALIFIED": "PASS",
+            "合格": "PASS",
+            "UNQUALIFIED": "FAIL",
+            "FAILED": "FAIL",
+            "不合格": "FAIL",
+            "无标准": "NO_STANDARD",
+            "暂无法判定": "NO_STANDARD",
+            "标准多候选": "MULTIPLE_CANDIDATES",
+            "待人工确认": "MULTIPLE_CANDIDATES",
+        }
+        return aliases.get(normalized, normalized)
+
+    def _assay_standard_label(self, result: dict[str, Any], assay: dict[str, Any]) -> str:
+        applied = self._dict_value(result.get("appliedStandard") or assay.get("appliedStandard"))
+        name = self._safe_text(
+            assay.get("appliedStandardName") or applied.get("standardName") or applied.get("name")
+        )
+        version = assay.get("appliedStandardVersion")
+        if version is None:
+            version = applied.get("version")
+        if not name:
+            return "未配置适用标准"
+        return f"{name} v{version}" if version not in {None, ""} else name
+
+    def _assay_judge_explanation(self, status: str, fallback: str) -> str:
+        canonical = self._canonical_assay_status(status)
+        if canonical == "NO_STANDARD":
+            return "当前产品未匹配到启用中的化验标准，因此不能判定合格或不合格。"
+        if canonical == "MULTIPLE_CANDIDATES":
+            return "当前匹配到多个候选标准，需要人工确认采用标准后再判定。"
+        return self._sanitize_assay_business_text(fallback)
+
+    def _normalize_assay_metric_code(self, value: str) -> str:
+        aliases = {camel: code for code, camel, _ in self.ASSAY_METRICS}
+        aliases.update(
+            {
+                "dry_weight": "dry_weight_loss",
+                "ph_value": "ph",
+            }
+        )
+        return aliases.get(value, value)
+
+    def _assay_scalar_text(self, value: Any, unit: str = "") -> str:
+        if value is None or value == "":
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            text = str(int(value))
+        else:
+            text = str(value)
+        return text + unit
+
+    def _assay_standard_range_text(self, standard: dict[str, Any]) -> str:
+        unit = self._safe_text(standard.get("unit"))
+        minimum = self._assay_scalar_text(standard.get("minValue"))
+        maximum = self._assay_scalar_text(standard.get("maxValue"))
+        compare_type = self._safe_text(standard.get("compareType")).lower()
+        if compare_type == "lte" and maximum:
+            return f"≤ {maximum}{unit}"
+        if compare_type == "lt" and maximum:
+            return f"< {maximum}{unit}"
+        if compare_type == "gte" and minimum:
+            return f"≥ {minimum}{unit}"
+        if compare_type == "gt" and minimum:
+            return f"> {minimum}{unit}"
+        if minimum and maximum:
+            return f"{minimum} - {maximum}{unit}"
+        return ""
+
+    def _sanitize_assay_business_text(self, value: str) -> str:
+        text = self._safe_text(value) or ""
+        replacements = (
+            ("MULTIPLE_CANDIDATES", "标准多候选"),
+            ("NO_STANDARD", "无标准"),
+            ("UNQUALIFIED", "不合格"),
+            ("QUALIFIED", "合格"),
+            ("FAILED", "不合格"),
+            ("NO_ASSAY", "无化验记录"),
+            ("FAIL", "不合格"),
+            ("PASS", "合格"),
+        )
+        for raw, label in replacements:
+            text = text.replace(raw, label)
+        text = re.sub(r"(无标准|标准多候选|不合格|合格)[（(]\1[)）]", r"\1", text)
+        return text
+
+    def _assay_report_card(self, report: SafeAssayReport) -> BusinessCard | None:
+        if not report.hasAssay:
+            return None
+        title_date = f" {report.sampleDate}" if report.sampleDate else ""
+        fields: list[dict[str, Any]] = [
+            {
+                "kind": "assay_summary",
+                "label": "判定结果",
+                "value": report.judgeLabel,
+                "productLabel": report.productLabel,
+                "sampleDate": report.sampleDate or "日期未明",
+                "judgeLabel": report.judgeLabel,
+                "judgeExplanation": report.judgeExplanation or "",
+                "standardLabel": report.standardLabel,
+            }
+        ]
+        for metric in report.metrics:
+            fields.append(
+                {
+                    "kind": "assay_metric",
+                    "label": metric.metricName,
+                    "value": metric.actualValueText,
+                    "metricName": metric.metricName,
+                    "actualValueText": metric.actualValueText,
+                    "standardRangeText": metric.standardRangeText,
+                    "resultLabel": metric.resultLabel,
+                    "reason": metric.reason or "",
+                }
+            )
+        for note in report.notes[:3]:
+            fields.append({"kind": "assay_note", "label": "说明", "value": note})
+        return BusinessCard(
+            cardType="assay_report",
+            title=f"{report.productLabel}{title_date} 化验报告",
+            fields=fields,
+        )
+
+    def _assay_history_card(self, result: dict[str, Any]) -> BusinessCard | None:
+        records = result.get("records") if isinstance(result.get("records"), list) else []
+        if not records:
+            return None
+        fields: list[dict[str, Any]] = []
+        for index, raw_record in enumerate(records[:20], start=1):
+            record = self._dict_value(raw_record)
+            fields.append(
+                {
+                    "kind": "assay_history_record",
+                    "label": f"{index}. {self._safe_text(record.get('sampleDate')) or '日期未明'}",
+                    "value": self._safe_text(record.get("judgeLabel")) or "结论未明",
+                    "productLabel": self._safe_text(record.get("productLabel")) or "产品未明",
+                    "sampleDate": self._safe_text(record.get("sampleDate")) or "日期未明",
+                    "judgeLabel": self._safe_text(record.get("judgeLabel")) or "结论未明",
+                    "standardLabel": self._safe_text(record.get("standardLabel")) or "未配置适用标准",
+                    "failedMetricText": self._safe_text(record.get("failedMetricText")),
+                    "testerLabel": self._safe_text(record.get("testerLabel")),
+                }
+            )
+        scope = self._safe_text(result.get("scopeLabel")) or "所选范围"
+        date_range = self._safe_text(result.get("dateRangeLabel")) or "历史"
+        return BusinessCard(cardType="assay_history", title=f"{scope} · {date_range}化验", fields=fields)
+
     def _format_assay_answer(self, label: str, result: dict[str, Any]) -> str:
-        if result.get("needsAssay") is True:
-            return f"{label}没有查询到对应日期的化验记录，不能判断合格或不合格。"
-        judge = self._safe_text(result.get("judgeResult") or result.get("result"))
-        if judge:
-            return f"{label}的化验结果为 {judge}。"
-        return f"{label}的化验状态已查询到，但返回字段不足以判断合格或不合格。"
+        report = self._adapt_assay_status(result, label)
+        if not report.hasAssay:
+            return f"{report.productLabel}没有查询到对应日期的化验记录，不能判断合格或不合格。"
+        if report.judgeLabel == "暂无法判定":
+            date_text = f" {report.sampleDate}" if report.sampleDate else ""
+            return (
+                f"已找到{report.productLabel}{date_text}的化验记录。当前未匹配到启用中的化验标准，"
+                "实测数据已列在下方卡片中，但暂时不能判定合格或不合格。"
+            )
+        date_text = f" {report.sampleDate}" if report.sampleDate else ""
+        return f"{report.productLabel}{date_text}的化验判定为{report.judgeLabel}。具体指标和采用标准见下方卡片。"
 
     def _format_assay_records_answer(self, result: dict[str, Any]) -> str:
         self._raise_if_tool_error_payload(result)
+        result = self._adapt_assay_records(result)
         summary = self._safe_text(result.get("summaryText"))
         if not summary:
             scope = self._safe_text(result.get("scopeLabel")) or "所选范围"
@@ -3459,7 +4254,7 @@ class WarehouseAgentRuntime:
         records = result.get("records") if isinstance(result.get("records"), list) else []
         if not records:
             return summary
-        lines = [summary]
+        lines = [summary, ""]
         for index, raw_record in enumerate(records[:5], start=1):
             record = self._dict_value(raw_record)
             sample_date = self._safe_text(record.get("sampleDate")) or "日期未明"
@@ -3483,42 +4278,17 @@ class WarehouseAgentRuntime:
 
     def _format_assay_report_detail_answer(self, result: dict[str, Any]) -> str:
         self._raise_if_tool_error_payload(result)
-        summary = self._safe_text(result.get("summaryText")) or "已查询到这份化验报告详情。"
-        lines = [summary]
-        details = []
-        sample_date = self._safe_text(result.get("sampleDate"))
-        product = self._safe_text(result.get("productLabel"))
-        judge = self._safe_text(result.get("judgeLabel"))
-        standard = self._safe_text(result.get("standardLabel"))
-        if sample_date:
-            details.append(sample_date)
-        if product:
-            details.append(product)
-        if judge:
-            details.append(f"判定：{judge}")
-        if standard:
-            details.append(f"标准：{standard}")
-        if details:
-            lines.append("，".join(details))
-        metrics = result.get("metrics") if isinstance(result.get("metrics"), list) else []
-        for index, raw_metric in enumerate(metrics[:7], start=1):
-            metric = self._dict_value(raw_metric)
-            name = self._safe_text(metric.get("metricName")) or f"指标{index}"
-            actual = self._safe_text(metric.get("actualValueText"))
-            standard_range = self._safe_text(metric.get("standardRangeText"))
-            metric_result = self._safe_text(metric.get("resultLabel"))
-            parts = [name]
-            if actual:
-                parts.append(f"实测 {actual}")
-            if standard_range:
-                parts.append(f"标准 {standard_range}")
-            if metric_result:
-                parts.append(metric_result)
-            lines.append(f"{index}. " + "，".join(parts))
-        notes = result.get("notes") if isinstance(result.get("notes"), list) else []
-        safe_notes = [note for value in notes if (note := self._safe_text(value))][:2]
-        if safe_notes:
-            lines.append("说明：" + "；".join(safe_notes))
+        report = (
+            SafeAssayReport.model_validate(result)
+            if "hasAssay" in result and "judgeLabel" in result
+            else self._adapt_assay_report_detail(result)
+        )
+        date_text = f" {report.sampleDate}" if report.sampleDate else ""
+        lines = [
+            f"{report.productLabel}{date_text}的化验判定为{report.judgeLabel}。具体指标和采用标准见下方卡片。"
+        ]
+        if report.judgeExplanation:
+            lines.append(report.judgeExplanation)
         return "\n".join(lines)
 
     def _format_assay_abnormalities_answer(self, result: dict[str, Any]) -> str:

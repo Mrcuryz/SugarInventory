@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.domain.po.AgentSession;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,10 +82,19 @@ public class StdioMcpSessionManager implements McpSessionManager {
     @Override
     public McpSession bindSession(LoginUser loginUser, AgentSession agentSession) {
         cleanupExpiredSessions();
-        ManagedSession existing = sessions.get(agentSession.getId());
-        if (existing != null && existing.process().isAlive()) {
-            return existing.session();
-        }
+        ManagedSession managed = sessions.compute(agentSession.getId(), (agentSessionId, existing) -> {
+            if (existing != null && existing.process().isAlive()) {
+                return existing;
+            }
+            if (existing != null) {
+                existing.session().close();
+            }
+            return startSession(loginUser, agentSession);
+        });
+        return managed.session();
+    }
+
+    private ManagedSession startSession(LoginUser loginUser, AgentSession agentSession) {
         String delegatedToken = agentSessionService.issueDelegationTokenForInternalUse(loginUser, agentSession.getId());
         Map<String, String> environment = Map.of(
                 "WAREHOUSE_DELEGATED_TOKEN", delegatedToken,
@@ -92,19 +102,23 @@ public class StdioMcpSessionManager implements McpSessionManager {
                 "WAREHOUSE_API_BASE_URL", apiBaseUrl,
                 "WAREHOUSE_MCP_LOG_FILE", Path.of(logFileDirectory, "warehouse-mcp-" + agentSession.getId() + ".log").toString()
         );
+        StdioMcpSession session = null;
         try {
             Process process = processFactory.start(List.of("java", "-jar", jarPath), environment);
-            StdioMcpSession session = new StdioMcpSession(agentSession.getId(), process, objectMapper);
+            session = new StdioMcpSession(agentSession.getId(), process, objectMapper);
             Set<String> actualTools = session.listTools();
             if (!EXPECTED_TOOLS.equals(actualTools)) {
-                session.close();
                 throw new IllegalStateException("Warehouse MCP capability registry mismatch.");
             }
-            sessions.put(agentSession.getId(), new ManagedSession(session, process, agentSession.getExpiresAt()));
-            return session;
+            AgentSession activeSession = agentSessionService.requireOwnedActiveSession(loginUser, agentSession.getId());
+            return new ManagedSession(session, process, activeSession.getExpiresAt());
         } catch (IOException e) {
+            closeQuietly(session);
             log.warn("Failed to start MCP process for agent session {}: {}", agentSession.getId(), e.getMessage());
             throw new IllegalStateException("Unable to start MCP session.");
+        } catch (RuntimeException e) {
+            closeQuietly(session);
+            throw e;
         }
     }
 
@@ -119,16 +133,28 @@ public class StdioMcpSessionManager implements McpSessionManager {
     @Override
     public void cleanupExpiredSessions() {
         LocalDateTime now = LocalDateTime.now();
-        sessions.entrySet().removeIf(entry -> {
-            ManagedSession managed = entry.getValue();
+        sessions.forEach((agentSessionId, managed) -> {
             boolean expired = managed.expiresAt() != null && managed.expiresAt().isBefore(now);
             boolean dead = !managed.process().isAlive();
-            if (expired || dead) {
+            if ((expired || dead) && sessions.remove(agentSessionId, managed)) {
                 managed.session().close();
-                return true;
             }
-            return false;
         });
+    }
+
+    @PreDestroy
+    public void closeAllSessions() {
+        sessions.forEach((agentSessionId, managed) -> {
+            if (sessions.remove(agentSessionId, managed)) {
+                managed.session().close();
+            }
+        });
+    }
+
+    private void closeQuietly(McpSession session) {
+        if (session != null) {
+            session.close();
+        }
     }
 
     private record ManagedSession(McpSession session, Process process, LocalDateTime expiresAt) {

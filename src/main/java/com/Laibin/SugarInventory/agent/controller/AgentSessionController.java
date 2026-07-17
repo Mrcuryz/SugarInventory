@@ -13,6 +13,7 @@ import com.Laibin.SugarInventory.agent.gateway.AgentGatewayService;
 import com.Laibin.SugarInventory.agent.mcp.McpSessionManager;
 import com.Laibin.SugarInventory.agent.security.AgentSecurityContext;
 import com.Laibin.SugarInventory.agent.service.AgentMessageReviewService;
+import com.Laibin.SugarInventory.agent.service.AgentMcpWarmupService;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.agent.vo.AgentMessageResponseVO;
 import com.Laibin.SugarInventory.agent.vo.AgentSessionVO;
@@ -43,24 +44,29 @@ public class AgentSessionController {
     private final McpSessionManager mcpSessionManager;
     private final AgentConversationMemory conversationMemory;
     private final AgentMessageReviewService agentMessageReviewService;
+    private final AgentMcpWarmupService mcpWarmupService;
 
     public AgentSessionController(AgentSessionService agentSessionService,
                                   AgentGatewayService agentGatewayService,
                                   McpSessionManager mcpSessionManager,
                                   AgentConversationMemory conversationMemory,
-                                  AgentMessageReviewService agentMessageReviewService) {
+                                  AgentMessageReviewService agentMessageReviewService,
+                                  AgentMcpWarmupService mcpWarmupService) {
         this.agentSessionService = agentSessionService;
         this.agentGatewayService = agentGatewayService;
         this.mcpSessionManager = mcpSessionManager;
         this.conversationMemory = conversationMemory;
         this.agentMessageReviewService = agentMessageReviewService;
+        this.mcpWarmupService = mcpWarmupService;
     }
 
     @PostMapping("/sessions")
     public Result<AgentSessionVO> createSession(@AuthenticationPrincipal LoginUser loginUser,
                                                 @Valid @RequestBody(required = false) AgentSessionCreateDTO dto,
                                                 HttpServletRequest request) {
-        return Result.success(agentSessionService.createSession(loginUser, dto, request));
+        AgentSessionVO session = agentSessionService.createSession(loginUser, dto, request);
+        mcpWarmupService.warmUp(loginUser, session.getAgentSessionId());
+        return Result.success(session);
     }
 
     @GetMapping("/sessions/current")

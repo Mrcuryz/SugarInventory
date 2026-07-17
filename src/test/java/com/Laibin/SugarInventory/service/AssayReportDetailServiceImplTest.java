@@ -53,7 +53,49 @@ class AssayReportDetailServiceImplTest {
         assertThat(result.getMetrics().get(0).getActualValueText()).isEqualTo("120");
         assertThat(result.getMetrics().get(0).getStandardRangeText()).isEqualTo("≤ 100");
         assertThat(result.getMetrics().get(0).getResultLabel()).isEqualTo("不合格");
+        assertThat(result.getNotes()).isEmpty();
         assertThat(result.toString()).doesNotContain("assayId", "productId");
+    }
+
+    @Test
+    void linksDryWeightLossAndPhToCanonicalStandardCodes() {
+        AssayVO assay = failedAssay();
+        assay.setJudgeResult("PASS");
+        assay.setDryWeight(new BigDecimal("1.3"));
+        assay.setPhValue(new BigDecimal("7.2"));
+
+        QualityStandardItemVO dryWeight = rangeItem(
+                "dry_weight_loss", "干燥失重", "g/100g", "1.2", "1.4"
+        );
+        QualityStandardItemVO ph = rangeItem("ph", "pH", "", "6", "9");
+        AssayStandardSnapshotVO snapshot = assay.getStandardSnapshot();
+        snapshot.setItems(List.of(dryWeight, ph));
+
+        String reportRef = refCodec.encode(1001, 84, LocalDate.of(2026, 7, 8));
+        when(assayService.getAssayById(1001)).thenReturn(assay);
+        AssayReportDetailQueryDTO query = new AssayReportDetailQueryDTO();
+        query.setReportRef(reportRef);
+
+        AssayReportDetailVO result = service.getReportDetail(query);
+
+        assertThat(result.getMetrics())
+                .filteredOn(metric -> "干燥失重".equals(metric.getMetricName()))
+                .singleElement()
+                .satisfies(metric -> {
+                    assertThat(metric.getMetricCode()).isEqualTo("dry_weight_loss");
+                    assertThat(metric.getActualValueText()).isEqualTo("1.3g/100g");
+                    assertThat(metric.getStandardRangeText()).isEqualTo("1.2 - 1.4g/100g");
+                    assertThat(metric.getResultLabel()).isEqualTo("合格");
+                });
+        assertThat(result.getMetrics())
+                .filteredOn(metric -> "pH".equals(metric.getMetricName()))
+                .singleElement()
+                .satisfies(metric -> {
+                    assertThat(metric.getMetricCode()).isEqualTo("ph");
+                    assertThat(metric.getActualValueText()).isEqualTo("7.2");
+                    assertThat(metric.getStandardRangeText()).isEqualTo("6 - 9");
+                    assertThat(metric.getResultLabel()).isEqualTo("合格");
+                });
     }
 
     @Test
@@ -107,5 +149,16 @@ class AssayReportDetailServiceImplTest {
         snapshot.setItems(List.of(color, sucrose));
         assay.setStandardSnapshot(snapshot);
         return assay;
+    }
+
+    private QualityStandardItemVO rangeItem(String code, String name, String unit, String min, String max) {
+        QualityStandardItemVO item = new QualityStandardItemVO();
+        item.setMetricCode(code);
+        item.setMetricName(name);
+        item.setUnit(unit);
+        item.setMinValue(new BigDecimal(min));
+        item.setMaxValue(new BigDecimal(max));
+        item.setCompareType("range");
+        return item;
     }
 }
