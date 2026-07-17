@@ -3,6 +3,8 @@ package com.Laibin.SugarInventory.mapper;
 import com.Laibin.SugarInventory.domain.dto.InventoryQueryDTO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.domain.vo.VWarehouseCapacity;
+import com.Laibin.SugarInventory.mapper.model.WarehouseMixedStorageFactRow;
+import com.Laibin.SugarInventory.mapper.model.InventoryLedgerAgentRow;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -12,6 +14,58 @@ import java.util.List;
 
 @Mapper
 public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
+
+    @Select({"<script>",
+            "SELECT w.warehouse_name AS warehouseName, p.product_name AS productName, p.product_type AS productType,",
+            "i.product_status AS productStatus, sm.mesh_name AS screenMeshName, pc.code AS palletCode,",
+            "i.side, i.row_number AS rowNumber, i.layer, i.quantity AS palletQuantity, i.pieces, i.entry_date AS entryDate,",
+            "pc.production_date AS productionDate, i.created_at AS recordedAt",
+            "FROM inventory i JOIN warehouse w ON w.id=i.warehouse_id JOIN product p ON p.id=i.product_id",
+            "LEFT JOIN screen_mesh sm ON sm.id=i.screen_mesh_id LEFT JOIN pallet_code pc ON pc.id=i.pallet_code_id",
+            "<where>",
+            "<if test='productName != null and productName != \"\"'>p.product_name LIKE CONCAT('%',#{productName},'%')</if>",
+            "<if test='warehouseName != null and warehouseName != \"\"'>AND w.warehouse_name LIKE CONCAT('%',#{warehouseName},'%')</if>",
+            "<if test='screenMeshName != null and screenMeshName != \"\"'>AND sm.mesh_name = #{screenMeshName}</if>",
+            "<if test='productStatus != null and productStatus != \"\"'>AND i.product_status = #{productStatus}</if>",
+            "<if test='entryDateStart != null'>AND i.entry_date &gt;= #{entryDateStart}</if>",
+            "<if test='entryDateEnd != null'>AND i.entry_date &lt;= #{entryDateEnd}</if>",
+            "</where> ORDER BY i.entry_date ASC, w.warehouse_name ASC, p.product_name ASC, i.id ASC LIMIT #{offset},#{size}",
+            "</script>"})
+    List<InventoryLedgerAgentRow> selectInventoryLedger(@Param("productName") String productName,
+            @Param("warehouseName") String warehouseName, @Param("screenMeshName") String screenMeshName,
+            @Param("productStatus") String productStatus, @Param("entryDateStart") java.time.LocalDate entryDateStart,
+            @Param("entryDateEnd") java.time.LocalDate entryDateEnd, @Param("offset") long offset, @Param("size") int size);
+
+    @Select({"<script>", "SELECT COUNT(*) FROM inventory i JOIN warehouse w ON w.id=i.warehouse_id JOIN product p ON p.id=i.product_id LEFT JOIN screen_mesh sm ON sm.id=i.screen_mesh_id",
+            "<where>",
+            "<if test='productName != null and productName != \"\"'>p.product_name LIKE CONCAT('%',#{productName},'%')</if>",
+            "<if test='warehouseName != null and warehouseName != \"\"'>AND w.warehouse_name LIKE CONCAT('%',#{warehouseName},'%')</if>",
+            "<if test='screenMeshName != null and screenMeshName != \"\"'>AND sm.mesh_name = #{screenMeshName}</if>",
+            "<if test='productStatus != null and productStatus != \"\"'>AND i.product_status = #{productStatus}</if>",
+            "<if test='entryDateStart != null'>AND i.entry_date &gt;= #{entryDateStart}</if>",
+            "<if test='entryDateEnd != null'>AND i.entry_date &lt;= #{entryDateEnd}</if>",
+            "</where>", "</script>"})
+    Long countInventoryLedger(@Param("productName") String productName, @Param("warehouseName") String warehouseName,
+            @Param("screenMeshName") String screenMeshName, @Param("productStatus") String productStatus,
+            @Param("entryDateStart") java.time.LocalDate entryDateStart, @Param("entryDateEnd") java.time.LocalDate entryDateEnd);
+
+    @Select({
+            "<script>",
+            "SELECT w.warehouse_name AS warehouseName, COUNT(DISTINCT i.product_id) AS productCount,",
+            "COUNT(DISTINCT p.product_type) AS productTypeCount,",
+            "COUNT(DISTINCT CONCAT(i.product_id, '|', COALESCE(i.screen_mesh_id, ''), '|', COALESCE(i.product_status, ''))) AS specificationCount,",
+            "COUNT(*) AS inventoryRecordCount,",
+            "SUBSTRING(GROUP_CONCAT(DISTINCT p.product_name ORDER BY p.product_name SEPARATOR '、'), 1, 1000) AS productLabels,",
+            "SUBSTRING(GROUP_CONCAT(DISTINCT p.product_type ORDER BY p.product_type SEPARATOR '、'), 1, 500) AS productTypeLabels,",
+            "SUBSTRING(GROUP_CONCAT(DISTINCT i.product_status ORDER BY i.product_status SEPARATOR '、'), 1, 500) AS productStatusLabels,",
+            "SUBSTRING(GROUP_CONCAT(DISTINCT sm.mesh_name ORDER BY sm.mesh_name SEPARATOR '、'), 1, 500) AS screenMeshLabels",
+            "FROM inventory i INNER JOIN warehouse w ON w.id = i.warehouse_id",
+            "INNER JOIN product p ON p.id = i.product_id LEFT JOIN screen_mesh sm ON sm.id = i.screen_mesh_id",
+            "<where><if test='warehouseId != null'>i.warehouse_id = #{warehouseId}</if></where>",
+            "GROUP BY i.warehouse_id, w.warehouse_name ORDER BY w.id LIMIT 200",
+            "</script>"
+    })
+    List<WarehouseMixedStorageFactRow> selectWarehouseMixedStorageFacts(@Param("warehouseId") Integer warehouseId);
 
     @Select("<script>" +
             "SELECT * FROM v_warehouse_inventory_summary " +

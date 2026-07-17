@@ -1,0 +1,23 @@
+[Unit]
+Description=Laibin Sugar Inventory Python Agent Runtime
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=laibin
+Group=laibin
+WorkingDirectory=/opt/laibin-sugar/agent
+EnvironmentFile=/etc/laibin-sugar/agent.env
+ExecStart=/opt/laibin-sugar/agent-venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8091
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/laibin-sugar/agent
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

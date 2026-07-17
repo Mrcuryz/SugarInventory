@@ -5,6 +5,7 @@ import com.Laibin.SugarInventory.agent.python.dto.PythonAgentChatRequestDTO;
 import com.Laibin.SugarInventory.agent.python.dto.PythonAgentChatResponseDTO;
 import com.Laibin.SugarInventory.agent.python.dto.PythonAgentStreamEventDTO;
 import com.Laibin.SugarInventory.agent.runtime.AgentRuntimeProperties;
+import com.Laibin.SugarInventory.agent.internal.service.impl.McpInternalAgentToolGatewayService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -45,6 +46,7 @@ class HttpPythonAgentClientTest {
                      "dependencies":{"toolGateway":"UP","memory":"UP","model":"BASIC"}}
                     """);
         });
+        server.createContext("/internal/agent/capabilities", exchange -> respond(exchange, 200, expectedCapabilities()));
         server.createContext("/internal/agent/chat", exchange -> {
             chatServiceKey.set(exchange.getRequestHeaders().getFirst("X-Agent-Service-Key"));
             chatBody.set(objectMapper.readTree(exchange.getRequestBody()));
@@ -76,6 +78,50 @@ class HttpPythonAgentClientTest {
         String bodyText = chatBody.get().toString();
         assertThat(bodyText).doesNotContain(
                 "python-service-secret", "delegationToken", "Authorization", "refreshToken", "password");
+    }
+
+    @Test
+    void failsClosedWhenCapabilityRegistryDoesNotMatch() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/internal/agent/health", exchange -> respond(exchange, 200,
+                "{\"status\":\"UP\",\"dependencies\":{\"toolGateway\":\"UP\"}}"));
+        server.createContext("/internal/agent/capabilities", exchange -> respond(exchange, 200,
+                expectedCapabilities().replace("\"toolCount\":47", "\"toolCount\":46")));
+        server.start();
+
+        AgentRuntimeProperties properties = new AgentRuntimeProperties();
+        properties.setPythonBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
+        properties.setPythonTimeoutMs(2000);
+        properties.setPythonServiceKey("python-service-secret");
+
+        assertThat(new HttpPythonAgentClient(properties, objectMapper).isHealthy()).isFalse();
+    }
+
+    @Test
+    void failsClosedWhenExpertProfileRegistryDoesNotMatch() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/internal/agent/health", exchange -> respond(exchange, 200,
+                "{\"status\":\"UP\",\"dependencies\":{\"toolGateway\":\"UP\"}}"));
+        server.createContext("/internal/agent/capabilities", exchange -> respond(exchange, 200,
+                expectedCapabilities().replace(
+                        "0f7da43814511eff9eeb2ba6bea4c250d47bd071a5a28859f2fe77cdc7637c87",
+                        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")));
+        server.start();
+
+        AgentRuntimeProperties properties = new AgentRuntimeProperties();
+        properties.setPythonBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
+        properties.setPythonTimeoutMs(2000);
+        properties.setPythonServiceKey("python-service-secret");
+
+        assertThat(new HttpPythonAgentClient(properties, objectMapper).isHealthy()).isFalse();
+    }
+
+    @Test
+    void javaExpertProfileRegistryMatchesThePythonCanonicalHash() {
+        assertThat(McpInternalAgentToolGatewayService.agentProfileRegistryHash(new ObjectMapper()))
+                .isEqualTo("0f7da43814511eff9eeb2ba6bea4c250d47bd071a5a28859f2fe77cdc7637c87");
     }
 
     @Test
@@ -149,11 +195,46 @@ class HttpPythonAgentClientTest {
         assertThat(cancelBody.get().toString()).doesNotContain("python-service-secret");
     }
 
+    @Test
+    void clearsPythonSessionWithServiceKeyAndDeleteMethod() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        AtomicReference<String> serviceKey = new AtomicReference<>();
+        AtomicReference<String> method = new AtomicReference<>();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/internal/agent/sessions/agt_001", exchange -> {
+            serviceKey.set(exchange.getRequestHeaders().getFirst("X-Agent-Service-Key"));
+            method.set(exchange.getRequestMethod());
+            respond(exchange, 200, "{\"agentSessionId\":\"agt_001\",\"cleared\":true}");
+        });
+        server.start();
+
+        AgentRuntimeProperties properties = new AgentRuntimeProperties();
+        properties.setPythonBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
+        properties.setPythonTimeoutMs(2000);
+        properties.setPythonServiceKey("python-service-secret");
+        HttpPythonAgentClient client = new HttpPythonAgentClient(properties, objectMapper);
+
+        client.clearSession("agt_001");
+
+        assertThat(serviceKey).hasValue("python-service-secret");
+        assertThat(method).hasValue("DELETE");
+    }
+
     private void respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
         exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();
+    }
+
+    private String expectedCapabilities() {
+        return """
+                {"runtimeVersion":"0.2.0","protocolVersion":"1.0",
+                 "toolRegistryHash":"b6fd218f6ac17e3817f26e898348743ea92a7331b8f70eabee76ec2c91bd93b1",
+                 "recipeRegistryHash":"c5ee0907e4134024138ff5489bd9b58d92c4103663a00f0d0d14fa5a40d12385",
+                 "agentProfileRegistryHash":"0f7da43814511eff9eeb2ba6bea4c250d47bd071a5a28859f2fe77cdc7637c87",
+                 "toolCount":47,"recipeCount":1,"agentProfiles":[]}
+                """;
     }
 }

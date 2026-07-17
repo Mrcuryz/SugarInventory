@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.agent.python.dto.PythonAgentChatRequestDTO;
 import com.Laibin.SugarInventory.agent.python.dto.PythonAgentChatResponseDTO;
 import com.Laibin.SugarInventory.agent.python.dto.PythonAgentStreamEventDTO;
 import com.Laibin.SugarInventory.agent.runtime.AgentRuntimeProperties;
+import com.Laibin.SugarInventory.agent.internal.service.impl.McpInternalAgentToolGatewayService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,11 @@ import java.util.function.Consumer;
 @Component
 public class HttpPythonAgentClient implements PythonAgentClient {
     static final String SERVICE_KEY_HEADER = "X-Agent-Service-Key";
+    static final String EXPECTED_PROTOCOL_VERSION = "1.0";
+    static final String EXPECTED_TOOL_REGISTRY_HASH = "b6fd218f6ac17e3817f26e898348743ea92a7331b8f70eabee76ec2c91bd93b1";
+    static final String EXPECTED_RECIPE_REGISTRY_HASH = "c5ee0907e4134024138ff5489bd9b58d92c4103663a00f0d0d14fa5a40d12385";
+    static final int EXPECTED_TOOL_COUNT = 47;
+    static final int EXPECTED_RECIPE_COUNT = 1;
 
     private final AgentRuntimeProperties properties;
     private final ObjectMapper objectMapper;
@@ -48,14 +54,33 @@ public class HttpPythonAgentClient implements PythonAgentClient {
                 return false;
             }
             JsonNode body = objectMapper.readTree(response.body());
-            return "UP".equals(body.path("status").asText())
-                    && !"MISCONFIGURED".equals(body.path("dependencies").path("toolGateway").asText());
+            if (!"UP".equals(body.path("status").asText())
+                    || "MISCONFIGURED".equals(body.path("dependencies").path("toolGateway").asText())) {
+                return false;
+            }
+            return capabilitiesMatch();
         } catch (IOException e) {
             return false;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
         }
+    }
+
+    private boolean capabilitiesMatch() throws IOException, InterruptedException {
+        HttpRequest request = baseRequest("/internal/agent/capabilities").GET().build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            return false;
+        }
+        JsonNode body = objectMapper.readTree(response.body());
+        return EXPECTED_PROTOCOL_VERSION.equals(body.path("protocolVersion").asText())
+                && EXPECTED_TOOL_REGISTRY_HASH.equals(body.path("toolRegistryHash").asText())
+                && EXPECTED_RECIPE_REGISTRY_HASH.equals(body.path("recipeRegistryHash").asText())
+                && McpInternalAgentToolGatewayService.agentProfileRegistryHash(objectMapper)
+                        .equals(body.path("agentProfileRegistryHash").asText())
+                && body.path("toolCount").asInt(-1) == EXPECTED_TOOL_COUNT
+                && body.path("recipeCount").asInt(-1) == EXPECTED_RECIPE_COUNT;
     }
 
     @Override
@@ -136,6 +161,35 @@ public class HttpPythonAgentClient implements PythonAgentClient {
             }
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new PythonAgentClientException("PYTHON_AGENT_CANCEL_ERROR", response.statusCode() >= 500);
+            }
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw new PythonAgentClientException("PYTHON_AGENT_TIMEOUT", true);
+        } catch (IOException e) {
+            throw new PythonAgentClientException("PYTHON_AGENT_UNAVAILABLE", true);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new PythonAgentClientException("PYTHON_AGENT_INTERRUPTED", true);
+        }
+    }
+
+    @Override
+    public void clearSession(String agentSessionId) {
+        if (!configured()) {
+            throw new PythonAgentClientException("PYTHON_AGENT_MISCONFIGURED", false);
+        }
+        if (agentSessionId == null || !agentSessionId.matches("[A-Za-z0-9_-]{1,64}")) {
+            throw new PythonAgentClientException("PYTHON_AGENT_CLEAR_SESSION_INVALID", false);
+        }
+        try {
+            HttpRequest request = baseRequest("/internal/agent/sessions/" + agentSessionId)
+                    .DELETE()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 401 || response.statusCode() == 403) {
+                throw new PythonAgentClientException("PYTHON_AGENT_SERVICE_UNAUTHORIZED", false);
+            }
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new PythonAgentClientException("PYTHON_AGENT_CLEAR_SESSION_ERROR", response.statusCode() >= 500);
             }
         } catch (java.net.http.HttpTimeoutException e) {
             throw new PythonAgentClientException("PYTHON_AGENT_TIMEOUT", true);

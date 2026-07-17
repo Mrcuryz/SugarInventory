@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public final class ToolModels {
@@ -148,6 +149,69 @@ public final class ToolModels {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = false)
+    public record DateRange(
+            @JsonProperty(value = "type", required = true) String type,
+            LocalDate date,
+            @Min(1) @Max(366) Integer days,
+            LocalDate from,
+            LocalDate to
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record AssayRecordsRequest(
+            @JsonProperty(value = "productScope", required = true) ProductScope productScope,
+            DateRange dateRange,
+            String judgeStatus,
+            String sortBy,
+            String sortDirection,
+            @Min(1) Integer page,
+            @Min(1) @Max(100) Integer size
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record AssayReportDetailRequest(
+            @JsonProperty(value = "reportRef", required = true)
+            @NotBlank
+            @Size(min = 1, max = 200)
+            String reportRef,
+            Boolean includeMetrics,
+            Boolean includeStandardSnapshot
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record AssayAbnormalitiesRequest(
+            @JsonProperty(value = "productScope", required = true) ProductScope productScope,
+            DateRange dateRange,
+            List<String> abnormalTypes,
+            String groupBy,
+            @Min(1) @Max(100) Integer limit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record ProductsWithoutRecentAssayRequest(
+            @JsonProperty(value = "productScope", required = true) ProductScope productScope,
+            @JsonProperty(value = "warehouseScope", required = true) WarehouseScope warehouseScope,
+            String population,
+            DateRange dateRange,
+            String groupBy,
+            @Min(1) @Max(100) Integer limit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record AssayStandardCoverageRequest(
+            @JsonProperty(value = "productScope", required = true) ProductScope productScope,
+            DateRange dateRange,
+            String coverageType,
+            @Min(1) @Max(100) Integer limit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
     public record WarehouseStatusRequest(
             @JsonPropertyDescription("Preferred unique warehouse id. When supplied, warehouseQuery is ignored.")
             @Min(1)
@@ -193,6 +257,62 @@ public final class ToolModels {
             @Min(1)
             @Max(100)
             Integer flowLimit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record PalletLifecycleRequest(
+            @JsonProperty(value = "code", required = true)
+            @NotBlank @Size(min = 1, max = 100) String code,
+            Boolean includeInventory,
+            Boolean includeAssay,
+            Boolean includeFlows,
+            Boolean includePrintInfo,
+            @Min(1) @Max(100) Integer flowLimit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record PalletFlowRecordsRequest(
+            String code,
+            ProductScope productScope,
+            @Min(1) Integer warehouseId,
+            DateRange dateRange,
+            List<String> eventTypes,
+            @Min(1) Integer page,
+            @Min(1) @Max(100) Integer size
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record PrintedNotInboundCodesRequest(
+            ProductScope productScope,
+            @Size(min = 1, max = 50) String orderNo,
+            @Size(min = 1, max = 80) String batchNo,
+            DateRange dateRange,
+            String groupBy,
+            @Min(1) @Max(100) Integer limit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record PalletAnomaliesRequest(
+            ProductScope productScope,
+            @Min(1) Integer warehouseId,
+            DateRange dateRange,
+            List<String> anomalyTypes,
+            @Min(1) @Max(100) Integer limit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record QrBatchInboundCompletionRequest(
+            String batchNo,
+            String orderNo,
+            @Min(1) Integer productId,
+            DateRange dateRange,
+            Boolean includeUnfinishedExamples,
+            @Min(1) @Max(100) Integer limit
     ) {
     }
 
@@ -348,6 +468,7 @@ public final class ToolModels {
     public record InventoryDistributionGroup(
             String groupLabel,
             String warehouseLabel,
+            String canonicalProductName,
             String productLabel,
             long rawFullPallets,
             long rawLoosePieces,
@@ -388,6 +509,212 @@ public final class ToolModels {
         public static InventoryDistributionResponse error(ToolError error) {
             return new InventoryDistributionResponse(null, null, null, 0, 0, null, null, 0, null, null,
                     0, 0, 0, null, List.of(), List.of(), error);
+        }
+    }
+
+    public record AssayRecord(
+            String recordRef,
+            String recordLabel,
+            String productLabel,
+            LocalDate sampleDate,
+            LocalDateTime createdAt,
+            String judgeStatus,
+            String judgeLabel,
+            String failedMetricText,
+            Integer failedMetricCount,
+            String standardLabel,
+            String testerLabel,
+            String actionHint
+    ) {
+    }
+
+    public record AssayRecordsResponse(
+            String scopeLabel,
+            String dateRangeLabel,
+            long total,
+            long passCount,
+            long failedCount,
+            long noStandardCount,
+            long multipleCandidatesCount,
+            LocalDate latestSampleDate,
+            String summaryText,
+            int page,
+            int size,
+            List<AssayRecord> records,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static AssayRecordsResponse error(ToolError error) {
+            return new AssayRecordsResponse(null, null, 0, 0, 0, 0, 0, null, null,
+                    1, 20, List.of(), List.of(), error);
+        }
+    }
+
+    public record AssayReportMetric(
+            String metricCode,
+            String metricName,
+            String actualValueText,
+            String standardRangeText,
+            String resultLabel,
+            String reason
+    ) {
+    }
+
+    public record AssayReportDetailResponse(
+            String reportRef,
+            String reportLabel,
+            String productLabel,
+            LocalDate sampleDate,
+            LocalDateTime createdAt,
+            String judgeStatus,
+            String judgeLabel,
+            String judgeMessage,
+            String standardLabel,
+            List<AssayReportMetric> metrics,
+            List<String> matchedStandards,
+            List<String> riskLabels,
+            List<String> notes,
+            String summaryText,
+            ToolError error
+    ) {
+        public static AssayReportDetailResponse error(ToolError error) {
+            return new AssayReportDetailResponse(null, null, null, null, null, null, null, null,
+                    null, List.of(), List.of(), List.of(), List.of(), null, error);
+        }
+    }
+
+    public record AssayAbnormalityGroup(
+            String groupLabel,
+            long total,
+            long failedCount,
+            long noStandardCount,
+            long multipleCandidatesCount,
+            LocalDate latestSampleDate,
+            List<String> riskLabels
+    ) {
+    }
+
+    public record AssayAbnormalitiesResponse(
+            String scopeLabel,
+            String dateRangeLabel,
+            String groupBy,
+            long total,
+            long failedCount,
+            long noStandardCount,
+            long multipleCandidatesCount,
+            LocalDate latestSampleDate,
+            String summaryText,
+            List<AssayAbnormalityGroup> groups,
+            List<String> riskLabels,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static AssayAbnormalitiesResponse error(ToolError error) {
+            return new AssayAbnormalitiesResponse(null, null, null, 0, 0, 0, 0, null, null,
+                    List.of(), List.of(), List.of(), error);
+        }
+    }
+
+    public record ProductWithoutRecentAssayGroup(
+            String groupLabel,
+            String productLabel,
+            String warehouseLabel,
+            long rawFullPallets,
+            long rawLoosePieces,
+            Long normalizedPallets,
+            Long normalizedLoosePieces,
+            long totalEquivalentPieces,
+            String stockText,
+            String totalWeightText,
+            long inventoryRecordCount,
+            long palletCount,
+            long warehouseCount,
+            long productCount,
+            LocalDate latestInboundTime,
+            List<String> warehouseLabels,
+            List<String> riskLabels,
+            String nextActionLabel,
+            String calculationNote
+    ) {
+    }
+
+    public record ProductsWithoutRecentAssayResponse(
+            String scopeLabel,
+            String warehouseScopeLabel,
+            String dateRangeLabel,
+            String population,
+            String groupBy,
+            long totalGroups,
+            long rawFullPallets,
+            long rawLoosePieces,
+            Long normalizedPallets,
+            Long normalizedLoosePieces,
+            long totalEquivalentPieces,
+            String totalStockText,
+            String totalWeightText,
+            long inventoryRecordCount,
+            long palletCount,
+            long warehouseCount,
+            long productCount,
+            String summaryText,
+            List<ProductWithoutRecentAssayGroup> groups,
+            List<String> riskLabels,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static ProductsWithoutRecentAssayResponse error(ToolError error) {
+            return new ProductsWithoutRecentAssayResponse(null, null, null, null, null,
+                    0, 0, 0, null, null, 0, null, null, 0, 0, 0, 0,
+                    null, List.of(), List.of(), List.of(), error);
+        }
+    }
+
+    public record AssayStandardCoverageGroup(
+            String groupLabel,
+            String productLabel,
+            String coverageLabel,
+            String affectedStockText,
+            long rawFullPallets,
+            long rawLoosePieces,
+            Long normalizedPallets,
+            Long normalizedLoosePieces,
+            long totalEquivalentPieces,
+            String totalWeightText,
+            long inventoryRecordCount,
+            long palletCount,
+            long warehouseCount,
+            LocalDate latestInboundTime,
+            List<String> warehouseLabels,
+            List<String> riskLabels
+    ) {
+    }
+
+    public record AssayStandardCoverageResponse(
+            String scopeLabel,
+            String dateRangeLabel,
+            String coverageType,
+            long totalGroups,
+            long rawFullPallets,
+            long rawLoosePieces,
+            Long normalizedPallets,
+            Long normalizedLoosePieces,
+            long totalEquivalentPieces,
+            String totalStockText,
+            String totalWeightText,
+            long inventoryRecordCount,
+            long palletCount,
+            long warehouseCount,
+            long productCount,
+            String summaryText,
+            List<AssayStandardCoverageGroup> groups,
+            List<String> riskLabels,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static AssayStandardCoverageResponse error(ToolError error) {
+            return new AssayStandardCoverageResponse(null, null, null,
+                    0, 0, 0, null, null, 0, null, null, 0, 0, 0, 0,
+                    null, List.of(), List.of(), List.of(), error);
         }
     }
 
@@ -473,6 +800,472 @@ public final class ToolModels {
         public static PalletStatusResponse error(ToolError error) {
             return new PalletStatusResponse(null, false, null, null, null, null, List.of(), List.of(), List.of(), error);
         }
+    }
+
+    public record PalletLifecycleEvent(
+            LocalDateTime time,
+            String eventType,
+            String eventLabel,
+            String codeLabel,
+            String productLabel,
+            String fromWarehouseLabel,
+            String toWarehouseLabel,
+            String operatorLabel,
+            Integer cycleNo
+    ) {
+    }
+
+    public record PalletPrintInfo(
+            String batchLabel,
+            String orderLabel,
+            String printStatusLabel,
+            String labelStatusLabel,
+            LocalDateTime printedAt,
+            LocalDateTime usedAt,
+            LocalDateTime recycledAt
+    ) {
+    }
+
+    public record PalletLifecycleResponse(
+            String codeLabel,
+            String currentStatusLabel,
+            String productLabel,
+            String warehouseLabel,
+            String quantityText,
+            LocalDate productionDate,
+            String assaySummary,
+            PalletPrintInfo printInfo,
+            List<PalletLifecycleEvent> timeline,
+            List<String> riskLabels,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static PalletLifecycleResponse error(ToolError error) {
+            return new PalletLifecycleResponse(null, null, null, null, null, null, null, null, List.of(), List.of(), List.of(), error);
+        }
+    }
+
+    public record PalletFlowRecord(
+            LocalDateTime time,
+            String eventType,
+            String eventLabel,
+            String codeLabel,
+            String productLabel,
+            String fromWarehouseLabel,
+            String toWarehouseLabel,
+            String operatorLabel,
+            Integer cycleNo
+    ) {
+    }
+
+    public record PalletFlowRecordsResponse(
+            String scopeLabel,
+            String dateRangeLabel,
+            long total,
+            String summaryText,
+            List<PalletFlowRecord> records,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static PalletFlowRecordsResponse error(ToolError error) {
+            return new PalletFlowRecordsResponse(null, null, 0, null, List.of(), List.of(), error);
+        }
+    }
+
+    public record PrintedNotInboundGroup(
+            String groupLabel,
+            long printedCount,
+            long inboundCount,
+            long notInboundCount,
+            String completionRateText,
+            List<String> examples,
+            List<String> riskLabels
+    ) {
+    }
+
+    public record PrintedNotInboundCodesResponse(
+            String scopeLabel,
+            String dateRangeLabel,
+            String groupBy,
+            long printedCount,
+            long inboundCount,
+            long notInboundCount,
+            String completionRateText,
+            String summaryText,
+            List<PrintedNotInboundGroup> groups,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static PrintedNotInboundCodesResponse error(ToolError error) {
+            return new PrintedNotInboundCodesResponse(null, null, null, 0, 0, 0, null, null, List.of(), List.of(), error);
+        }
+    }
+
+    public record PalletAnomalyGroup(
+            String anomalyType,
+            String groupLabel,
+            long count,
+            List<String> examples,
+            List<String> riskLabels
+    ) {
+    }
+
+    public record PalletAnomaliesResponse(
+            String scopeLabel,
+            String dateRangeLabel,
+            long total,
+            String summaryText,
+            List<PalletAnomalyGroup> groups,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static PalletAnomaliesResponse error(ToolError error) {
+            return new PalletAnomaliesResponse(null, null, 0, null, List.of(), List.of(), error);
+        }
+    }
+
+    public record QrBatchInboundCompletionResponse(
+            String batchLabel,
+            String orderLabel,
+            long printedCount,
+            long inboundCount,
+            long notInboundCount,
+            String completionRateText,
+            List<String> unfinishedExamples,
+            String summaryText,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static QrBatchInboundCompletionResponse error(ToolError error) {
+            return new QrBatchInboundCompletionResponse(null, null, 0, 0, 0, null, List.of(), null, List.of(), error);
+        }
+    }
+
+    public record ProductionEntityResolveRequest(String entityType, String query, Integer limit) {
+    }
+
+    public record ProductionEntityCandidate(
+            String entityRef,
+            String entityType,
+            String displayCode,
+            String status,
+            LocalDate businessDate,
+            String summary
+    ) {
+    }
+
+    public record ProductionEntityResolutionResponse(
+            String resolutionStatus,
+            boolean needsUserSelection,
+            String entityType,
+            String query,
+            List<ProductionEntityCandidate> candidates,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductionEntityResolutionResponse error(ToolError error) {
+            return new ProductionEntityResolutionResponse("NO_MATCH", false, null, null, List.of(), List.of(), error);
+        }
+    }
+
+    public record ProductionOrderProgressRequest(String orderRef) {
+    }
+
+    public record ProductionOrderProgressResponse(
+            String dataScope,
+            String orderRef,
+            String orderNo,
+            String orderType,
+            String status,
+            LocalDate productionDate,
+            String teamName,
+            String plannedMaterialText,
+            String plannedOutputText,
+            int materialRecordCount,
+            int outputRecordCount,
+            int requiredQrCount,
+            int boundQrCount,
+            int inboundQrCount,
+            int labelBatchCount,
+            int reservedLabelCount,
+            int usedLabelCount,
+            int recycledLabelCount,
+            LocalDateTime updatedAt,
+            LocalDateTime completedAt,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductionOrderProgressResponse error(ToolError error) {
+            return new ProductionOrderProgressResponse(null, null, null, null, null, null, null, null, null,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, null, null, List.of(), error);
+        }
+    }
+
+    public record ProductionBoilingBatchTraceRequest(String batchRef) {
+    }
+
+    public record ProductionBoilingBatchTraceResponse(
+            String dataScope,
+            String batchRef,
+            String batchNo,
+            LocalDate boilingDate,
+            String sugarType,
+            String productName,
+            String status,
+            BigDecimal totalWeightKg,
+            BigDecimal reservedWeightKg,
+            BigDecimal consumedWeightKg,
+            BigDecimal remainingWeightKg,
+            int usageCount,
+            int nodeCount,
+            int edgeCount,
+            List<JsonNode> usages,
+            List<JsonNode> nodes,
+            List<JsonNode> edges,
+            List<JsonNode> timeline,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductionBoilingBatchTraceResponse error(ToolError error) {
+            return new ProductionBoilingBatchTraceResponse(null, null, null, null, null, null, null,
+                    null, null, null, null, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), List.of(), error);
+        }
+    }
+
+    public record ProductionMaterialPickTraceRequest(String orderRef) {
+    }
+
+    public record ProductionMaterialPickTraceResponse(
+            String dataScope,
+            String orderRef,
+            String orderNo,
+            String orderStatus,
+            int materialRecordCount,
+            List<JsonNode> records,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductionMaterialPickTraceResponse error(ToolError error) {
+            return new ProductionMaterialPickTraceResponse(null, null, null, null, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record ProductionLabelCompletionRequest(String orderRef) {
+    }
+
+    public record ProductionLabelCompletionResponse(
+            String dataScope,
+            String orderRef,
+            String orderNo,
+            String orderStatus,
+            int labelBatchCount,
+            int reservedLabelCount,
+            int usedLabelCount,
+            int recycledLabelCount,
+            int requiredQrCount,
+            int boundQrCount,
+            int inboundQrCount,
+            int notBoundQrCount,
+            int notInboundQrCount,
+            List<JsonNode> batches,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductionLabelCompletionResponse error(ToolError error) {
+            return new ProductionLabelCompletionResponse(null, null, null, null,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record ProductionInProcessMaterialsRequest(
+            String productName,
+            String productType,
+            String productionDateStart,
+            String productionDateEnd,
+            Integer page,
+            Integer size
+    ) {
+    }
+
+    public record ProductionInProcessMaterialsResponse(
+            String dataScope,
+            long total,
+            int page,
+            int size,
+            List<JsonNode> records,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductionInProcessMaterialsResponse error(ToolError error) {
+            return new ProductionInProcessMaterialsResponse(null, 0, 0, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record ProductionMaterialCandidatesRequest(String orderRef, Integer page, Integer size) {
+    }
+
+    public record ProductionMaterialCandidatesResponse(
+            String dataScope, String orderRef, long total, int page, int size,
+            List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static ProductionMaterialCandidatesResponse error(ToolError error) {
+            return new ProductionMaterialCandidatesResponse(null, null, 0, 0, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record PalletTasksRequest(
+            String code, String taskType, String bizScene, String status,
+            String productName, String productType, String productStatus, String targetWarehouseName,
+            String productionDateStart, String productionDateEnd, Integer page, Integer size
+    ) {
+    }
+
+    public record PalletTasksResponse(
+            String dataScope, long total, int page, int size,
+            List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static PalletTasksResponse error(ToolError error) {
+            return new PalletTasksResponse(null, 0, 0, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record StockDocumentsRequest(
+            String documentType, String productName, String warehouseName, String operatorName,
+            String startDate, String endDate, Integer page, Integer size
+    ) {
+    }
+
+    public record StockDocumentsResponse(
+            String dataScope, String documentType, long total, int page, int size,
+            List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static StockDocumentsResponse error(ToolError error) {
+            return new StockDocumentsResponse(null, null, 0, 0, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record AutoInboundBatchesRequest(String status, Integer limit) {
+    }
+
+    public record AutoInboundBatchesResponse(
+            String dataScope, int count, List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static AutoInboundBatchesResponse error(ToolError error) {
+            return new AutoInboundBatchesResponse(null, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record AutoInboundBatchDetailRequest(String batchRef) {
+    }
+
+    public record AutoInboundBatchDetailResponse(
+            String dataScope, String batchRef, int taskCount, List<JsonNode> tasks,
+            List<String> globalRemarks, List<String> limitations, ToolError error
+    ) {
+        public static AutoInboundBatchDetailResponse error(ToolError error) {
+            return new AutoInboundBatchDetailResponse(null, null, 0, List.of(), List.of(), List.of(), error);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record WarehouseCapacityDistributionRequest(
+            WarehouseScope warehouseScope, String occupancyBand, Boolean onlyAvailable,
+            @Min(1) Integer page, @Min(1) @Max(50) Integer size
+    ) {
+    }
+
+    public record WarehouseCapacityDistributionResponse(
+            String dataScope, long total, int page, int size, JsonNode summary,
+            List<JsonNode> records, Map<String, String> occupancyBandDefinition,
+            List<String> limitations, ToolError error
+    ) {
+        public static WarehouseCapacityDistributionResponse error(ToolError error) {
+            return new WarehouseCapacityDistributionResponse(null, 0, 0, 0, null, List.of(), Map.of(), List.of(), error);
+        }
+    }
+
+    public record WarehouseRecentOperationsRequest(
+            Integer warehouseId, String from, String to, List<String> eventTypes, Integer limit
+    ) {
+    }
+
+    public record WarehouseRecentOperationsResponse(
+            String dataScope, int count, List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static WarehouseRecentOperationsResponse error(ToolError error) {
+            return new WarehouseRecentOperationsResponse(null, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record WarehouseMixedStorageFactsRequest(Integer warehouseId, String factType, Integer limit) {
+    }
+
+    public record WarehouseMixedStorageFactsResponse(
+            String dataScope, int count, List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static WarehouseMixedStorageFactsResponse error(ToolError error) {
+            return new WarehouseMixedStorageFactsResponse(null, 0, List.of(), List.of(), error);
+        }
+    }
+
+    public record ProductCatalogRequest(
+            String productName, String productType, String productStatus, String packagingMethod,
+            String screenMeshName, Integer page, Integer size
+    ) { }
+    public record ProductCatalogResponse(
+            String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static ProductCatalogResponse error(ToolError error) { return new ProductCatalogResponse(null, 0, 0, 0, List.of(), List.of(), error); }
+    }
+    public record ProductDetailRequest(String productName) { }
+    public record ProductDetailResponse(
+            String dataScope, String productName, String productType, String productStatus, String packagingMethod,
+            BigDecimal weightPerPiece, Integer piecesPerPallet, Boolean canStack, String screenMeshName,
+            String conversionSummary, List<String> limitations, ToolError error
+    ) {
+        public static ProductDetailResponse error(ToolError error) { return new ProductDetailResponse(null, null, null, null, null, null, null, null, null, null, List.of(), error); }
+    }
+    public record ScreenMeshCatalogRequest(String meshName, Integer page, Integer size) { }
+    public record ScreenMeshCatalogResponse(
+            String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error
+    ) {
+        public static ScreenMeshCatalogResponse error(ToolError error) { return new ScreenMeshCatalogResponse(null, 0, 0, 0, List.of(), List.of(), error); }
+    }
+    public record AssayGroupsCatalogResponse(String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static AssayGroupsCatalogResponse error(ToolError e) { return new AssayGroupsCatalogResponse(null, 0, 0, 0, List.of(), List.of(), e); }
+    }
+    public record QualityStandardCatalogResponse(String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static QualityStandardCatalogResponse error(ToolError e) { return new QualityStandardCatalogResponse(null, 0, 0, 0, List.of(), List.of(), e); }
+    }
+    public record QualityStandardDetailResponse(String dataScope, String standardCode, String standardName, String productType,
+            String standardLevel, Integer version, String status, String remark, List<JsonNode> metrics,
+            List<String> relatedProductNames, List<String> limitations, ToolError error) {
+        public static QualityStandardDetailResponse error(ToolError e) { return new QualityStandardDetailResponse(null, null, null, null, null, null, null, null, List.of(), List.of(), List.of(), e); }
+    }
+    public record ProductStandardRelationsResponse(String dataScope, String productName, int count, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static ProductStandardRelationsResponse error(ToolError e) { return new ProductStandardRelationsResponse(null, null, 0, List.of(), List.of(), e); }
+    }
+    public record EmployeeRosterResponse(String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static EmployeeRosterResponse error(ToolError e) { return new EmployeeRosterResponse(null, 0, 0, 0, List.of(), List.of(), e); }
+    }
+    public record RoleCatalogResponse(String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static RoleCatalogResponse error(ToolError e) { return new RoleCatalogResponse(null, 0, 0, 0, List.of(), List.of(), e); }
+    }
+    public record RolePermissionSummaryResponse(String dataScope, String roleName, String roleCode, String status,
+            Integer activeEmployeeCount, Integer permissionCount, List<JsonNode> permissions, List<String> limitations, ToolError error) {
+        public static RolePermissionSummaryResponse error(ToolError e) { return new RolePermissionSummaryResponse(null, null, null, null, null, null, List.of(), List.of(), e); }
+    }
+    public record AuditPageResponse(String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static AuditPageResponse error(ToolError e) { return new AuditPageResponse(null, 0, 0, 0, List.of(), List.of(), e); }
+    }
+    public record InventoryLedgerResponse(String dataScope, long total, int page, int size, String inventoryAsOf, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static InventoryLedgerResponse error(ToolError e) { return new InventoryLedgerResponse(null, 0, 0, 0, null, List.of(), List.of(), e); }
+    }
+    public record PreparePoolBalanceResponse(String dataScope, long total, int page, int size, String balanceAsOf, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static PreparePoolBalanceResponse error(ToolError e) { return new PreparePoolBalanceResponse(null, 0, 0, 0, null, List.of(), List.of(), e); }
+    }
+    public record FixedProductQrPoolResponse(String dataScope, long total, int page, int size, String poolAsOf, List<JsonNode> records, List<String> limitations, ToolError error) {
+        public static FixedProductQrPoolResponse error(ToolError e) { return new FixedProductQrPoolResponse(null, 0, 0, 0, null, List.of(), List.of(), e); }
     }
 
     public record AssayStatusResponse(

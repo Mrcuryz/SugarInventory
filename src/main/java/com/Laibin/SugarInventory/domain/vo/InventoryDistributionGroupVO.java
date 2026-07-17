@@ -11,6 +11,7 @@ import java.util.List;
 public class InventoryDistributionGroupVO {
     String groupLabel;
     String warehouseLabel;
+    String canonicalProductName;
     String productLabel;
     long rawFullPallets;
     long rawLoosePieces;

@@ -1,0 +1,178 @@
+registryVersion: business-rule-roadmap-2026-07-13
+status: DESIGN_ONLY
+runtimeEnabled: false
+decisionAuthority: DETERMINISTIC_RULE_ENGINE
+llmFinalDecisionAllowed: false
+wikiRole: "解释规则、术语、来源和示例；不执行规则，不签发业务决策。"
+
+ruleContract:
+  requiredFields:
+    - ruleId
+    - version
+    - owner
+    - status
+    - inputSchemaVersion
+    - outputDecisionEnum
+    - reasonCodes
+    - effectiveFrom
+    - effectiveTo
+    - priority
+    - implementationHash
+    - testSetHash
+  lifecycle: [DRAFT, APPROVED, ACTIVE, DEPRECATED, RETIRED, BLOCKED]
+  previewExecuteRule: "preview 保存规则版本；execute 使用同版本重算。版本不可用、发生漂移或 decision 改变时拒绝并要求重新 preview。"
+
+rules:
+  - ruleId: outbound_eligibility
+    version: 1
+    owner: logistics_domain_owner
+    status: DRAFT
+    inputSchemaVersion: outbound_eligibility_input@1
+    outputDecisionEnum: [ELIGIBLE, BLOCKED, MANUAL_REVIEW, UNSUPPORTED]
+    reasonCodes:
+      - INVENTORY_NOT_FOUND
+      - INSUFFICIENT_STOCK
+      - ASSAY_NOT_FOUND
+      - QUALITY_NOT_RELEASED
+      - PALLET_TASK_CONFLICT
+      - WAREHOUSE_UNAVAILABLE
+      - RULE_INPUT_INCOMPLETE
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 100
+    sourceRefs: [OutStockService, PalletCodeService]
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [rules_scattered_in_services, batch_quality_link_pending]
+
+  - ruleId: quality_release
+    version: 1
+    owner: quality_domain_owner
+    status: BLOCKED
+    inputSchemaVersion: quality_release_input@1
+    outputDecisionEnum: [RELEASED, BLOCKED, NO_ASSAY, NO_STANDARD, MULTIPLE_CANDIDATES, UNSUPPORTED]
+    reasonCodes:
+      - BATCH_ASSAY_LINK_MISSING
+      - ASSAY_NOT_FOUND
+      - STANDARD_NOT_FOUND
+      - METRIC_OUT_OF_RANGE
+      - MULTIPLE_STANDARD_CANDIDATES
+      - RULE_INPUT_INCOMPLETE
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 100
+    sourceRefs: [AssayService, ProductQualityStandardRelationService]
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [inventory_batch_link_missing, multiple_candidate_policy_pending]
+
+  - ruleId: fifo_allocation
+    version: 1
+    owner: logistics_domain_owner
+    status: DRAFT
+    inputSchemaVersion: inventory_allocation_input@1
+    outputDecisionEnum: [ALLOCATED, PARTIAL, INSUFFICIENT, UNSUPPORTED]
+    reasonCodes: [NO_CANDIDATE, INSUFFICIENT_STOCK, ORDERING_FIELD_MISSING, RULE_INPUT_INCOMPLETE]
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 100
+    sourceRefs: [InventoryMapper, OutStockService]
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [current_mapper_order_needs_audit, tie_breaker_pending]
+
+  - ruleId: fefo_allocation
+    version: 1
+    owner: logistics_domain_owner
+    status: BLOCKED
+    inputSchemaVersion: inventory_allocation_input@1
+    outputDecisionEnum: [ALLOCATED, PARTIAL, INSUFFICIENT, UNSUPPORTED]
+    reasonCodes: [EXPIRY_DATE_MISSING, SHELF_LIFE_RULE_MISSING, NO_CANDIDATE, RULE_INPUT_INCOMPLETE]
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 100
+    sourceRefs: []
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [expiry_data_not_defined, shelf_life_policy_not_defined]
+
+  - ruleId: mixed_storage
+    version: 1
+    owner: warehouse_domain_owner
+    status: BLOCKED
+    inputSchemaVersion: mixed_storage_input@1
+    outputDecisionEnum: [ALLOWED, WARNING, BLOCKED, UNSUPPORTED]
+    reasonCodes: [SAME_SLOT_DIFFERENT_PRODUCT, SAME_SIDE_DIFFERENT_PRODUCT, SAME_WAREHOUSE_DIFFERENT_PRODUCT, RULE_NOT_APPROVED]
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 100
+    sourceRefs: [inventory]
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [scope_definition_pending, threshold_pending]
+
+  - ruleId: capacity_allocation
+    version: 1
+    owner: warehouse_domain_owner
+    status: DRAFT
+    inputSchemaVersion: capacity_allocation_input@1
+    outputDecisionEnum: [ALLOCATED, NO_SPACE, LOCATION_CONFLICT, STACKING_NOT_ALLOWED, WAREHOUSE_UNAVAILABLE]
+    reasonCodes:
+      - WAREHOUSE_MAINTENANCE
+      - CAPACITY_FULL
+      - SIDE_FULL
+      - LOCATION_OCCUPIED
+      - ROW_OUT_OF_RANGE
+      - LAYER_OUT_OF_RANGE
+      - PRODUCT_CANNOT_STACK
+      - CONCURRENT_ALLOCATION_CONFLICT
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 100
+    sourceRefs: [InStockService, SemiProductRecordService, PalletCodeService]
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [logic_scattered_in_write_services, warehouse_status_sync_pending]
+
+  - ruleId: production_completion
+    version: 1
+    owner: production_domain_owner
+    status: BLOCKED
+    inputSchemaVersion: production_completion_input@1
+    outputDecisionEnum: [READY, BLOCKED, ALREADY_COMPLETED, MANUAL_REVIEW]
+    reasonCodes:
+      - ORDER_STATUS_NOT_READY
+      - MATERIAL_PICK_NOT_FINISHED
+      - OUTPUT_INVALID
+      - LABELS_INSUFFICIENT
+      - LABEL_STATE_CONFLICT
+      - RULE_INPUT_INCOMPLETE
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 100
+    sourceRefs: [ProductionOrderService]
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [order_state_machine_not_centralized, completion_business_definition_pending]
+
+  - ruleId: approval_required
+    version: 1
+    owner: security_and_business_owner
+    status: DRAFT
+    inputSchemaVersion: approval_required_input@1
+    outputDecisionEnum: [NO_APPROVAL, SINGLE_APPROVAL, STRONG_CONFIRMATION, SECOND_APPROVER, FORBIDDEN]
+    reasonCodes:
+      - L3_OPERATION
+      - L4_CONFIGURATION_CHANGE
+      - DELETE_OPERATION
+      - BATCH_LIMIT_EXCEEDED
+      - SELF_PRIVILEGE_CHANGE
+      - LAST_ADMIN_PROTECTION
+      - CROSS_SCOPE_OPERATION
+    effectiveFrom: null
+    effectiveTo: null
+    priority: 1000
+    sourceRefs: [tool_capability_registry, rbac_permissions]
+    implementationHash: PENDING
+    testSetHash: PENDING
+    knownGaps: [approval_policy_not_implemented, second_approver_model_pending]

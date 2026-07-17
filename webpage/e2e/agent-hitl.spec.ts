@@ -12,7 +12,14 @@ type SseRecord = {
   events: SseEvent[]
 }
 
+type ExpertCanary = {
+  expert: string
+  message: string
+  toolName: string
+}
+
 const appBaseUrl = process.env.AGENT_E2E_BASE_URL || 'http://127.0.0.1:5173'
+const pythonRuntimeBaseUrl = process.env.AGENT_E2E_PYTHON_BASE_URL || 'http://127.0.0.1:8091'
 const mysqlBin = process.env.AGENT_E2E_MYSQL_BIN || 'mysql'
 const dbConfig = {
   host: process.env.AGENT_E2E_DB_HOST || '127.0.0.1',
@@ -37,6 +44,18 @@ const forbiddenUiTerms = [
   'java.lang',
   'Traceback',
   'raw'
+]
+
+const expertCanaries: ExpertCanary[] = [
+  { expert: 'inventory_expert', message: '查询库存台账', toolName: 'query_inventory_ledger' },
+  { expert: 'warehouse_expert', message: '哪些库位快满了', toolName: 'query_warehouse_capacity_distribution' },
+  { expert: 'logistics_expert', message: '查询待处理的出库任务列表', toolName: 'query_pallet_tasks' },
+  { expert: 'pallet_expert', message: '查询固定产品二维码池中的可打印码', toolName: 'query_fixed_product_qr_pool' },
+  { expert: 'production_expert', message: '查询当前在制半成品', toolName: 'query_in_process_materials' },
+  { expert: 'assay_expert', message: '查询质量标准目录', toolName: 'query_quality_standard_catalog' },
+  { expert: 'master_data_expert', message: '查询成品产品目录', toolName: 'query_product_catalog' },
+  { expert: 'administration_expert', message: '查询员工名册', toolName: 'query_employee_roster' },
+  { expert: 'audit_expert', message: '查询操作日志', toolName: 'search_operation_logs' }
 ]
 
 test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
@@ -204,10 +223,11 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     const recoveredInUi = bodyText.includes(pendingEnd.interruptId) || bodyText.includes('等待你选择')
 
     if (dbAssertionsEnabled && !recoveredInUi) {
-      const row = queryOne(
+      await expect.poll(() => queryOne(
         `SELECT status FROM agent_interrupt_state WHERE interrupt_id='${escapeSql(pendingEnd.interruptId)}'`
-      )
-      expect(row?.status, 'old pending interrupt must be recovered in UI or cancelled/revoked server-side').not.toBe('PENDING')
+      )?.status, {
+        message: 'old pending interrupt must be recovered in UI or cancelled/revoked server-side'
+      }).not.toBe('PENDING')
     } else {
       expect(recoveredInUi).toBe(true)
     }
@@ -231,6 +251,83 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await assertNoForbiddenUiTerms(page, ['Authorization'])
   })
 })
+
+test.describe('Agent v1 nine-expert read-only acceptance', () => {
+  let authToken = ''
+
+  test.beforeAll(async ({ request }) => {
+    authToken = await resolveToken(request)
+    await assertRuntimeCapabilities(request)
+  })
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((jwt) => {
+      window.localStorage.setItem('pinia-token', JSON.stringify({ token: jwt }))
+    }, authToken)
+    await installSseCapture(page)
+  })
+
+  for (const scenario of expertCanaries) {
+    test(`${scenario.expert} executes ${scenario.toolName} as an L1 canary`, async ({ page }) => {
+      await openAssistant(page)
+      await clearCapturedSse(page)
+      await sendAssistantMessage(page, scenario.message)
+
+      const record = await lastSse(page)
+      const errorEvent = record.events.findLast((event) => event.event === 'error')
+      expect(errorEvent, `${scenario.expert} should not return a tool or permission error`).toBeUndefined()
+      expect(terminalPayload(record).finishReason).toBe('completed')
+
+      if (dbAssertionsEnabled) {
+        const sessionId = extractSessionId(record.url)
+        const rows = queryRows(
+          `SELECT tool_name, result_code, request_summary FROM agent_tool_audit_log WHERE agent_session_id='${escapeSql(sessionId)}' AND tool_name='${escapeSql(scenario.toolName)}' ORDER BY created_at DESC`
+        )
+        const successful = rows.find((row) => row.result_code === 'SUCCESS')
+        expect(successful, `${scenario.toolName} should be audited as SUCCESS`).toBeTruthy()
+        expect(successful?.request_summary).toContain(`"expertAgent":"${scenario.expert}"`)
+      }
+
+      await assertNoForbiddenUiTerms(page)
+    })
+  }
+})
+
+async function assertRuntimeCapabilities(request: APIRequestContext) {
+  const serviceKey = process.env.AGENT_PYTHON_SERVICE_KEY
+  if (!serviceKey) {
+    throw new Error('Set AGENT_PYTHON_SERVICE_KEY before running Agent v1 E2E acceptance.')
+  }
+  const response = await request.get(`${pythonRuntimeBaseUrl}/internal/agent/capabilities`, {
+    headers: { 'X-Agent-Service-Key': serviceKey }
+  })
+  expect(response.ok(), `Python runtime capabilities endpoint returned ${response.status()}`).toBe(true)
+  const body = await response.json()
+  expect(body.toolCount).toBe(47)
+  expect(body.recipeCount).toBe(1)
+  expect(body.toolRegistryHash).toMatch(/^[a-f0-9]{64}$/)
+  expect(body.recipeRegistryHash).toMatch(/^[a-f0-9]{64}$/)
+  expect(body.agentProfileRegistryHash).toBe('412aa3229fc7be546be9f0ad1e9953491375523d0a4ef73145698b576d99c653')
+
+  const counts = Object.fromEntries(
+    (body.agentProfiles || []).map((profile: { name: string, allowedToolCount: number }) => [
+      profile.name,
+      profile.allowedToolCount
+    ])
+  )
+  expect(counts).toEqual({
+    administration_expert: 3,
+    assay_expert: 12,
+    audit_expert: 3,
+    inventory_expert: 6,
+    logistics_expert: 4,
+    main_agent: 0,
+    master_data_expert: 3,
+    pallet_expert: 9,
+    production_expert: 7,
+    warehouse_expert: 5
+  })
+}
 
 async function resolveToken(request: APIRequestContext) {
   if (process.env.AGENT_E2E_TOKEN) return process.env.AGENT_E2E_TOKEN

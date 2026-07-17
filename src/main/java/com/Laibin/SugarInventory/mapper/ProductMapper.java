@@ -106,6 +106,9 @@ public interface ProductMapper extends BaseMapper<Product> {
             "   updated_at = #{updatedAt} " +
             "</set>" +
             "WHERE id = #{productId}" +
+            "<if test='requireNoInventory'>" +
+            "  AND NOT EXISTS (SELECT 1 FROM inventory i WHERE i.product_id = #{productId})" +
+            "</if>" +
             "</script>")
     int dynamicUpdate(
             @Param("productId") Integer productId,
@@ -118,7 +121,8 @@ public interface ProductMapper extends BaseMapper<Product> {
             @Param("screenMeshId") Integer screenMeshId,
             @Param("updatedBy") Integer updatedBy,
             @Param("updatedAt") LocalDateTime updatedAt,
-            @Param("canStack") Boolean canStack
+            @Param("canStack") Boolean canStack,
+            @Param("requireNoInventory") boolean requireNoInventory
     );
 
     @Delete("DELETE FROM product WHERE id = #{id}")

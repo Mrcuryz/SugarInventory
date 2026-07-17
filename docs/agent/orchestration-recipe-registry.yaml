@@ -1,0 +1,26 @@
+registryVersion: m1.4-production-hardening-1
+recipes:
+  - recipeId: warehouse_inventory_latest_assay
+    planVersion: 1
+    executionMode: controlled_sequential
+    dataScope: PRODUCT_LATEST_ASSAY
+    batchQualificationSupported: false
+    maxSteps: 4
+    maxToolCalls: 12
+    maxProductFanOut: 5
+    steps:
+      - stepId: inventory_scope
+        expert: inventory_expert
+        allowedTools: [resolve_warehouses, get_inventory_distribution]
+      - stepId: latest_assay
+        expert: assay_expert
+        allowedTools: [resolve_products, query_assay_records]
+        dependsOn: [inventory_scope]
+      - stepId: safe_summary
+        expert: main_agent
+        allowedTools: []
+        dependsOn: [latest_assay]
+    limitations:
+      - 最新产品化验不能证明当前库存批次均合格。
+      - 最多查询五类产品；超出部分不继续扇出。
+      - 不允许模型新增、重排或替换步骤和工具。

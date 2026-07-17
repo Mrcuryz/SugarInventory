@@ -3,6 +3,7 @@
 import axios from 'axios';
 
 import {ElMessage} from 'element-plus'
+import {isJsonParseErrorMessage, resolveResponseMessage} from './requestError.mjs'
 //定义一个变量,记录公共的前缀  ,  baseURL
 // const baseURL = 'http://localhost:8080/api';
 const baseURL = '/api';
@@ -56,13 +57,15 @@ instance.interceptors.response.use(
         }
         //操作失败
         //JSON parse error
-        if (result.data.code === 500 && result.data.msg.includes('JSON parse error')) {
+        const responseMessage = resolveResponseMessage(result.data)
+        if (result.data?.code === 500 && isJsonParseErrorMessage(responseMessage)) {
             ElMessage.error('请检查输入参数是否正确')
-            return Promise.reject(result.data)
+            return Promise.reject({...result.data, msg: '请检查输入参数是否正确'})
         }
-        ElMessage.error(result.data.msg ? result.data.msg : '服务异常')
+        ElMessage.error(responseMessage)
         //异步操作的状态转换为失败
-        return Promise.reject(result.data)
+        const errorPayload = result.data && typeof result.data === 'object' ? result.data : {}
+        return Promise.reject({...errorPayload, msg: responseMessage})
 
     },
     err => {
@@ -74,7 +77,7 @@ instance.interceptors.response.use(
             redirectToLogin()
         } else if (err?.response?.status) {
             const data = err.response.data
-            const message = data?.msg || data?.message || data || `请求失败：${err.response.status}`
+            const message = resolveResponseMessage(data, `请求失败：${err.response.status}`)
             ElMessage.error(message)
         }
         return Promise.reject(err);//异步的状态转化成失败的状态

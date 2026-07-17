@@ -46,12 +46,13 @@ import java.util.regex.Pattern;
 @Service
 public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     private static final Logger log = LoggerFactory.getLogger(RuntimeRoutingAgentGatewayService.class);
-    private static final String UNAVAILABLE_MESSAGE = "AI 助手暂时不可用，请稍后重试。";
+    private static final String UNAVAILABLE_MESSAGE = "Agent 服务暂不可用，本次未执行任何业务查询或变更。";
     private static final Set<String> SAFE_PAGE_CONTEXT_KEYS = Set.of("path", "routeName", "pageTitle");
     private static final Set<String> STREAM_EVENT_TYPES = Set.of(
             "message_start", "progress", "clarification", "text_delta", "card", "error", "message_end",
-            "tool_start", "tool_end", "debug", "heartbeat", "cancelled", "timeout", "fallback");
+            "tool_start", "tool_end", "debug", "audit", "heartbeat", "cancelled", "timeout", "fallback");
     private static final Set<String> DEBUG_STREAM_EVENT_TYPES = Set.of("tool_start", "tool_end", "debug");
+    private static final Set<String> INTERNAL_STREAM_EVENT_TYPES = Set.of("audit");
     private static final Pattern INTERNAL_TEXT = Pattern.compile(
             "(?i)(authorization|bearer\\s+|delegationToken|refreshToken|productId|warehouseId|toolName|stackTrace|jdbc:|\\bSUCCESS\\b|\\btoken\\b)");
     private static final Pattern LABEL_ID = Pattern.compile("\\s*[(（]#\\d+[)）]\\s*");
@@ -273,6 +274,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             }
             recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), activeStream.messageId(), requestId, traceId, request,
                     "python_stream", resultCode, errorCode, fallbackUsed, auditResponse, elapsedMillis(startedAt));
+            recordAgentHandoffAudit(session, activeStream, resultCode, errorCode, elapsedMillis(startedAt));
             activeStreams.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()), activeStream);
             cancelledMessageKeys.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()));
         }
@@ -326,6 +328,14 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
 
     @Override
     public void clearSession(String agentSessionId) {
+        if (properties.getMode() == AgentRuntimeProperties.Mode.PYTHON
+                || pythonContextSessions.contains(agentSessionId)) {
+            try {
+                pythonAgentClient.clearSession(agentSessionId);
+            } catch (PythonAgentClientException e) {
+                log.warn("Python Agent session cleanup failed; errorCode={}", safeCode(e.getCode()));
+            }
+        }
         pythonContextSessions.remove(agentSessionId);
         legacyFallbackSessions.remove(agentSessionId);
         activeStreams.entrySet().removeIf(entry -> entry.getValue().agentSessionId().equals(agentSessionId));
@@ -454,16 +464,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     }
 
     private boolean canFallback(String agentSessionId, AgentMessageRequestDTO request) {
-        if (!properties.isFallbackEnabled()
-                || pythonContextSessions.contains(agentSessionId)
-                || selectedOption(request.getPageContext()) != null) {
-            return false;
-        }
-        String message = request.getMessage() == null ? "" : request.getMessage().trim();
-        if (message.isBlank() || containsAny(message, "这些", "它", "刚才", "那个", "这个", "上述", "前面", "继续", "展开")) {
-            return false;
-        }
-        return containsAny(message, "库存", "库位", "仓库", "容量", "托盘", "化验");
+        return false;
     }
 
     private AgentMessageResponseVO unavailableResponse(AgentSessionVO session) {
@@ -595,6 +596,10 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             throw new InvalidStreamEventException();
         }
         validateInterruptStreamEvent(activeStream, source);
+        if (INTERNAL_STREAM_EVENT_TYPES.contains(type)) {
+            activeStream.recordAgentHandoff(source.getPayload());
+            return;
+        }
         if (DEBUG_STREAM_EVENT_TYPES.contains(type) && !isAdmin(loginUser)) {
             return;
         }
@@ -880,6 +885,33 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
     }
 
+    private void recordAgentHandoffAudit(AgentSessionVO session,
+                                         ActiveStream activeStream,
+                                         String resultCode,
+                                         String errorCode,
+                                         long durationMs) {
+        String summary = activeStream.agentHandoffSummary();
+        if (summary == null) {
+            return;
+        }
+        try {
+            AgentToolAuditDTO audit = new AgentToolAuditDTO();
+            audit.setToolName("agent_handoff");
+            audit.setToolCallId(activeStream.messageId());
+            audit.setMessageId(activeStream.messageId());
+            audit.setUpstreamPath("/internal/agent/chat/stream");
+            audit.setArgumentsSummary(summary);
+            audit.setRequestSummary("sourceAgent=main_agent");
+            audit.setResponseSummary("resultCode=" + resultCode);
+            audit.setResultCode(resultCode);
+            audit.setErrorCode(errorCode);
+            audit.setDurationMs(durationMs);
+            agentSessionService.recordToolAudit(session.getAgentSessionId(), session.getUserId(), audit);
+        } catch (RuntimeException e) {
+            log.warn("Agent handoff audit could not be recorded; errorCode=AGENT_HANDOFF_AUDIT_FAILED");
+        }
+    }
+
     private String safeErrorMessage(String code) {
         if (code == null) {
             return UNAVAILABLE_MESSAGE;
@@ -969,6 +1001,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         private final AtomicInteger sequence = new AtomicInteger(0);
         private final Set<String> interruptIds = ConcurrentHashMap.newKeySet();
         private volatile String resultCode = "COMPLETED";
+        private volatile String agentHandoffSummary;
 
         private ActiveStream(String agentSessionId, String messageId, SseEmitter emitter) {
             this.agentSessionId = agentSessionId;
@@ -1009,6 +1042,30 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
                     cancelled.set(true);
                 }
             }
+        }
+
+        private void recordAgentHandoff(JsonNode payload) {
+            if (payload == null || payload.isNull()) {
+                return;
+            }
+            JsonNode handoff = payload.path("intentRouter").path("agent_handoff");
+            String targetAgent = safeAuditIdentifier(handoff.path("target_agent").asText(null));
+            String businessDomain = safeAuditIdentifier(handoff.path("business_domain").asText(null));
+            String mode = safeAuditIdentifier(handoff.path("mode").asText(null));
+            if (targetAgent == null) {
+                return;
+            }
+            agentHandoffSummary = "targetAgent=" + targetAgent
+                    + "; businessDomain=" + businessDomain
+                    + "; handoffMode=" + mode;
+        }
+
+        private String agentHandoffSummary() {
+            return agentHandoffSummary;
+        }
+
+        private static String safeAuditIdentifier(String value) {
+            return value != null && value.matches("[a-z][a-z0-9_]{0,79}") ? value : null;
         }
 
         private void cancel() {

@@ -1,0 +1,21 @@
+[Unit]
+Description=Laibin Sugar Inventory Backend
+After=network-online.target mysql.service laibin-agent.service
+Wants=network-online.target
+Requires=laibin-agent.service
+
+[Service]
+Type=simple
+User=laibin
+Group=laibin
+WorkingDirectory=/opt/laibin-sugar/backend
+EnvironmentFile=/etc/laibin-sugar/backend.env
+ExecStart=/usr/bin/java -jar /opt/laibin-sugar/backend/app.jar
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

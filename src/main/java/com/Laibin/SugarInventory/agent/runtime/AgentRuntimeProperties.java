@@ -13,9 +13,9 @@ public class AgentRuntimeProperties {
         PYTHON
     }
 
-    private Mode mode = Mode.LEGACY;
+    private Mode mode = Mode.PYTHON;
     private String pythonBaseUrl = "http://localhost:8091";
     private long pythonTimeoutMs = 30000;
     private String pythonServiceKey = "";
-    private boolean fallbackEnabled = true;
+    private boolean fallbackEnabled = false;
 }

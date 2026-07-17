@@ -99,6 +99,10 @@ class InventoryDistributionServiceImplTest {
         assertThat(result.getNotes()).anyMatch(note -> note.contains("不同每板件数"));
         assertThat(result.getNotes()).anyMatch(note -> note.contains("过滤条件"));
         assertThat(result.getGroups().get(0).getProductLabel()).contains("黄冰糖（袋）");
+        assertThat(result.getGroups().get(0).getCanonicalProductName()).isEqualTo("黄冰糖");
+        assertThat(result.getCalculationNote()).contains("一个二维码板位", "不再叠加整板", "产品管理当前配置");
+        assertThat(result.getNotes()).contains(result.getCalculationNote());
+        assertThat(result.getNotes()).noneMatch(note -> note.contains("尚未由业务负责人确认"));
     }
 
     @Test

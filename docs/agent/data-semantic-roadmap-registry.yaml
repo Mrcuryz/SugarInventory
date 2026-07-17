@@ -1,0 +1,356 @@
+registryVersion: data-semantic-roadmap-2026-07-13
+status: DESIGN_ONLY
+runtimeEnabled: false
+timezone: Asia/Shanghai
+scopeFields: [organizationScope, plantScope, warehouseAreaScope]
+
+datasetContract:
+  requiredFields:
+    - datasetId
+    - version
+    - type
+    - grain
+    - owner
+    - eventOrSnapshotTime
+    - sourceRefs
+    - scopeFields
+    - retentionPolicy
+    - dataQuality
+    - status
+  mutationRule: "事实修正使用更正事件或新版本，不静默覆盖已发布历史。"
+
+datasets:
+  - datasetId: inventory_snapshot
+    version: 1
+    type: SNAPSHOT
+    grain: "snapshotAt × organization × plant × warehouseArea × warehouse × side × row × layer × product × productionDate × pallet"
+    owner: inventory_domain_owner
+    eventOrSnapshotTime: snapshotAt
+    sourceRefs: [inventory, warehouse, product, pallet_code]
+    scopeFields: [organizationScope, plantScope, warehouseAreaScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: TO_BE_DEFINED
+      completenessChecks: [all_inventory_rows_scoped, product_conversion_present]
+      uniquenessKey: [snapshotAt, warehouseRef, side, row, layer, inventoryRef]
+      knownGaps: [historical_snapshot_not_implemented, warehouse_cur_capacity_consistency_needs_test]
+    status: BLOCKED
+
+  - datasetId: stock_movement
+    version: 1
+    type: EVENT_FACT
+    grain: "one normalized inbound/outbound/transfer business event line"
+    owner: logistics_domain_owner
+    eventOrSnapshotTime: occurredAt
+    sourceRefs: [in_stock, out_stock, semi_product_record, pallet_flow_record, pallet_task]
+    scopeFields: [organizationScope, plantScope, warehouseAreaScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: NEAR_REAL_TIME
+      completenessChecks: [movement_has_source_ref, quantity_convertible, source_and_target_scope_valid]
+      uniquenessKey: [movementSourceType, movementSourceRef, movementLineRef]
+      knownGaps: [traditional_and_pallet_flow_deduplication, some_write_paths_lack_audit]
+    status: DESIGN_ONLY
+
+  - datasetId: production_order
+    version: 1
+    type: EVENT_AND_SNAPSHOT_FACT
+    grain: "one production order version or status event"
+    owner: production_domain_owner
+    eventOrSnapshotTime: eventAt
+    sourceRefs: [production_order]
+    scopeFields: [organizationScope, plantScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: NEAR_REAL_TIME
+      completenessChecks: [order_number_unique, status_known, order_type_known]
+      uniquenessKey: [orderRef, orderVersion, eventType]
+      knownGaps: [status_enum_scattered, terminal_state_definition_pending]
+    status: DESIGN_ONLY
+
+  - datasetId: material
+    version: 1
+    type: EVENT_FACT
+    grain: "production order × actual material pick line × pallet"
+    owner: production_domain_owner
+    eventOrSnapshotTime: pickedAt
+    sourceRefs: [production_order_material, inventory, pallet_flow_record]
+    scopeFields: [organizationScope, plantScope, warehouseAreaScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: NEAR_REAL_TIME
+      completenessChecks: [order_ref_present, product_ref_present, quantity_convertible]
+      uniquenessKey: [orderRef, materialLineRef, palletCycleRef]
+      knownGaps: [planned_material_json_needs_versioned_schema, unit_conversion_rule_pending]
+    status: DESIGN_ONLY
+
+  - datasetId: output
+    version: 1
+    type: EVENT_FACT
+    grain: "production order × product × output line or label batch"
+    owner: production_domain_owner
+    eventOrSnapshotTime: outputAt
+    sourceRefs: [production_order_output, production_label_batch, production_order_output_code]
+    scopeFields: [organizationScope, plantScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: NEAR_REAL_TIME
+      completenessChecks: [order_ref_present, product_ref_present, output_quantity_convertible]
+      uniquenessKey: [orderRef, outputLineRef, labelBatchRef]
+      knownGaps: [planned_output_json_needs_versioned_schema, yield_unit_definition_pending]
+    status: DESIGN_ONLY
+
+  - datasetId: assay
+    version: 1
+    type: VERSIONED_FACT
+    grain: "assay record version × metric code"
+    owner: quality_domain_owner
+    eventOrSnapshotTime: sampleAt
+    sourceRefs: [assay, quality_standard, product_quality_standard_relation]
+    scopeFields: [organizationScope, plantScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: DAILY_OR_BETTER
+      completenessChecks: [product_ref_present, sample_time_present, metric_code_registered, standard_version_recorded]
+      uniquenessKey: [assayRecordRef, assayVersion, metricCode]
+      knownGaps: [inventory_batch_link_missing, no_standard_and_multiple_candidate_semantics_need_explicit_metric_policy]
+    status: DESIGN_ONLY
+
+  - datasetId: pallet_lifecycle
+    version: 1
+    type: EVENT_FACT
+    grain: "pallet code × lifecycle cycle × event"
+    owner: pallet_domain_owner
+    eventOrSnapshotTime: eventAt
+    sourceRefs: [pallet_code, pallet_task, pallet_flow_record, inventory]
+    scopeFields: [organizationScope, plantScope, warehouseAreaScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: NEAR_REAL_TIME
+      completenessChecks: [code_ref_present, cycle_number_present, event_type_registered]
+      uniquenessKey: [codeRef, cycleNo, eventRef]
+      knownGaps: [independent_scan_log_missing]
+    status: DESIGN_ONLY
+
+  - datasetId: warehouse_capacity
+    version: 1
+    type: SNAPSHOT
+    grain: "snapshotAt × organization × plant × warehouseArea × warehouse × side"
+    owner: warehouse_domain_owner
+    eventOrSnapshotTime: snapshotAt
+    sourceRefs: [warehouse, inventory]
+    scopeFields: [organizationScope, plantScope, warehouseAreaScope]
+    retentionPolicy: TO_BE_DEFINED
+    dataQuality:
+      freshnessTarget: TO_BE_DEFINED
+      completenessChecks: [max_capacity_non_negative, occupied_not_above_capacity, inventory_reconciled]
+      uniquenessKey: [snapshotAt, warehouseRef, side]
+      knownGaps: [historical_snapshot_not_implemented, cur_capacity_maintenance_consistency_needs_test]
+    status: BLOCKED
+
+metricContract:
+  requiredFields:
+    - metricId
+    - version
+    - name
+    - owner
+    - formula
+    - unit
+    - timeSemantics
+    - sourceDatasets
+    - allowedDimensions
+    - dataQuality
+    - status
+  activationRule: "ACTIVE 指标必须有固定测试数据、期望结果和 registry hash。"
+
+metrics:
+  - metricId: inventory_equivalent_pieces
+    version: 1
+    name: 库存等价总件数
+    owner: inventory_domain_owner
+    formula: "SUM(fullPalletQuantity * piecesPerPallet + loosePieceQuantity)"
+    unit: PIECE
+    timeSemantics:
+      type: SNAPSHOT_TIME
+      field: snapshotAt
+      timezone: Asia/Shanghai
+    sourceDatasets: [inventory_snapshot@1]
+    allowedDimensions: [organization, plant, warehouseArea, warehouse, product, productType, productStatus, productionDate]
+    dataQuality:
+      freshness: "inherits inventory_snapshot"
+      missingConversion: EXCLUDE_AND_WARN
+      divisionByZero: NOT_APPLICABLE
+      knownGaps: [historical_snapshot_not_implemented]
+    status: DRAFT
+
+  - metricId: inventory_age_days
+    version: 1
+    name: 库龄天数
+    owner: inventory_domain_owner
+    formula: "DATE_DIFF(asOfDate, entryDate)"
+    unit: DAY
+    timeSemantics:
+      type: SNAPSHOT_AS_OF
+      field: snapshotAt
+      timezone: Asia/Shanghai
+    sourceDatasets: [inventory_snapshot@1]
+    allowedDimensions: [organization, plant, warehouseArea, warehouse, product, productionDate, ageBand]
+    dataQuality:
+      freshness: "inherits inventory_snapshot"
+      missingEntryDate: EXCLUDE_AND_WARN
+      negativeAge: INVALID_ROW
+      knownGaps: [shelf_life_rules_not_defined]
+    status: DRAFT
+
+  - metricId: stock_inbound_equivalent_pieces
+    version: 1
+    name: 入库等价件数
+    owner: logistics_domain_owner
+    formula: "SUM(normalizedEquivalentPieces) WHERE movementType = INBOUND"
+    unit: PIECE
+    timeSemantics:
+      type: EVENT_TIME
+      field: occurredAt
+      timezone: Asia/Shanghai
+    sourceDatasets: [stock_movement@1]
+    allowedDimensions: [organization, plant, warehouseArea, warehouse, product, day, week, month, movementSourceType]
+    dataQuality:
+      freshness: NEAR_REAL_TIME
+      duplicateHandling: DEDUP_BY_SOURCE_REF
+      missingConversion: EXCLUDE_AND_WARN
+      knownGaps: [traditional_and_pallet_flow_deduplication]
+    status: DRAFT
+
+  - metricId: stock_outbound_equivalent_pieces
+    version: 1
+    name: 出库等价件数
+    owner: logistics_domain_owner
+    formula: "SUM(normalizedEquivalentPieces) WHERE movementType = OUTBOUND"
+    unit: PIECE
+    timeSemantics:
+      type: EVENT_TIME
+      field: occurredAt
+      timezone: Asia/Shanghai
+    sourceDatasets: [stock_movement@1]
+    allowedDimensions: [organization, plant, warehouseArea, warehouse, product, day, week, month, movementSourceType]
+    dataQuality:
+      freshness: NEAR_REAL_TIME
+      duplicateHandling: DEDUP_BY_SOURCE_REF
+      missingConversion: EXCLUDE_AND_WARN
+      knownGaps: [traditional_and_pallet_flow_deduplication]
+    status: DRAFT
+
+  - metricId: warehouse_capacity_utilization_rate
+    version: 1
+    name: 库位容量利用率
+    owner: warehouse_domain_owner
+    formula: "100 * SUM(occupiedSlots) / SUM(maxSlots)"
+    unit: PERCENT
+    timeSemantics:
+      type: SNAPSHOT_TIME
+      field: snapshotAt
+      timezone: Asia/Shanghai
+    sourceDatasets: [warehouse_capacity@1]
+    allowedDimensions: [organization, plant, warehouseArea, warehouse, side]
+    dataQuality:
+      freshness: "inherits warehouse_capacity"
+      divisionByZero: NULL_AND_WARN
+      overCapacity: INVALID_AND_ALERT
+      knownGaps: [historical_snapshot_not_implemented]
+    status: BLOCKED
+
+  - metricId: production_order_completion_rate
+    version: 1
+    name: 生产订单完成率
+    owner: production_domain_owner
+    formula: "100 * completedOrderCount / eligibleOrderCount"
+    unit: PERCENT
+    timeSemantics:
+      type: EVENT_TIME_WITH_COHORT
+      field: eventAt
+      timezone: Asia/Shanghai
+    sourceDatasets: [production_order@1]
+    allowedDimensions: [organization, plant, orderType, team, day, week, month]
+    dataQuality:
+      freshness: NEAR_REAL_TIME
+      divisionByZero: NULL_AND_WARN
+      terminalStatePolicy: TO_BE_APPROVED
+      knownGaps: [status_enum_scattered, eligible_order_definition_pending]
+    status: BLOCKED
+
+  - metricId: material_consumption_variance_rate
+    version: 1
+    name: 材料消耗差异率
+    owner: production_domain_owner
+    formula: "100 * (actualMaterialEquivalent - plannedMaterialEquivalent) / plannedMaterialEquivalent"
+    unit: PERCENT
+    timeSemantics:
+      type: ORDER_COHORT_TIME
+      field: productionDate
+      timezone: Asia/Shanghai
+    sourceDatasets: [production_order@1, material@1]
+    allowedDimensions: [organization, plant, order, materialProduct, orderType, productionDate]
+    dataQuality:
+      freshness: NEAR_REAL_TIME
+      divisionByZero: NULL_AND_WARN
+      missingPlan: EXCLUDE_AND_WARN
+      knownGaps: [planned_material_schema_pending, unit_conversion_rule_pending]
+    status: BLOCKED
+
+  - metricId: production_yield_rate
+    version: 1
+    name: 生产产出率
+    owner: production_domain_owner
+    formula: "100 * actualOutputEquivalentWeight / actualInputEquivalentWeight"
+    unit: PERCENT
+    timeSemantics:
+      type: ORDER_COHORT_TIME
+      field: productionDate
+      timezone: Asia/Shanghai
+    sourceDatasets: [material@1, output@1]
+    allowedDimensions: [organization, plant, order, outputProduct, orderType, productionDate]
+    dataQuality:
+      freshness: NEAR_REAL_TIME
+      divisionByZero: NULL_AND_WARN
+      missingWeightConversion: EXCLUDE_AND_WARN
+      knownGaps: [yield_business_definition_pending, loss_and_rework_policy_pending]
+    status: BLOCKED
+
+  - metricId: assay_pass_rate
+    version: 1
+    name: 化验通过率
+    owner: quality_domain_owner
+    formula: "100 * PASS_count / (PASS_count + FAIL_count); exclude NO_STANDARD and MULTIPLE_CANDIDATES"
+    unit: PERCENT
+    timeSemantics:
+      type: SAMPLE_EVENT_TIME
+      field: sampleAt
+      timezone: Asia/Shanghai
+    sourceDatasets: [assay@1]
+    allowedDimensions: [organization, plant, product, productType, standardVersion, metricCode, day, week, month]
+    dataQuality:
+      freshness: DAILY_OR_BETTER
+      divisionByZero: NULL_AND_WARN
+      excludedStatusesReportedSeparately: [NO_STANDARD, MULTIPLE_CANDIDATES]
+      knownGaps: [business_approval_of_multiple_candidate_treatment]
+    status: DRAFT
+
+  - metricId: qr_inbound_completion_rate
+    version: 1
+    name: 二维码入库完成率
+    owner: pallet_domain_owner
+    formula: "100 * inboundCodeCount / printedCodeCount within the same registered code family and scope"
+    unit: PERCENT
+    timeSemantics:
+      type: EVENT_TIME_AND_AS_OF
+      field: printedAt
+      asOfField: dataAsOf
+      timezone: Asia/Shanghai
+    sourceDatasets: [pallet_lifecycle@1, output@1]
+    allowedDimensions: [organization, plant, codeFamily, order, labelBatch, product, day, week, month]
+    dataQuality:
+      freshness: NEAR_REAL_TIME
+      divisionByZero: NULL_AND_WARN
+      codeFamilyMustMatch: true
+      knownGaps: [independent_scan_log_missing]
+    status: DRAFT

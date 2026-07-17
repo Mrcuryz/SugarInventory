@@ -13,6 +13,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  shadowCompareMode: {
+    type: Boolean,
+    default: false
+  },
   sending: {
     type: Boolean,
     default: false
@@ -23,6 +27,26 @@ const emit = defineEmits(['choose-option', 'feedback', 'card-action'])
 
 const feedbackExpanded = ref(false)
 const cards = computed(() => visibleCards(props.item))
+const shadowComparison = computed(() => {
+  if (!props.shadowCompareMode || props.item.role !== 'assistant') return null
+  const trace = props.item.intentTrace
+  const shadow = trace?.goalDraftShadow
+  if (!trace?.intent_type || !shadow) return null
+  const draft = shadow.draft || {}
+  return {
+    routerGoal: trace.intent_subtype || trace.intent_type,
+    routerAction: trace.next_action || 'unknown',
+    modelStatus: shadow.status || 'UNAVAILABLE',
+    modelGoal: draft.goalType || '未生成',
+    dataNeed: draft.dataNeed || '未知',
+    clarification: draft.needsClarification === true ? '需要' : '不需要',
+    contextReuse: Array.isArray(draft.contextReuse) && draft.contextReuse.length
+      ? draft.contextReuse.join('、')
+      : '无',
+    confidence: typeof draft.confidence === 'number' ? `${Math.round(draft.confidence * 100)}%` : '未知',
+    latency: Number.isFinite(shadow.latencyMs) ? `${shadow.latencyMs}ms` : '未知'
+  }
+})
 const canSendFeedback = computed(() => (
   props.item.role === 'assistant' &&
   props.item.messageId &&
@@ -85,6 +109,21 @@ const sendFeedback = (feedbackType) => {
         <span>{{ call.resultCode }}</span>
         <span v-if="call.errorCode">{{ call.errorCode }}</span>
       </div>
+    </div>
+
+    <div v-if="shadowComparison" class="shadow-comparison">
+      <div class="shadow-comparison-title">Router / 模型 Shadow 对比</div>
+      <div class="shadow-comparison-grid">
+        <span>Router 目标</span><strong>{{ shadowComparison.routerGoal }}</strong>
+        <span>Router 动作</span><strong>{{ shadowComparison.routerAction }}</strong>
+        <span>模型状态</span><strong>{{ shadowComparison.modelStatus }}</strong>
+        <span>模型目标</span><strong>{{ shadowComparison.modelGoal }}</strong>
+        <span>数据需要</span><strong>{{ shadowComparison.dataNeed }}</strong>
+        <span>模型追问</span><strong>{{ shadowComparison.clarification }}</strong>
+        <span>上下文复用</span><strong>{{ shadowComparison.contextReuse }}</strong>
+        <span>置信度 / 耗时</span><strong>{{ shadowComparison.confidence }} / {{ shadowComparison.latency }}</strong>
+      </div>
+      <div class="shadow-comparison-note">仅用于 UAT 对照；实际执行仍由 Router 与 Runtime 边界控制。</div>
     </div>
 
     <div v-if="showFeedbackTrigger" class="feedback-entry">
@@ -249,6 +288,41 @@ const sendFeedback = (feedbackType) => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.shadow-comparison {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #b8d1ff;
+  border-radius: 8px;
+  background: #f5f8ff;
+  color: #475467;
+  font-size: 12px;
+}
+
+.shadow-comparison-title {
+  color: #175cd3;
+  font-weight: 700;
+}
+
+.shadow-comparison-grid {
+  display: grid;
+  grid-template-columns: minmax(82px, auto) minmax(0, 1fr);
+  gap: 5px 10px;
+}
+
+.shadow-comparison-grid strong {
+  min-width: 0;
+  color: #344054;
+  overflow-wrap: anywhere;
+}
+
+.shadow-comparison-note {
+  padding-top: 7px;
+  border-top: 1px solid #dce7ff;
+  color: #667085;
 }
 
 .feedback-actions {

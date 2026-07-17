@@ -1,0 +1,132 @@
+schemaVersion: "1.0"
+asOf: "2026-07-15"
+stage: "M2-0.1"
+runtimeActivationAllowed: false
+
+metricRules:
+  - ruleId: inventory_equivalent_pieces
+    version: 1
+    status: CONFIRMED
+    businessDefinition: "每条当前库存记录对应一个二维码板位；满板时按产品每板件数计算，不足一板时 pieces 表示该板实际件数，不再额外叠加整板。"
+    formula: "SUM(CASE WHEN pieces > 0 THEN pieces ELSE quantity * pieces_per_pallet END)"
+    unit: "piece"
+    sourceFields:
+      - "inventory.quantity"
+      - "inventory.pieces"
+      - "product.pieces_per_pallet"
+    conversionParameterSource:
+      status: CONFIRMED_CONFIGURATION_SOURCE
+      configuredIn: "product management"
+      piecesPerPalletField: "product.pieces_per_pallet"
+      evidence: "2026-07-15 用户业务说明：每板固定 x 件，由用户在产品管理中配置。"
+    validStates:
+      - state: "quantity = 1 AND pieces = 0"
+        meaning: "一个满板二维码板位，实际件数为 product.pieces_per_pallet。"
+      - state: "quantity = 1 AND 0 < pieces < pieces_per_pallet"
+        meaning: "一个不足满板但仍完整占用板位的二维码，实际件数仅以 pieces 为准。"
+    legacyReviewStates:
+      - state: "quantity > 1 AND pieces = 0"
+        meaning: "不符合现行一板一码规则的历史兼容记录；查询时按 quantity * pieces_per_pallet 兼容，但不得由新写路径继续产生。"
+      - state: "pieces IS NULL"
+        meaning: "数据库字段允许 NULL；历史查询暂按 0 兼容，并列入数据质量画像。"
+    invalidStates:
+      - "quantity IS NULL OR quantity <= 0"
+      - "pieces < 0"
+      - "pieces >= pieces_per_pallet"
+      - "quantity > 1 AND pieces > 0"
+      - "pieces_per_pallet IS NULL OR pieces_per_pallet <= 0"
+    nullHandling: "现行写路径应写入 0；历史 NULL 查询按 0 兼容，但必须纳入数据质量画像，不得继续新增。"
+    deduplication: "按 inventory.id 一行一次；允许的 inventory→product、inventory→warehouse 都必须保持多对一，禁止连接后重复库存行。"
+    rounding: "整数指标，不舍入；中间计算使用足够宽的整数类型并检查溢出。"
+    legacyHandling: "quantity > 1 且 pieces = 0 暂按历史多板记录兼容；其他非法状态先做脱敏聚合画像，再决定修复或隔离。"
+    currentDatabaseEvidence: "NOT_SAMPLED_CURRENT_DEPLOYMENT"
+    codeEvidence:
+      - "docs/方案/2026-04-27-single-qr-single-inventory-rule.md"
+      - "docs/方案/2026-04-28-finished-inbound-semi-consumption-loose-piece-audit.md"
+      - "src/main/java/com/Laibin/SugarInventory/service/impl/SemiProductRecordServiceImpl.java"
+      - "src/main/java/com/Laibin/SugarInventory/service/model/PalletInventoryOccupancyRule.java"
+      - "src/main/java/com/Laibin/SugarInventory/service/impl/OutStockServiceImpl.java"
+      - "laibin.sql#v_warehouse_inventory_summary"
+    reconciliationTargets:
+      - "get_inventory_overview"
+      - "get_inventory_distribution"
+      - "query_inventory_ledger"
+      - "inventory summary page"
+    owner: "WMS_PRODUCT_OWNER"
+    approvedBy: "USER_BUSINESS_CONFIRMATION"
+    approvalRef: "Agent V1.1 thread, 2026-07-15"
+    implementationStatus: IMPLEMENTED_IN_CURRENT_INVENTORY_READ_AGGREGATES
+    dataQualityOpenItems:
+      - "未取得当前部署数据库中非法状态和历史 quantity > 1 记录的脱敏分布。"
+      - "数据库 inventory.quantity 注释仍描述为板数，未表达现行一板一码约束。"
+
+  - ruleId: total_weight_kg
+    version: 1
+    status: CONFIRMED
+    dependsOn:
+      ruleId: inventory_equivalent_pieces
+      minimumStatus: CONFIRMED
+    businessDefinition: "当前库存按已确认件数与已确认单件重量口径计算的总重量。"
+    formula: "inventory_equivalent_pieces * product.weight_per_piece"
+    unit: "kg"
+    weightSource: "product.weight_per_piece"
+    weightSourceStatus: CONFIRMED_CONFIGURATION_SOURCE
+    weightSourceEvidence: "2026-07-15 用户业务说明：每件固定重 y kg，由用户在产品管理中配置。"
+    estimatedByCurrentProductConfiguration: false
+    snapshotAvailableOnInventory: false
+    configurationImmutability: "产品存在当前 inventory 记录时，禁止修改 weight_per_piece 与 pieces_per_pallet；真实规格变化必须新建产品。"
+    nullZeroIllegalWeightHandling: "DATA_QUALITY_ERROR；不得用 COALESCE 变成 0，也不得从聚合中静默排除。"
+    packagingAndUnitHandling: "按产品主数据的 kg/件；不同包装必须是不同的受控产品记录，禁止模型换算任意单位。"
+    precision: "产品单件重量使用 DECIMAL(10,2)；行级不舍入，聚合后按现有展示规则输出。"
+    precisionStatus: "CONFIRMED_STORAGE_PRECISION"
+    historicalConfigurationHandling: "本规则只用于当前库存；库存清零后允许修改产品配置，因此历史重量分析仍需事件或规格快照，不能由当前产品配置反推。"
+    owner: "WMS_PRODUCT_OWNER"
+    approvedBy: "USER_BUSINESS_CONFIRMATION"
+    approvalRef: "Agent V1.1 thread, 2026-07-15"
+    implementationStatus: IMPLEMENTED_WITH_PRODUCT_UPDATE_GUARD
+    dataQualityOpenItems:
+      - "未取得当前部署数据库中非正 weight_per_piece 或 pieces_per_pallet 的脱敏分布。"
+
+permissionContract:
+  contractId: inventory_read_permission_contract
+  version: 1
+  status: BLOCKED
+  capability: inventory_read
+  requiredPermissions: null
+  requiredPermissionsProposal:
+    allOf:
+      - "inventory:view"
+    legacyPermissionToRetireOrMapExplicitly:
+      - "record:query"
+    forbiddenFallback:
+      - "isAuthenticated()"
+      - "仅凭 mcp:warehouse:read 代替业务权限"
+  deploymentScopeMode: UNCONFIRMED
+  allowedDeploymentScopeModes:
+    - GLOBAL_SINGLE_ORG
+    - WAREHOUSE_SCOPED
+    - OTHER
+  scopeInjectionOwner: JAVA_BACKEND
+  scopeSource: "PENDING_AUTHENTICATED_USER_DATA_SCOPE_POLICY"
+  agentPlanMaySpecifyScope: false
+  agentPlanMayNarrowScope: true
+  permissionDeniedCode: "INVENTORY_READ_PERMISSION_DENIED"
+  scopeUnresolvableCode: "INVENTORY_DATA_SCOPE_UNRESOLVED"
+  emptyResultCode: "INVENTORY_READ_NO_DATA"
+  upstreamFailureCode: "INVENTORY_READ_UPSTREAM_FAILURE"
+  failClosed: true
+  agentRule: "Agent 数据范围必须与页面相同或更严格；不能因走 Agent Gateway 获得页面没有的库存范围。"
+  confirmationsRequired:
+    - "当前部署是否为单组织。"
+    - "是否所有登录用户都可查看全部库存。"
+    - "是否存在按仓库、库区、角色、班组、人员或厂区的数据范围。"
+    - "未来是否计划多厂区或多组织。"
+    - "inventory:view 是否作为全部库存读取入口的统一权限，record:query 如何兼容。"
+    - "Agent 是否需要比页面权限更严格。"
+  owner: "PENDING_PRODUCT_SECURITY_DEPLOYMENT_OWNERS"
+  approvedBy: null
+  approvalRef: null
+  blockingReasons:
+    - "现有入口混用 isAuthenticated、record:query 和 inventory:view。"
+    - "Service 与 Mapper 未发现基于当前用户的仓库/组织行级范围注入。"
+    - "当前部署范围与未来多组织计划没有可核验确认。"

@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:mysql://127.0.0.1:3306/laibin_test?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${TEST_DB_USERNAME:laibin_test}
+    password: ${TEST_DB_PASSWORD:local-test-only}
+
+wechat:
+  appid: ${TEST_WECHAT_APP_ID:test-app-id}
+  secret: ${TEST_WECHAT_APP_SECRET:test-secret-not-for-production}
+
+openai:
+  api-key: ${TEST_OPENAI_API_KEY:test-api-key-not-for-production}
+
+jwt:
+  secret: ${TEST_JWT_SECRET:dGVzdC1vbmx5LWp3dC1zZWNyZXQtMzItYnl0ZXMtbWluaW11bQ==}
+
+agent:
+  internal-tool:
+    service-key: ${TEST_AGENT_INTERNAL_TOOL_SERVICE_KEY:test-internal-tool-key}
+  runtime:
+    python-service-key: ${TEST_AGENT_PYTHON_SERVICE_KEY:test-python-service-key}
+    fallback-enabled: false

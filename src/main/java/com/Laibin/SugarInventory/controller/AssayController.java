@@ -5,12 +5,27 @@ import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.dto.AssayAbnormalitiesQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AssayCheckDTO;
 import com.Laibin.SugarInventory.domain.dto.AssayQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.AssayReportDetailQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.AssayRecordsQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.AssayStandardCoverageQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AssaySubmitDTO;
+import com.Laibin.SugarInventory.domain.dto.ProductsWithoutRecentAssayQueryDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
+import com.Laibin.SugarInventory.domain.vo.AssayAbnormalitiesVO;
+import com.Laibin.SugarInventory.domain.vo.AssayReportDetailVO;
+import com.Laibin.SugarInventory.domain.vo.AssayRecordsVO;
+import com.Laibin.SugarInventory.domain.vo.AssayStandardCoverageVO;
 import com.Laibin.SugarInventory.domain.vo.AssayVO;
+import com.Laibin.SugarInventory.domain.vo.ProductsWithoutRecentAssayVO;
+import com.Laibin.SugarInventory.service.AssayAbnormalitiesService;
+import com.Laibin.SugarInventory.service.AssayReportDetailService;
+import com.Laibin.SugarInventory.service.AssayRecordsService;
 import com.Laibin.SugarInventory.service.AssayService;
+import com.Laibin.SugarInventory.service.AssayStandardCoverageService;
+import com.Laibin.SugarInventory.service.ProductsWithoutRecentAssayService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,6 +52,21 @@ public class AssayController {
     @Autowired
     private AssayService assayService;
 
+    @Autowired
+    private AssayRecordsService assayRecordsService;
+
+    @Autowired
+    private AssayReportDetailService assayReportDetailService;
+
+    @Autowired
+    private AssayAbnormalitiesService assayAbnormalitiesService;
+
+    @Autowired
+    private ProductsWithoutRecentAssayService productsWithoutRecentAssayService;
+
+    @Autowired
+    private AssayStandardCoverageService assayStandardCoverageService;
+
     @PostMapping("/import")
     @LogOperation(value = "化验数据", type = OperationType.INSERT)
     @Operation(summary = "导入化验记录", description = "批量导入化验记录")
@@ -61,7 +91,7 @@ public class AssayController {
         }
     }
 
-    @PreAuthorize("hasAuthority('quality:test')")
+    @PreAuthorize("hasAuthority('assay:view')")
     @Operation(summary = "查询化验记录", description = "根据查询条件分页查询化验记录")
     @PostMapping("/query")
     public Result<PageResult<AssayVO>> queryAssays(@RequestBody AssayQueryDTO query) {
@@ -72,7 +102,43 @@ public class AssayController {
         }
     }
 
+    @PreAuthorize("hasAuthority('assay:view')")
+    @Operation(summary = "受控化验记录分析查询", description = "按受控产品范围、采样日期范围和判定状态查询化验记录")
+    @PostMapping("/records/query")
+    public Result<AssayRecordsVO> queryAssayRecords(@RequestBody AssayRecordsQueryDTO query) {
+        return Result.success(assayRecordsService.queryRecords(query));
+    }
+
+    @PreAuthorize("hasAuthority('assay:view')")
+    @Operation(summary = "受控化验报告详情查询", description = "通过受控 reportRef 查询单条化验报告指标、判定和标准摘要")
+    @PostMapping("/report-detail/query")
+    public Result<AssayReportDetailVO> getAssayReportDetail(@RequestBody AssayReportDetailQueryDTO query) {
+        return Result.success(assayReportDetailService.getReportDetail(query));
+    }
+
+    @PreAuthorize("hasAuthority('assay:view')")
+    @Operation(summary = "受控化验异常分析查询", description = "按受控产品范围、采样日期范围和异常类型查询化验质量异常")
+    @PostMapping("/abnormalities/query")
+    public Result<AssayAbnormalitiesVO> queryAssayAbnormalities(@RequestBody AssayAbnormalitiesQueryDTO query) {
+        return Result.success(assayAbnormalitiesService.queryAbnormalities(query));
+    }
+
+    @PreAuthorize("hasAuthority('assay:view')")
+    @Operation(summary = "受控缺化验库存分析查询", description = "按当前在库库存查询指定日期范围内缺少有效化验的产品或库位分组")
+    @PostMapping("/products-without-recent-assay/query")
+    public Result<ProductsWithoutRecentAssayVO> queryProductsWithoutRecentAssay(@RequestBody ProductsWithoutRecentAssayQueryDTO query) {
+        return Result.success(productsWithoutRecentAssayService.queryProductsWithoutRecentAssay(query));
+    }
+
+    @PreAuthorize("hasAuthority('assay:view')")
+    @Operation(summary = "受控质量标准覆盖分析查询", description = "按当前在库产品查询质量标准覆盖缺口")
+    @PostMapping("/standard-coverage/query")
+    public Result<AssayStandardCoverageVO> queryAssayStandardCoverage(@RequestBody AssayStandardCoverageQueryDTO query) {
+        return Result.success(assayStandardCoverageService.queryCoverage(query));
+    }
+
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('assay:view')")
     @Operation(summary = "查询化验详情", description = "根据化验记录ID查询判定详情")
     public Result<AssayVO> getAssayById(@PathVariable Integer id) {
         try {
@@ -83,6 +149,7 @@ public class AssayController {
     }
 
     @GetMapping("/by-product-date")
+    @PreAuthorize("hasAuthority('assay:view')")
     @Operation(summary = "按产品和生产日期查询化验记录", description = "用于库存链路查看化验，不存在时返回空")
     public Result<AssayVO> getAssayByProductDate(@RequestParam Integer productId,
                                                  @RequestParam LocalDate productionDate) {

@@ -8,6 +8,11 @@ import com.Laibin.SugarInventory.domain.dto.FixedProductActivateDTO;
 import com.Laibin.SugarInventory.domain.dto.FixedProductBindDTO;
 import com.Laibin.SugarInventory.domain.dto.FixedProductPoolQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletCodeQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.PalletAnomaliesQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.PalletFlowRecordsQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.PalletLifecycleQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.PrintedNotInboundCodesQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.QrBatchInboundCompletionQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PalletQrExportDTO;
 import com.Laibin.SugarInventory.domain.dto.BindPalletTaskDTO;
 import com.Laibin.SugarInventory.domain.dto.BindTaskSemiItemsDTO;
@@ -35,17 +40,24 @@ import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.PalletBindResultVO;
 import com.Laibin.SugarInventory.domain.vo.PalletFlowCyclePageVO;
 import com.Laibin.SugarInventory.domain.vo.PalletFlowDetailVO;
+import com.Laibin.SugarInventory.domain.vo.PalletAnomaliesVO;
+import com.Laibin.SugarInventory.domain.vo.PalletFlowRecordsVO;
+import com.Laibin.SugarInventory.domain.vo.PalletLifecycleVO;
+import com.Laibin.SugarInventory.domain.vo.PrintedNotInboundCodesVO;
+import com.Laibin.SugarInventory.domain.vo.QrBatchInboundCompletionVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
 import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.service.PalletCodeService;
+import com.Laibin.SugarInventory.service.PalletLifecycleAnalysisService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -70,6 +82,9 @@ public class PalletCodeController {
 
     @Autowired
     private PalletCodeService palletCodeService;
+
+    @Autowired
+    private PalletLifecycleAnalysisService palletLifecycleAnalysisService;
 
     @Operation(summary = "批量生成托盘码", description = "根据数量批量生成托盘码")
     @PostMapping("/generate")
@@ -148,6 +163,7 @@ public class PalletCodeController {
 
     @Operation(summary = "托盘流转轮次分页", description = "按托盘码分页查询历史循环轮次摘要")
     @GetMapping("/{code}/flows/cycles")
+    @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<PageResult<PalletFlowCyclePageVO>> pageFlowCycles(@PathVariable("code") String code,
                                                                     @RequestParam(value = "pageNum", defaultValue = "1") Long pageNum,
                                                                     @RequestParam(value = "pageSize", defaultValue = "5") Long pageSize) {
@@ -161,6 +177,7 @@ public class PalletCodeController {
 
     @Operation(summary = "托盘流转明细", description = "按托盘码和循环号查询流转时间线")
     @GetMapping("/{code}/flows")
+    @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<List<PalletFlowDetailVO>> listFlowsByCycle(@PathVariable("code") String code,
                                                              @RequestParam("cycleNo") Integer cycleNo) {
         try {
@@ -241,8 +258,44 @@ public class PalletCodeController {
 
     @Operation(summary = "解析托盘码", description = "小程序扫码后解析托盘码并返回基础信息")
     @GetMapping("/parse")
+    @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<PalletCodeInfoVO> parse(@RequestParam("code") String code) {
         return Result.success(palletCodeService.parseAndGetInfo(code));
+    }
+
+    @Operation(summary = "二维码托盘生命周期查询", description = "按二维码或托盘码查询生成、打印、入库、流转和化验等只读生命周期摘要")
+    @PostMapping("/lifecycle/query")
+    @PreAuthorize("hasAuthority('qrcode:view')")
+    public Result<PalletLifecycleVO> queryQrCodeLifecycle(@RequestBody @Valid PalletLifecycleQueryDTO query) {
+        return Result.success(palletLifecycleAnalysisService.queryQrCodeLifecycle(query));
+    }
+
+    @Operation(summary = "托盘流转记录查询", description = "按托盘码、产品、库位、时间和事件类型查询受控流转记录")
+    @PostMapping("/flow-records/query")
+    @PreAuthorize("hasAuthority('qrcode:view')")
+    public Result<PalletFlowRecordsVO> queryPalletFlowRecords(@RequestBody PalletFlowRecordsQueryDTO query) {
+        return Result.success(palletLifecycleAnalysisService.queryPalletFlowRecords(query));
+    }
+
+    @Operation(summary = "已打印未入库二维码查询", description = "按标签批次、订单或产品范围查询已打印但尚未完成入库的二维码统计")
+    @PostMapping("/printed-not-inbound/query")
+    @PreAuthorize("hasAuthority('qrcode:view')")
+    public Result<PrintedNotInboundCodesVO> queryPrintedNotInboundCodes(@RequestBody PrintedNotInboundCodesQueryDTO query) {
+        return Result.success(palletLifecycleAnalysisService.queryPrintedNotInboundCodes(query));
+    }
+
+    @Operation(summary = "托盘生命周期异常查询", description = "查询托盘状态、库存、流转和产品绑定之间的受控不一致")
+    @PostMapping("/anomalies/query")
+    @PreAuthorize("hasAuthority('qrcode:view')")
+    public Result<PalletAnomaliesVO> queryPalletAnomalies(@RequestBody PalletAnomaliesQueryDTO query) {
+        return Result.success(palletLifecycleAnalysisService.queryPalletAnomalies(query));
+    }
+
+    @Operation(summary = "二维码批次入库完成率查询", description = "按标签批次、生产订单或产品范围统计二维码入库完成率")
+    @PostMapping("/batch-inbound-completion/query")
+    @PreAuthorize("hasAuthority('qrcode:view')")
+    public Result<QrBatchInboundCompletionVO> queryQrBatchInboundCompletion(@RequestBody QrBatchInboundCompletionQueryDTO query) {
+        return Result.success(palletLifecycleAnalysisService.queryQrBatchInboundCompletion(query));
     }
 
     @Operation(summary = "托盘码二维码", description = "生成托盘码对应的二维码图片(PNG)")
@@ -286,6 +339,7 @@ public class PalletCodeController {
 
     @Operation(summary = "托盘化验数据", description = "根据托盘码查询化验数据")
     @GetMapping("/{code}/assay")
+    @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<PalletAssayVO> getAssay(@PathVariable("code") String code) {
         try {
             PalletAssayVO vo = palletCodeService.getAssayByCode(code);
@@ -299,6 +353,7 @@ public class PalletCodeController {
 
     @Operation(summary = "托盘库存位置", description = "根据托盘码查询当前库存位置")
     @GetMapping("/{code}/inventory")
+    @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<PalletInventoryVO> getInventory(@PathVariable("code") String code) {
         try {
             PalletInventoryVO vo = palletCodeService.getInventoryByCode(code);

@@ -147,6 +147,8 @@ def events_for_response(
     terminal_payload = _terminal_context(response, terminal_context)
     if include_start:
         yield _event(builder.next("message_start", {"role": "assistant"}))
+    if response.reviewTrace:
+        yield _event(builder.next("audit", {"intentRouter": response.reviewTrace}))
     interrupt_card = next(
         (
             card
@@ -186,14 +188,28 @@ def events_for_response(
             )
         )
     elif response.error:
-        finish_reason = "timeout" if response.error.code in {"UPSTREAM_TIMEOUT", "PYTHON_AGENT_TIMEOUT"} else "error"
+        finish_reason = (
+            "timeout"
+            if response.error.code in {"UPSTREAM_TIMEOUT", "PYTHON_AGENT_TIMEOUT", "MODEL_TIMEOUT"}
+            else "error"
+        )
+        if response.error.code == "MODEL_TIMEOUT":
+            category = "MODEL_TIMEOUT"
+        elif response.error.code in {"LLM_PLAN_INVALID", "MODEL_UPSTREAM_ERROR"}:
+            category = "MODEL_ERROR"
+        elif response.error.code == "UPSTREAM_AUTHENTICATION_FAILED":
+            category = "AUTHENTICATION_ERROR"
+        elif response.error.code == "PERMISSION_DENIED":
+            category = "PERMISSION_DENIED"
+        else:
+            category = "TOOL_TIMEOUT" if finish_reason == "timeout" else "TOOL_ERROR"
         yield _event(
             builder.next(
                 "error",
                 {
                     "message": response.error.message,
                     "retryable": response.error.retryable,
-                    "category": "TOOL_TIMEOUT" if finish_reason == "timeout" else "TOOL_ERROR",
+                    "category": category,
                 },
             )
         )
@@ -248,7 +264,7 @@ def _finish_payload(finish_reason: str, terminal_context: EventPayload | None) -
 
 def _terminal_context(response: ChatResponse, terminal_context: EventPayload | None) -> EventPayload:
     payload: EventPayload = dict(terminal_context or {})
-    if response.reviewTrace:
+    if response.debug and response.reviewTrace:
         payload["reviewTrace"] = response.reviewTrace
     return payload
 

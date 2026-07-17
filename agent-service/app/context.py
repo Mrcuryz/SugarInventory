@@ -53,6 +53,17 @@ class ContextBuilder:
                     ],
                 )
             )
+        if state.selected_production_order is not None:
+            packs.append(
+                DomainContextPack(
+                    name="selected_production_order",
+                    triggerReason="current conversation has selected production order",
+                    instructions=[
+                        f"最近已确认生产订单：{state.selected_production_order.display_label}。",
+                        "涉及“这个订单、该订单、刚才的订单”时，必须沿用受控 orderRef，不得重新猜测订单。",
+                    ],
+                )
+            )
         return packs
 
     def _safety_pack(self) -> DomainContextPack:

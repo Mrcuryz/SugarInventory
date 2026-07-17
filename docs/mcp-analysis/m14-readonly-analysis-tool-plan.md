@@ -2,6 +2,27 @@
 
 本文档最初用于进入 M1.4 前的资产盘点和工具候选拆分。`get_inventory_distribution` 已完成 M1.4a-1 单品首版和 M1.4a-2 多范围、多过滤形态；其余候选仍仅为分析，不新增写操作。
 
+详细工具设计已拆分到 `docs/mcp-analysis/m14-module-tool-design.md`。后续实现 M1.4b-f 工具时，以本文档确定模块范围，以详细设计文档确定工具输入、输出、planner 规则、safe adapter、前端展示、审计和测试要求。
+
+## 当前基础能力对 M1.4 的影响
+
+M1.4 后续工具应直接复用以下已完成基础能力：
+
+- Agent Tool 审计：每次工具调用记录 `messageId`、耗时、结果码、错误码和脱敏摘要。
+- 工具失败与业务空结果区分：MCP `isError=true`、超时、权限、参数错误不得被解释成“未查询到数据”。
+- HITL interrupt/resume：resolver 多候选、未来详情选择和受控范围选择均只传 opaque `optionId` / `recordRef`，不向普通 UI 暴露内部 ID。
+- LLM Wiki Lite / Tool Capability Registry：新增工具必须补充 `can_answer`、`cannot_answer`、`use_when`、`do_not_use_when`、正反例和 safe summary。
+- Answer Review：低置信度成功、未调用工具、只调用 resolver、用户纠正、safe adapter 误判均可沉淀为 review 和后续回归测试。
+
+## 后续推荐实施顺序
+
+当前建议优先级从“补最多工具”调整为“补齐库存风险解释闭环”：
+
+1. M1.4b 化验查询与质量分析：`query_assay_records`（已实现）、`query_assay_abnormalities`（已实现）、`query_products_without_recent_assay`（已实现）、`get_assay_report_detail`（已实现）、`query_assay_standard_coverage`（已实现；第一版支持 `PRODUCT_WITHOUT_STANDARD`）。
+2. M1.4c 二维码 / 托盘生命周期分析：`query_qr_code_lifecycle`、`query_printed_not_inbound_codes`、`query_pallet_anomalies`、`query_qr_batch_inbound_completion`、`query_pallet_flow_records`。
+3. M1.4a 后续库存明细：`query_inventory_records`、`query_inventory_ageing`、必要时补 `query_inventory_without_assay`。
+4. M1.4d 库位健康分析、M1.4e 生产订单闭环、M1.4f 审计排查。
+
 ## 设计边界
 
 M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计资产整理成受控只读分析能力。
@@ -216,6 +237,8 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 
 风险等级：L1。
 
+状态：已实现，M1.4b。
+
 用途：
 
 - 按产品、日期范围、状态、报告号查询化验记录。
@@ -233,9 +256,11 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 
 缺口：
 
-- 需要明确“最近一次”按采样时间、化验日期、创建时间还是报告日期排序。
+- 已采用“采样日期优先、采样日期相同时按创建时间”的第一版口径；如业务后续要求按报告日期，需要调整 read model。
 
 ### get_assay_report_detail
+
+状态：已实现，M1.4b。
 
 风险等级：L1。
 
@@ -253,11 +278,14 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 - `AssayController` 的 `GET /{id}`。
 - 质量标准与产品标准关系接口。
 
-缺口：
+实现口径：
 
-- 不应要求用户提供内部 assayId；应支持通过报告号或候选确认进入详情。
+- 不要求用户提供内部 assayId；通过 `query_assay_records` 返回的受控 `recordRef` 查询详情。
+- `recordRef` 为 opaque 引用，普通 UI 不暴露内部 assayId。
 
 ### query_assay_abnormalities
+
+状态：已实现，M1.4b。
 
 风险等级：L1/L2。
 
@@ -284,11 +312,13 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 
 ### query_products_without_recent_assay
 
+状态：已实现，M1.4b。
+
 风险等级：L1/L2。
 
 用途：
 
-- 查询指定产品范围内，最近 N 天没有化验记录的产品。
+- 查询当前在库库存中，指定产品范围和库位范围内，最近 N 天没有有效化验记录的产品或分组。
 
 可回答：
 
@@ -304,9 +334,11 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 
 缺口：
 
-- 需要确认统计全集：全部启用产品、当前有库存产品、今日生产产品，还是指定产品组。
+- 第一版统计全集已固定为 `CURRENT_INVENTORY` 当前在库库存；`ACTIVE_PRODUCTS` 和 `TODAY_INBOUND` 暂不实现。
 
 ### query_assay_standard_coverage
+
+状态：已实现，M1.4b；第一版支持 `PRODUCT_WITHOUT_STANDARD`。
 
 风险等级：L1/L2。
 
@@ -328,11 +360,16 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 
 缺口：
 
-- 需要确认产品到标准的有效期、版本、启停用规则。
+- 产品到标准的有效期、启停用规则已按当前 `product_quality_standard_relation` 和 `quality_standards.status` 实现。
+- `ASSAY_WITHOUT_STANDARD` 和 `UNUSED_STANDARD` 的时间窗口及历史口径仍待确认，当前不自动推断。
 
 ## M1.4c：二维码 / 托盘生命周期分析
 
 目标是让 Agent 能追踪托盘码从打印、入库、流转、化验、作废到异常的完整只读链路。
+
+实现状态：五个工具已完成 Java 只读聚合、Internal Agent Gateway 白名单、`warehouse-mcp` 注册、Python planner / safe answer adapter 和回归测试，当前已允许 Agent 调用。后续仍需在真实测试数据和前端卡片上持续验证，不代表具备任何写入能力。
+
+第一版口径：打印使用 `production_order_label_batch.printed_at`；入库使用输出码已关联库存、存在入库时间或状态为 `INSTOCK`。当前没有独立二维码扫描日志，`VOID_CODE_SCANNED` 只返回证据来源缺口说明。
 
 ### query_qr_code_lifecycle
 
@@ -400,8 +437,7 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 
 缺口：
 
-- 需要确认“打印”的数据源：打印任务、标签批次、二维码生成记录，还是实际打印日志。
-- 需要确认“未入库”的判定字段。
+- 第一版已采用标签批次 `printed_at` 作为“打印”来源，并采用输出码库存关联、入库时间或 `INSTOCK` 作为“入库”判定；若业务需要实际打印机日志，后续需补独立来源。
 
 ### query_pallet_anomalies
 
@@ -427,7 +463,7 @@ M1.4 的目标是把现有仓储、化验、二维码、托盘、生产和审计
 缺口：
 
 - 需要业务确认异常定义。
-- 需要确认是否存在作废码扫描日志；如果没有，需要先补审计来源。
+- 当前没有独立作废码扫描日志，工具返回证据缺口说明，不将无日志等同于“没有扫描”。后续接入审计来源后再开放 `VOID_CODE_SCANNED` 的事实统计。
 
 ### query_qr_batch_inbound_completion
 

@@ -1,0 +1,219 @@
+registryVersion: cross-expert-recipe-roadmap-2026-07-13
+status: DESIGN_ONLY
+runtimeEnabled: false
+runtimeRegistry: docs/agent/orchestration-recipe-registry.yaml
+currentRuntimeRecipeIds:
+  - warehouse_inventory_latest_assay
+activationRule: "候选配方只有在工具、规则、指标、权限、固定数据测试和启动 hash 握手全部完成后，才能人工复制到运行时 Registry。"
+
+globalConstraints:
+  preferSingleRegisteredAggregateWhenAvailable: true
+  modelGeneratedDag: FORBIDDEN
+  expertFreeConversation: FORBIDDEN
+  mainAgentBusinessTools: []
+  immutableExpertContextPerStep: true
+  allowStepInsertion: false
+  allowStepDeletion: false
+  allowStepReordering: false
+  allowExpertReplacement: false
+  allowToolReplacement: false
+  defaultMaxSteps: 4
+  defaultMaxToolCalls: 12
+  defaultMaxProductFanOut: 5
+
+candidates:
+  - recipeId: outbound_preflight_check_v1
+    recipeVersion: 1
+    status: BLOCKED
+    blockedBy:
+      - preview_outbound_plan
+      - batch_assay_link
+      - outbound_eligibility_rule_v1
+      - quality_release_rule_v1
+    executionMode: controlled_sequential
+    trigger: "用户明确要求检查一笔具体出库是否可行，但尚未要求执行出库。"
+    antiTriggers:
+      - "只查询当前库存。"
+      - "直接要求执行出库。"
+      - "没有产品、托盘或数量范围的泛化问题。"
+    limits:
+      maxSteps: 4
+      maxToolCalls: 12
+      maxProductFanOut: 5
+    deterministicRuleRefs:
+      - outbound_eligibility@1
+      - quality_release@1
+    steps:
+      - stepId: outbound_plan
+        expert: logistics_expert
+        allowedTools: [preview_outbound_plan]
+      - stepId: inventory_evidence
+        expert: inventory_expert
+        allowedTools: [query_inventory_ledger]
+        dependsOn: [outbound_plan]
+      - stepId: quality_evidence
+        expert: quality_expert
+        allowedTools: [query_assay_records, get_assay_report_detail]
+        dependsOn: [outbound_plan]
+      - stepId: safe_summary
+        expert: main_agent
+        allowedTools: []
+        dependsOn: [inventory_evidence, quality_evidence]
+    resultSemantics:
+      decisionSource: deterministic_rule_engine
+      executionAllowed: false
+      limitations:
+        - "配方结果是出库前检查，不是执行凭证。"
+        - "批次化验关联未完成时不得输出质量放行结论。"
+    failurePolicy:
+      missingQualityEvidence: UNSUPPORTED_SCOPE
+      toolFailure: FAILED
+      partialSuccess: false
+
+  - recipeId: inventory_health_check_v1
+    recipeVersion: 1
+    status: DESIGN_ONLY
+    blockedBy:
+      - query_inventory_ledger
+      - query_warehouse_capacity_distribution
+      - query_warehouse_mixed_storage_facts
+    executionMode: controlled_parallel_join
+    trigger: "用户要求对当前库存、库位容量和质量覆盖做综合健康检查。"
+    antiTriggers:
+      - "用户只问单个产品库存。"
+      - "用户要求历史库存或容量趋势但没有快照数据。"
+    limits:
+      maxSteps: 4
+      maxToolCalls: 12
+      maxProductFanOut: 0
+    steps:
+      - stepId: inventory_facts
+        expert: inventory_expert
+        allowedTools: [get_inventory_overview, query_inventory_ledger]
+      - stepId: warehouse_facts
+        expert: warehouse_expert
+        allowedTools: [query_warehouse_capacity_distribution, query_warehouse_mixed_storage_facts]
+      - stepId: quality_coverage
+        expert: quality_expert
+        allowedTools: [query_products_without_recent_assay, query_assay_standard_coverage]
+      - stepId: safe_summary
+        expert: main_agent
+        allowedTools: []
+        dependsOn: [inventory_facts, warehouse_facts, quality_coverage]
+    resultSemantics:
+      dataScope: CURRENT_INVENTORY_HEALTH
+      historicalTrendSupported: false
+      mixedStorageDecisionSupported: false
+    failurePolicy:
+      independentBranchFailure: PARTIAL_SUCCESS
+      toolFailureIsNoData: false
+
+  - recipeId: production_order_closure_check_v1
+    recipeVersion: 1
+    status: DESIGN_ONLY
+    blockedBy:
+      - query_production_order_progress
+      - query_production_label_completion
+      - query_pallet_tasks
+    executionMode: controlled_sequential
+    trigger: "用户询问某个生产订单从领料、产出、标签到入库任务是否闭环。"
+    antiTriggers:
+      - "创建、取消或完成生产订单。"
+      - "确认任何入库任务。"
+    limits:
+      maxSteps: 4
+      maxToolCalls: 12
+      maxProductFanOut: 5
+    steps:
+      - stepId: production_progress
+        expert: production_expert
+        allowedTools: [resolve_production_entities, query_production_order_progress, query_production_label_completion]
+      - stepId: qr_reconciliation
+        expert: pallet_expert
+        allowedTools: [query_qr_batch_inbound_completion]
+        dependsOn: [production_progress]
+      - stepId: pending_tasks
+        expert: logistics_expert
+        allowedTools: [query_pallet_tasks]
+        dependsOn: [production_progress]
+      - stepId: safe_summary
+        expert: main_agent
+        allowedTools: []
+        dependsOn: [qr_reconciliation, pending_tasks]
+    resultSemantics:
+      dataScope: PRODUCTION_ORDER_CLOSURE_FACTS
+      canFinishProduction: false
+      canConfirmInbound: false
+    failurePolicy:
+      independentBranchFailure: PARTIAL_SUCCESS
+
+  - recipeId: assay_risk_daily_v1
+    recipeVersion: 1
+    status: DESIGN_ONLY
+    blockedBy:
+      - registered_daily_report_formatter
+    executionMode: controlled_sequential
+    trigger: "用户或登记订阅要求生成指定日期的化验风险日报。"
+    antiTriggers:
+      - "把无化验解释为不合格。"
+      - "判断当前库存批次均合格。"
+    limits:
+      maxSteps: 3
+      maxToolCalls: 8
+      maxProductFanOut: 0
+    steps:
+      - stepId: inventory_population
+        expert: inventory_expert
+        allowedTools: [get_inventory_overview]
+      - stepId: assay_risks
+        expert: quality_expert
+        allowedTools: [query_assay_abnormalities, query_products_without_recent_assay, query_assay_standard_coverage]
+        dependsOn: [inventory_population]
+      - stepId: daily_report
+        expert: main_agent
+        allowedTools: []
+        dependsOn: [assay_risks]
+    resultSemantics:
+      dataScope: DAILY_ASSAY_RISK
+      batchQualificationSupported: false
+      separateCategories: [FAILED, NO_ASSAY, NO_STANDARD, MULTIPLE_CANDIDATES, TOOL_ERROR]
+    failurePolicy:
+      toolFailureIsNoData: false
+      partialSuccess: true
+
+  - recipeId: qr_inbound_reconciliation_v1
+    recipeVersion: 1
+    status: DESIGN_ONLY
+    blockedBy:
+      - query_production_label_completion
+      - query_pallet_tasks
+    executionMode: controlled_sequential
+    trigger: "用户要求对指定订单、标签批次或产品范围核对二维码打印、状态、任务和入库完成情况。"
+    antiTriggers:
+      - "补入库、重打、作废或恢复二维码。"
+    limits:
+      maxSteps: 4
+      maxToolCalls: 12
+      maxProductFanOut: 5
+    steps:
+      - stepId: label_scope
+        expert: production_expert
+        allowedTools: [resolve_production_entities, query_production_label_completion]
+      - stepId: qr_status
+        expert: pallet_expert
+        allowedTools: [query_printed_not_inbound_codes, query_qr_batch_inbound_completion]
+        dependsOn: [label_scope]
+      - stepId: task_status
+        expert: logistics_expert
+        allowedTools: [query_pallet_tasks]
+        dependsOn: [label_scope]
+      - stepId: safe_summary
+        expert: main_agent
+        allowedTools: []
+        dependsOn: [qr_status, task_status]
+    resultSemantics:
+      dataScope: QR_INBOUND_RECONCILIATION
+      separateCodeFamilies: [PRODUCTION_LABEL, FIXED_PRODUCT_QR]
+      writeSupported: false
+    failurePolicy:
+      independentBranchFailure: PARTIAL_SUCCESS

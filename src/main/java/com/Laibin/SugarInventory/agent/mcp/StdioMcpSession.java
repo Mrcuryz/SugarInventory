@@ -13,6 +13,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -64,6 +66,27 @@ public class StdioMcpSession implements McpSession {
                     safeLogValue(agentSessionId), safeLogValue(call.toolName()),
                     e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
             return new McpToolResult(call.toolName(), objectMapper.createObjectNode().put("message", "MCP tool call failed."), "ERROR", "MCP_CALL_FAILED", elapsedMs(start));
+        }
+    }
+
+    @Override
+    public Set<String> listTools() {
+        try {
+            ensureInitialized();
+            JsonNode response = request("tools/list", objectMapper.createObjectNode());
+            if (response.hasNonNull("error")) {
+                throw new IllegalStateException("MCP tool registry request failed.");
+            }
+            Set<String> names = new HashSet<>();
+            for (JsonNode tool : response.path("result").path("tools")) {
+                String name = tool.path("name").asText(null);
+                if (name != null && !name.isBlank()) {
+                    names.add(name);
+                }
+            }
+            return Set.copyOf(names);
+        } catch (IOException e) {
+            throw new IllegalStateException("MCP tool registry request failed.", e);
         }
     }
 

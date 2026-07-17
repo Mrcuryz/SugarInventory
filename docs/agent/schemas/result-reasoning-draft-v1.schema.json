@@ -1,0 +1,49 @@
+{
+  "additionalProperties": false,
+  "description": "Model's semantic assessment; Runtime remains the completion authority.",
+  "properties": {
+    "schemaVersion": {"const": "1.0", "default": "1.0", "title": "Schemaversion", "type": "string"},
+    "proposedStatus": {
+      "enum": ["COMPLETE", "PARTIAL", "NEEDS_CLARIFICATION", "UNSUPPORTED", "FAILED"],
+      "title": "Proposedstatus",
+      "type": "string"
+    },
+    "answeredUserGoal": {"title": "Answeredusergoal", "type": "boolean"},
+    "evidenceRefs": {"items": {"type": "string"}, "maxItems": 20, "title": "Evidencerefs", "type": "array"},
+    "missingFacts": {
+      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "PRODUCT_LATEST_ASSAY", "WAREHOUSE_STATUS", "ENTITY_RESOLUTION"], "type": "string"},
+      "maxItems": 10,
+      "title": "Missingfacts",
+      "type": "array"
+    },
+    "failedFacts": {
+      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "PRODUCT_LATEST_ASSAY", "WAREHOUSE_STATUS", "ENTITY_RESOLUTION"], "type": "string"},
+      "maxItems": 10,
+      "title": "Failedfacts",
+      "type": "array"
+    },
+    "contradictions": {"items": {"type": "string"}, "maxItems": 10, "title": "Contradictions", "type": "array"},
+    "limitations": {"items": {"type": "string"}, "maxItems": 10, "title": "Limitations", "type": "array"},
+    "suggestedFollowupActions": {
+      "items": {
+        "enum": [
+          "REUSE_ENTITY",
+          "REPLACE_ENTITY",
+          "VIEW_DETAILS",
+          "NEXT_PAGE",
+          "NARROW_SCOPE",
+          "RETRY_FAILED_FACT",
+          "RETURN_TO_SUMMARY",
+          "UNDO_LAST_CONTEXT_CHANGE"
+        ],
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Suggestedfollowupactions",
+      "type": "array"
+    }
+  },
+  "required": ["proposedStatus", "answeredUserGoal"],
+  "title": "ResultReasoningDraftV1",
+  "type": "object"
+}

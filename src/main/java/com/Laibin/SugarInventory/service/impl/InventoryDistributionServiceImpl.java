@@ -28,7 +28,8 @@ import java.util.Set;
 public class InventoryDistributionServiceImpl implements InventoryDistributionService {
     private static final int DEFAULT_LIMIT = 20;
     private static final int MAX_LIMIT = 100;
-    private static final String CALCULATION_NOTE = "按各产品每板件数将原始整板数和散件数折算为等价件数。";
+    private static final String CALCULATION_NOTE =
+            "一条库存记录对应一个二维码板位；不足一板时以该板实际件数计算，不再叠加整板。换算参数取产品管理当前配置。";
     private static final Set<String> PRODUCT_STATUSES = Set.of("半成品", "成品");
     private static final Set<String> WAREHOUSE_STATUSES = Set.of("正常", "空置", "满仓", "维护", "临期预警");
     private static final Set<String> PALLET_STATUSES = Set.of("FREE", "PENDING", "INSTOCK", "INVALID", "ORDER_RESERVED");
@@ -91,6 +92,7 @@ public class InventoryDistributionServiceImpl implements InventoryDistributionSe
         return InventoryDistributionGroupVO.builder()
                 .groupLabel(groupLabel(warehouseLabel, productLabel))
                 .warehouseLabel(warehouseLabel)
+                .canonicalProductName(row.getProductName())
                 .productLabel(productLabel)
                 .rawFullPallets(value(row.getRawFullPallets()))
                 .rawLoosePieces(value(row.getRawLoosePieces()))
@@ -254,7 +256,7 @@ public class InventoryDistributionServiceImpl implements InventoryDistributionSe
     private List<String> notes(InventoryDistributionQueryDTO query, boolean mixedScale) {
         List<String> notes = new ArrayList<>();
         notes.add("仅统计当前在库库存。");
-        notes.add("按各产品标准板件换算后展示。");
+        notes.add(CALCULATION_NOTE);
         if (mixedScale) {
             notes.add("当前范围包含不同每板件数的规格，汇总库存以总等价件数和总重量为准。");
         }

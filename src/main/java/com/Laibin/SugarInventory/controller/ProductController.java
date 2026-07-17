@@ -184,7 +184,7 @@ public class ProductController {
      *            注解 @AuthenticationPrincipal 用于获取当前登录用户信息
      * @return 成功或失败信息
      */
-    @Operation(summary = "更新产品", description = "根据产品ID更新产品信息，允许部分字段更新（产品名称、类型、状态、包装方式、单件重量）")
+    @Operation(summary = "更新产品", description = "根据产品ID更新产品信息；产品存在当前库存时，禁止修改每板件数和单件重量，不同规格应新建产品")
     @LogOperation(value = "产品", type = OperationType.UPDATE)
     @PutMapping("")
     @PreAuthorize("hasAuthority('product:update')")

@@ -13,11 +13,14 @@ Implemented endpoints:
 - `POST /internal/agent/chat`
 - `POST /internal/agent/chat/stream`
 - `POST /internal/agent/resume`
+- `DELETE /internal/agent/sessions/{agentSessionId}`
 
 Runtime rules:
 
 - Main path: `AGENT_TOOL_MODE=java_gateway`
 - Test-only path: `AGENT_TOOL_MODE=mock`
+- Environment-driven mock mode does not bypass service authentication unless
+  `AGENT_ALLOW_INSECURE_MOCK_AUTH=true` is explicitly set for isolated tests.
 - Python never connects to the database.
 - Python never calls arbitrary HTTP endpoints.
 - Python only calls the Java Gateway path `/internal/agent/tools/{toolName}`.
@@ -32,12 +35,28 @@ $env:JAVA_TOOL_GATEWAY_BASE_URL="http://localhost:8080"
 $env:AGENT_INTERNAL_TOOL_SERVICE_KEY="<python-to-java-tool-key>"
 $env:AGENT_PYTHON_SERVICE_KEY="<java-to-python-service-key>"
 $env:REQUEST_TIMEOUT_MS="15000"
+$env:AGENT_RUN_TIMEOUT_MS="90000" # llm mode default; whole bounded Agent turn
 $env:AGENT_MODEL_MODE="openai_compatible" # or basic
 $env:AGENT_MODEL_BASE_URL="https://example-model-gateway/v1"
 $env:AGENT_MODEL_NAME="<model-name>"
 $env:AGENT_MODEL_API_KEY="<model-service-key>"
 $env:AGENT_MODEL_TIMEOUT_MS="30000"
+$env:AGENT_GOAL_DRAFT_SHADOW_ENABLED="false"
+$env:AGENT_PLANNING_MODE="deterministic" # deterministic or local/UAT-only llm
+$env:AGENT_LLM_ALLOWED_EXPERTS="inventory_expert,warehouse_expert,assay_expert"
+$env:AGENT_LLM_MAX_TOOL_CALLS="3"
+$env:AGENT_LLM_MAX_TOOL_RETRIES="1"
 ```
+
+`AGENT_PLANNING_MODE=llm` is an experimental local/UAT path. It is rejected at
+startup in `AGENT_ENV=production`, requires `AGENT_MODEL_MODE=openai_compatible`,
+and does not change the deterministic default.
+
+`REQUEST_TIMEOUT_MS` only limits one Java Gateway tool request. The whole SSE
+turn is limited independently by `AGENT_RUN_TIMEOUT_MS` (default: 90 seconds in
+`llm`, 20 seconds in `deterministic`). In `llm` mode the expert's validated
+final answer is sent directly to the client; Runtime does not invoke another
+model pass merely to stream or rewrite that answer.
 
 ## Run
 
@@ -47,9 +66,12 @@ cd D:\Laibin\LaibinSugarInventory\agent-service
 .\.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8091
 ```
 
-The current M1.3R-1c runtime uses an in-memory LangGraph-compatible
-checkpointer. Installing the optional `langgraph` extra is reserved for the next
-runtime iteration that wires a concrete `StateGraph`.
+The current runtime uses a bounded in-memory LangGraph-compatible checkpointer.
+Requests for the same `agentSessionId` are serialized, message/tool history is
+bounded, HITL state is bound to its originating expert, and Java session
+revocation calls the Python clear-session endpoint. This backend is still
+single-process only: production multi-worker deployment requires a shared,
+encrypted persistent checkpointer with TTL before it is considered M5-ready.
 
 
 ## M1.3R-1d Domain Context
@@ -163,9 +185,24 @@ messages + structured state + domain context packs + tool schemas
 ```
 
 `BasicModelClient` is still a deterministic local substitute so tests and local
-acceptance do not depend on an external LLM. A production model client can
-replace it by implementing the same `ModelClient` protocol. The runtime remains
-the safety boundary: only the six existing L1 read-only tools are allowed,
+acceptance do not depend on an external LLM. In the default deterministic mode,
+the OpenAI-compatible client does not control tool execution. V1.1b adds an
+optional `GoalDraftV1` model call in Shadow Mode. It records a desensitized
+semantic proposal alongside the current Router result but cannot change the
+selected expert, tool, arguments, permission scope, or execution path. Enable
+it only for controlled UAT with `AGENT_GOAL_DRAFT_SHADOW_ENABLED=true`.
+
+V1.1 Experimental LLM Tool Loop adds a separate `AGENT_PLANNING_MODE=llm` path
+for local/UAT comparison. The main model selects one experimental expert or the
+existing registered recipe. The selected expert proposes one read-only action
+at a time, observes a safe result, and may continue, clarify, or answer. Runtime
+still validates the expert whitelist, model-visible schema, state references,
+three-call budget, one retry, HITL, evidence references, and error/no-data
+separation. Only inventory, warehouse, and assay experts are enabled initially;
+all other experts fail closed in this mode. See
+`docs/agent/agent-v1-1-experimental-llm-tool-loop-design.md`.
+
+The runtime remains the safety boundary: only the current allowlisted L1 read-only tools are allowed,
 planned arguments are validated against explicit schemas, resolver ambiguity
 still becomes user clarification, and ordinary responses never expose internal
 IDs, tool names, tokens, raw JSON, or stack traces.
@@ -176,8 +213,49 @@ Domain context packs currently cover:
 - product and inventory lookup rules
 - warehouse naming and resolver rules
 - pallet status lookup rules
+- QR / pallet lifecycle, printed-not-inbound, anomaly, flow, and batch completion rules
 - assay status lookup rules
 - selected product / selected warehouse structured state
+
+## Modular Main Agent and Expert Agents
+
+The Python runtime now uses a least-privilege handoff layer:
+
+```text
+main_agent -> Agent Handoff Router -> one module expert -> safe result -> main_agent answer
+main_agent -> allowlisted dependency plan -> multiple bounded expert steps -> main_agent answer
+```
+
+`main_agent` owns intent routing, conversation state, HITL, safety decisions,
+and the final user-facing answer. It has no business tools. Inventory,
+warehouse, assay, and pallet experts each receive only their own context pack
+and tool schemas. Production and audit expert profiles exist as extension
+points but currently have no enabled tools.
+
+The runtime validates the expert tool scope both after planning and immediately
+before calling the Java Gateway using an immutable per-run execution context.
+An out-of-bound model choice is rejected instead of being silently re-routed to
+another expert. `ToolArgumentBuilder` also accepts an
+`expert_model_clients` mapping, so module experts can later use different model
+clients and parameters. The current application wiring still shares the
+configured default model client.
+
+The first compound recipe handles a warehouse inventory question followed by
+"their assay status". It runs inventory scope resolution first, then passes a
+bounded product scope through the assay expert. The recipe permits at most four
+steps, twelve tool calls, and five product fan-out items. Each step receives a
+fresh immutable expert context; partial assay failures preserve the inventory
+answer. Because the current inventory distribution does not expose a verified
+batch-to-assay join, the answer explicitly describes latest product assay
+records and never claims that each in-stock batch is qualified.
+
+Ordinary SSE does not include the full router/handoff snapshot. Python emits a
+Java-only `audit` event, Java filters it from the user stream, and persists the
+target expert, business domain, and handoff mode. Every Java internal tool audit
+also carries the same bounded expert context.
+
+See `docs/agent/modular-agent-architecture.md` for responsibilities, current
+tool ownership, audit fields, limitations, and extension rules.
 
 ## M1.3R-5 Streaming (completed)
 

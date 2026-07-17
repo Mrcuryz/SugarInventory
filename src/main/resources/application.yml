@@ -3,8 +3,8 @@ spring:
     proxy-target-class: true
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/laibin?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: ssmrcury1
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       max-lifetime: 60000       # 连接最大存活时间（建议比 MySQL 的 wait_timeout 短，单位毫秒）
@@ -31,15 +31,15 @@ springdoc:
 server:
   port: 8080
 wechat:
-  appid: wxb2e24e10a7cb3ef8
-  secret: 0e992128f83b91b6e618da3151f108f7
+  appid: ${WECHAT_APP_ID:}
+  secret: ${WECHAT_APP_SECRET}
 openai:
-  api-url: https://api.deepseek.com
+  api-url: ${OPENAI_API_URL:https://api.deepseek.com}
   api-key: ${OPENAI_API_KEY}
-  model: deepseek-v4-flash
+  model: ${OPENAI_MODEL:deepseek-v4-flash}
   max-tokens: 8192
 jwt:
-  secret: xVqyO+0aawRF/LNpEjDDe1w/VXjnbgjJsm43uq0dbpTTt5EHbldZ3FLohntYJfRlXAhW2ZNww27q04Ja2C9kNw==
+  secret: ${JWT_SECRET}
   expiration: 86400000
 user:
   dir: D:\\Laibin\\LaibinSugarInventory
@@ -62,12 +62,15 @@ logging:
       logic-delete-field: deleted
       id-type: auto
 agent:
+  entity-ref:
+    secret: ${AGENT_ENTITY_REF_SECRET:}
+    ttl-seconds: ${AGENT_ENTITY_REF_TTL_SECONDS:600}
   internal-tool:
     service-key: ${AGENT_INTERNAL_TOOL_SERVICE_KEY:}
     max-arguments-bytes: ${AGENT_INTERNAL_TOOL_MAX_ARGUMENTS_BYTES:16384}
   runtime:
-    mode: ${AGENT_RUNTIME_MODE:legacy}
+    mode: ${AGENT_RUNTIME_MODE:python}
     python-base-url: ${AGENT_PYTHON_BASE_URL:http://localhost:8091}
     python-timeout-ms: ${AGENT_PYTHON_TIMEOUT_MS:30000}
     python-service-key: ${AGENT_PYTHON_SERVICE_KEY:}
-    fallback-enabled: ${AGENT_RUNTIME_FALLBACK_ENABLED:true}
+    fallback-enabled: ${AGENT_RUNTIME_FALLBACK_ENABLED:false}

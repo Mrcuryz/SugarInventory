@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -8,17 +10,112 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agents import MAIN_AGENT, AgentHandoffRouter
 from app.config import Settings
 from app.context import ContextBuilder
 from app.cancellation import current_cancellation_token
+from app.execution import AgentExecutionContext, bind_execution_context
 from app.graph.state import InMemoryCheckpointer, SelectedEntity
 from app.main import create_app
-from app.model import ModelArgumentDecision, ModelArgumentRequest, ModelPlanDecision, ModelPlanRequest
+from app.model import (
+    BasicModelClient,
+    ExpertLoopRequest,
+    GoalDraftRequest,
+    MainAgentRouteRequest,
+    ModelArgumentDecision,
+    ModelArgumentRequest,
+    ModelPlanDecision,
+    ModelPlanRequest,
+    ModelDecisionError,
+    OpenAICompatibleModelClient,
+    take_model_decision_diagnostics,
+)
+from app.orchestration import CompoundExecutionPlan, OrchestrationStep
 from app.runtime import WarehouseAgentRuntime
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import AgentError, ChatRequest, ChatResponse, GoalDraftV1, ResultReasoningDraftV1
 from app.streaming import sse_for_response
 from app.tool_arguments import ToolArgumentBuilder
-from app.tools.client import JavaGatewayToolClient, MockToolClient, ToolGatewayError
+from app.tools.client import ALLOWED_TOOLS, JavaGatewayToolClient, MockToolClient, ToolGatewayError
+
+
+EXPECTED_EXPERT_TOOLS = {
+    "inventory_expert": frozenset(
+        {
+            "resolve_products",
+            "resolve_warehouses",
+            "get_inventory_overview",
+            "get_inventory_distribution",
+            "query_inventory_ledger",
+            "query_prepare_pool_balance",
+        }
+    ),
+    "warehouse_expert": frozenset(
+        {
+            "resolve_warehouses",
+            "get_warehouse_status",
+            "query_warehouse_capacity_distribution",
+            "query_warehouse_recent_operations",
+            "query_warehouse_mixed_storage_facts",
+        }
+    ),
+    "assay_expert": frozenset(
+        {
+            "resolve_products",
+            "resolve_warehouses",
+            "get_assay_status",
+            "query_assay_records",
+            "get_assay_report_detail",
+            "query_assay_abnormalities",
+            "query_products_without_recent_assay",
+            "query_assay_standard_coverage",
+            "query_assay_groups",
+            "query_quality_standard_catalog",
+            "get_quality_standard_detail",
+            "query_product_standard_relations",
+        }
+    ),
+    "pallet_expert": frozenset(
+        {
+            "resolve_products",
+            "resolve_warehouses",
+            "get_pallet_status",
+            "query_qr_code_lifecycle",
+            "query_printed_not_inbound_codes",
+            "query_pallet_anomalies",
+            "query_pallet_flow_records",
+            "query_qr_batch_inbound_completion",
+            "query_fixed_product_qr_pool",
+        }
+    ),
+    "production_expert": frozenset(
+        {
+            "resolve_production_entities",
+            "query_production_order_progress",
+            "query_boiling_batch_trace",
+            "query_material_pick_trace",
+            "query_production_label_completion",
+            "query_in_process_materials",
+            "query_material_candidates",
+        }
+    ),
+    "logistics_expert": frozenset(
+        {
+            "query_pallet_tasks",
+            "query_stock_documents",
+            "query_auto_inbound_batches",
+            "get_auto_inbound_batch_detail",
+        }
+    ),
+    "master_data_expert": frozenset(
+        {"resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog"}
+    ),
+    "administration_expert": frozenset(
+        {"query_employee_roster", "query_roles", "get_role_permission_summary"}
+    ),
+    "audit_expert": frozenset(
+        {"search_operation_logs", "query_agent_tool_audit", "query_agent_answer_reviews"}
+    ),
+}
 
 
 def chat_payload(message: str, agent_session_id: str = "agt_test") -> dict[str, Any]:
@@ -60,6 +157,1116 @@ def test_default_gateway_timeout_is_15_seconds(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("REQUEST_TIMEOUT_MS", raising=False)
 
     assert Settings.from_env().request_timeout_ms == 15000
+
+
+def test_goal_draft_shadow_flag_is_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AGENT_GOAL_DRAFT_SHADOW_ENABLED", raising=False)
+
+    assert Settings.from_env().goal_draft_shadow_enabled is False
+
+
+def test_goal_draft_shadow_flag_can_be_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENT_GOAL_DRAFT_SHADOW_ENABLED", "true")
+
+    assert Settings.from_env().goal_draft_shadow_enabled is True
+
+
+@pytest.mark.parametrize(
+    ("model_type", "schema_file"),
+    [
+        (GoalDraftV1, "goal-draft-v1.schema.json"),
+        (ResultReasoningDraftV1, "result-reasoning-draft-v1.schema.json"),
+    ],
+)
+def test_v1_1_model_contract_schema_files_match_runtime_models(
+    model_type: Any,
+    schema_file: str,
+) -> None:
+    path = Path(__file__).resolve().parents[2] / "docs" / "agent" / "schemas" / schema_file
+
+    assert json.loads(path.read_text(encoding="utf-8")) == model_type.model_json_schema()
+
+
+def test_goal_draft_rejects_executable_fields() -> None:
+    with pytest.raises(ValueError):
+        GoalDraftV1.model_validate(
+            {
+                "schemaVersion": "1.0",
+                "goalType": "CURRENT_PRODUCT_INVENTORY",
+                "requestedOutcome": "查询当前库存",
+                "dataNeed": "FRESH_READ",
+                "needsClarification": False,
+                "confidence": 1,
+                "toolName": "get_inventory_overview",
+            }
+        )
+
+
+class CapturingGoalDraftModel(BasicModelClient):
+    def __init__(self) -> None:
+        self.requests: list[GoalDraftRequest] = []
+
+    def draft_goal(self, request: GoalDraftRequest) -> GoalDraftV1:
+        self.requests.append(request)
+        return GoalDraftV1(
+            goalType="WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY",
+            requestedOutcome="故意与现有 Router 不同的 Shadow 判断",
+            entityMentions=[
+                {
+                    "entityType": "PRODUCT",
+                    "mentionText": "黄冰糖",
+                    "referenceKind": "EXPLICIT",
+                }
+            ],
+            contextReuse=[],
+            missingEntities=["WAREHOUSE"],
+            dataNeed="FRESH_READ",
+            presentationPreference="SUMMARY",
+            needsClarification=True,
+            clarificationReason="MISSING_ENTITY",
+            confidence=0.72,
+        )
+
+
+def test_goal_draft_shadow_never_changes_router_execution() -> None:
+    model = CapturingGoalDraftModel()
+    decision = ToolArgumentBuilder(
+        model_client=model,  # type: ignore[arg-type]
+        goal_draft_shadow_enabled=True,
+    ).plan(
+        user_message="查黄冰糖库存",
+        state=InMemoryCheckpointer().get("agt_goal_shadow"),
+    )
+
+    assert decision.action == "call_tool"
+    assert decision.toolName == "resolve_products"
+    shadow = decision.routeSnapshot["goalDraftShadow"]
+    assert shadow["status"] == "AVAILABLE"
+    assert shadow["executionInfluence"] is False
+    assert shadow["latencyMs"] >= 0
+    assert shadow["draft"]["goalType"] == "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY"
+    assert "requestedOutcome" not in shadow["draft"]
+    assert "mentionText" not in shadow["draft"]["entityMentions"][0]
+
+
+def test_goal_draft_shadow_receives_redacted_context_without_internal_ids() -> None:
+    model = CapturingGoalDraftModel()
+    state = InMemoryCheckpointer().get("agt_goal_shadow_redaction")
+    state.messages.append({"role": "user", "content": "Authorization: Bearer secret-token"})
+    state.selected_product = SelectedEntity(84, "黄冰糖（袋）", "USER_SELECTION")
+
+    ToolArgumentBuilder(
+        model_client=model,  # type: ignore[arg-type]
+        goal_draft_shadow_enabled=True,
+    ).plan(user_message="它的库存", state=state)
+
+    request = model.requests[0]
+    assert request.selectedContext == {"PRODUCT": "黄冰糖（袋）"}
+    assert "84" not in json.dumps(request.selectedContext, ensure_ascii=False)
+    assert "secret-token" not in json.dumps(request.messages, ensure_ascii=False)
+
+
+def test_goal_draft_shadow_disabled_does_not_call_model() -> None:
+    class FailingShadowModel(BasicModelClient):
+        def draft_goal(self, request: GoalDraftRequest) -> GoalDraftV1:
+            raise AssertionError("shadow model must stay disabled")
+
+    decision = ToolArgumentBuilder(model_client=FailingShadowModel()).plan(  # type: ignore[arg-type]
+        user_message="查黄冰糖库存",
+        state=InMemoryCheckpointer().get("agt_goal_shadow_disabled"),
+    )
+
+    assert decision.toolName == "resolve_products"
+    assert "goalDraftShadow" not in decision.routeSnapshot
+
+
+def test_openai_compatible_goal_draft_uses_strict_non_executable_schema() -> None:
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answer=json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "goalType": "WAREHOUSE_INVENTORY_DISTRIBUTION",
+                "requestedOutcome": "查看一号库当前有什么库存",
+                "entityMentions": [
+                    {
+                        "entityType": "WAREHOUSE",
+                        "mentionText": "一号库",
+                        "referenceKind": "EXPLICIT",
+                    }
+                ],
+                "contextReuse": [],
+                "missingEntities": [],
+                "dataNeed": "FRESH_READ",
+                "presentationPreference": "SUMMARY",
+                "needsClarification": False,
+                "clarificationReason": "NONE",
+                "confidence": 0.95,
+            },
+            ensure_ascii=False,
+        ),
+    )
+    model_server.start()
+    try:
+        model = OpenAICompatibleModelClient(
+            Settings(
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                model_timeout_ms=2000,
+            )
+        )
+
+        draft = model.draft_goal(
+            GoalDraftRequest(
+                userMessage="一号库现在有什么库存",
+                messages=[],
+                selectedContext={},
+            )
+        )
+
+        assert draft is not None
+        assert draft.goalType == "WAREHOUSE_INVENTORY_DISTRIBUTION"
+        request_text = json.dumps(model_server.last_body, ensure_ascii=False)
+        assert "get_inventory_distribution" not in request_text
+        assert "warehouseId" not in request_text
+    finally:
+        model_server.stop()
+
+
+def test_openai_compatible_goal_draft_rejects_extra_executable_fields() -> None:
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answer=json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "goalType": "CURRENT_PRODUCT_INVENTORY",
+                "requestedOutcome": "查询库存",
+                "dataNeed": "FRESH_READ",
+                "needsClarification": False,
+                "confidence": 1,
+                "toolName": "get_inventory_overview",
+            },
+            ensure_ascii=False,
+        ),
+    )
+    model_server.start()
+    try:
+        model = OpenAICompatibleModelClient(
+            Settings(
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                model_timeout_ms=2000,
+            )
+        )
+
+        assert model.draft_goal(
+            GoalDraftRequest(userMessage="查库存", messages=[], selectedContext={})
+        ) is None
+    finally:
+        model_server.stop()
+
+
+def test_openai_compatible_main_agent_returns_strict_llm_route_decision() -> None:
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answer=json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "action": "DELEGATE",
+                "expertAgent": "inventory_expert",
+                "recipeId": None,
+                "answer": None,
+                "clarificationPrompt": None,
+                "semanticReason": "FOLLOWUP_QUERY",
+                "confidence": 0.96,
+            },
+            ensure_ascii=False,
+        ),
+    )
+    model_server.start()
+    try:
+        model = OpenAICompatibleModelClient(
+            Settings(
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                model_timeout_ms=2000,
+            )
+        )
+
+        decision = model.route_main_agent(
+            MainAgentRouteRequest(
+                userMessage="只看黄冰糖",
+                messages=[],
+                selectedContext={"WAREHOUSE": {"stateRef": "CURRENT_WAREHOUSE", "canonicalName": "1号库位"}},
+                availableExperts=[{"expertAgent": "inventory_expert", "domains": ["inventory"]}],
+                registeredRecipes=["warehouse_inventory_latest_assay"],
+            )
+        )
+
+        assert decision is not None
+        assert decision.action == "DELEGATE"
+        assert decision.expertAgent == "inventory_expert"
+        request_text = json.dumps(model_server.last_body, ensure_ascii=False)
+        assert "toolName" not in request_text
+        assert "warehouseId" not in request_text
+    finally:
+        model_server.stop()
+
+
+def test_openai_compatible_expert_returns_one_strict_tool_action() -> None:
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answer=json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "action": "CALL_TOOL",
+                "toolName": "get_inventory_overview",
+                "arguments": {"productRef": "CURRENT_PRODUCT"},
+                "answer": None,
+                "clarificationPrompt": None,
+                "citedObservationIds": [],
+                "statusReason": "NEED_FRESH_DATA",
+            },
+            ensure_ascii=False,
+        ),
+    )
+    model_server.start()
+    try:
+        model = OpenAICompatibleModelClient(
+            Settings(
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                model_timeout_ms=2000,
+            )
+        )
+
+        decision = model.decide_expert_action(
+            ExpertLoopRequest(
+                userMessage="它还有多少库存",
+                messages=[],
+                expertAgent="inventory_expert",
+                expertInstructions=["仅执行只读库存查询。"],
+                selectedContext={"PRODUCT": {"stateRef": "CURRENT_PRODUCT", "canonicalName": "黄冰糖（袋）"}},
+                toolSchemas={
+                    "get_inventory_overview": {
+                        "type": "object",
+                        "required": ["productRef"],
+                        "properties": {"productRef": {"const": "CURRENT_PRODUCT"}},
+                    }
+                },
+                observations=[],
+                toolCallCount=0,
+                maxToolCalls=3,
+            )
+        )
+
+        assert decision is not None
+        assert decision.action == "CALL_TOOL"
+        assert decision.arguments == {"productRef": "CURRENT_PRODUCT"}
+        assert "productId" not in json.dumps(model_server.last_body, ensure_ascii=False)
+    finally:
+        model_server.stop()
+
+
+def test_openai_compatible_expert_repairs_one_invalid_schema_response_without_logging_content() -> None:
+    invalid = {
+        "schemaVersion": "1.0",
+        "action": "CALL_TOOL",
+        "toolName": "get_inventory_overview",
+        "arguments": {"productRef": "CURRENT_PRODUCT"},
+        "answer": None,
+        "clarificationPrompt": None,
+        "citedObservationIds": ["obs_1"],
+        "statusReason": "NEED_MORE_DATA",
+        "reasoning": "sensitive-model-output-must-not-enter-diagnostics",
+    }
+    valid = {key: value for key, value in invalid.items() if key != "reasoning"}
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answers=[
+            json.dumps(invalid, ensure_ascii=False),
+            json.dumps(valid, ensure_ascii=False),
+        ],
+    )
+    model_server.start()
+    try:
+        model = OpenAICompatibleModelClient(
+            Settings(
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                model_timeout_ms=2000,
+            )
+        )
+
+        decision = model.decide_expert_action(
+            ExpertLoopRequest(
+                userMessage="继续查询库存",
+                messages=[],
+                expertAgent="inventory_expert",
+                expertInstructions=["仅执行只读库存查询。"],
+                selectedContext={"PRODUCT": {"stateRef": "CURRENT_PRODUCT"}},
+                toolSchemas={"get_inventory_overview": {"type": "object"}},
+                observations=[{"observationId": "obs_1", "status": "AVAILABLE"}],
+                toolCallCount=1,
+                maxToolCalls=3,
+            )
+        )
+        diagnostics = take_model_decision_diagnostics()
+
+        assert decision is not None
+        assert decision.action == "CALL_TOOL"
+        assert model_server.non_stream_request_count == 2
+        assert [item["outcome"] for item in diagnostics] == ["SCHEMA_INVALID", "VALID"]
+        assert "reasoning" in diagnostics[0]["validationPaths"]
+        assert "sensitive-model-output" not in json.dumps(diagnostics, ensure_ascii=False)
+    finally:
+        model_server.stop()
+
+
+def test_openai_compatible_expert_surfaces_typed_failure_after_one_format_repair() -> None:
+    model_server = FakeModelStreamServer([], direct_answers=["not-json", "still-not-json"])
+    model_server.start()
+    try:
+        model = OpenAICompatibleModelClient(
+            Settings(
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                model_timeout_ms=2000,
+            )
+        )
+
+        with pytest.raises(ModelDecisionError) as exc_info:
+            model.decide_expert_action(
+                ExpertLoopRequest(
+                    userMessage="查库存",
+                    messages=[],
+                    expertAgent="inventory_expert",
+                    expertInstructions=["仅执行只读库存查询。"],
+                    selectedContext={},
+                    toolSchemas={"get_inventory_overview": {"type": "object"}},
+                    observations=[],
+                    toolCallCount=0,
+                    maxToolCalls=3,
+                )
+            )
+
+        diagnostics = take_model_decision_diagnostics()
+        assert exc_info.value.code == "MODEL_ACTION_INVALID"
+        assert model_server.non_stream_request_count == 2
+        assert [item["outcome"] for item in diagnostics] == ["JSON_INVALID", "JSON_INVALID"]
+    finally:
+        model_server.stop()
+
+
+def test_app_goal_draft_shadow_is_audited_but_does_not_change_tool_execution() -> None:
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answer=json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "goalType": "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY",
+                "requestedOutcome": "故意错误的复合目标",
+                "entityMentions": [],
+                "contextReuse": [],
+                "missingEntities": ["WAREHOUSE"],
+                "dataNeed": "CLARIFICATION",
+                "presentationPreference": "DEFAULT",
+                "needsClarification": True,
+                "clarificationReason": "MISSING_ENTITY",
+                "confidence": 0.6,
+            },
+            ensure_ascii=False,
+        ),
+    )
+    model_server.start()
+    try:
+        tool_client = MockToolClient({"resolve_products": {"resolutionStatus": "NOT_FOUND"}})
+        app = create_app(
+            Settings(
+                tool_mode="mock",
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                model_timeout_ms=2000,
+                goal_draft_shadow_enabled=True,
+            ),
+            tool_client=tool_client,
+            checkpointer=InMemoryCheckpointer(),
+        )
+
+        response = TestClient(app).post(
+            "/internal/agent/chat",
+            json=chat_payload("查黄冰糖库存", "agt_goal_shadow_app"),
+        )
+
+        assert response.status_code == 200
+        assert tool_client.calls[0]["toolName"] == "resolve_products"
+        shadow = response.json()["reviewTrace"]["goalDraftShadow"]
+        assert shadow["draft"]["goalType"] == "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY"
+        assert shadow["executionInfluence"] is False
+    finally:
+        model_server.stop()
+
+
+def test_environment_mock_mode_does_not_disable_service_auth_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENT_TOOL_MODE", "mock")
+    monkeypatch.delenv("AGENT_ALLOW_INSECURE_MOCK_AUTH", raising=False)
+    monkeypatch.delenv("AGENT_PYTHON_SERVICE_KEY", raising=False)
+    settings = Settings.from_env()
+    app = create_app(settings, tool_client=MockToolClient(), checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).get("/internal/agent/health")
+
+    assert settings.allow_insecure_mock_auth is False
+    assert response.status_code == 503
+
+
+@pytest.mark.parametrize(
+    ("message", "tool_name", "intent"),
+    [
+        ("查询托盘码 P202607090001 的生命周期", "query_qr_code_lifecycle", "qr_code_lifecycle"),
+        ("哪些码打印了但没入库", "query_printed_not_inbound_codes", "printed_not_inbound_codes"),
+        ("最近30天托盘异常", "query_pallet_anomalies", "pallet_anomalies"),
+        ("托盘最近有哪些流转", "query_pallet_flow_records", "pallet_flow_records"),
+        ("批次 LB-001 入库完成率", "query_qr_batch_inbound_completion", "qr_batch_inbound_completion"),
+    ],
+)
+def test_m14c_queries_route_to_dedicated_read_tools(message: str, tool_name: str, intent: str) -> None:
+    state = InMemoryCheckpointer().get("agt_test")
+
+    decision = ToolArgumentBuilder().plan(user_message=message, state=state)
+
+    assert decision.action == "call_tool"
+    assert decision.toolName == tool_name
+    assert decision.intent == intent
+
+
+@pytest.mark.parametrize(
+    ("message", "tool_name"),
+    [
+        ("哪些二维码打印了但还没有入库？", "query_printed_not_inbound_codes"),
+        ("查询最近30天的托盘流转记录", "query_pallet_flow_records"),
+        ("哪些化验记录没有标准？", "query_assay_abnormalities"),
+        ("全部产品中最近7天没有化验的库存，按产品分类", "query_products_without_recent_assay"),
+    ],
+)
+def test_manual_browser_phrases_route_without_false_write_or_product_resolution(
+    message: str, tool_name: str
+) -> None:
+    state = InMemoryCheckpointer().get("agt_manual_route")
+
+    decision = ToolArgumentBuilder().plan(user_message=message, state=state)
+
+    assert decision.action == "call_tool"
+    assert decision.toolName == tool_name
+
+
+def test_assay_product_query_strips_structural_particle_and_enters_hitl() -> None:
+    tool_client = MockToolClient({"resolve_products": {
+        "resolutionStatus": "AMBIGUOUS", "needsUserSelection": True,
+        "clarificationPrompt": "“黄冰糖”有多个规格，请选择。",
+        "options": [
+            {"optionType": "SINGLE_PRODUCT", "displayLabel": "黄冰糖（袋）", "productId": 84},
+            {"optionType": "SINGLE_PRODUCT", "displayLabel": "黄冰糖（箱）", "productId": 85},
+        ],
+    }})
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post(
+        "/internal/agent/chat", json=chat_payload("黄冰糖最近30天的化验记录", "agt_assay_hitl")
+    )
+
+    assert response.status_code == 200
+    assert response.json()["needsUserSelection"] is True
+    assert tool_client.calls[0]["toolName"] == "resolve_products"
+    assert tool_client.calls[0]["arguments"]["query"] == "黄冰糖"
+
+
+@pytest.mark.parametrize(
+    ("message", "target_agent"),
+    [
+        ("查黄冰糖库存", "inventory_expert"),
+        ("2号库位容量怎么样", "warehouse_expert"),
+        ("最近7天有哪些化验异常", "assay_expert"),
+        ("最近30天托盘异常", "pallet_expert"),
+        ("查询当前在制半成品", "production_expert"),
+        ("查询待处理的出库任务列表", "logistics_expert"),
+        ("查询成品产品目录", "master_data_expert"),
+        ("查询员工名册", "administration_expert"),
+        ("查询操作日志", "audit_expert"),
+        ("你是谁", MAIN_AGENT),
+    ],
+)
+def test_main_agent_routes_to_least_privilege_expert(message: str, target_agent: str) -> None:
+    decision = ToolArgumentBuilder().plan(
+        user_message=message,
+        state=InMemoryCheckpointer().get("agt_handoff"),
+    )
+
+    handoff = decision.routeSnapshot["agent_handoff"]
+    assert handoff["source_agent"] == MAIN_AGENT
+    assert handoff["target_agent"] == target_agent
+    assert handoff["mode"] == ("direct" if target_agent == MAIN_AGENT else "delegate")
+
+
+def test_compound_inventory_assay_query_builds_bounded_dependency_plan() -> None:
+    decision = ToolArgumentBuilder().plan(
+        user_message="当前1号库库存情况如何？它们的化验情况如何？",
+        state=InMemoryCheckpointer().get("agt_compound_plan"),
+    )
+
+    assert decision.action == "orchestrate"
+    assert decision.routeSnapshot is not None
+    handoff = decision.routeSnapshot["agent_handoff"]
+    assert handoff["target_agent"] == MAIN_AGENT
+    assert handoff["allowed_tools"] == []
+    assert handoff["mode"] == "orchestrate"
+    orchestration = decision.routeSnapshot["orchestration"]
+    assert orchestration["max_tool_calls"] == 12
+    assert orchestration["max_fanout"] == 5
+    assert [step["expert_agent"] for step in orchestration["steps"]] == [
+        "inventory_expert",
+        "assay_expert",
+        MAIN_AGENT,
+    ]
+    assert orchestration["steps"][1]["depends_on"] == ["inventory_scope"]
+
+
+def test_compound_inventory_latest_assay_compact_phrase_uses_registered_recipe() -> None:
+    decision = ToolArgumentBuilder().plan(
+        user_message="1号库库存及这些产品最新化验",
+        state=InMemoryCheckpointer().get("agt_compound_compact_phrase"),
+    )
+
+    assert decision.action == "orchestrate"
+    assert decision.routeSnapshot is not None
+    assert decision.routeSnapshot["orchestration"]["recipe"] == "warehouse_inventory_latest_assay"
+    assert decision.arguments["warehouseQuery"] == "1号库位"
+
+
+def test_compound_inventory_assay_query_executes_experts_in_dependency_order() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 1, "displayLabel": "1号库位"}],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "1号库位的全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "3板20件",
+                "totalEquivalentPieces": 140,
+                "warehouseCount": 1,
+                "productCount": 1,
+                "palletCount": 3,
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋） 40kg/件 25件/板",
+                        "canonicalProductName": "黄冰糖（袋）",
+                        "productLabel": "黄冰糖（袋） 40kg/件 25件/板",
+                        "stockText": "3板20件",
+                        "totalEquivalentPieces": 140,
+                        "palletCount": 3,
+                        "warehouseCount": 1,
+                        "productCount": 1,
+                        "percentageText": "100.0%",
+                        "riskLabels": [],
+                    }
+                ],
+            },
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"productId": 84, "displayLabel": "黄冰糖（袋）"}],
+            },
+            "query_assay_records": {
+                "total": 1,
+                "records": [
+                    {
+                        "productLabel": "黄冰糖（袋）",
+                        "sampleDate": "2026-07-12",
+                        "judgeLabel": "合格",
+                        "standardLabel": "成品标准",
+                    }
+                ],
+            },
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("1号库库存及这些产品最新化验", "agt_compound"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_warehouses",
+        "get_inventory_distribution",
+        "resolve_products",
+        "query_assay_records",
+    ]
+    assert [call["expertAgent"] for call in tool_client.calls] == [
+        "inventory_expert",
+        "inventory_expert",
+        "assay_expert",
+        "assay_expert",
+    ]
+    assert tool_client.calls[2]["arguments"]["query"] == "黄冰糖（袋）"
+    assert "40kg/件" not in tool_client.calls[2]["arguments"]["query"]
+    assert tool_client.calls[-1]["arguments"]["productScope"] == {
+        "type": "SINGLE_PRODUCT",
+        "productId": 84,
+    }
+    assert "共 3 个托盘" in body["answer"]
+    assert "2026-07-12，合格" in body["answer"]
+    assert "不代表当前库存批次已经逐批对应并判定合格" in body["answer"]
+    orchestration = checkpointer.get("agt_compound").last_orchestration
+    assert orchestration is not None
+    assert orchestration["orchestrationStatus"] == "SUCCESS"
+    assert orchestration["dataScope"] == "PRODUCT_LATEST_ASSAY"
+    assert orchestration["batchQualificationSupported"] is False
+    assert orchestration["toolCallCount"] == 4
+    assert orchestration["toolBudgetRemaining"] == 8
+
+
+def test_compound_inventory_assay_query_bounds_fanout_and_keeps_partial_inventory_result() -> None:
+    groups = [
+        {
+            "groupLabel": f"产品{i}",
+            "canonicalProductName": f"产品{i}",
+            "productLabel": f"产品{i}",
+            "stockText": "1板",
+            "totalEquivalentPieces": 40,
+            "palletCount": 1,
+            "warehouseCount": 1,
+            "productCount": 1,
+            "percentageText": "14.3%",
+            "riskLabels": [],
+        }
+        for i in range(1, 8)
+    ]
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 1, "displayLabel": "1号库位"}],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "1号库位的全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "7板",
+                "totalEquivalentPieces": 280,
+                "warehouseCount": 1,
+                "productCount": 7,
+                "palletCount": 7,
+                "groups": groups,
+            },
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"productId": 84, "displayLabel": "测试产品"}],
+            },
+            "query_assay_records": ToolGatewayError("UPSTREAM_TIMEOUT", "timeout", retryable=True),
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("当前1号库库存情况如何？这些产品的化验情况如何？", "agt_compound_partial"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(tool_client.calls) == 12
+    assert len([call for call in tool_client.calls if call["toolName"] == "query_assay_records"]) == 5
+    assert "化验服务查询超时" in body["answer"]
+    assert "另有 2 类产品" in body["answer"]
+    orchestration = checkpointer.get("agt_compound_partial").last_orchestration
+    assert orchestration is not None
+    assert orchestration["orchestrationStatus"] == "PARTIAL_SUCCESS"
+    assert orchestration["productFanOutCount"] == 5
+    assert orchestration["steps"]["latest_assay"]["safeResultSummary"]["omittedProductCount"] == 2
+
+
+def test_compound_inventory_assay_clarification_resumes_original_plan() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "AMBIGUOUS",
+                "options": [
+                    {"warehouseId": 1, "displayLabel": "1号库位", "optionType": "SINGLE_WAREHOUSE"}
+                ],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "1号库位的全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "1板",
+                "totalEquivalentPieces": 40,
+                "warehouseCount": 1,
+                "productCount": 1,
+                "palletCount": 1,
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋）",
+                        "canonicalProductName": "黄冰糖（袋）",
+                        "productLabel": "黄冰糖（袋）",
+                        "stockText": "1板",
+                        "totalEquivalentPieces": 40,
+                        "palletCount": 1,
+                        "warehouseCount": 1,
+                        "productCount": 1,
+                        "percentageText": "100.0%",
+                        "riskLabels": [],
+                    }
+                ],
+            },
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"productId": 84, "displayLabel": "黄冰糖（袋）"}],
+            },
+            "query_assay_records": {"total": 0, "records": []},
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+    client = TestClient(app)
+
+    first = client.post(
+        "/internal/agent/chat",
+        json=chat_payload("当前1号库库存情况如何？它们的化验情况如何？"),
+    )
+    pending = checkpointer.get("agt_test").pending_clarification
+
+    assert first.status_code == 200
+    assert first.json()["needsUserSelection"] is True
+    assert pending is not None
+    assert pending.intent == "compound_inventory_assay"
+    assert pending.expert_agent == "inventory_expert"
+    assert pending.continuation is not None
+
+    resumed = client.post("/internal/agent/resume", json=resume_payload(checkpointer))
+
+    assert resumed.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_warehouses",
+        "get_inventory_distribution",
+        "resolve_products",
+        "query_assay_records",
+    ]
+    assert tool_client.calls[-1]["expertAgent"] == "assay_expert"
+    assert "未查询到化验记录" in resumed.json()["answer"]
+    orchestration = checkpointer.get("agt_test").last_orchestration
+    assert orchestration["orchestrationStatus"] == "SUCCESS"
+    assert orchestration["steps"]["latest_assay"]["safeResultSummary"]["resultCounts"]["NO_DATA"] == 1
+
+
+def test_compound_inventory_assay_never_parses_display_label_when_canonical_name_is_missing() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 1, "displayLabel": "1号库位"}],
+            },
+            "get_inventory_distribution": {
+                "scopeLabel": "1号库位的全部产品",
+                "productLabel": "全部产品",
+                "groupBy": "product",
+                "totalStockText": "1板",
+                "totalEquivalentPieces": 25,
+                "warehouseCount": 1,
+                "productCount": 1,
+                "palletCount": 1,
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋） 40kg/件 25件/板",
+                        "productLabel": "黄冰糖（袋） 40kg/件 25件/板",
+                        "stockText": "1板",
+                        "totalEquivalentPieces": 25,
+                        "palletCount": 1,
+                        "warehouseCount": 1,
+                        "productCount": 1,
+                        "percentageText": "100.0%",
+                        "riskLabels": [],
+                    }
+                ],
+            },
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("当前1号库库存情况如何？这些产品的化验情况如何？", "agt_missing_canonical"),
+    )
+
+    assert response.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_warehouses",
+        "get_inventory_distribution",
+    ]
+    assert "缺少受控产品规范名，未使用展示标签继续查询" in response.json()["answer"]
+    orchestration = checkpointer.get("agt_missing_canonical").last_orchestration
+    assert orchestration["orchestrationStatus"] == "PARTIAL_SUCCESS"
+    assert orchestration["steps"]["latest_assay"]["safeResultSummary"]["resultCounts"] == {
+        "ENTITY_CONTEXT_MISSING": 1
+    }
+
+
+def test_compound_resume_stops_when_tool_budget_is_already_exhausted() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "AMBIGUOUS",
+                "options": [{"warehouseId": 1, "displayLabel": "1号库位"}],
+            }
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+    client = TestClient(app)
+    client.post(
+        "/internal/agent/chat",
+        json=chat_payload("当前1号库库存情况如何？它们的化验情况如何？"),
+    )
+    state = checkpointer.get("agt_test")
+    assert state.orchestration_plan is not None
+    state.orchestration_plan["toolCallCount"] = 12
+    state.orchestration_plan["toolBudgetRemaining"] = 0
+
+    response = client.post("/internal/agent/resume", json=resume_payload(checkpointer))
+
+    assert response.status_code == 200
+    assert response.json()["error"]["code"] == "BUDGET_EXCEEDED"
+    assert checkpointer.get("agt_test").last_orchestration["orchestrationStatus"] == "BUDGET_EXCEEDED"
+    assert len(tool_client.calls) == 1
+
+
+def test_compound_hitl_resume_rejects_plan_version_drift() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "AMBIGUOUS",
+                "options": [{"warehouseId": 1, "displayLabel": "1号库位"}],
+            }
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+    client = TestClient(app)
+    client.post(
+        "/internal/agent/chat",
+        json=chat_payload("当前1号库库存情况如何？它们的化验情况如何？"),
+    )
+    pending = checkpointer.get("agt_test").pending_clarification
+    assert pending is not None and pending.continuation is not None
+    pending.continuation["planVersion"] = 999
+
+    response = client.post("/internal/agent/resume", json=resume_payload(checkpointer))
+
+    assert response.status_code == 200
+    assert response.json()["error"]["code"] == "ORCHESTRATION_PLAN_VERSION_MISMATCH"
+    assert len(tool_client.calls) == 1
+
+
+def test_inventory_batch_qualification_scope_is_rejected_without_tools() -> None:
+    tool_client = MockToolClient()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("1号库当前库存批次是否都化验合格？"),
+    )
+
+    assert response.status_code == 200
+    assert "尚不能确认当前库存批次是否逐批合格" in response.json()["answer"]
+    assert "未执行任何业务查询" in response.json()["answer"]
+    assert tool_client.calls == []
+
+
+def test_compound_plan_with_more_than_four_steps_is_rejected() -> None:
+    steps = tuple(
+        OrchestrationStep(
+            step_id=f"step_{index}",
+            expert_agent="main_agent",
+            business_domain="assistant_experience",
+            tools=(),
+            depends_on=(f"step_{index - 1}",) if index else (),
+        )
+        for index in range(5)
+    )
+    plan = CompoundExecutionPlan(plan_id="plan_too_large", recipe="test", steps=steps)
+
+    with pytest.raises(ValueError, match="step count"):
+        plan.validate(AgentHandoffRouter())
+
+
+def test_expert_agent_tool_scopes_cover_only_current_readonly_allowlist() -> None:
+    router = AgentHandoffRouter()
+    business_profiles = {
+        name: profile.allowed_tools
+        for name, profile in router.profiles.items()
+        if name != MAIN_AGENT
+    }
+    expert_tools = set().union(
+        *business_profiles.values()
+    )
+
+    assert business_profiles == EXPECTED_EXPERT_TOOLS
+    assert len(business_profiles) == 9
+    assert all(tools for tools in business_profiles.values())
+    assert expert_tools == ALLOWED_TOOLS
+    assert len(expert_tools) == 47
+    assert router.profile(MAIN_AGENT).allowed_tools == frozenset()
+    assert not any(tool.startswith(("execute_", "preview_")) for tool in expert_tools)
+    assert "query_assay_records" not in router.profile("inventory_expert").allowed_tools
+    assert "get_inventory_overview" not in router.profile("assay_expert").allowed_tools
+
+
+def test_tool_allowlists_match_java_gateway_and_warehouse_mcp_registration() -> None:
+    repository = Path(__file__).resolve().parents[2]
+    gateway_source = (
+        repository
+        / "src/main/java/com/Laibin/SugarInventory/agent/internal/service/impl/McpInternalAgentToolGatewayService.java"
+    ).read_text(encoding="utf-8")
+    gateway_block = re.search(
+        r"ALLOWED_TOOLS\s*=\s*Set\.of\((.*?)\);",
+        gateway_source,
+        flags=re.DOTALL,
+    )
+    assert gateway_block is not None
+    java_tools = set(re.findall(r'"([a-z][a-z0-9_]*)"', gateway_block.group(1)))
+
+    mcp_root = repository / "warehouse-mcp/src/main/java/com/Laibin/SugarInventory/mcp"
+    configuration = (mcp_root / "config/ToolConfiguration.java").read_text(encoding="utf-8")
+    mcp_tools = set(re.findall(r'methodTool\(warehouseTools,\s*"([a-z][a-z0-9_]*)"', configuration))
+    for callback in (mcp_root / "tool").glob("*ToolCallback.java"):
+        mcp_tools.update(re.findall(r'\.name\("([a-z][a-z0-9_]*)"\)', callback.read_text(encoding="utf-8")))
+
+    assert java_tools == ALLOWED_TOOLS
+    assert mcp_tools == ALLOWED_TOOLS
+
+
+def test_runtime_tool_profiles_match_capability_registry_and_all_tools_are_l1() -> None:
+    repository = Path(__file__).resolve().parents[2]
+    registry = (repository / "docs/agent/tool-capability-registry.yaml").read_text(encoding="utf-8")
+    architecture, tools_section = registry.split("\ntools:\n", maxsplit=1)
+    tools_section = tools_section.split("\nwrite_operation_boundary:\n", maxsplit=1)[0]
+
+    registered_l1_tools = set(
+        re.findall(
+            r'^  ([a-z][a-z0-9_]*):\n(?:(?!^  [a-z][a-z0-9_]*:).)*?^    risk_level: "L1"$',
+            tools_section,
+            flags=re.DOTALL | re.MULTILINE,
+        )
+    )
+    assert registered_l1_tools == ALLOWED_TOOLS
+    assert len(registered_l1_tools) == 47
+
+    for expert_name, expected_tools in EXPECTED_EXPERT_TOOLS.items():
+        profile = re.search(
+            rf"^    {expert_name}:\n.*?^      allowed_tools: \[(.*?)\]$",
+            architecture,
+            flags=re.DOTALL | re.MULTILINE,
+        )
+        assert profile is not None
+        documented_tools = set(re.findall(r'"([a-z][a-z0-9_]*)"', profile.group(1)))
+        assert documented_tools == expected_tools
+
+
+def test_runtime_rejects_tool_outside_active_expert_boundary() -> None:
+    checkpointer = InMemoryCheckpointer()
+    checkpointer.get("agt_boundary").active_agent = "assay_expert"
+    runtime = WarehouseAgentRuntime(tool_client=MockToolClient(), checkpointer=checkpointer)
+
+    context = AgentExecutionContext(
+        agent_name="assay_expert",
+        allowed_tools=frozenset(router_tool for router_tool in AgentHandoffRouter().profile("assay_expert").allowed_tools),
+        business_domain="assay",
+        handoff_mode="delegate",
+    )
+    with bind_execution_context(context):
+        with pytest.raises(ToolGatewayError) as error:
+            runtime._call_tool_values(
+                agent_session_id="agt_boundary",
+                tool_name="get_inventory_overview",
+                arguments={"productId": 84},
+                trace_id=None,
+                request_id=None,
+                message_id=None,
+            )
+
+    assert error.value.code == "EXPERT_TOOL_NOT_ALLOWED"
+
+
+def test_runtime_requires_immutable_execution_context_before_tool_call() -> None:
+    runtime = WarehouseAgentRuntime(tool_client=MockToolClient(), checkpointer=InMemoryCheckpointer())
+
+    with pytest.raises(ToolGatewayError) as error:
+        runtime._call_tool_values(
+            agent_session_id="agt_missing_context",
+            tool_name="get_inventory_overview",
+            arguments={"productId": 84},
+            trace_id=None,
+            request_id=None,
+            message_id=None,
+        )
+
+    assert error.value.code == "AGENT_EXECUTION_CONTEXT_MISSING"
+
+
+class CapturingExpertModel:
+    def __init__(self) -> None:
+        self.argument_requests: list[ModelArgumentRequest] = []
+
+    def plan_next_action(self, request: ModelPlanRequest) -> ModelPlanDecision:
+        return ModelPlanDecision(action="ask_user", prompt="unused")
+
+    def build_tool_arguments(self, request: ModelArgumentRequest) -> ModelArgumentDecision:
+        self.argument_requests.append(request)
+        return ModelArgumentDecision(
+            toolName=request.toolName,
+            arguments={"query": "黄冰糖", "limit": 10},
+        )
+
+    def generate_direct_answer(self, request: Any) -> str:
+        return "unused"
+
+    def stream_answer_deltas(self, answer: str):
+        yield answer
+
+
+def test_expert_model_client_can_be_replaced_per_module() -> None:
+    assay_model = CapturingExpertModel()
+    state = InMemoryCheckpointer().get("agt_expert_model")
+    state.active_agent = "assay_expert"
+    builder = ToolArgumentBuilder(expert_model_clients={"assay_expert": assay_model})
+
+    arguments = builder.build(
+        tool_name="resolve_products",
+        user_message="查询黄冰糖化验",
+        state=state,
+    )
+
+    assert arguments == {"query": "黄冰糖", "limit": 10}
+    assert assay_model.argument_requests
+    context_names = [pack.name for pack in assay_model.argument_requests[0].domainContext]
+    assert "expert_agent:assay_expert" in context_names
 def test_health() -> None:
     app = create_app(
         Settings(tool_mode="mock"),
@@ -71,7 +1278,35 @@ def test_health() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "UP"
-    assert body["dependencies"]["memory"] == "UP"
+    assert body["dependencies"]["stateStore"] == "UP"
+
+
+def test_capability_endpoint_returns_registry_hashes_and_counts() -> None:
+    app = create_app(
+        Settings(tool_mode="mock"),
+        tool_client=MockToolClient(),
+        checkpointer=InMemoryCheckpointer(),
+    )
+
+    response = TestClient(app).get("/internal/agent/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["runtimeVersion"] == "0.2.0"
+    assert body["protocolVersion"] == "1.0"
+    assert body["toolCount"] == 47
+    assert body["recipeCount"] == 1
+    assert len(body["toolRegistryHash"]) == 64
+    assert len(body["recipeRegistryHash"]) == 64
+    assert len(body["agentProfileRegistryHash"]) == 64
+    assert body["recipes"][0]["recipeId"] == "warehouse_inventory_latest_assay"
+    profile_counts = {profile["name"]: profile["allowedToolCount"] for profile in body["agentProfiles"]}
+    assert profile_counts == {
+        MAIN_AGENT: 0,
+        **{name: len(tools) for name, tools in EXPECTED_EXPERT_TOOLS.items()},
+    }
+    profile_tools = {profile["name"]: frozenset(profile["allowedTools"]) for profile in body["agentProfiles"]}
+    assert profile_tools == {MAIN_AGENT: frozenset(), **EXPECTED_EXPERT_TOOLS}
 
 
 @pytest.mark.parametrize(
@@ -153,11 +1388,8 @@ def test_write_operation_is_not_executed_and_offers_readonly_alternative() -> No
 @pytest.mark.parametrize(
     "question,expected_intents",
     [
-        ("最近有没有化验异常？", {"report_analysis", "unsupported"}),
         ("最近30天化验趋势怎么样？", {"report_analysis", "unsupported"}),
-        ("哪些产品化验不合格？", {"report_analysis", "unsupported"}),
         ("帮我导出库存报表", {"report_analysis", "unsupported"}),
-        ("查一下生产订单", {"unsupported", "report_analysis"}),
     ],
 )
 def test_unsupported_business_capabilities_use_direct_answer_without_no_match(
@@ -187,7 +1419,7 @@ def test_unsupported_business_capabilities_use_direct_answer_without_no_match(
     assert router["planned_tools"] == []
 
 
-def test_stream_message_end_carries_review_trace_in_normal_mode() -> None:
+def test_stream_message_end_hides_review_trace_in_normal_mode() -> None:
     tool_client = MockToolClient()
     app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
 
@@ -196,10 +1428,7 @@ def test_stream_message_end_carries_review_trace_in_normal_mode() -> None:
     assert response.status_code == 200
     events = parse_sse_events(response.text)
     assert events[-1]["type"] == "message_end"
-    review_trace = events[-1]["payload"]["reviewTrace"]
-    assert review_trace["intent_type"] == "write_operation"
-    assert review_trace["next_action"] == "explain_unsupported"
-    assert review_trace["planned_tools"] == []
+    assert "reviewTrace" not in events[-1]["payload"]
     assert "debug" not in [event["type"] for event in events]
 
 
@@ -236,6 +1465,7 @@ def test_colloquial_warehouse_contents_uses_resolver_then_distribution() -> None
                 "groups": [
                     {
                         "groupLabel": "黄冰糖（袋）",
+                        "canonicalProductName": "黄冰糖（袋）",
                         "productLabel": "黄冰糖（袋）",
                         "stockText": "3板20件",
                         "totalEquivalentPieces": 140,
@@ -329,6 +1559,11 @@ def test_candidate_selected_writes_state_and_queries_inventory() -> None:
     client = TestClient(app)
 
     client.post("/internal/agent/chat", json=chat_payload("查黄冰糖库存"))
+    pending = checkpointer.get("agt_test").pending_clarification
+    assert pending is not None
+    assert pending.expert_agent == "inventory_expert"
+    assert "get_inventory_overview" in pending.allowed_tools
+    checkpointer.get("agt_test").active_agent = "assay_expert"
     payload = resume_payload(checkpointer)
     response = client.post("/internal/agent/resume", json=payload)
 
@@ -340,12 +1575,84 @@ def test_candidate_selected_writes_state_and_queries_inventory() -> None:
     assert state.selected_product.internal_id == 84
     assert tool_client.calls[-1]["toolName"] == "get_inventory_overview"
     assert tool_client.calls[-1]["arguments"] == {"productId": 84}
+    assert tool_client.calls[-1]["expertAgent"] == "inventory_expert"
     assert "productId" not in json.dumps(body, ensure_ascii=False)
 
     duplicate = client.post("/internal/agent/resume", json=payload)
     assert duplicate.status_code == 200
     assert duplicate.json()["answer"] == body["answer"]
     assert len([call for call in tool_client.calls if call["toolName"] == "get_inventory_overview"]) == 1
+
+
+def test_same_session_turns_are_serialized() -> None:
+    first_call_started = threading.Event()
+    release_first_call = threading.Event()
+
+    class BlockingToolClient(MockToolClient):
+        def call_tool(self, **kwargs: Any) -> dict[str, Any]:
+            if not first_call_started.is_set():
+                first_call_started.set()
+                assert release_first_call.wait(timeout=2)
+            return super().call_tool(**kwargs)
+
+    tool_client = BlockingToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"productId": 84, "displayLabel": "黄冰糖（袋）"}],
+            },
+            "get_inventory_overview": {"displayStockInfo": "1板", "totalEquivalentPieces": 40},
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 2, "displayLabel": "2号库位"}],
+            },
+            "get_warehouse_status": {"warehouseName": "2", "maxCapacity": 100},
+        }
+    )
+    runtime = WarehouseAgentRuntime(tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    errors: list[BaseException] = []
+    second_done = threading.Event()
+
+    def run(message: str, done: threading.Event | None = None) -> None:
+        try:
+            runtime.chat(ChatRequest.model_validate(chat_payload(message, "agt_serial")))
+        except BaseException as exc:  # pragma: no cover - assertion reports captured failures
+            errors.append(exc)
+        finally:
+            if done is not None:
+                done.set()
+
+    first = threading.Thread(target=run, args=("查黄冰糖库存",), daemon=True)
+    second = threading.Thread(target=run, args=("2号库位容量怎么样", second_done), daemon=True)
+    first.start()
+    assert first_call_started.wait(timeout=1)
+    second.start()
+    assert not second_done.wait(timeout=0.2)
+    release_first_call.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert not errors
+    assert not first.is_alive()
+    assert not second.is_alive()
+
+
+def test_checkpointer_bounds_history_and_clear_endpoint_removes_state() -> None:
+    checkpointer = InMemoryCheckpointer()
+    state = checkpointer.get("agt_clear")
+    state.messages.extend({"role": "user", "content": str(index)} for index in range(120))
+    state.tool_results.extend({"kind": "test", "summary": {"index": index}} for index in range(70))
+    checkpointer.save("agt_clear", state)
+
+    assert len(checkpointer.get("agt_clear").messages) == InMemoryCheckpointer.MAX_MESSAGES
+    assert len(checkpointer.get("agt_clear").tool_results) == InMemoryCheckpointer.MAX_TOOL_RESULTS
+
+    app = create_app(Settings(tool_mode="mock"), tool_client=MockToolClient(), checkpointer=checkpointer)
+    response = TestClient(app).delete("/internal/agent/sessions/agt_clear")
+
+    assert response.status_code == 200
+    assert response.json()["cleared"] is True
+    assert checkpointer.get("agt_clear").messages == []
 
 
 def test_java_gateway_client_can_call_real_gateway_endpoint() -> None:
@@ -784,8 +2091,10 @@ def test_runtime_rejects_model_planned_product_id_without_confirmed_state() -> N
 
     response = runtime.chat(ChatRequest.model_validate(chat_payload("看看质量怎么样", "agt_model")))
 
-    assert response.needsUserSelection is True
-    assert "哪个产品" in response.answer
+    assert response.needsUserSelection is False
+    assert response.error is not None
+    assert response.error.code == "EXPERT_TOOL_NOT_ALLOWED"
+    assert "专家权限" in response.answer
     assert tool_client.calls == []
 
 
@@ -840,6 +2149,7 @@ def test_warehouse_inventory_query_resolves_warehouse_then_calls_distribution() 
                 "groups": [
                     {
                         "groupLabel": "黄冰糖（袋）",
+                        "canonicalProductName": "黄冰糖（袋）",
                         "productLabel": "黄冰糖（袋）",
                         "stockText": "5板10件",
                         "totalEquivalentPieces": 210,
@@ -1020,11 +2330,14 @@ class FakeModelStreamServer:
         reasoning_delta: str | None = None,
         status_code: int = 200,
         direct_answer: str | None = None,
+        direct_answers: list[str] | None = None,
     ) -> None:
         self.deltas = deltas
         self.reasoning_delta = reasoning_delta
         self.status_code = status_code
         self.direct_answer = direct_answer
+        self.direct_answers = list(direct_answers or [])
+        self.non_stream_request_count = 0
         self.last_path: str | None = None
         self.last_headers: dict[str, str] = {}
         self.last_body: dict[str, Any] = {}
@@ -1043,7 +2356,11 @@ class FakeModelStreamServer:
                 owner.last_headers = {key: value for key, value in self.headers.items()}
                 owner.last_body = json.loads(body.decode("utf-8"))
                 if not owner.last_body.get("stream"):
-                    answer = owner.direct_answer if owner.direct_answer is not None else "".join(owner.deltas)
+                    owner.non_stream_request_count += 1
+                    if owner.direct_answers:
+                        answer = owner.direct_answers.pop(0)
+                    else:
+                        answer = owner.direct_answer if owner.direct_answer is not None else "".join(owner.deltas)
                     payload = json.dumps(
                         {"choices": [{"message": {"content": answer}}]},
                         ensure_ascii=False,
@@ -1228,7 +2545,10 @@ def test_inventory_location_followup_uses_safe_distribution_when_available() -> 
                         "raw": {"sql": "hidden"},
                     }
                 ],
-                "notes": ["仅统计当前在库库存。"],
+                "notes": [
+                    "仅统计当前在库库存。",
+                    "一条库存记录对应一个二维码板位；不足一板时以该板实际件数计算，不再叠加整板。换算参数取产品管理当前配置。",
+                ],
             },
         }
     )
@@ -1240,6 +2560,8 @@ def test_inventory_location_followup_uses_safe_distribution_when_available() -> 
     body = response.json()
     assert "主要存放在以下库位" in body["answer"]
     assert "2号库位" in body["answer"]
+    assert "数据口径限制" not in body["answer"]
+    assert "不作为权威结论" not in body["answer"]
     assert tool_client.calls[-1]["toolName"] == "get_inventory_distribution"
     assert tool_client.calls[-1]["arguments"] == {
         "productScope": {"type": "SINGLE_PRODUCT", "productId": 84},
@@ -1409,6 +2731,7 @@ def test_stream_clarification_ends_with_required_finish_reason() -> None:
     assert [event["type"] for event in events] == [
         "message_start",
         "progress",
+        "audit",
         "progress",
         "clarification",
         "message_end",
@@ -1498,6 +2821,20 @@ def test_stream_tool_timeout_emits_timeout_and_message_end() -> None:
     assert events[-2]["type"] == "error"
     assert events[-2]["payload"]["retryable"] is True
     assert events[-1]["type"] == "message_end"
+    assert events[-1]["payload"]["finishReason"] == "timeout"
+
+
+def test_stream_model_timeout_is_not_mislabeled_as_tool_timeout() -> None:
+    response = ChatResponse(
+        agentSessionId="agt_test",
+        answer="模型规划超时。",
+        error=AgentError(code="MODEL_TIMEOUT", message="模型结构化决策响应超时。", retryable=True),
+    )
+
+    events = parse_sse_events("".join(sse_for_response(response)))
+
+    assert events[-2]["type"] == "error"
+    assert events[-2]["payload"]["category"] == "MODEL_TIMEOUT"
     assert events[-1]["payload"]["finishReason"] == "timeout"
 
 
@@ -1864,8 +3201,6 @@ def test_all_product_empty_distribution_uses_scope_from_verified_arguments() -> 
     [
         ("所有产品近7天未通过库存按品种统计", "FAIL", "product"),
         ("全部品种近7天检测失败库存按产品分类", "FAIL", "product"),
-        ("全部产品近7天无化验库存按库位分类", "MISSING_ASSAY", "warehouse"),
-        ("所有产品近7天未化验库存按库位统计", "MISSING_ASSAY", "warehouse"),
         ("全部产品近7天无标准库存按库位和产品分类", "NO_STANDARD", "warehouse_product"),
     ],
 )
@@ -1929,3 +3264,896 @@ def test_distribution_rejects_unselected_warehouse_id_from_model() -> None:
 
     with pytest.raises(ValueError, match="warehouseId"):
         builder.plan(user_message="这个产品在这个库位的库存分布", state=state)
+
+
+def test_query_assay_records_today_all_products() -> None:
+    tool_client = MockToolClient(
+        {
+            "query_assay_records": {
+                "scopeLabel": "全部产品",
+                "dateRangeLabel": "2026-07-09",
+                "total": 1,
+                "summaryText": "2026-07-09全部产品共有 1 条化验记录，其中 1 条合格，0 条不合格，0 条无标准，0 条标准多候选。",
+                "records": [
+                    {
+                        "productLabel": "黄冰糖（袋）",
+                        "sampleDate": "2026-07-09",
+                        "judgeLabel": "合格",
+                        "standardLabel": "黄冰糖标准 v3",
+                    }
+                ],
+            }
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("今天有哪些化验记录？"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "共有 1 条化验记录" in body["answer"]
+    assert "黄冰糖（袋）" in body["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["query_assay_records"]
+    arguments = tool_client.calls[0]["arguments"]
+    assert arguments["productScope"] == {"type": "ALL"}
+    assert arguments["dateRange"]["type"] == "EXACT"
+
+
+def test_get_assay_report_detail_uses_prior_record_ref() -> None:
+    tool_client = MockToolClient(
+        {
+            "query_assay_records": {
+                "scopeLabel": "全部产品",
+                "dateRangeLabel": "2026-07-09",
+                "total": 1,
+                "summaryText": "2026-07-09全部产品共有 1 条化验记录，其中 0 条合格，1 条不合格，0 条无标准，0 条标准多候选。",
+                "records": [
+                    {
+                        "recordRef": "assay_report_testref",
+                        "productLabel": "黄冰糖（袋）",
+                        "sampleDate": "2026-07-09",
+                        "judgeLabel": "不合格",
+                        "failedMetricText": "色值",
+                        "standardLabel": "黄冰糖标准 v3",
+                    }
+                ],
+            },
+            "get_assay_report_detail": {
+                "reportRef": "assay_report_testref",
+                "reportLabel": "2026-07-09 黄冰糖（袋）化验",
+                "productLabel": "黄冰糖（袋）",
+                "sampleDate": "2026-07-09",
+                "judgeLabel": "不合格",
+                "standardLabel": "黄冰糖标准 v3",
+                "summaryText": "黄冰糖（袋）本次化验不合格，主要异常指标为色值。",
+                "metrics": [
+                    {
+                        "metricName": "色值",
+                        "actualValueText": "120",
+                        "standardRangeText": "≤ 100",
+                        "resultLabel": "不合格",
+                    }
+                ],
+                "notes": ["无标准表示无法自动判定，不等同于不合格。"],
+            },
+        }
+    )
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+    client = TestClient(app)
+
+    first = client.post("/internal/agent/chat", json=chat_payload("今天有哪些化验记录？"))
+    second = client.post("/internal/agent/chat", json=chat_payload("刚才那条化验详情是什么？"))
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "query_assay_records",
+        "get_assay_report_detail",
+    ]
+    assert tool_client.calls[1]["arguments"] == {
+        "reportRef": "assay_report_testref",
+        "includeMetrics": True,
+        "includeStandardSnapshot": True,
+    }
+    assert "主要异常指标为色值" in second.json()["answer"]
+    assert "实测 120" in second.json()["answer"]
+    assert "标准 ≤ 100" in second.json()["answer"]
+
+
+def test_query_assay_abnormalities_recent_all_products() -> None:
+    tool_client = MockToolClient(
+        {
+            "query_assay_abnormalities": {
+                "scopeLabel": "全部产品",
+                "dateRangeLabel": "最近7天",
+                "total": 2,
+                "failedCount": 1,
+                "noStandardCount": 1,
+                "summaryText": "最近7天全部产品发现 2 条化验质量异常，其中 1 条不合格，1 条无标准，0 条标准多候选。",
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋）",
+                        "total": 2,
+                        "failedCount": 1,
+                        "noStandardCount": 1,
+                        "latestSampleDate": "2026-07-08",
+                    }
+                ],
+            }
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("最近7天有哪些化验异常？"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "发现 2 条化验质量异常" in body["answer"]
+    assert "黄冰糖（袋）" in body["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["query_assay_abnormalities"]
+    arguments = tool_client.calls[0]["arguments"]
+    assert arguments["productScope"] == {"type": "ALL"}
+    assert arguments["dateRange"] == {"type": "LAST_DAYS", "days": 7}
+
+
+def test_query_products_without_recent_assay_recent_all_products() -> None:
+    tool_client = MockToolClient(
+        {
+            "query_products_without_recent_assay": {
+                "scopeLabel": "当前在库全部产品",
+                "warehouseScopeLabel": "全部库位",
+                "dateRangeLabel": "最近7天",
+                "totalGroups": 1,
+                "summaryText": "最近7天全部库位中当前在库全部产品共有 1 个当前在库分组缺少有效化验。",
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋）",
+                        "productLabel": "黄冰糖（袋）",
+                        "stockText": "2板20件",
+                        "latestInboundTime": "2026-07-01",
+                        "riskLabels": ["无有效化验"],
+                    }
+                ],
+                "notes": ["无标准表示已有化验但无法自动判定，不等同于无化验。"],
+            }
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("最近7天哪些在库产品没有化验？"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "缺少有效化验" in body["answer"]
+    assert "黄冰糖（袋）" in body["answer"]
+    assert "无标准表示已有化验" in body["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["query_products_without_recent_assay"]
+    arguments = tool_client.calls[0]["arguments"]
+    assert arguments["productScope"] == {"type": "ALL"}
+    assert arguments["warehouseScope"] == {"type": "ALL"}
+    assert arguments["population"] == "CURRENT_INVENTORY"
+    assert arguments["dateRange"] == {"type": "LAST_DAYS", "days": 7}
+    assert arguments["groupBy"] == "product"
+
+
+def test_query_assay_standard_coverage_all_products() -> None:
+    tool_client = MockToolClient(
+        {
+            "query_assay_standard_coverage": {
+                "scopeLabel": "当前在库全部产品",
+                "coverageType": "PRODUCT_WITHOUT_STANDARD",
+                "totalGroups": 1,
+                "summaryText": "当前在库全部产品共有 1 个当前在库产品未绑定有效质量标准。",
+                "groups": [
+                    {
+                        "groupLabel": "黄冰糖（袋）",
+                        "coverageLabel": "未绑定质量标准",
+                        "affectedStockText": "2板20件",
+                        "riskLabels": ["无法自动判定化验合格性"],
+                    }
+                ],
+            }
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("哪些在库产品没有质量标准？"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "未绑定有效质量标准" in body["answer"]
+    assert "黄冰糖（袋）" in body["answer"]
+    assert "不等同于化验不合格" in body["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["query_assay_standard_coverage"]
+    arguments = tool_client.calls[0]["arguments"]
+    assert arguments["productScope"] == {"type": "ALL"}
+    assert arguments["coverageType"] == "PRODUCT_WITHOUT_STANDARD"
+    assert arguments["limit"] == 50
+
+
+def test_query_products_without_recent_assay_resolves_warehouse_scope() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "needsUserSelection": False,
+                "candidates": [{"warehouseId": 1, "warehouseName": "1", "displayLabel": "1号库位"}],
+            },
+            "query_products_without_recent_assay": {
+                "scopeLabel": "当前在库全部产品",
+                "warehouseScopeLabel": "1号库位",
+                "dateRangeLabel": "今天",
+                "totalGroups": 0,
+                "summaryText": "未查询到1号库位中当前在库全部产品在今天缺少有效化验的当前在库分组。",
+                "groups": [],
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("1号库位有哪些库存缺化验？"))
+
+    assert response.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_warehouses",
+        "query_products_without_recent_assay",
+    ]
+    assert tool_client.calls[1]["arguments"]["warehouseScope"] == {"type": "SINGLE_WAREHOUSE", "warehouseId": 1}
+    assert tool_client.calls[1]["arguments"]["productScope"] == {"type": "ALL"}
+
+
+def test_query_assay_records_resolves_product_before_range_query() -> None:
+    tool_client = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "needsUserSelection": False,
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖",
+                        "packagingMethod": "袋",
+                        "weightPerPiece": 25,
+                        "piecesPerPallet": 40,
+                    }
+                ],
+            },
+            "query_assay_records": {
+                "scopeLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                "dateRangeLabel": "最近30天",
+                "total": 1,
+                "summaryText": "最近30天黄冰糖（袋）共有 1 条不合格化验记录。",
+                "records": [
+                    {
+                        "productLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                        "sampleDate": "2026-07-08",
+                        "judgeLabel": "不合格",
+                        "failedMetricText": "色值",
+                        "standardLabel": "黄冰糖标准 v3",
+                    }
+                ],
+            },
+        }
+    )
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("黄冰糖最近30天不合格化验记录"))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "不合格化验记录" in body["answer"]
+    assert "异常指标：色值" in body["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_products", "query_assay_records"]
+    arguments = tool_client.calls[-1]["arguments"]
+    assert arguments["productScope"] == {"type": "SINGLE_PRODUCT", "productId": 84}
+    assert arguments["dateRange"] == {"type": "LAST_DAYS", "days": 30}
+    assert arguments["judgeStatus"] == "FAILED"
+def test_production_order_progress_uses_controlled_resolver_chain() -> None:
+    tool_client = MockToolClient({
+        "resolve_production_entities": {
+            "resolutionStatus": "EXACT",
+            "needsUserSelection": False,
+            "entityType": "PRODUCTION_ORDER",
+            "candidates": [{
+                "entityRef": "aer_controlled-order-ref",
+                "entityType": "PRODUCTION_ORDER",
+                "displayCode": "PO-20260713-001",
+                "status": "IN_PROGRESS",
+            }],
+        },
+        "query_production_order_progress": {
+            "dataScope": "CURRENT_PRODUCTION_ORDER_PROGRESS",
+            "orderNo": "PO-20260713-001",
+            "status": "IN_PROGRESS",
+            "productionDate": "2026-07-13",
+            "materialRecordCount": 2,
+            "outputRecordCount": 1,
+            "requiredQrCount": 10,
+            "boundQrCount": 8,
+            "inboundQrCount": 6,
+            "reservedLabelCount": 10,
+            "limitations": ["不代表质量放行结论。"],
+        },
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查询生产订单 PO-20260713-001 的进度"),
+    )
+
+    assert response.status_code == 200
+    assert "PO-20260713-001" in response.json()["answer"]
+    assert "不代表产出率、损耗率或质量放行结论" in response.json()["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_production_entities",
+        "query_production_order_progress",
+    ]
+    assert all(call["expertAgent"] == "production_expert" for call in tool_client.calls)
+    assert tool_client.calls[1]["arguments"] == {"orderRef": "aer_controlled-order-ref"}
+
+
+def test_production_order_ambiguity_does_not_query_progress() -> None:
+    tool_client = MockToolClient({
+        "resolve_production_entities": {
+            "resolutionStatus": "AMBIGUOUS",
+            "needsUserSelection": True,
+            "entityType": "PRODUCTION_ORDER",
+            "candidates": [
+                {"entityRef": "aer_one", "displayCode": "PO-20260713-001"},
+                {"entityRef": "aer_two", "displayCode": "PO-20260713-002"},
+            ],
+        }
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查询生产订单 PO-20260713 的进度"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["needsUserSelection"] is True
+    assert "PO-20260713-001" in response.json()["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_production_entities"]
+
+
+def test_boiling_batch_trace_uses_controlled_ref_and_safe_formatter() -> None:
+    tool_client = MockToolClient({
+        "resolve_production_entities": {
+            "resolutionStatus": "EXACT",
+            "needsUserSelection": False,
+            "entityType": "BOILING_BATCH",
+            "candidates": [{
+                "entityRef": "aer_controlled-batch-ref",
+                "entityType": "BOILING_BATCH",
+                "displayCode": "BT-20260713-001",
+            }],
+        },
+        "query_boiling_batch_trace": {
+            "dataScope": "REGISTERED_BOILING_BATCH_TRACE",
+            "batchNo": "BT-20260713-001",
+            "status": "AVAILABLE",
+            "productName": "黄冰糖",
+            "totalWeightKg": 1000,
+            "remainingWeightKg": 400,
+            "usageCount": 2,
+            "nodeCount": 3,
+            "edgeCount": 2,
+            "limitations": ["缺失关系不会推断。"],
+        },
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查询煮糖批次 BT-20260713-001 的追溯"),
+    )
+
+    assert response.status_code == 200
+    assert "BT-20260713-001" in response.json()["answer"]
+    assert "缺失的上下游关系不会由 Agent 推断" in response.json()["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_production_entities",
+        "query_boiling_batch_trace",
+    ]
+    assert all(call["expertAgent"] == "production_expert" for call in tool_client.calls)
+    assert tool_client.calls[1]["arguments"] == {"batchRef": "aer_controlled-batch-ref"}
+
+
+def test_material_pick_trace_uses_order_ref_and_does_not_claim_variance() -> None:
+    tool_client = MockToolClient({
+        "resolve_production_entities": {
+            "resolutionStatus": "EXACT", "needsUserSelection": False, "entityType": "PRODUCTION_ORDER",
+            "candidates": [{"entityRef": "aer_order", "entityType": "PRODUCTION_ORDER", "displayCode": "PO-001"}],
+        },
+        "query_material_pick_trace": {
+            "dataScope": "REGISTERED_MATERIAL_PICK_TRACE", "orderNo": "PO-001", "orderStatus": "IN_PROGRESS",
+            "materialRecordCount": 1,
+            "records": [{"productName": "半成品糖", "palletCode": "P001", "warehouseName": "1号库位", "totalWeight": 500}],
+        },
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询生产订单 PO-001 的领料追溯"))
+
+    assert response.status_code == 200
+    assert "半成品糖" in response.json()["answer"]
+    assert "不计算计划差异、损耗或实际消耗率" in response.json()["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_production_entities", "query_material_pick_trace"]
+    assert tool_client.calls[1]["arguments"] == {"orderRef": "aer_order"}
+
+
+def test_production_label_completion_routes_through_resolver_and_keeps_stage_semantics() -> None:
+    tool_client = MockToolClient({
+        "resolve_production_entities": {
+            "resolutionStatus": "EXACT", "needsUserSelection": False, "entityType": "PRODUCTION_ORDER",
+            "candidates": [{"entityRef": "aer_order", "entityType": "PRODUCTION_ORDER", "displayCode": "PO-001"}],
+        },
+        "query_production_label_completion": {
+            "dataScope": "CURRENT_PRODUCTION_LABEL_COMPLETION", "orderNo": "PO-001",
+            "orderStatus": "IN_PROGRESS", "labelBatchCount": 1,
+            "reservedLabelCount": 10, "usedLabelCount": 8, "recycledLabelCount": 1,
+            "requiredQrCount": 10, "boundQrCount": 7, "inboundQrCount": 4,
+            "notBoundQrCount": 3, "notInboundQrCount": 6,
+            "batches": [{"batchNo": "LB-001", "productName": "白砂糖", "status": "PRINTED"}],
+            "limitations": ["printedAt 仅表示标签批次记录了打印时间，不代表二维码已绑定或已入库。"],
+        },
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查询生产订单 PO-001 的标签打印、二维码绑定和入库完成情况"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "不等同于二维码已绑定或已入库" in body["answer"]
+    assert "尚未绑定 3" in body["answer"]
+    assert "尚未入库 6" in body["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_production_entities", "query_production_label_completion"
+    ]
+    assert all(call["expertAgent"] == "production_expert" for call in tool_client.calls)
+    assert tool_client.calls[1]["arguments"] == {"orderRef": "aer_order"}
+
+
+def test_in_process_materials_uses_production_expert_and_preserves_limitations() -> None:
+    tool_client = MockToolClient({"query_in_process_materials": {
+        "dataScope": "CURRENT_REGISTERED_IN_PROCESS_MATERIALS", "total": 1, "page": 1, "size": 20,
+        "records": [{"orderNo": "PO-001", "productName": "半成品糖", "palletCode": "P001", "materialStatus": "PICKED"}],
+        "limitations": ["在制记录不代表仍可再次领用、质量已放行、FIFO/FEFO 推荐或实时库存结余。"],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询当前在制半成品"))
+
+    assert response.status_code == 200
+    assert "半成品糖" in response.json()["answer"]
+    assert "状态 已领用" in response.json()["answer"]
+    assert "PICKED" not in response.json()["answer"]
+    assert "不代表仍可再次领用" in response.json()["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["query_in_process_materials"]
+    assert tool_client.calls[0]["expertAgent"] == "production_expert"
+
+
+def test_material_candidates_use_controlled_order_ref_without_recommendation_claim() -> None:
+    tool_client = MockToolClient({
+        "resolve_production_entities": {"resolutionStatus": "EXACT", "needsUserSelection": False,
+            "entityType": "PRODUCTION_ORDER", "candidates": [{"entityRef": "aer_order", "displayCode": "PO-001"}]},
+        "query_material_candidates": {"dataScope": "CURRENT_MATERIAL_CANDIDATE_INVENTORY", "total": 1,
+            "records": [{"productName": "半成品糖", "palletCode": "P001", "warehouseName": "1号库位"}]},
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询生产订单 PO-001 的领料候选"))
+
+    assert response.status_code == 200
+    assert "不是 FIFO/FEFO 推荐" in response.json()["answer"]
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_production_entities", "query_material_candidates"]
+    assert tool_client.calls[1]["arguments"] == {"orderRef": "aer_order"}
+
+
+def test_pending_outbound_tasks_route_to_logistics_expert_without_execution() -> None:
+    tool_client = MockToolClient({"query_pallet_tasks": {
+        "dataScope": "CURRENT_PALLET_TASKS", "total": 1, "page": 1, "size": 20,
+        "records": [{"taskType": "OUT", "taskStatus": "PENDING", "code": "P001", "productName": "冰糖"}],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询待处理的出库任务列表"))
+
+    assert response.status_code == 200
+    assert "未确认、取消或执行" in response.json()["answer"]
+    assert tool_client.calls[0]["toolName"] == "query_pallet_tasks"
+    assert tool_client.calls[0]["expertAgent"] == "logistics_expert"
+    assert tool_client.calls[0]["arguments"]["taskType"] == "OUT"
+    assert tool_client.calls[0]["arguments"]["status"] == "PENDING"
+    assert "出库任务" in response.json()["answer"]
+    assert "状态为待处理" in response.json()["answer"]
+    assert "OUT" not in response.json()["answer"]
+    assert "PENDING" not in response.json()["answer"]
+
+
+def test_outbound_documents_route_to_logistics_expert_and_one_source() -> None:
+    tool_client = MockToolClient({"query_stock_documents": {"dataScope": "RECORDED_STOCK_DOCUMENTS",
+        "documentType": "OUTBOUND", "total": 1, "page": 1, "size": 20,
+        "records": [{"businessDate": "2026-07-14", "productName": "冰糖", "warehouseName": "1号库位", "quantity": 2}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询最近的出库单据"))
+
+    assert response.status_code == 200
+    assert "每次只查询一种明确单据来源" in response.json()["answer"]
+    assert tool_client.calls[0]["expertAgent"] == "logistics_expert"
+    assert tool_client.calls[0]["arguments"]["documentType"] == "OUTBOUND"
+
+
+def test_auto_inbound_batches_keep_opaque_ref_out_of_answer_and_support_numbered_detail() -> None:
+    opaque_ref = "aibr_" + "A" * 43
+    tool_client = MockToolClient({
+        "query_auto_inbound_batches": {
+            "dataScope": "CURRENT_USER_RECENT_AUTO_INBOUND_BATCHES", "count": 1,
+            "records": [{"batchRef": opaque_ref, "displayName": "今日报数", "taskCount": 1, "status": "PARSED"}],
+        },
+        "get_auto_inbound_batch_detail": {
+            "dataScope": "CURRENT_USER_AUTO_INBOUND_BATCH_DETAIL", "batchRef": opaque_ref, "taskCount": 1,
+            "tasks": [{"productName": "单晶冰糖", "warehouseName": "1号库位", "status": "PENDING", "riskLevel": "GREEN"}],
+        },
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    client = TestClient(app)
+
+    listed = client.post("/internal/agent/chat", json=chat_payload("查询智能报数批次"))
+    detailed = client.post("/internal/agent/chat", json=chat_payload("查看智能报数批次第一个批次详情"))
+
+    assert listed.status_code == 200
+    assert opaque_ref not in listed.json()["answer"]
+    assert "未确认或执行入库" in listed.json()["answer"]
+    assert detailed.status_code == 200
+    assert opaque_ref not in detailed.json()["answer"]
+    assert tool_client.calls[-1]["toolName"] == "get_auto_inbound_batch_detail"
+    assert tool_client.calls[-1]["arguments"] == {"batchRef": opaque_ref}
+    assert all(call["expertAgent"] == "logistics_expert" for call in tool_client.calls)
+
+
+def test_warehouse_capacity_distribution_routes_to_warehouse_expert_without_risk_claim() -> None:
+    tool_client = MockToolClient({"query_warehouse_capacity_distribution": {
+        "dataScope": "CURRENT_WAREHOUSE_CAPACITY_FACTS", "total": 1,
+        "summary": {"currentCapacity": 9, "maximumCapacity": 10, "remainingCapacity": 1},
+        "records": [{"warehouseName": "2号库位", "currentCapacity": 9, "maximumCapacity": 10,
+                     "remainingCapacity": 1, "occupancyRate": 90, "occupancyBand": "HIGH"}],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("哪些库位快满了"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_warehouse_capacity_distribution"
+    assert tool_client.calls[0]["expertAgent"] == "warehouse_expert"
+    assert tool_client.calls[0]["arguments"]["occupancyBand"] == "HIGH"
+    assert "不是业务风险" in response.json()["answer"]
+
+
+def test_empty_high_capacity_distribution_explains_filter_without_zero_global_summary() -> None:
+    tool_client = MockToolClient({"query_warehouse_capacity_distribution": {
+        "dataScope": "CURRENT_WAREHOUSE_CAPACITY_FACTS", "total": 0,
+        "summary": {"currentCapacity": 0, "maximumCapacity": 0, "remainingCapacity": 0},
+        "records": [],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("哪些库位快满了"))
+
+    assert response.status_code == 200
+    assert "没有库位符合“快满”条件" in response.json()["answer"]
+    assert "不代表系统中没有库位" in response.json()["answer"]
+    assert "最大容量 0" not in response.json()["answer"]
+
+
+def test_warehouse_recent_operations_resolve_single_warehouse_and_keep_event_ledger_boundary() -> None:
+    tool_client = MockToolClient({
+        "resolve_warehouses": {"resolutionStatus": "UNIQUE", "candidates": [
+            {"warehouseId": 2, "displayLabel": "2号库位", "matchType": "EXACT_NAME"}]},
+        "query_warehouse_recent_operations": {"dataScope": "RECORDED_WAREHOUSE_PALLET_FLOW_EVENTS", "count": 1,
+            "records": [{"operationTime": "2026-07-14T09:00:00", "eventType": "TRANSFER",
+                         "productName": "单晶冰糖", "fromWarehouseName": "2号库位", "toWarehouseName": "3号库位"}]},
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("2号库位最近发生了什么"))
+
+    assert response.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_warehouses", "query_warehouse_recent_operations"]
+    assert tool_client.calls[1]["arguments"]["warehouseId"] == 2
+    assert all(call["expertAgent"] == "warehouse_expert" for call in tool_client.calls)
+    assert "不是完整操作日志" in response.json()["answer"]
+
+
+def test_mixed_storage_query_returns_facts_without_risk_decision() -> None:
+    tool_client = MockToolClient({"query_warehouse_mixed_storage_facts": {
+        "dataScope": "CURRENT_WAREHOUSE_MULTI_PRODUCT_SPEC_FACTS", "count": 1,
+        "records": [{"warehouseName": "1号库位", "productCount": 2, "specificationCount": 3,
+                     "productLabels": ["单晶冰糖", "老冰糖"]}],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("哪些库位放了多个产品"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_warehouse_mixed_storage_facts"
+    assert tool_client.calls[0]["expertAgent"] == "warehouse_expert"
+    assert tool_client.calls[0]["arguments"]["factType"] == "MULTIPLE_PRODUCTS"
+    assert "不得解释为违规、风险或调拨建议" in response.json()["answer"]
+
+
+def test_product_catalog_defaults_to_all_product_statuses_without_inventory_claim() -> None:
+    tool_client = MockToolClient({"query_product_catalog": {"dataScope": "CURRENT_PRODUCT_MASTER_DATA", "total": 1,
+        "records": [{"productName": "单晶冰糖", "productType": "白冰糖", "productStatus": "成品",
+                     "packagingMethod": "袋", "screenMeshName": "8目"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询成品产品目录"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_product_catalog"
+    assert tool_client.calls[0]["expertAgent"] == "master_data_expert"
+    assert "productStatus" not in tool_client.calls[0]["arguments"]
+    assert "productName" not in tool_client.calls[0]["arguments"]
+    assert "不代表库存、质量合格或生产可用性" in response.json()["answer"]
+
+
+def test_product_catalog_only_filters_status_when_user_explicitly_requests_it() -> None:
+    tool_client = MockToolClient({"query_product_catalog": {
+        "dataScope": "CURRENT_PRODUCT_MASTER_DATA", "total": 1,
+        "records": [{"productName": "半成品糖", "productType": "白冰糖", "productStatus": "半成品"}],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("产品目录中只看半成品"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_product_catalog"
+    assert tool_client.calls[0]["arguments"]["productStatus"] == "半成品"
+
+
+def test_screen_mesh_catalog_routes_to_master_data_expert() -> None:
+    tool_client = MockToolClient({"query_screen_mesh_catalog": {"dataScope": "CURRENT_SCREEN_MESH_MASTER_DATA", "total": 1,
+        "records": [{"meshName": "8目", "description": "成品筛网"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("系统有哪些筛网"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_screen_mesh_catalog"
+    assert tool_client.calls[0]["expertAgent"] == "master_data_expert"
+    assert "不代表产品当前实际使用情况" in response.json()["answer"]
+
+
+def test_quality_standard_catalog_stays_with_assay_expert_and_no_usage_claim() -> None:
+    tool_client = MockToolClient({"query_quality_standard_catalog": {"dataScope": "CURRENT_QUALITY_STANDARD_CATALOG", "total": 1,
+        "records": [{"standardCode": "QS-001", "standardName": "白冰糖标准", "version": 2, "status": "ENABLED"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询质量标准目录"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_quality_standard_catalog"
+    assert tool_client.calls[0]["expertAgent"] == "assay_expert"
+    assert "不证明某次化验实际采用该标准" in response.json()["answer"]
+    assert "状态为已启用" in response.json()["answer"]
+    assert "ENABLED" not in response.json()["answer"]
+
+
+def test_employee_roster_routes_to_administration_expert_and_masks_mobile() -> None:
+    tool_client = MockToolClient({"query_employee_roster": {"dataScope": "CURRENT_EMPLOYEE_ROSTER", "total": 1,
+        "records": [{"employeeId": "E001", "name": "张三", "maskedMobile": "138****5678", "department": "仓储部", "position": "库管", "status": "在职"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询员工名册"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_employee_roster"
+    assert tool_client.calls[0]["expertAgent"] == "administration_expert"
+    assert "138****5678" in response.json()["answer"]
+    assert "登录凭据" in response.json()["answer"]
+
+
+def test_role_permission_summary_requires_exact_key_and_stays_with_administration_expert() -> None:
+    tool_client = MockToolClient({"get_role_permission_summary": {"dataScope": "CURRENT_RBAC_ROLE_PERMISSION_SUMMARY",
+        "roleCode": "WAREHOUSE", "roleName": "仓库员", "permissionCount": 1,
+        "permissions": [{"permissionCode": "inventory:view", "permissionName": "查看库存", "permissionGroup": "INVENTORY"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查看角色 WAREHOUSE 的权限摘要"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "get_role_permission_summary"
+    assert tool_client.calls[0]["expertAgent"] == "administration_expert"
+    assert tool_client.calls[0]["arguments"]["roleCodeOrName"] == "WAREHOUSE"
+    assert "每次业务查询仍会重新执行 RBAC 鉴权" in response.json()["answer"]
+
+
+def test_operation_logs_route_to_audit_expert_and_only_format_safe_fields() -> None:
+    tool_client = MockToolClient({"search_operation_logs": {"dataScope": "RECORDED_BUSINESS_OPERATION_LOGS", "total": 1,
+        "records": [{"module": "inventory", "operationType": "UPDATE", "operator": "张三", "operationTime": "2026-07-14T10:00:00", "changedFieldNames": ["quantity"]}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询操作日志"))
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "search_operation_logs"
+    assert tool_client.calls[0]["expertAgent"] == "audit_expert"
+    assert "修改前后值" in response.json()["answer"]
+    assert "执行修改" in response.json()["answer"]
+    assert "UPDATE" not in response.json()["answer"]
+
+
+def test_agent_tool_audit_does_not_expose_arguments_or_context() -> None:
+    tool_client = MockToolClient({"query_agent_tool_audit": {"dataScope": "RECORDED_AGENT_TOOL_AUDIT", "total": 1,
+        "records": [{"capability": "query_roles", "resultCode": "SUCCESS", "durationMs": 8, "occurredAt": "2026-07-14T10:00:00"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询 Agent 工具审计"))
+    assert response.status_code == 200
+    assert tool_client.calls[0]["expertAgent"] == "audit_expert"
+    assert "参数、Prompt、模型上下文" in response.json()["answer"]
+
+
+def test_agent_answer_reviews_return_safe_summary_only() -> None:
+    tool_client = MockToolClient({"query_agent_answer_reviews": {"dataScope": "AGENT_ANSWER_REVIEW_SAFE_SUMMARY", "total": 1,
+        "records": [{"answerStatus": "NEEDS_REVIEW", "confidenceLevel": "LOW", "failureDomain": "ROUTER", "reviewStatus": "OPEN"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询 Agent 回答审查"))
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_agent_answer_reviews"
+    assert "用户原问题" in response.json()["answer"]
+
+
+def test_inventory_ledger_is_current_snapshot_not_history_or_qualification() -> None:
+    tool_client = MockToolClient({"query_inventory_ledger": {"dataScope": "CURRENT_INVENTORY_LEDGER_ROWS", "total": 1, "inventoryAsOf": "2026-07-14T12:00:00",
+        "records": [{"warehouseName": "1号库", "productName": "单晶冰糖", "location": "A-1-1", "palletQuantity": 1, "pieces": 20, "entryDate": "2026-07-10"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询库存台账"))
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_inventory_ledger"
+    assert tool_client.calls[0]["expertAgent"] == "inventory_expert"
+    assert "不是完整历史流水" in response.json()["answer"]
+    assert "不证明当前库存批次质量合格" in response.json()["answer"]
+
+
+def test_prepare_pool_balance_is_positive_only_and_not_reservation_claim() -> None:
+    tool_client = MockToolClient({"query_prepare_pool_balance": {"dataScope": "CURRENT_POSITIVE_PREPARE_POOL_BALANCE", "total": 1,
+        "records": [{"productName": "半成品糖", "inPieces": 30, "consumedPieces": 10, "remainingPieces": 20}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询备料池余额"))
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_prepare_pool_balance"
+    assert tool_client.calls[0]["arguments"]["positiveOnly"] is True
+    assert "不等于已为订单保留" in response.json()["answer"]
+
+
+def test_fixed_product_qr_pool_is_read_only_and_printability_is_not_activation() -> None:
+    tool_client = MockToolClient({"query_fixed_product_qr_pool": {"dataScope": "CURRENT_FIXED_PRODUCT_QR_POOL", "total": 1,
+        "records": [{"code": "QR001", "fixedProductName": "单晶冰糖", "status": "FREE", "allowPrint": True}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询固定产品二维码池中的可打印码"))
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_fixed_product_qr_pool"
+    assert tool_client.calls[0]["expertAgent"] == "pallet_expert"
+    assert tool_client.calls[0]["arguments"]["freeOnly"] is True
+    assert "不表示标签已打印" in response.json()["answer"]
+    assert "状态为空闲、可使用" in response.json()["answer"]
+    assert "FREE" not in response.json()["answer"]
+    assert "未执行绑定、打印、启用、作废、恢复" in response.json()["answer"]
+
+
+def test_quality_standard_detail_requires_code_and_version() -> None:
+    tool_client = MockToolClient({"get_quality_standard_detail": {"dataScope": "CURRENT_QUALITY_STANDARD_DETAIL",
+        "standardCode": "QS-001", "standardName": "白冰糖标准", "version": 2, "status": "ENABLED", "metrics": [{}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查看质量标准详情，代码 QS-001 版本 2"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["arguments"] == {"standardCode": "QS-001", "version": 2}
+    assert "最终质量判定仍由确定性服务执行" in response.json()["answer"]
+
+
+def test_all_finished_products_phrase_routes_to_product_catalog() -> None:
+    tool_client = MockToolClient({"query_product_catalog": {
+        "dataScope": "CURRENT_PRODUCT_MASTER_DATA", "total": 2,
+        "records": [{"productName": "黄冰糖（袋）", "productType": "黄冰糖", "productStatus": "成品"}],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询所有成品产品"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_product_catalog"
+    assert tool_client.calls[0]["expertAgent"] == "master_data_expert"
+
+
+def test_product_detail_resolves_display_name_and_establishes_product_context() -> None:
+    tool_client = MockToolClient({
+        "resolve_products": {"resolutionStatus": "UNIQUE", "candidates": [{
+            "productId": 84, "productName": "黄冰糖（袋）", "displayLabel": "黄冰糖（袋）",
+        }]},
+        "get_product_detail": {"dataScope": "CURRENT_PRODUCT_MASTER_DETAIL", "productName": "黄冰糖（袋）",
+            "productType": "黄冰糖", "productStatus": "成品", "packagingMethod": "袋"},
+        "get_assay_status": {"judgeResult": "NO_ASSAY", "needsAssay": True},
+    })
+    checkpointer = InMemoryCheckpointer()
+    client = TestClient(create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer))
+
+    detail = client.post("/internal/agent/chat", json=chat_payload("查询黄冰糖（袋）的产品详情"))
+    assay = client.post("/internal/agent/chat", json=chat_payload("它今天有没有化验？"))
+
+    assert detail.status_code == 200
+    assert assay.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == ["resolve_products", "get_product_detail", "get_assay_status"]
+    assert tool_client.calls[0]["arguments"]["query"] == "黄冰糖（袋）"
+    assert tool_client.calls[2]["arguments"]["productId"] == 84
+
+
+def test_chinese_role_name_is_accepted_for_permission_summary() -> None:
+    tool_client = MockToolClient({"get_role_permission_summary": {
+        "dataScope": "CURRENT_RBAC_ROLE_PERMISSION_SUMMARY", "roleName": "管理员", "permissionCount": 1,
+        "permissions": [{"permissionName": "查看库存"}],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询管理员角色有哪些权限"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "get_role_permission_summary"
+    assert tool_client.calls[0]["arguments"] == {"roleCodeOrName": "管理员"}
+
+
+def test_selected_warehouse_context_scopes_capacity_and_recent_flows() -> None:
+    tool_client = MockToolClient({
+        "resolve_warehouses": {"resolutionStatus": "UNIQUE", "candidates": [
+            {"warehouseId": 1, "displayLabel": "1号库位"}]},
+        "get_warehouse_status": {"warehouseName": "1", "currentCapacity": 19, "maximumCapacity": 60,
+            "remainingCapacity": 41, "inventory": []},
+        "query_warehouse_recent_operations": {"dataScope": "RECORDED_WAREHOUSE_PALLET_FLOW_EVENTS",
+            "count": 0, "records": []},
+    })
+    client = TestClient(create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer()))
+
+    first = client.post("/internal/agent/chat", json=chat_payload("1号库位当前情况"))
+    capacity = client.post("/internal/agent/chat", json=chat_payload("这个库位还有多少容量？"))
+    flows = client.post("/internal/agent/chat", json=chat_payload("最近发生过哪些流转？"))
+
+    assert first.status_code == capacity.status_code == flows.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_warehouses", "get_warehouse_status", "get_warehouse_status", "query_warehouse_recent_operations"
+    ]
+    assert tool_client.calls[2]["arguments"] == {"warehouseId": 1}
+    assert tool_client.calls[3]["arguments"]["warehouseId"] == 1
+
+
+def test_production_order_ambiguity_uses_hitl_and_followup_reuses_controlled_ref() -> None:
+    tool_client = MockToolClient({
+        "resolve_production_entities": {"resolutionStatus": "AMBIGUOUS", "needsUserSelection": True,
+            "entityType": "PRODUCTION_ORDER", "candidates": [
+                {"entityRef": "aer_order_one", "displayCode": "PO202606300003"},
+                {"entityRef": "aer_order_two", "displayCode": "PO202606300002"}]},
+        "query_production_order_progress": {"orderNo": "PO202606300003", "status": "COMPLETED"},
+        "query_material_pick_trace": {"orderNo": "PO202606300003", "orderStatus": "COMPLETED", "records": []},
+    })
+    checkpointer = InMemoryCheckpointer()
+    client = TestClient(create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer))
+
+    clarification = client.post("/internal/agent/chat", json=chat_payload("查询生产订单2026的进度"))
+    resumed = client.post("/internal/agent/resume", json=resume_payload(checkpointer))
+    materials = client.post("/internal/agent/chat", json=chat_payload("这个订单领过哪些物料？"))
+
+    assert clarification.status_code == resumed.status_code == materials.status_code == 200
+    assert clarification.json()["needsUserSelection"] is True
+    assert clarification.json()["cards"][0]["cardType"] == "candidate_selection"
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_production_entities", "query_production_order_progress", "query_material_pick_trace"
+    ]
+    assert tool_client.calls[1]["arguments"] == {"orderRef": "aer_order_one"}
+    assert tool_client.calls[2]["arguments"] == {"orderRef": "aer_order_one"}
+    assert "已完成" in resumed.json()["answer"] and "COMPLETED" not in resumed.json()["answer"]

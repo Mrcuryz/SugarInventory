@@ -4,9 +4,19 @@ import com.Laibin.SugarInventory.mcp.client.WarehouseApiClient;
 import com.Laibin.SugarInventory.mcp.client.WarehouseApiException;
 import com.Laibin.SugarInventory.mcp.model.ToolModels;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AmbiguityType;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayRecordsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayRecordsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayReportDetailRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayReportDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStandardCoverageRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStandardCoverageResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayAbnormalitiesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayAbnormalitiesResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayLookupMode;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductsWithoutRecentAssayRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductsWithoutRecentAssayResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRecord;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewResponse;
@@ -18,6 +28,62 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.OptionType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PageInfo;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletLifecycleRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletLifecycleResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletFlowRecordsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletFlowRecordsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PrintedNotInboundCodesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PrintedNotInboundCodesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletAnomaliesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletAnomaliesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QrBatchInboundCompletionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QrBatchInboundCompletionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolveRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolutionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialPickTraceRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialPickTraceResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionLabelCompletionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionLabelCompletionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionInProcessMaterialsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionInProcessMaterialsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidatesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidatesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchDetailRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseCapacityDistributionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseCapacityDistributionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseRecentOperationsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseRecentOperationsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseMixedStorageFactsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseMixedStorageFactsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCatalogRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayGroupsCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductStandardRelationsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.EmployeeRosterResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RoleCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RolePermissionSummaryResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AuditPageResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryLedgerResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PreparePoolBalanceResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FixedProductQrPoolResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCandidate;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductResolutionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
@@ -205,6 +271,394 @@ public class WarehouseReadService {
                 request.productScope(), request.warehouseScope(), request.statusFilter(), request.groupBy(),
                 request.limit() == null ? 20 : request.limit());
         return apiClient.postData("/api/inventory/distribution", normalized, InventoryDistributionResponse.class);
+    }
+
+    public AssayRecordsResponse queryAssayRecords(AssayRecordsRequest request) {
+        ToolModels.ToolError validation = validateAssayRecordsRequest(request);
+        if (validation != null) {
+            return AssayRecordsResponse.error(validation);
+        }
+        AssayRecordsRequest normalized = new AssayRecordsRequest(
+                request.productScope(),
+                request.dateRange(),
+                request.judgeStatus() == null ? "ANY" : request.judgeStatus(),
+                request.sortBy() == null ? "sampleDate" : request.sortBy(),
+                request.sortDirection() == null ? "DESC" : request.sortDirection(),
+                request.page() == null ? 1 : request.page(),
+                request.size() == null ? 20 : request.size());
+        return apiClient.postData("/api/assay/records/query", normalized, AssayRecordsResponse.class);
+    }
+
+    public AssayReportDetailResponse getAssayReportDetail(AssayReportDetailRequest request) {
+        ToolModels.ToolError validation = validateAssayReportDetailRequest(request);
+        if (validation != null) {
+            return AssayReportDetailResponse.error(validation);
+        }
+        AssayReportDetailRequest normalized = new AssayReportDetailRequest(
+                request.reportRef().trim(),
+                request.includeMetrics() == null || request.includeMetrics(),
+                request.includeStandardSnapshot() == null || request.includeStandardSnapshot());
+        return apiClient.postData("/api/assay/report-detail/query", normalized, AssayReportDetailResponse.class);
+    }
+
+    public AssayAbnormalitiesResponse queryAssayAbnormalities(AssayAbnormalitiesRequest request) {
+        ToolModels.ToolError validation = validateAssayAbnormalitiesRequest(request);
+        if (validation != null) {
+            return AssayAbnormalitiesResponse.error(validation);
+        }
+        AssayAbnormalitiesRequest normalized = new AssayAbnormalitiesRequest(
+                request.productScope(),
+                request.dateRange(),
+                request.abnormalTypes() == null || request.abnormalTypes().isEmpty()
+                        ? List.of("FAILED", "NO_STANDARD", "MULTIPLE_CANDIDATES")
+                        : request.abnormalTypes(),
+                request.groupBy() == null ? "product" : request.groupBy(),
+                request.limit() == null ? 50 : request.limit());
+        return apiClient.postData("/api/assay/abnormalities/query", normalized, AssayAbnormalitiesResponse.class);
+    }
+
+    public ProductsWithoutRecentAssayResponse queryProductsWithoutRecentAssay(ProductsWithoutRecentAssayRequest request) {
+        ToolModels.ToolError validation = validateProductsWithoutRecentAssayRequest(request);
+        if (validation != null) {
+            return ProductsWithoutRecentAssayResponse.error(validation);
+        }
+        ProductsWithoutRecentAssayRequest normalized = new ProductsWithoutRecentAssayRequest(
+                request.productScope(),
+                request.warehouseScope(),
+                request.population() == null ? "CURRENT_INVENTORY" : request.population(),
+                request.dateRange(),
+                request.groupBy() == null ? "product" : request.groupBy(),
+                request.limit() == null ? 50 : request.limit());
+        return apiClient.postData("/api/assay/products-without-recent-assay/query", normalized,
+                ProductsWithoutRecentAssayResponse.class);
+    }
+
+    public AssayStandardCoverageResponse queryAssayStandardCoverage(AssayStandardCoverageRequest request) {
+        ToolModels.ToolError validation = validateAssayStandardCoverageRequest(request);
+        if (validation != null) {
+            return AssayStandardCoverageResponse.error(validation);
+        }
+        AssayStandardCoverageRequest normalized = new AssayStandardCoverageRequest(
+                request.productScope(),
+                request.dateRange(),
+                request.coverageType() == null ? "PRODUCT_WITHOUT_STANDARD" : request.coverageType(),
+                request.limit() == null ? 50 : request.limit());
+        return apiClient.postData("/api/assay/standard-coverage/query", normalized,
+                AssayStandardCoverageResponse.class);
+    }
+
+    public PalletLifecycleResponse queryQrCodeLifecycle(PalletLifecycleRequest request) {
+        ToolModels.ToolError validation = validatePalletLifecycleRequest(request);
+        if (validation != null) {
+            return PalletLifecycleResponse.error(validation);
+        }
+        PalletLifecycleRequest normalized = new PalletLifecycleRequest(
+                request.code().trim(),
+                request.includeInventory() == null || request.includeInventory(),
+                request.includeAssay() == null || request.includeAssay(),
+                request.includeFlows() == null || request.includeFlows(),
+                request.includePrintInfo() != null && request.includePrintInfo(),
+                request.flowLimit() == null ? 50 : request.flowLimit());
+        return apiClient.postData("/api/pallet-codes/lifecycle/query", normalized, PalletLifecycleResponse.class);
+    }
+
+    public PalletFlowRecordsResponse queryPalletFlowRecords(PalletFlowRecordsRequest request) {
+        ToolModels.ToolError validation = validatePalletFlowRecordsRequest(request);
+        if (validation != null) {
+            return PalletFlowRecordsResponse.error(validation);
+        }
+        PalletFlowRecordsRequest normalized = new PalletFlowRecordsRequest(
+                trimToNull(request.code()),
+                request.productScope(),
+                request.warehouseId(),
+                request.dateRange(),
+                request.eventTypes(),
+                request.page() == null ? 1 : request.page(),
+                request.size() == null ? 20 : request.size());
+        return apiClient.postData("/api/pallet-codes/flow-records/query", normalized, PalletFlowRecordsResponse.class);
+    }
+
+    public PrintedNotInboundCodesResponse queryPrintedNotInboundCodes(PrintedNotInboundCodesRequest request) {
+        ToolModels.ToolError validation = validatePrintedNotInboundCodesRequest(request);
+        if (validation != null) {
+            return PrintedNotInboundCodesResponse.error(validation);
+        }
+        PrintedNotInboundCodesRequest normalized = new PrintedNotInboundCodesRequest(
+                request.productScope() == null ? new ToolModels.ProductScope("ALL", null, null, null) : request.productScope(),
+                trimToNull(request.orderNo()),
+                trimToNull(request.batchNo()),
+                request.dateRange(),
+                request.groupBy() == null ? "batch" : request.groupBy(),
+                request.limit() == null ? 50 : request.limit());
+        return apiClient.postData("/api/pallet-codes/printed-not-inbound/query", normalized,
+                PrintedNotInboundCodesResponse.class);
+    }
+
+    public PalletAnomaliesResponse queryPalletAnomalies(PalletAnomaliesRequest request) {
+        ToolModels.ToolError validation = validatePalletAnomaliesRequest(request);
+        if (validation != null) {
+            return PalletAnomaliesResponse.error(validation);
+        }
+        PalletAnomaliesRequest normalized = new PalletAnomaliesRequest(
+                request.productScope() == null ? new ToolModels.ProductScope("ALL", null, null, null) : request.productScope(),
+                request.warehouseId(),
+                request.dateRange(),
+                request.anomalyTypes(),
+                request.limit() == null ? 50 : request.limit());
+        return apiClient.postData("/api/pallet-codes/anomalies/query", normalized, PalletAnomaliesResponse.class);
+    }
+
+    public QrBatchInboundCompletionResponse queryQrBatchInboundCompletion(QrBatchInboundCompletionRequest request) {
+        ToolModels.ToolError validation = validateQrBatchInboundCompletionRequest(request);
+        if (validation != null) {
+            return QrBatchInboundCompletionResponse.error(validation);
+        }
+        QrBatchInboundCompletionRequest normalized = new QrBatchInboundCompletionRequest(
+                trimToNull(request.batchNo()),
+                trimToNull(request.orderNo()),
+                request.productId(),
+                request.dateRange(),
+                request.includeUnfinishedExamples() == null || request.includeUnfinishedExamples(),
+                request.limit() == null ? 20 : request.limit());
+        return apiClient.postData("/api/pallet-codes/batch-inbound-completion/query", normalized,
+                QrBatchInboundCompletionResponse.class);
+    }
+
+    public ProductionEntityResolutionResponse resolveProductionEntities(ProductionEntityResolveRequest request) {
+        if (request == null || request.entityType() == null || request.entityType().isBlank()
+                || request.query() == null || request.query().isBlank()) {
+            throw new IllegalArgumentException("entityType and query are required");
+        }
+        int limit = request.limit() == null ? 5 : Math.max(1, Math.min(request.limit(), 10));
+        ProductionEntityResolveRequest normalized = new ProductionEntityResolveRequest(
+                request.entityType().trim(), request.query().trim(), limit);
+        return apiClient.postData("/api/production/agent-read/entities/resolve", normalized,
+                ProductionEntityResolutionResponse.class);
+    }
+
+    public ProductionOrderProgressResponse queryProductionOrderProgress(ProductionOrderProgressRequest request) {
+        if (request == null || request.orderRef() == null || request.orderRef().isBlank()) {
+            throw new IllegalArgumentException("orderRef is required");
+        }
+        return apiClient.postData("/api/production/agent-read/orders/progress/query",
+                new ProductionOrderProgressRequest(request.orderRef().trim()), ProductionOrderProgressResponse.class);
+    }
+
+    public ProductionBoilingBatchTraceResponse queryBoilingBatchTrace(ProductionBoilingBatchTraceRequest request) {
+        if (request == null || request.batchRef() == null || request.batchRef().isBlank()) {
+            throw new IllegalArgumentException("batchRef is required");
+        }
+        return apiClient.postData("/api/production/agent-read/boiling-batches/trace/query",
+                new ProductionBoilingBatchTraceRequest(request.batchRef().trim()),
+                ProductionBoilingBatchTraceResponse.class);
+    }
+
+    public ProductionMaterialPickTraceResponse queryMaterialPickTrace(ProductionMaterialPickTraceRequest request) {
+        if (request == null || request.orderRef() == null || request.orderRef().isBlank()) {
+            throw new IllegalArgumentException("orderRef is required");
+        }
+        return apiClient.postData("/api/production/agent-read/orders/material-pick-trace/query",
+                new ProductionMaterialPickTraceRequest(request.orderRef().trim()),
+                ProductionMaterialPickTraceResponse.class);
+    }
+
+    public ProductionLabelCompletionResponse queryProductionLabelCompletion(ProductionLabelCompletionRequest request) {
+        if (request == null || request.orderRef() == null || request.orderRef().isBlank()) {
+            throw new IllegalArgumentException("orderRef is required");
+        }
+        return apiClient.postData("/api/production/agent-read/orders/label-completion/query",
+                new ProductionLabelCompletionRequest(request.orderRef().trim()),
+                ProductionLabelCompletionResponse.class);
+    }
+
+    public ProductionInProcessMaterialsResponse queryInProcessMaterials(ProductionInProcessMaterialsRequest request) {
+        ProductionInProcessMaterialsRequest source = request == null
+                ? new ProductionInProcessMaterialsRequest(null, null, null, null, 1, 20) : request;
+        int page = source.page() == null ? 1 : source.page();
+        int size = source.size() == null ? 20 : source.size();
+        if (page < 1 || size < 1 || size > 50) {
+            throw new IllegalArgumentException("page must be >= 1 and size must be between 1 and 50");
+        }
+        return apiClient.postData("/api/production/agent-read/materials/in-process/query",
+                new ProductionInProcessMaterialsRequest(source.productName(), source.productType(),
+                        source.productionDateStart(), source.productionDateEnd(), page, size),
+                ProductionInProcessMaterialsResponse.class);
+    }
+
+    public ProductionMaterialCandidatesResponse queryMaterialCandidates(ProductionMaterialCandidatesRequest request) {
+        if (request == null || request.orderRef() == null || request.orderRef().isBlank()) {
+            throw new IllegalArgumentException("orderRef is required");
+        }
+        int page = request.page() == null ? 1 : request.page();
+        int size = request.size() == null ? 20 : request.size();
+        if (page < 1 || size < 1 || size > 50) throw new IllegalArgumentException("invalid pagination");
+        return apiClient.postData("/api/production/agent-read/orders/material-candidates/query",
+                new ProductionMaterialCandidatesRequest(request.orderRef().trim(), page, size),
+                ProductionMaterialCandidatesResponse.class);
+    }
+
+    public PalletTasksResponse queryPalletTasks(PalletTasksRequest request) {
+        PalletTasksRequest source = request == null
+                ? new PalletTasksRequest(null, null, null, null, null, null, null, null, null, null, 1, 20)
+                : request;
+        int page = source.page() == null ? 1 : source.page();
+        int size = source.size() == null ? 20 : source.size();
+        if (page < 1 || size < 1 || size > 50) throw new IllegalArgumentException("invalid pagination");
+        return apiClient.postData("/api/logistics/agent-read/pallet-tasks/query",
+                new PalletTasksRequest(source.code(), source.taskType(), source.bizScene(), source.status(),
+                        source.productName(), source.productType(), source.productStatus(), source.targetWarehouseName(),
+                        source.productionDateStart(), source.productionDateEnd(), page, size), PalletTasksResponse.class);
+    }
+
+    public StockDocumentsResponse queryStockDocuments(StockDocumentsRequest request) {
+        if (request == null || request.documentType() == null || request.documentType().isBlank()) {
+            throw new IllegalArgumentException("documentType is required");
+        }
+        int page = request.page() == null ? 1 : request.page();
+        int size = request.size() == null ? 20 : request.size();
+        if (page < 1 || size < 1 || size > 50) throw new IllegalArgumentException("invalid pagination");
+        return apiClient.postData("/api/logistics/agent-read/stock-documents/query",
+                new StockDocumentsRequest(request.documentType(), request.productName(), request.warehouseName(),
+                        request.operatorName(), request.startDate(), request.endDate(), page, size),
+                StockDocumentsResponse.class);
+    }
+
+    public AutoInboundBatchesResponse queryAutoInboundBatches(AutoInboundBatchesRequest request) {
+        AutoInboundBatchesRequest source = request == null ? new AutoInboundBatchesRequest(null, 20) : request;
+        int limit = source.limit() == null ? 20 : source.limit();
+        if (limit < 1 || limit > 20) throw new IllegalArgumentException("invalid limit");
+        return apiClient.postData("/api/logistics/agent-read/auto-inbound/batches/query",
+                new AutoInboundBatchesRequest(source.status(), limit), AutoInboundBatchesResponse.class);
+    }
+
+    public AutoInboundBatchDetailResponse getAutoInboundBatchDetail(AutoInboundBatchDetailRequest request) {
+        if (request == null || request.batchRef() == null || request.batchRef().isBlank()
+                || request.batchRef().length() > 100 || !request.batchRef().startsWith("aibr_")) {
+            throw new IllegalArgumentException("valid batchRef is required");
+        }
+        return apiClient.postData("/api/logistics/agent-read/auto-inbound/batches/detail/query",
+                request, AutoInboundBatchDetailResponse.class);
+    }
+
+    public WarehouseCapacityDistributionResponse queryWarehouseCapacityDistribution(WarehouseCapacityDistributionRequest request) {
+        WarehouseCapacityDistributionRequest source = request == null
+                ? new WarehouseCapacityDistributionRequest(new WarehouseScope("ALL", null), "ANY", false, 1, 20) : request;
+        WarehouseScope scope = source.warehouseScope() == null ? new WarehouseScope("ALL", null) : source.warehouseScope();
+        int page = source.page() == null ? 1 : source.page(); int size = source.size() == null ? 20 : source.size();
+        if (page < 1 || size < 1 || size > 50) throw new IllegalArgumentException("invalid pagination");
+        return apiClient.postData("/api/warehouse/agent-read/capacity-distribution/query",
+                new WarehouseCapacityDistributionRequest(scope, source.occupancyBand() == null ? "ANY" : source.occupancyBand(),
+                        Boolean.TRUE.equals(source.onlyAvailable()), page, size), WarehouseCapacityDistributionResponse.class);
+    }
+
+    public WarehouseRecentOperationsResponse queryWarehouseRecentOperations(WarehouseRecentOperationsRequest request) {
+        WarehouseRecentOperationsRequest source = request == null
+                ? new WarehouseRecentOperationsRequest(null, null, null, List.of(), 20) : request;
+        int limit = source.limit() == null ? 20 : source.limit();
+        if (limit < 1 || limit > 50) throw new IllegalArgumentException("invalid limit");
+        return apiClient.postData("/api/warehouse/agent-read/recent-operations/query",
+                new WarehouseRecentOperationsRequest(source.warehouseId(), source.from(), source.to(),
+                        source.eventTypes() == null ? List.of() : source.eventTypes(), limit),
+                WarehouseRecentOperationsResponse.class);
+    }
+
+    public WarehouseMixedStorageFactsResponse queryWarehouseMixedStorageFacts(WarehouseMixedStorageFactsRequest request) {
+        WarehouseMixedStorageFactsRequest source = request == null
+                ? new WarehouseMixedStorageFactsRequest(null, "ANY", 20) : request;
+        int limit = source.limit() == null ? 20 : source.limit();
+        if (limit < 1 || limit > 50) throw new IllegalArgumentException("invalid limit");
+        return apiClient.postData("/api/warehouse/agent-read/mixed-storage-facts/query",
+                new WarehouseMixedStorageFactsRequest(source.warehouseId(), source.factType() == null ? "ANY" : source.factType(), limit),
+                WarehouseMixedStorageFactsResponse.class);
+    }
+
+    public ProductCatalogResponse queryProductCatalog(ProductCatalogRequest request) {
+        ProductCatalogRequest source = request == null ? new ProductCatalogRequest(null, null, null, null, null, 1, 20) : request;
+        int page = source.page() == null ? 1 : source.page(); int size = source.size() == null ? 20 : source.size();
+        if (page < 1 || size < 1 || size > 50) throw new IllegalArgumentException("invalid pagination");
+        return apiClient.postData("/api/master-data/agent-read/products/query",
+                new ProductCatalogRequest(source.productName(), source.productType(), source.productStatus(), source.packagingMethod(), source.screenMeshName(), page, size),
+                ProductCatalogResponse.class);
+    }
+    public ProductDetailResponse getProductDetail(ProductDetailRequest request) {
+        if (request == null || request.productName() == null || request.productName().isBlank()) throw new IllegalArgumentException("productName is required");
+        return apiClient.postData("/api/master-data/agent-read/products/detail/query", request, ProductDetailResponse.class);
+    }
+    public ScreenMeshCatalogResponse queryScreenMeshCatalog(ScreenMeshCatalogRequest request) {
+        ScreenMeshCatalogRequest source = request == null ? new ScreenMeshCatalogRequest(null, 1, 20) : request;
+        int page = source.page() == null ? 1 : source.page(); int size = source.size() == null ? 20 : source.size();
+        if (page < 1 || size < 1 || size > 50) throw new IllegalArgumentException("invalid pagination");
+        return apiClient.postData("/api/master-data/agent-read/screen-meshes/query", new ScreenMeshCatalogRequest(source.meshName(), page, size), ScreenMeshCatalogResponse.class);
+    }
+    public AssayGroupsCatalogResponse queryAssayGroups(String groupName, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        return apiClient.postData("/api/quality/agent-read/assay-groups/query", Map.of("groupName", groupName == null ? "" : groupName, "page", p, "size", s), AssayGroupsCatalogResponse.class);
+    }
+    public QualityStandardCatalogResponse queryQualityStandardCatalog(String productType, String standardName, String status, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        Map<String, Object> body = new java.util.HashMap<>(); if (productType != null) body.put("productType", productType); if (standardName != null) body.put("standardName", standardName); if (status != null) body.put("status", status); body.put("page", p); body.put("size", s);
+        return apiClient.postData("/api/quality/agent-read/standards/query", body, QualityStandardCatalogResponse.class);
+    }
+    public QualityStandardDetailResponse getQualityStandardDetail(String standardCode, Integer version) {
+        if (standardCode == null || standardCode.isBlank() || version == null || version <= 0) throw new IllegalArgumentException("standardCode and version are required");
+        return apiClient.postData("/api/quality/agent-read/standards/detail/query", Map.of("standardCode", standardCode, "version", version), QualityStandardDetailResponse.class);
+    }
+    public ProductStandardRelationsResponse queryProductStandardRelations(String productName) {
+        if (productName == null || productName.isBlank()) throw new IllegalArgumentException("productName is required");
+        return apiClient.postData("/api/quality/agent-read/product-standard-relations/query", Map.of("productName", productName), ProductStandardRelationsResponse.class);
+    }
+    public EmployeeRosterResponse queryEmployeeRoster(String employeeId, String name, String department, String position, String status, String roleCode, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        Map<String, Object> body = new java.util.HashMap<>();
+        if (employeeId != null) body.put("employeeId", employeeId); if (name != null) body.put("name", name); if (department != null) body.put("department", department);
+        if (position != null) body.put("position", position); if (status != null) body.put("status", status); if (roleCode != null) body.put("roleCode", roleCode);
+        body.put("page", p); body.put("size", s);
+        return apiClient.postData("/api/administration/agent-read/employees/query", body, EmployeeRosterResponse.class);
+    }
+    public RoleCatalogResponse queryRoles(String keyword, String status, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        Map<String, Object> body = new java.util.HashMap<>(); if (keyword != null) body.put("keyword", keyword); if (status != null) body.put("status", status); body.put("page", p); body.put("size", s);
+        return apiClient.postData("/api/administration/agent-read/roles/query", body, RoleCatalogResponse.class);
+    }
+    public RolePermissionSummaryResponse getRolePermissionSummary(String roleCodeOrName) {
+        if (roleCodeOrName == null || roleCodeOrName.isBlank()) throw new IllegalArgumentException("roleCodeOrName is required");
+        return apiClient.postData("/api/administration/agent-read/roles/permission-summary/query", Map.of("roleCodeOrName", roleCodeOrName), RolePermissionSummaryResponse.class);
+    }
+    public AuditPageResponse searchOperationLogs(String module, String operationType, String operator, String startTime, String endTime, Integer page, Integer size) {
+        return auditPage("/api/audit/agent-read/operation-logs/query", module, operationType, operator, null, null, startTime, endTime, page, size);
+    }
+    public AuditPageResponse queryAgentToolAudit(String capability, String resultCode, String errorCode, String startTime, String endTime, Integer page, Integer size) {
+        return auditPage("/api/audit/agent-read/agent-tool-audit/query", null, null, null, capability, resultCode, startTime, endTime, page, size, errorCode);
+    }
+    public AuditPageResponse queryAgentAnswerReviews(String reviewStatus, String answerStatus, String failureDomain, String failureCategory, String suggestedFixType, String testCaseStatus, Boolean priorityOnly, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        Map<String, Object> body = new java.util.HashMap<>(); put(body, "reviewStatus", reviewStatus); put(body, "answerStatus", answerStatus); put(body, "failureDomain", failureDomain);
+        put(body, "failureCategory", failureCategory); put(body, "suggestedFixType", suggestedFixType); put(body, "testCaseStatus", testCaseStatus); if (priorityOnly != null) body.put("priorityOnly", priorityOnly);
+        body.put("page", p); body.put("size", s); return apiClient.postData("/api/audit/agent-read/agent-answer-reviews/query", body, AuditPageResponse.class);
+    }
+    private AuditPageResponse auditPage(String path, String module, String operationType, String operator, String capability, String resultCode, String startTime, String endTime, Integer page, Integer size, String... errorCode) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        Map<String, Object> body = new java.util.HashMap<>(); put(body, "module", module); put(body, "operationType", operationType); put(body, "operator", operator);
+        put(body, "capability", capability); put(body, "resultCode", resultCode); put(body, "startTime", startTime); put(body, "endTime", endTime); if (errorCode.length > 0) put(body, "errorCode", errorCode[0]);
+        body.put("page", p); body.put("size", s); return apiClient.postData(path, body, AuditPageResponse.class);
+    }
+    private void put(Map<String, Object> target, String key, String value) { if (value != null && !value.isBlank()) target.put(key, value); }
+    public InventoryLedgerResponse queryInventoryLedger(String productName, String warehouseName, String screenMeshName, String productStatus, String entryDateStart, String entryDateEnd, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        Map<String, Object> body = new java.util.HashMap<>(); put(body, "productName", productName); put(body, "warehouseName", warehouseName); put(body, "screenMeshName", screenMeshName); put(body, "productStatus", productStatus); put(body, "entryDateStart", entryDateStart); put(body, "entryDateEnd", entryDateEnd); body.put("page", p); body.put("size", s);
+        return apiClient.postData("/api/inventory/agent-read/ledger/query", body, InventoryLedgerResponse.class);
+    }
+    public PreparePoolBalanceResponse queryPreparePoolBalance(String productName, String productType, String screenMeshName, String productionDateStart, String productionDateEnd, Boolean positiveOnly, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        if (Boolean.FALSE.equals(positiveOnly)) throw new IllegalArgumentException("only positiveOnly=true is supported");
+        Map<String, Object> body = new java.util.HashMap<>(); put(body, "productName", productName); put(body, "productType", productType); put(body, "screenMeshName", screenMeshName); put(body, "productionDateStart", productionDateStart); put(body, "productionDateEnd", productionDateEnd); body.put("positiveOnly", true); body.put("page", p); body.put("size", s);
+        return apiClient.postData("/api/inventory/agent-read/prepare-pool-balance/query", body, PreparePoolBalanceResponse.class);
+    }
+    public FixedProductQrPoolResponse queryFixedProductQrPool(String productName, List<String> codes, String status, Boolean freeOnly, Integer page, Integer size) {
+        int p = page == null ? 1 : page, s = size == null ? 20 : size; if (p < 1 || s < 1 || s > 50) throw new IllegalArgumentException("invalid pagination");
+        if (codes != null && codes.size() > 20) throw new IllegalArgumentException("codes exceeds limit");
+        Map<String, Object> body = new java.util.HashMap<>(); put(body, "productName", productName); if (codes != null && !codes.isEmpty()) body.put("codes", codes); put(body, "status", status); if (freeOnly != null) body.put("freeOnly", freeOnly); body.put("page", p); body.put("size", s);
+        return apiClient.postData("/api/pallet-codes/agent-read/fixed-product-pool/query", body, FixedProductQrPoolResponse.class);
     }
 
     public WarehouseStatusResponse getWarehouseStatus(WarehouseStatusRequest request) {
@@ -625,6 +1079,254 @@ public class WarehouseReadService {
                 && values.stream().allMatch(value -> value != null && allowed.contains(value)));
     }
 
+    private ToolModels.ToolError validateAssayRecordsRequest(AssayRecordsRequest request) {
+        if (request == null || request.productScope() == null) {
+            return ErrorMapper.invalid("productScope", "productScope is required.");
+        }
+        ToolModels.ToolError error = validateProductScope("productScope", request.productScope());
+        if (error != null) {
+            return error;
+        }
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) {
+                return error;
+            }
+        }
+        if (request.judgeStatus() != null
+                && !Set.of("ANY", "PASS", "FAILED", "NO_STANDARD", "MULTIPLE_CANDIDATES").contains(request.judgeStatus())) {
+            return ErrorMapper.invalid("judgeStatus", "Unsupported assay judge status.");
+        }
+        if (request.sortBy() != null && !Set.of("sampleDate", "createdAt").contains(request.sortBy())) {
+            return ErrorMapper.invalid("sortBy", "Unsupported assay sort field.");
+        }
+        if (request.sortDirection() != null && !Set.of("ASC", "DESC").contains(request.sortDirection())) {
+            return ErrorMapper.invalid("sortDirection", "Unsupported assay sort direction.");
+        }
+        return validatePage(request.page() == null ? DEFAULT_PAGE : request.page(), request.size() == null ? 20 : request.size());
+    }
+
+    private ToolModels.ToolError validateAssayReportDetailRequest(AssayReportDetailRequest request) {
+        if (request == null || request.reportRef() == null || request.reportRef().isBlank()
+                || request.reportRef().length() > 200) {
+            return ErrorMapper.invalid("reportRef", "reportRef is required and must be 1..200 characters.");
+        }
+        return null;
+    }
+
+    private ToolModels.ToolError validateAssayAbnormalitiesRequest(AssayAbnormalitiesRequest request) {
+        if (request == null || request.productScope() == null) {
+            return ErrorMapper.invalid("productScope", "productScope is required.");
+        }
+        ToolModels.ToolError error = validateProductScope("productScope", request.productScope());
+        if (error != null) {
+            return error;
+        }
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) {
+                return error;
+            }
+        }
+        if (request.abnormalTypes() != null
+                && (!allowedValues(request.abnormalTypes(), Set.of("FAILED", "NO_STANDARD", "MULTIPLE_CANDIDATES"))
+                || request.abnormalTypes().isEmpty())) {
+            return ErrorMapper.invalid("abnormalTypes", "Unsupported assay abnormal type.");
+        }
+        if (request.groupBy() != null && !Set.of("product", "date", "abnormal_type", "metric").contains(request.groupBy())) {
+            return ErrorMapper.invalid("groupBy", "Unsupported assay abnormality grouping.");
+        }
+        return validateLimit(request.limit() == null ? 50 : request.limit());
+    }
+
+    private ToolModels.ToolError validateProductsWithoutRecentAssayRequest(ProductsWithoutRecentAssayRequest request) {
+        if (request == null || request.productScope() == null) {
+            return ErrorMapper.invalid("productScope", "productScope is required.");
+        }
+        ToolModels.ToolError error = validateProductScope("productScope", request.productScope());
+        if (error != null) {
+            return error;
+        }
+        if (request.warehouseScope() == null || request.warehouseScope().type() == null
+                || !Set.of("ALL", "SINGLE_WAREHOUSE").contains(request.warehouseScope().type())) {
+            return ErrorMapper.invalid("warehouseScope.type", "Unsupported warehouse scope type.");
+        }
+        if ("SINGLE_WAREHOUSE".equals(request.warehouseScope().type())) {
+            error = validatePositiveId("warehouseScope.warehouseId", request.warehouseScope().warehouseId());
+            if (error != null || request.warehouseScope().warehouseId() == null) {
+                return error == null ? ErrorMapper.invalid("warehouseScope.warehouseId", "warehouseId is required.") : error;
+            }
+        }
+        if (request.population() != null && !"CURRENT_INVENTORY".equals(request.population())) {
+            return ErrorMapper.invalid("population", "Unsupported population.");
+        }
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) {
+                return error;
+            }
+        }
+        if (request.groupBy() != null && !Set.of("product", "warehouse", "product_warehouse").contains(request.groupBy())) {
+            return ErrorMapper.invalid("groupBy", "Unsupported products without recent assay grouping.");
+        }
+        return validateLimit(request.limit() == null ? 50 : request.limit());
+    }
+
+    private ToolModels.ToolError validateAssayStandardCoverageRequest(AssayStandardCoverageRequest request) {
+        if (request == null || request.productScope() == null) {
+            return ErrorMapper.invalid("productScope", "productScope is required.");
+        }
+        ToolModels.ToolError error = validateProductScope("productScope", request.productScope());
+        if (error != null) {
+            return error;
+        }
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) {
+                return error;
+            }
+        }
+        if (request.coverageType() != null
+                && !Set.of("PRODUCT_WITHOUT_STANDARD", "ASSAY_WITHOUT_STANDARD", "UNUSED_STANDARD")
+                .contains(request.coverageType())) {
+            return ErrorMapper.invalid("coverageType", "Unsupported assay standard coverage type.");
+        }
+        return validateLimit(request.limit() == null ? 50 : request.limit());
+    }
+
+    private ToolModels.ToolError validatePalletLifecycleRequest(PalletLifecycleRequest request) {
+        ToolModels.ToolError error = validateRequiredString("code", request == null ? null : request.code(), 100);
+        if (error != null) return error;
+        if (request.flowLimit() != null && (request.flowLimit() < 1 || request.flowLimit() > 100)) {
+            return ErrorMapper.invalid("flowLimit", "flowLimit must be between 1 and 100.");
+        }
+        return null;
+    }
+
+    private ToolModels.ToolError validatePalletFlowRecordsRequest(PalletFlowRecordsRequest request) {
+        if (request == null) return ErrorMapper.invalid("request", "request is required.");
+        ToolModels.ToolError error = validateOptionalString("code", request.code(), 100);
+        if (error != null) return error;
+        if (request.productScope() != null) {
+            error = validateProductScope("productScope", request.productScope());
+            if (error != null) return error;
+        }
+        error = validatePositiveId("warehouseId", request.warehouseId());
+        if (error != null) return error;
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) return error;
+        }
+        if (request.eventTypes() != null
+                && (request.eventTypes().isEmpty() || !allowedValues(request.eventTypes(),
+                Set.of("INBOUND", "OUTBOUND", "TRANSFER", "BIND", "ASSAY", "CANCEL", "LABEL")))) {
+            return ErrorMapper.invalid("eventTypes", "Unsupported pallet flow event type.");
+        }
+        return validatePage(request.page() == null ? 1 : request.page(), request.size() == null ? 20 : request.size());
+    }
+
+    private ToolModels.ToolError validatePrintedNotInboundCodesRequest(PrintedNotInboundCodesRequest request) {
+        if (request == null) return ErrorMapper.invalid("request", "request is required.");
+        ToolModels.ToolError error = request.productScope() == null
+                ? null : validateProductScope("productScope", request.productScope());
+        if (error != null) return error;
+        error = validateOptionalString("orderNo", request.orderNo(), 50);
+        if (error != null) return error;
+        error = validateOptionalString("batchNo", request.batchNo(), 80);
+        if (error != null) return error;
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) return error;
+        }
+        if (request.groupBy() != null && !Set.of("batch", "order", "product").contains(request.groupBy())) {
+            return ErrorMapper.invalid("groupBy", "Unsupported printed-code grouping.");
+        }
+        return validateLimit(request.limit() == null ? 50 : request.limit());
+    }
+
+    private ToolModels.ToolError validatePalletAnomaliesRequest(PalletAnomaliesRequest request) {
+        if (request == null) return ErrorMapper.invalid("request", "request is required.");
+        ToolModels.ToolError error = request.productScope() == null
+                ? null : validateProductScope("productScope", request.productScope());
+        if (error != null) return error;
+        error = validatePositiveId("warehouseId", request.warehouseId());
+        if (error != null) return error;
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) return error;
+        }
+        if (request.anomalyTypes() != null
+                && (request.anomalyTypes().isEmpty() || !allowedValues(request.anomalyTypes(), Set.of(
+                "VOID_CODE_SCANNED", "STATUS_INVENTORY_MISMATCH", "DUPLICATE_INBOUND",
+                "OUTBOUND_WITHOUT_INBOUND", "PRODUCT_BINDING_MISMATCH")))) {
+            return ErrorMapper.invalid("anomalyTypes", "Unsupported pallet anomaly type.");
+        }
+        return validateLimit(request.limit() == null ? 50 : request.limit());
+    }
+
+    private ToolModels.ToolError validateQrBatchInboundCompletionRequest(QrBatchInboundCompletionRequest request) {
+        if (request == null) return ErrorMapper.invalid("request", "request is required.");
+        ToolModels.ToolError error = validateOptionalString("batchNo", request.batchNo(), 80);
+        if (error != null) return error;
+        error = validateOptionalString("orderNo", request.orderNo(), 50);
+        if (error != null) return error;
+        error = validatePositiveId("productId", request.productId());
+        if (error != null) return error;
+        if (request.dateRange() != null) {
+            error = validateDateRange(request.dateRange());
+            if (error != null) return error;
+        }
+        if ((request.batchNo() == null || request.batchNo().isBlank())
+                && (request.orderNo() == null || request.orderNo().isBlank())
+                && request.productId() == null && request.dateRange() == null) {
+            return ErrorMapper.invalid("batchNo", "batchNo, orderNo, productId, or dateRange is required.");
+        }
+        return validateLimit(request.limit() == null ? 20 : request.limit());
+    }
+
+    private ToolModels.ToolError validateProductScope(String prefix, ToolModels.ProductScope scope) {
+        String productType = scope.type();
+        if (productType == null
+                || !Set.of("SINGLE_PRODUCT", "EXACT_PRODUCT_NAME_GROUP", "PRODUCT_TYPE_GROUP", "ALL").contains(productType)) {
+            return ErrorMapper.invalid(prefix + ".type", "Unsupported product scope type.");
+        }
+        if ("SINGLE_PRODUCT".equals(productType)) {
+            ToolModels.ToolError error = validatePositiveId(prefix + ".productId", scope.productId());
+            if (error != null || scope.productId() == null) {
+                return error == null ? ErrorMapper.invalid(prefix + ".productId", "productId is required.") : error;
+            }
+        } else if ("EXACT_PRODUCT_NAME_GROUP".equals(productType)) {
+            ToolModels.ToolError error = validateRequiredString(prefix + ".productName", scope.productName(), 100);
+            if (error != null) return error;
+        } else if ("PRODUCT_TYPE_GROUP".equals(productType)) {
+            ToolModels.ToolError error = validateRequiredString(prefix + ".productType", scope.productType(), 50);
+            if (error != null) return error;
+        }
+        return null;
+    }
+
+    private ToolModels.ToolError validateDateRange(ToolModels.DateRange range) {
+        if (range.type() == null || !Set.of("EXACT", "LAST_DAYS", "RANGE").contains(range.type())) {
+            return ErrorMapper.invalid("dateRange.type", "Unsupported date range type.");
+        }
+        if ("EXACT".equals(range.type()) && range.date() == null) {
+            return ErrorMapper.invalid("dateRange.date", "date is required for EXACT.");
+        }
+        if ("LAST_DAYS".equals(range.type())
+                && (range.days() == null || range.days() < 1 || range.days() > 366)) {
+            return ErrorMapper.invalid("dateRange.days", "days must be between 1 and 366.");
+        }
+        if ("RANGE".equals(range.type())) {
+            if (range.from() == null || range.to() == null) {
+                return ErrorMapper.invalid("dateRange.from", "from and to are required for RANGE.");
+            }
+            if (range.from().isAfter(range.to())) {
+                return ErrorMapper.invalid("dateRange.from", "from must not be after to.");
+            }
+        }
+        return null;
+    }
+
     private ToolModels.ToolError validateWarehouseStatusRequest(WarehouseStatusRequest request) {
         if (request == null) {
             return ErrorMapper.invalid("warehouseId", "warehouseId or warehouseQuery is required.");
@@ -750,6 +1452,13 @@ public class WarehouseReadService {
 
     private int defaultLimit(Integer limit) {
         return limit == null ? DEFAULT_LIMIT : limit;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private ProductCandidate productCandidate(JsonNode item, MatchType matchType, int matchScore) {

@@ -7,10 +7,14 @@ import java.util.Map;
 
 public class InventoryDistributionSqlProvider {
     private static final String METRICS = """
-            COALESCE(SUM(i.quantity), 0) AS rawFullPallets,
+            COALESCE(SUM(CASE WHEN COALESCE(i.pieces, 0) > 0 THEN 0 ELSE COALESCE(i.quantity, 0) END), 0) AS rawFullPallets,
             COALESCE(SUM(i.pieces), 0) AS rawLoosePieces,
-            COALESCE(SUM(COALESCE(i.quantity, 0) * p.pieces_per_pallet + COALESCE(i.pieces, 0)), 0) AS totalEquivalentPieces,
-            COALESCE(SUM((COALESCE(i.quantity, 0) * p.pieces_per_pallet + COALESCE(i.pieces, 0)) * p.weight_per_piece), 0) AS totalWeight,
+            COALESCE(SUM(CASE WHEN COALESCE(i.pieces, 0) > 0
+                THEN COALESCE(i.pieces, 0)
+                ELSE COALESCE(i.quantity, 0) * p.pieces_per_pallet END), 0) AS totalEquivalentPieces,
+            COALESCE(SUM((CASE WHEN COALESCE(i.pieces, 0) > 0
+                THEN COALESCE(i.pieces, 0)
+                ELSE COALESCE(i.quantity, 0) * p.pieces_per_pallet END) * p.weight_per_piece), 0) AS totalWeight,
             COUNT(DISTINCT i.warehouse_id) AS warehouseCount,
             COUNT(DISTINCT i.product_id) AS productCount,
             COUNT(DISTINCT i.pallet_code_id) AS palletCount,

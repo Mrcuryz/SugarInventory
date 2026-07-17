@@ -1,0 +1,221 @@
+schema_version: "1.0"
+registry_status: M2_0_CONTRACT_DRAFT
+runtime_enabled: false
+decision: CONDITIONAL_GO
+
+dataset:
+  id: inventory_current_snapshot_v1
+  version: "1.0"
+  display_name: 当前库存快照
+  owner: inventory-domain
+  description: >-
+    查询执行时点仍存在于 inventory 表中的当前库存事实。它不是历史快照、事件账或库存趋势，
+    不能恢复过去某日库存，也不能把 entry_date 分布解释为库存随时间的变化。
+  as_of_semantics: QUERY_TRANSACTION_TIME
+  authoritative_grain: >-
+    一行代表一个当前占用物理库位坐标的 inventory 记录；数据库以
+    (warehouse_id, side, row_number, layer) 唯一约束该位置。它不是产品与仓库聚合行，
+    也不能在 pallet_code_id 为空时被称为一个托盘。
+  source_tables:
+    - inventory
+    - product
+    - warehouse
+  allowed_relations:
+    - from: inventory.product_id
+      to: product.id
+      cardinality: MANY_TO_ONE
+      accumulation_rule: 只允许按 product 主键等值关联；关联后 inventory 行数不得增加。
+    - from: inventory.warehouse_id
+      to: warehouse.id
+      cardinality: MANY_TO_ONE
+      accumulation_rule: 只允许按 warehouse 主键等值关联；关联后 inventory 行数不得增加。
+  forbidden_relations:
+    - assay
+    - production
+    - stock_document
+    - pallet_flow
+    - pallet_code
+    - custom_join
+
+permission_contract:
+  status: BLOCKED_PENDING_DECISION
+  observed_implementation:
+    get_inventory_distribution: isAuthenticated()
+    get_inventory_overview: AUTHENTICATED_BY_GLOBAL_SECURITY_DEFAULT
+    inventory_summary_page_api: "hasAuthority('record:query')"
+    query_inventory_ledger: "hasAuthority('inventory:view')"
+    row_level_scope: NOT_FOUND_IN_SERVICE_OR_MAPPER
+    organization_scope: NOT_PROVEN_FROM_REPOSITORY
+  required_before_runtime_prototype:
+    - 选择并记录唯一的库存语义查询权限点。
+    - 明确实际部署是否单组织，以及获得权限的用户是否可看全部仓库。
+    - 若存在仓库或组织范围，必须由 Java 注入同一行级范围，模型不得提供或扩大范围。
+    - 用同一用户对账语义查询与确定性工具的允许、拒绝和可见行集合。
+
+measures:
+  inventory_record_count:
+    status: ELIGIBLE_AFTER_PERMISSION_GATE
+    type: integer
+    unit: RECORD
+    definition: 通过允许的多对一关系后，对当前 inventory 事实行 COUNT(*)。
+    null_handling: 事实行不存在时为 0。
+    deduplication: 不去重；每条 inventory 事实计一次。
+    precision: 精确整数，不舍入。
+    reconcile_with:
+      - query_inventory_ledger
+    limitations:
+      - 表示当前占用记录数，不等于托盘数、产品数或历史入库次数。
+
+  equivalent_pieces:
+    status: BLOCKED_METRIC_RECONCILIATION
+    type: integer
+    unit: PIECE
+    proposed_definition: >-
+      SUM(CASE WHEN COALESCE(inventory.pieces, 0) > 0
+      THEN inventory.pieces
+      ELSE COALESCE(inventory.quantity, 0) * product.pieces_per_pallet END)
+    rationale: >-
+      当前写入和出库代码把 pieces > 0 的行视为零散件行；此时 quantity 不能再作为整板数量累计。
+    null_handling: >-
+      quantity/pieces 可按 0 处理；pieces_per_pallet 缺失、为 0 或非法时必须返回 DATA_QUALITY_ERROR，
+      不得静默排除或按 0 计算。
+    deduplication: 每条 inventory 事实只累计一次；只允许多对一 product/warehouse 关联。
+    precision: 精确整数，不舍入。
+    reconcile_with:
+      - get_inventory_overview
+      - get_inventory_distribution
+      - query_inventory_ledger
+    known_conflict: >-
+      v_warehouse_inventory_summary 使用 pieces > 0 时不累计 quantity；
+      InventoryDistributionSqlProvider 当前无条件计算 quantity * pieces_per_pallet + pieces，
+      对 quantity=1 且 pieces>0 的零散件行会重复折算。未解决前不得启用本指标。
+    reconciliation_note: >-
+      get_inventory_overview 的 summary 由当前分页 records 在 MCP 层再次汇总；只有取全所有分页，
+      或证明过滤结果完整落在单页时，才能与全量聚合对账。
+
+  total_weight_kg:
+    status: BLOCKED_BY_EQUIVALENT_PIECES
+    type: decimal
+    unit: KG
+    proposed_definition: 每行权威 equivalent_pieces * product.weight_per_piece 后求和。
+    null_handling: weight_per_piece 缺失或非法时返回 DATA_QUALITY_ERROR，不得静默按 0。
+    deduplication: 继承 equivalent_pieces 的事实去重规则。
+    precision: 中间与结果使用 BigDecimal；至少保留源字段精度，不在聚合前舍入。
+    display_rounding: 展示层可去除无意义末尾 0，但不得改变对账值。
+    reconcile_with:
+      - get_inventory_overview
+      - get_inventory_distribution
+      - query_inventory_ledger
+    limitations:
+      - 依赖 equivalent_pieces 口径先完成对账。
+
+  pallet_count:
+    status: DISABLED_AMBIGUOUS_SEMANTICS
+    type: integer
+    unit: PALLET_CODE
+    observed_definition: COUNT(DISTINCT inventory.pallet_code_id)
+    null_handling: pallet_code_id 为空的库存事实不计数。
+    deduplication: 按非空 pallet_code_id 去重。
+    precision: 精确整数，不舍入。
+    reconcile_with:
+      - get_inventory_distribution
+      - query_inventory_ledger
+    limitations:
+      - 当前实现实际是“关联托盘码数”，不能证明等于物理托盘数或占用库位数。
+      - 若需启用，优先改名为 linked_pallet_count；否则必须先证明托盘码完整性。
+
+dimensions:
+  product:
+    status: ELIGIBLE_AFTER_PERMISSION_GATE
+    source: inventory.product_id -> product.id
+    business_definition: 当前库存关联的产品业务对象；模型只使用解析器签发的 opaque valueRef。
+    sensitive: false
+    cardinality: MEDIUM_UNMEASURED
+    filter: true
+    group: true
+    sort: true
+    null_handling: 关系缺失视为 DATA_QUALITY_ERROR，不使用“未知产品”继续聚合。
+
+  product_type:
+    status: ELIGIBLE_AFTER_PERMISSION_GATE
+    source: product.product_type
+    business_definition: 产品主数据中的产品类型。
+    sensitive: false
+    cardinality: LOW_UNMEASURED
+    filter: true
+    group: true
+    sort: true
+    null_handling: 显式显示“未设置产品类型”，同时产生数据质量 warning。
+
+  warehouse:
+    status: ELIGIBLE_AFTER_PERMISSION_GATE
+    source: inventory.warehouse_id -> warehouse.id
+    business_definition: 当前库存所在的仓库/库位业务对象；模型只使用解析器签发的 opaque valueRef。
+    sensitive: false
+    cardinality: MEDIUM_UNMEASURED
+    filter: true
+    group: true
+    sort: true
+    null_handling: 关系缺失视为 DATA_QUALITY_ERROR，不使用“未知仓库”继续聚合。
+
+  warehouse_side:
+    status: ELIGIBLE_AFTER_PERMISSION_GATE
+    source: inventory.side
+    business_definition: 当前库存物理位置的左右侧。
+    sensitive: false
+    cardinality: VERY_LOW
+    filter: true
+    group: true
+    sort: true
+    null_handling: 空值显示“未设置侧别”并产生 warning。
+
+  inbound_date:
+    status: CONDITIONAL_BUSINESS_DEFINITION_CONFIRMATION
+    source: inventory.entry_date
+    business_definition: 候选定义为当前库存记录的入库日期。
+    sensitive: false
+    cardinality: HIGH_UNMEASURED
+    filter: true
+    group: true
+    sort: true
+    null_handling: 空值归入“未知日期”，不得猜测日期。
+    limitations:
+      - 数据库注释同时出现“入库日期（生产日期）”，而代码另有 pallet_code.production_date；语义存在冲突。
+      - 只可表达当前库存按入库日期的分布或库龄，不能表达历史库存趋势。
+
+  production_date:
+    status: DISABLED_RELATION_NOT_ALLOWED
+    source: pallet_code.production_date
+    business_definition: 产品生产日期。
+    sensitive: false
+    cardinality: HIGH_UNMEASURED
+    filter: false
+    group: false
+    sort: false
+    null_handling: NOT_APPLICABLE
+    limitations:
+      - inventory 本身没有该字段；启用需要 inventory -> pallet_code 关系，超出 M2-0 允许关系。
+      - 不得把 inventory.entry_date 别名为 production_date。
+
+query_limits:
+  max_iterations: 3
+  max_dimensions: 2
+  max_measures: 2
+  max_filters: 8
+  max_sort_fields: 2
+  max_limit: 100
+  default_limit: 20
+  max_inbound_date_range_days: 180
+  timeout_ms: 3000
+  max_concurrent_queries_per_user: 2
+  scan_limit: PENDING_DATABASE_EXPLAIN_BASELINE
+
+runtime_forbidden:
+  - model_generated_sql
+  - table_or_column_name_from_model
+  - model_selected_join
+  - arbitrary_formula_or_function
+  - raw_database_id
+  - cross_domain_query
+  - historical_inventory_claim
+  - automatic_write_transition

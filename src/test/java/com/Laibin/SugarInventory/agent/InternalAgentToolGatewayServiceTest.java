@@ -112,6 +112,8 @@ class InternalAgentToolGatewayServiceTest {
         assertThat(audit.getResultCode()).isEqualTo("SUCCESS");
         assertThat(audit.getErrorCode()).isNull();
         assertThat(audit.getDurationMs()).isNotNegative();
+        assertThat(audit.getRequestSummary()).contains(
+                "inventory_expert", "inventory", "delegate", "trace_001", "req_001");
     }
 
     @Test
@@ -203,12 +205,52 @@ class InternalAgentToolGatewayServiceTest {
     }
 
     @Test
-    void whitelistContainsExactlySevenReadOnlyToolsAndNeverDispatchesWriteToolNames() {
+    void whitelistContainsExactlyFortySevenReadOnlyToolsAndNeverDispatchesWriteToolNames() {
         Set<String> expected = Set.of(
                 "resolve_products",
                 "resolve_warehouses",
                 "get_inventory_overview",
                 "get_inventory_distribution",
+                "query_assay_records",
+                "get_assay_report_detail",
+                "query_assay_abnormalities",
+                "query_products_without_recent_assay",
+                "query_assay_standard_coverage",
+                "query_qr_code_lifecycle",
+                "query_printed_not_inbound_codes",
+                "query_pallet_anomalies",
+                "query_pallet_flow_records",
+                "query_qr_batch_inbound_completion",
+                "resolve_production_entities",
+                "query_production_order_progress",
+                "query_boiling_batch_trace",
+                "query_material_pick_trace",
+                "query_production_label_completion",
+                "query_in_process_materials",
+                "query_material_candidates",
+                "query_pallet_tasks",
+                "query_stock_documents",
+                "query_auto_inbound_batches",
+                "get_auto_inbound_batch_detail",
+                "query_warehouse_capacity_distribution",
+                "query_warehouse_recent_operations",
+                "query_warehouse_mixed_storage_facts",
+                "query_product_catalog",
+                "get_product_detail",
+                "query_screen_mesh_catalog",
+                "query_assay_groups",
+                "query_quality_standard_catalog",
+                "get_quality_standard_detail",
+                "query_product_standard_relations",
+                "query_employee_roster",
+                "query_roles",
+                "get_role_permission_summary",
+                "search_operation_logs",
+                "query_agent_tool_audit",
+                "query_agent_answer_reviews",
+                "query_inventory_ledger",
+                "query_prepare_pool_balance",
+                "query_fixed_product_qr_pool",
                 "get_warehouse_status",
                 "get_pallet_status",
                 "get_assay_status");
@@ -220,12 +262,19 @@ class InternalAgentToolGatewayServiceTest {
         });
 
         for (String toolName : expected) {
-            InternalAgentToolResponseVO response = gateway.invoke(SERVICE_KEY, toolName, request(Map.of()));
+            String expertAgent = McpInternalAgentToolGatewayService.expertAllowedTools().entrySet().stream()
+                    .filter(entry -> entry.getValue().contains(toolName))
+                    .map(Map.Entry::getKey)
+                    .findFirst()
+                    .orElseThrow();
+            InternalAgentToolRequestDTO toolRequest = request(Map.of());
+            toolRequest.getClient().setExpertAgent(expertAgent);
+            InternalAgentToolResponseVO response = gateway.invoke(SERVICE_KEY, toolName, toolRequest);
             assertThat(response.getStatus()).isEqualTo("SUCCESS");
         }
 
         ArgumentCaptor<McpToolCall> callCaptor = ArgumentCaptor.forClass(McpToolCall.class);
-        verify(mcpSession, times(7)).callTool(callCaptor.capture());
+        verify(mcpSession, times(expected.size())).callTool(callCaptor.capture());
         assertThat(callCaptor.getAllValues())
                 .extracting(McpToolCall::toolName)
                 .containsExactlyInAnyOrderElementsOf(expected)
@@ -233,6 +282,31 @@ class InternalAgentToolGatewayServiceTest {
                         || name.startsWith("execute_")
                         || name.contains("sql")
                         || name.contains("http"));
+    }
+
+    @Test
+    void rejectsCrossExpertMainAgentUnknownExpertAndMissingExpertBeforeMcpDispatch() {
+        InternalAgentToolRequestDTO crossExpert = request(Map.of("query", "黄冰糖"));
+        crossExpert.getClient().setExpertAgent("warehouse_expert");
+        assertThat(gateway.invoke(SERVICE_KEY, "resolve_products", crossExpert).getError().getCode())
+                .isEqualTo("EXPERT_TOOL_NOT_ALLOWED");
+
+        InternalAgentToolRequestDTO mainAgent = request(Map.of("query", "黄冰糖"));
+        mainAgent.getClient().setExpertAgent("main_agent");
+        assertThat(gateway.invoke(SERVICE_KEY, "resolve_products", mainAgent).getError().getCode())
+                .isEqualTo("EXPERT_TOOL_NOT_ALLOWED");
+
+        InternalAgentToolRequestDTO unknownExpert = request(Map.of("query", "黄冰糖"));
+        unknownExpert.getClient().setExpertAgent("unknown_expert");
+        assertThat(gateway.invoke(SERVICE_KEY, "resolve_products", unknownExpert).getError().getCode())
+                .isEqualTo("EXPERT_TOOL_NOT_ALLOWED");
+
+        InternalAgentToolRequestDTO missingExpert = request(Map.of("query", "黄冰糖"));
+        missingExpert.getClient().setExpertAgent(null);
+        assertThat(gateway.invoke(SERVICE_KEY, "resolve_products", missingExpert).getError().getCode())
+                .isEqualTo("INVALID_ARGUMENT");
+
+        verify(mcpSession, never()).callTool(any());
     }
 
     @Test
@@ -285,6 +359,9 @@ class InternalAgentToolGatewayServiceTest {
         InternalAgentToolClientDTO client = new InternalAgentToolClientDTO();
         client.setTraceId("trace_001");
         client.setRequestId("req_001");
+        client.setExpertAgent("inventory_expert");
+        client.setBusinessDomain("inventory");
+        client.setHandoffMode("delegate");
 
         InternalAgentToolRequestDTO request = new InternalAgentToolRequestDTO();
         request.setAgentSessionId("agt_001");

@@ -177,5 +177,27 @@ public interface PalletFlowRecordMapper extends BaseMapper<PalletFlowRecord> {
     })
     List<WarehouseRecentOperationVO> listRecentWarehouseOperations(@Param("warehouseId") Integer warehouseId,
                                                                    @Param("limit") Integer limit);
+
+    @Select("<script>" +
+            "SELECT fr.operation_time AS operationTime, fr.operation_type AS operationType, " +
+            "fr.operation_name AS operationName, u.name AS operatorName, pc.code AS palletCode, " +
+            "p.product_name AS productName, fw.warehouse_name AS fromWarehouseName, " +
+            "tw.warehouse_name AS toWarehouseName, fr.remark AS remark " +
+            "FROM pallet_flow_record fr " +
+            "LEFT JOIN user u ON u.id = fr.operator_id LEFT JOIN pallet_code pc ON pc.id = fr.pallet_code_id " +
+            "LEFT JOIN product p ON p.id = fr.product_id LEFT JOIN warehouse fw ON fw.id = fr.from_warehouse_id " +
+            "LEFT JOIN warehouse tw ON tw.id = fr.to_warehouse_id <where> 1=1 " +
+            "<if test='warehouseId != null'> AND (fr.from_warehouse_id = #{warehouseId} OR fr.to_warehouse_id = #{warehouseId}) </if> " +
+            "<if test='from != null'> AND fr.operation_time &gt;= #{from} </if> " +
+            "<if test='to != null'> AND fr.operation_time &lt;= #{to} </if> " +
+            "<if test='operationTypes != null and operationTypes.size() > 0'> AND fr.operation_type IN " +
+            "<foreach collection='operationTypes' item='type' open='(' separator=',' close=')'>#{type}</foreach> </if> " +
+            "</where> ORDER BY fr.operation_time DESC, fr.id DESC LIMIT #{limit}</script>")
+    List<WarehouseRecentOperationVO> queryRecentWarehouseOperations(
+            @Param("warehouseId") Integer warehouseId,
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to,
+            @Param("operationTypes") List<String> operationTypes,
+            @Param("limit") Integer limit);
 }
 

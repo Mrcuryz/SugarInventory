@@ -51,6 +51,16 @@ nbdist/
 /deliverables/
 /META-INF/
 /target/
+/agent-service/build/
+/agent-service/.eggs/
+.env
+.env.*
+!.env.example
+/deploy/simple/.env
+/deploy/simple/artifacts/*
+!/deploy/simple/artifacts/.gitkeep
+/deploy/simple/cert/*
+!/deploy/simple/cert/.gitkeep
 
 *.msi
 *.exe

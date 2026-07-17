@@ -279,4 +279,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
     int updateAssayByPalletCodeId(@Param("palletCodeId") Integer palletCodeId,
                                   @Param("assayId") Integer assayId);
 
+    @Select("SELECT EXISTS(SELECT 1 FROM inventory WHERE product_id = #{productId} LIMIT 1)")
+    boolean existsByProductId(@Param("productId") Integer productId);
+
 }

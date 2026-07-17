@@ -339,6 +339,10 @@ Agent Gateway 负责：
 * Agent Tool 审计；
 * 面向前端返回自然语言、业务卡片和追问建议。
 
+Agent Gateway 内部采用模块化 Agent 编排：主 Agent 负责意图、上下文、HITL、安全边界和最终回答，通过 Router 把受支持任务交给库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC 和审计最小权限专家。主 Agent 不直接持有业务工具；专家只看到本模块 context pack 和工具 schema。当前 9 个业务专家均已有 L1 只读工具，但 v2/规划占位仍只能说明能力缺口，不得把设计条目当作已实现能力。
+
+模块化 Agent 是 Python 侧的附加最小权限层，不能替代 Java Gateway 的用户身份、scope 和工具白名单校验。未来可以为不同专家配置不同模型与参数，但模型替换不得改变工具权限、参数校验、safe adapter 或写操作安全链路。详细设计见 `docs/agent/modular-agent-architecture.md`。
+
 ### 10.2 MCP Server
 
 MCP Server 负责：
@@ -648,7 +652,7 @@ MCP Server 负责：
 
 ## 12. 当前阶段提醒
 
-当前已实现的 6 个只读 MCP 工具是基础能力，不是最终用户体验本身。后续迭代优先级应从“增加工具数量”转向“形成真实助手感”：
+当前已实现的 47 个只读 MCP 工具是基础能力，不是最终用户体验本身。后续迭代优先级应从“增加工具数量”转向“形成真实助手感”和上线安全闭环：
 
 1. 上下文稳定；
 2. 消歧自然；
@@ -657,3 +661,23 @@ MCP Server 负责：
 5. 业务结果可读；
 6. 查询分析受控开放；
 7. 写操作强约束。
+
+## 13. Agent v1、v2 与后续规划能力的调整路线
+
+本节为设计路线，不修改当前 47 个只读工具、Python/Java/MCP 白名单或当前唯一受控复合配方。
+
+1. 先完成 Agent v1 日常查询覆盖，使 inventory、warehouse、logistics、pallet、production、quality、master_data、administration、audit 专家均有真实只读能力和固定数据测试。
+2. 再建设 inventory、stock movement、production、material、output、assay、pallet lifecycle、warehouse capacity 等事实/快照数据，以及版本化指标 Registry、数据质量和 Rule Engine。
+3. 在数据语义稳定后建设 v2-A：登记报表、受控跨域分析、化验文件暂存预览，以及入库/出库/调拨 dry-run。
+4. 完成 executionToken、幂等、实体/规则版本重检、审批、事务、HITL 和完整审计后，才允许逐项进入 v2-B execute。
+5. 工作群先开放群安全查询、登记报表、提醒和 Web 跳转确认，不在群聊内执行 L3/L4。
+6. 历史数据、指标、规则和模型评测稳定后，再建设只生成 advisory scenarios 的 planning_expert、预测、优化和仿真。
+7. 当前只预留 organizationScope、plantScope、warehouseAreaScope；多组织真正启用前必须完成 scope 隔离和跨 scope 测试。
+
+长期设计继续禁止任意 SQL、任意 HTTP、万能管理工具、模型自由 DAG、专家自由互聊、直接修改库存，以及任何绕过 preview/HITL 的写入。详细设计和机器可读占位见：
+
+- `docs/mcp-analysis/agent-expert-tool-blueprint.md`
+- `docs/agent/expert-tool-roadmap-registry.yaml`
+- `docs/agent/cross-expert-recipe-roadmap-registry.yaml`
+- `docs/agent/data-semantic-roadmap-registry.yaml`
+- `docs/agent/business-rule-roadmap-registry.yaml`

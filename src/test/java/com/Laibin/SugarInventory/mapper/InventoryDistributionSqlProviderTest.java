@@ -114,6 +114,25 @@ class InventoryDistributionSqlProviderTest {
         assertThat(sql).doesNotContain("p.product_name = '黄冰糖'");
     }
 
+    @Test
+    void partialPalletUsesActualPiecesWithoutAddingAFullPallet() {
+        InventoryDistributionQueryDTO query = query();
+        query.getProductScope().setType("ALL");
+
+        String sql = provider.selectAggregate(Map.of("query", query));
+        long quantity = 1;
+        long pieces = 10;
+        long piecesPerPallet = 40;
+        long confirmedResult = pieces > 0 ? pieces : quantity * piecesPerPallet;
+
+        assertThat(sql).contains("CASE WHEN COALESCE(i.pieces, 0) > 0");
+        assertThat(sql).contains("THEN COALESCE(i.pieces, 0)");
+        assertThat(sql).contains("ELSE COALESCE(i.quantity, 0) * p.pieces_per_pallet END");
+        assertThat(sql).contains("CASE WHEN COALESCE(i.pieces, 0) > 0 THEN 0 ELSE COALESCE(i.quantity, 0) END");
+        assertThat(sql).doesNotContain("p.pieces_per_pallet + COALESCE(i.pieces, 0)");
+        assertThat(confirmedResult).isEqualTo(10);
+    }
+
     private InventoryDistributionQueryDTO query() {
         InventoryDistributionQueryDTO.ProductScope productScope = new InventoryDistributionQueryDTO.ProductScope();
         InventoryDistributionQueryDTO.WarehouseScope warehouseScope = new InventoryDistributionQueryDTO.WarehouseScope();

@@ -14,6 +14,8 @@ public class EmployeeQueryDTO {
     private String mobile;      // 手机号（支持模糊查询）
     @Schema(description = "所属部门")
     private String department;  // 所属部门（支持模糊查询）
+    @Schema(description = "职位")
+    private String position;    // 职位（支持模糊查询）
     @Schema(description = "状态")
     private String status;      // 状态（例如：在职、离职）
     @Schema(description = "预设角色")

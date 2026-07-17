@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:laibin:agent:inventory-semantic-query-plan:v1",
+  "title": "Inventory Semantic Query Plan V1",
+  "description": "M2-0 离线契约草案。仅描述 inventory_current_snapshot_v1；不是 SQL、Join 或权限表达式。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "datasetId",
+    "datasetVersion",
+    "resultShape",
+    "measures",
+    "dimensions",
+    "filters",
+    "sort",
+    "limit"
+  ],
+  "properties": {
+    "datasetId": {
+      "const": "inventory_current_snapshot_v1"
+    },
+    "datasetVersion": {
+      "const": "1.0"
+    },
+    "resultShape": {
+      "type": "string",
+      "enum": ["AGGREGATE", "INVENTORY_RECORDS"]
+    },
+    "measures": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "inventory_record_count",
+          "equivalent_pieces",
+          "total_weight_kg"
+        ]
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "product",
+          "product_type",
+          "warehouse",
+          "warehouse_side",
+          "inbound_date"
+        ]
+      }
+    },
+    "filters": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/filter"
+      }
+    },
+    "sort": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/sort"
+      }
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 20
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "resultShape": {
+            "const": "INVENTORY_RECORDS"
+          }
+        },
+        "required": ["resultShape"]
+      },
+      "then": {
+        "properties": {
+          "dimensions": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "direction"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "enum": [
+            "inventory_record_count",
+            "equivalent_pieces",
+            "total_weight_kg",
+            "product",
+            "product_type",
+            "warehouse",
+            "warehouse_side",
+            "inbound_date"
+          ]
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["ASC", "DESC"]
+        }
+      }
+    },
+    "filter": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/entityFilter"
+        },
+        {
+          "$ref": "#/$defs/categoricalFilter"
+        },
+        {
+          "$ref": "#/$defs/dateFilter"
+        }
+      ]
+    },
+    "entityFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "operator"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "enum": ["product", "warehouse"]
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["EQ", "IN"]
+        },
+        "valueRef": {
+          "$ref": "#/$defs/opaqueValueRef"
+        },
+        "valueRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/opaqueValueRef"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "const": "EQ"
+              }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "required": ["valueRef"],
+            "not": {
+              "required": ["valueRefs"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "const": "IN"
+              }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "required": ["valueRefs"],
+            "not": {
+              "required": ["valueRef"]
+            }
+          }
+        }
+      ]
+    },
+    "categoricalFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "operator"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "enum": ["product_type", "warehouse_side"]
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["EQ", "NEQ", "IN", "NOT_IN"]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["EQ", "NEQ"]
+              }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "required": ["value"],
+            "not": {
+              "required": ["values"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["IN", "NOT_IN"]
+              }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "required": ["values"],
+            "not": {
+              "required": ["value"]
+            }
+          }
+        }
+      ]
+    },
+    "dateFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "operator"],
+      "properties": {
+        "field": {
+          "const": "inbound_date"
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["ON", "BEFORE", "AFTER", "BETWEEN"]
+        },
+        "value": {
+          "type": "string",
+          "format": "date"
+        },
+        "values": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["ON", "BEFORE", "AFTER"]
+              }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "required": ["value"],
+            "not": {
+              "required": ["values"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "const": "BETWEEN"
+              }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "required": ["values"],
+            "not": {
+              "required": ["value"]
+            }
+          }
+        }
+      ]
+    },
+    "opaqueValueRef": {
+      "type": "string",
+      "pattern": "^ctx_[A-Za-z0-9_-]{8,80}$",
+      "description": "由 Java/解析器签发并绑定当前用户与会话的短期不透明引用；不得填原始数据库 ID。"
+    }
+  }
+}

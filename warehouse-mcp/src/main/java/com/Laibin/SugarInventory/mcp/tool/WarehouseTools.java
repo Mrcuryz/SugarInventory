@@ -1,8 +1,20 @@
 package com.Laibin.SugarInventory.mcp.tool;
 
+import java.util.List;
+
 import com.Laibin.SugarInventory.mcp.client.WarehouseApiException;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayRecordsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayRecordsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayReportDetailRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayReportDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStandardCoverageRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStandardCoverageResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayAbnormalitiesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayAbnormalitiesResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayStatusResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductsWithoutRecentAssayRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductsWithoutRecentAssayResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionRequest;
@@ -12,7 +24,62 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletLifecycleRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletLifecycleResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletFlowRecordsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletFlowRecordsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PrintedNotInboundCodesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PrintedNotInboundCodesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletAnomaliesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletAnomaliesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QrBatchInboundCompletionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QrBatchInboundCompletionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductResolutionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolveRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolutionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialPickTraceRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialPickTraceResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionLabelCompletionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionLabelCompletionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionInProcessMaterialsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionInProcessMaterialsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidatesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidatesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchDetailRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseCapacityDistributionRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseCapacityDistributionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseRecentOperationsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseRecentOperationsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseMixedStorageFactsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseMixedStorageFactsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCatalogRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayGroupsCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardDetailResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductStandardRelationsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.EmployeeRosterResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RoleCatalogResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RolePermissionSummaryResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AuditPageResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryLedgerResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PreparePoolBalanceResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FixedProductQrPoolResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveWarehousesRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseResolutionResponse;
@@ -125,6 +192,388 @@ public class WarehouseTools {
                     safeLogValue(e.getMessage()));
             return InventoryDistributionResponse.error(ErrorMapper.unexpected());
         }
+    }
+
+    public AssayRecordsResponse queryAssayRecords(AssayRecordsRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_assay_records",
+                    () -> readService.queryAssayRecords(request));
+        } catch (WarehouseApiException e) {
+            return AssayRecordsResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_assay_records failed; productScope={}, judgeStatus={}, errorType={}, message={}",
+                    request == null || request.productScope() == null ? null : request.productScope().type(),
+                    request == null ? null : request.judgeStatus(),
+                    e.getClass().getSimpleName(),
+                    safeLogValue(e.getMessage()));
+            return AssayRecordsResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public AssayReportDetailResponse getAssayReportDetail(AssayReportDetailRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("get_assay_report_detail",
+                    () -> readService.getAssayReportDetail(request));
+        } catch (WarehouseApiException e) {
+            return AssayReportDetailResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("get_assay_report_detail failed; reportRefPresent={}, errorType={}, message={}",
+                    request != null && request.reportRef() != null && !request.reportRef().isBlank(),
+                    e.getClass().getSimpleName(),
+                    safeLogValue(e.getMessage()));
+            return AssayReportDetailResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public AssayAbnormalitiesResponse queryAssayAbnormalities(AssayAbnormalitiesRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_assay_abnormalities",
+                    () -> readService.queryAssayAbnormalities(request));
+        } catch (WarehouseApiException e) {
+            return AssayAbnormalitiesResponse.error(ErrorMapper.upstream(e));
+        } catch (Exception e) {
+            log.warn("query_assay_abnormalities failed; productScope={}, groupBy={}, errorType={}, message={}",
+                    request == null ? null : request.productScope(),
+                    request == null ? null : request.groupBy(),
+                    e.getClass().getSimpleName(),
+                    e.getMessage());
+            return AssayAbnormalitiesResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductsWithoutRecentAssayResponse queryProductsWithoutRecentAssay(ProductsWithoutRecentAssayRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_products_without_recent_assay",
+                    () -> readService.queryProductsWithoutRecentAssay(request));
+        } catch (WarehouseApiException e) {
+            return ProductsWithoutRecentAssayResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_products_without_recent_assay failed; productScope={}, warehouseScope={}, groupBy={}, errorType={}, message={}",
+                    request == null ? null : request.productScope(),
+                    request == null ? null : request.warehouseScope(),
+                    request == null ? null : request.groupBy(),
+                    e.getClass().getSimpleName(),
+                    safeLogValue(e.getMessage()));
+            return ProductsWithoutRecentAssayResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public AssayStandardCoverageResponse queryAssayStandardCoverage(AssayStandardCoverageRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_assay_standard_coverage",
+                    () -> readService.queryAssayStandardCoverage(request));
+        } catch (WarehouseApiException e) {
+            return AssayStandardCoverageResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_assay_standard_coverage failed; productScope={}, coverageType={}, errorType={}, message={}",
+                    request == null ? null : request.productScope(),
+                    request == null ? null : request.coverageType(),
+                    e.getClass().getSimpleName(),
+                    safeLogValue(e.getMessage()));
+            return AssayStandardCoverageResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public PalletLifecycleResponse queryQrCodeLifecycle(PalletLifecycleRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_qr_code_lifecycle", () -> readService.queryQrCodeLifecycle(request));
+        } catch (WarehouseApiException e) {
+            return PalletLifecycleResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_qr_code_lifecycle failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return PalletLifecycleResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public PrintedNotInboundCodesResponse queryPrintedNotInboundCodes(PrintedNotInboundCodesRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_printed_not_inbound_codes", () -> readService.queryPrintedNotInboundCodes(request));
+        } catch (WarehouseApiException e) {
+            return PrintedNotInboundCodesResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_printed_not_inbound_codes failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return PrintedNotInboundCodesResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public PalletAnomaliesResponse queryPalletAnomalies(PalletAnomaliesRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_pallet_anomalies", () -> readService.queryPalletAnomalies(request));
+        } catch (WarehouseApiException e) {
+            return PalletAnomaliesResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_pallet_anomalies failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return PalletAnomaliesResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public PalletFlowRecordsResponse queryPalletFlowRecords(PalletFlowRecordsRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_pallet_flow_records", () -> readService.queryPalletFlowRecords(request));
+        } catch (WarehouseApiException e) {
+            return PalletFlowRecordsResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_pallet_flow_records failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return PalletFlowRecordsResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public QrBatchInboundCompletionResponse queryQrBatchInboundCompletion(QrBatchInboundCompletionRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_qr_batch_inbound_completion", () -> readService.queryQrBatchInboundCompletion(request));
+        } catch (WarehouseApiException e) {
+            return QrBatchInboundCompletionResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_qr_batch_inbound_completion failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return QrBatchInboundCompletionResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionEntityResolutionResponse resolveProductionEntities(String entityType, String query, Integer limit) {
+        try {
+            return WarehouseToolCallContext.withToolName("resolve_production_entities",
+                    () -> readService.resolveProductionEntities(new ProductionEntityResolveRequest(entityType, query, limit)));
+        } catch (WarehouseApiException e) {
+            return ProductionEntityResolutionResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("resolve_production_entities failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionEntityResolutionResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionOrderProgressResponse queryProductionOrderProgress(String orderRef) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_production_order_progress",
+                    () -> readService.queryProductionOrderProgress(new ProductionOrderProgressRequest(orderRef)));
+        } catch (WarehouseApiException e) {
+            return ProductionOrderProgressResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_production_order_progress failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionOrderProgressResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionBoilingBatchTraceResponse queryBoilingBatchTrace(String batchRef) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_boiling_batch_trace",
+                    () -> readService.queryBoilingBatchTrace(new ProductionBoilingBatchTraceRequest(batchRef)));
+        } catch (WarehouseApiException e) {
+            return ProductionBoilingBatchTraceResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_boiling_batch_trace failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionBoilingBatchTraceResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionMaterialPickTraceResponse queryMaterialPickTrace(String orderRef) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_material_pick_trace",
+                    () -> readService.queryMaterialPickTrace(new ProductionMaterialPickTraceRequest(orderRef)));
+        } catch (WarehouseApiException e) {
+            return ProductionMaterialPickTraceResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_material_pick_trace failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionMaterialPickTraceResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionLabelCompletionResponse queryProductionLabelCompletion(String orderRef) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_production_label_completion",
+                    () -> readService.queryProductionLabelCompletion(new ProductionLabelCompletionRequest(orderRef)));
+        } catch (WarehouseApiException e) {
+            return ProductionLabelCompletionResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_production_label_completion failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionLabelCompletionResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionInProcessMaterialsResponse queryInProcessMaterials(String productName, String productType,
+                                                                         String productionDateStart, String productionDateEnd,
+                                                                         Integer page, Integer size) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_in_process_materials",
+                    () -> readService.queryInProcessMaterials(new ProductionInProcessMaterialsRequest(
+                            productName, productType, productionDateStart, productionDateEnd, page, size)));
+        } catch (WarehouseApiException e) {
+            return ProductionInProcessMaterialsResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_in_process_materials failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionInProcessMaterialsResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionMaterialCandidatesResponse queryMaterialCandidates(String orderRef, Integer page, Integer size) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_material_candidates",
+                    () -> readService.queryMaterialCandidates(new ProductionMaterialCandidatesRequest(orderRef, page, size)));
+        } catch (WarehouseApiException e) {
+            return ProductionMaterialCandidatesResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_material_candidates failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionMaterialCandidatesResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public PalletTasksResponse queryPalletTasks(PalletTasksRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_pallet_tasks", () -> readService.queryPalletTasks(request));
+        } catch (WarehouseApiException e) {
+            return PalletTasksResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_pallet_tasks failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return PalletTasksResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public StockDocumentsResponse queryStockDocuments(StockDocumentsRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_stock_documents", () -> readService.queryStockDocuments(request));
+        } catch (WarehouseApiException e) {
+            return StockDocumentsResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_stock_documents failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return StockDocumentsResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public AutoInboundBatchesResponse queryAutoInboundBatches(AutoInboundBatchesRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_auto_inbound_batches", () -> readService.queryAutoInboundBatches(request));
+        } catch (WarehouseApiException e) {
+            return AutoInboundBatchesResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_auto_inbound_batches failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return AutoInboundBatchesResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public AutoInboundBatchDetailResponse getAutoInboundBatchDetail(AutoInboundBatchDetailRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("get_auto_inbound_batch_detail", () -> readService.getAutoInboundBatchDetail(request));
+        } catch (WarehouseApiException e) {
+            return AutoInboundBatchDetailResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("get_auto_inbound_batch_detail failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return AutoInboundBatchDetailResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public WarehouseCapacityDistributionResponse queryWarehouseCapacityDistribution(WarehouseCapacityDistributionRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_warehouse_capacity_distribution",
+                    () -> readService.queryWarehouseCapacityDistribution(request));
+        } catch (WarehouseApiException e) {
+            return WarehouseCapacityDistributionResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_warehouse_capacity_distribution failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return WarehouseCapacityDistributionResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public WarehouseRecentOperationsResponse queryWarehouseRecentOperations(WarehouseRecentOperationsRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_warehouse_recent_operations",
+                    () -> readService.queryWarehouseRecentOperations(request));
+        } catch (WarehouseApiException e) {
+            return WarehouseRecentOperationsResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_warehouse_recent_operations failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return WarehouseRecentOperationsResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public WarehouseMixedStorageFactsResponse queryWarehouseMixedStorageFacts(WarehouseMixedStorageFactsRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_warehouse_mixed_storage_facts",
+                    () -> readService.queryWarehouseMixedStorageFacts(request));
+        } catch (WarehouseApiException e) {
+            return WarehouseMixedStorageFactsResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_warehouse_mixed_storage_facts failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return WarehouseMixedStorageFactsResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductCatalogResponse queryProductCatalog(String productName, String productType, String productStatus,
+                                                       String packagingMethod, String screenMeshName, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_product_catalog", () -> readService.queryProductCatalog(
+                new ProductCatalogRequest(productName, productType, productStatus, packagingMethod, screenMeshName, page, size)));
+        } catch (WarehouseApiException e) { return ProductCatalogResponse.error(ErrorMapper.upstream(e)); }
+        catch (RuntimeException e) { return ProductCatalogResponse.error(ErrorMapper.unexpected()); }
+    }
+    public ProductDetailResponse getProductDetail(String productName) {
+        try { return WarehouseToolCallContext.withToolName("get_product_detail", () -> readService.getProductDetail(new ProductDetailRequest(productName))); }
+        catch (WarehouseApiException e) { return ProductDetailResponse.error(ErrorMapper.upstream(e)); }
+        catch (RuntimeException e) { return ProductDetailResponse.error(ErrorMapper.unexpected()); }
+    }
+    public ScreenMeshCatalogResponse queryScreenMeshCatalog(String meshName, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_screen_mesh_catalog", () -> readService.queryScreenMeshCatalog(new ScreenMeshCatalogRequest(meshName, page, size))); }
+        catch (WarehouseApiException e) { return ScreenMeshCatalogResponse.error(ErrorMapper.upstream(e)); }
+        catch (RuntimeException e) { return ScreenMeshCatalogResponse.error(ErrorMapper.unexpected()); }
+    }
+    public AssayGroupsCatalogResponse queryAssayGroups(String groupName, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_assay_groups", () -> readService.queryAssayGroups(groupName, page, size)); }
+        catch (WarehouseApiException e) { return AssayGroupsCatalogResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return AssayGroupsCatalogResponse.error(ErrorMapper.unexpected()); }
+    }
+    public QualityStandardCatalogResponse queryQualityStandardCatalog(String productType, String standardName, String status, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_quality_standard_catalog", () -> readService.queryQualityStandardCatalog(productType, standardName, status, page, size)); }
+        catch (WarehouseApiException e) { return QualityStandardCatalogResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return QualityStandardCatalogResponse.error(ErrorMapper.unexpected()); }
+    }
+    public QualityStandardDetailResponse getQualityStandardDetail(String standardCode, Integer version) {
+        try { return WarehouseToolCallContext.withToolName("get_quality_standard_detail", () -> readService.getQualityStandardDetail(standardCode, version)); }
+        catch (WarehouseApiException e) { return QualityStandardDetailResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return QualityStandardDetailResponse.error(ErrorMapper.unexpected()); }
+    }
+    public ProductStandardRelationsResponse queryProductStandardRelations(String productName) {
+        try { return WarehouseToolCallContext.withToolName("query_product_standard_relations", () -> readService.queryProductStandardRelations(productName)); }
+        catch (WarehouseApiException e) { return ProductStandardRelationsResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return ProductStandardRelationsResponse.error(ErrorMapper.unexpected()); }
+    }
+    public EmployeeRosterResponse queryEmployeeRoster(String employeeId, String name, String department, String position, String status, String roleCode, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_employee_roster", () -> readService.queryEmployeeRoster(employeeId, name, department, position, status, roleCode, page, size)); }
+        catch (WarehouseApiException e) { return EmployeeRosterResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return EmployeeRosterResponse.error(ErrorMapper.unexpected()); }
+    }
+    public RoleCatalogResponse queryRoles(String keyword, String status, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_roles", () -> readService.queryRoles(keyword, status, page, size)); }
+        catch (WarehouseApiException e) { return RoleCatalogResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return RoleCatalogResponse.error(ErrorMapper.unexpected()); }
+    }
+    public RolePermissionSummaryResponse getRolePermissionSummary(String roleCodeOrName) {
+        try { return WarehouseToolCallContext.withToolName("get_role_permission_summary", () -> readService.getRolePermissionSummary(roleCodeOrName)); }
+        catch (WarehouseApiException e) { return RolePermissionSummaryResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return RolePermissionSummaryResponse.error(ErrorMapper.unexpected()); }
+    }
+    public AuditPageResponse searchOperationLogs(String module, String operationType, String operator, String startTime, String endTime, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("search_operation_logs", () -> readService.searchOperationLogs(module, operationType, operator, startTime, endTime, page, size)); }
+        catch (WarehouseApiException e) { return AuditPageResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return AuditPageResponse.error(ErrorMapper.unexpected()); }
+    }
+    public AuditPageResponse queryAgentToolAudit(String capability, String resultCode, String errorCode, String startTime, String endTime, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_agent_tool_audit", () -> readService.queryAgentToolAudit(capability, resultCode, errorCode, startTime, endTime, page, size)); }
+        catch (WarehouseApiException e) { return AuditPageResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return AuditPageResponse.error(ErrorMapper.unexpected()); }
+    }
+    public AuditPageResponse queryAgentAnswerReviews(String reviewStatus, String answerStatus, String failureDomain, String failureCategory, String suggestedFixType, String testCaseStatus, Boolean priorityOnly, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_agent_answer_reviews", () -> readService.queryAgentAnswerReviews(reviewStatus, answerStatus, failureDomain, failureCategory, suggestedFixType, testCaseStatus, priorityOnly, page, size)); }
+        catch (WarehouseApiException e) { return AuditPageResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return AuditPageResponse.error(ErrorMapper.unexpected()); }
+    }
+    public InventoryLedgerResponse queryInventoryLedger(String productName, String warehouseName, String screenMeshName, String productStatus, String entryDateStart, String entryDateEnd, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_inventory_ledger", () -> readService.queryInventoryLedger(productName, warehouseName, screenMeshName, productStatus, entryDateStart, entryDateEnd, page, size)); }
+        catch (WarehouseApiException e) { return InventoryLedgerResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return InventoryLedgerResponse.error(ErrorMapper.unexpected()); }
+    }
+    public PreparePoolBalanceResponse queryPreparePoolBalance(String productName, String productType, String screenMeshName, String productionDateStart, String productionDateEnd, Boolean positiveOnly, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_prepare_pool_balance", () -> readService.queryPreparePoolBalance(productName, productType, screenMeshName, productionDateStart, productionDateEnd, positiveOnly, page, size)); }
+        catch (WarehouseApiException e) { return PreparePoolBalanceResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return PreparePoolBalanceResponse.error(ErrorMapper.unexpected()); }
+    }
+    public FixedProductQrPoolResponse queryFixedProductQrPool(String productName, List<String> codes, String status, Boolean freeOnly, Integer page, Integer size) {
+        try { return WarehouseToolCallContext.withToolName("query_fixed_product_qr_pool", () -> readService.queryFixedProductQrPool(productName, codes, status, freeOnly, page, size)); }
+        catch (WarehouseApiException e) { return FixedProductQrPoolResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return FixedProductQrPoolResponse.error(ErrorMapper.unexpected()); }
     }
 
     @Tool(name = "get_warehouse_status", description = "Read warehouse capacity, inventory details, and recent operations, preferring a unique warehouseId when available.")

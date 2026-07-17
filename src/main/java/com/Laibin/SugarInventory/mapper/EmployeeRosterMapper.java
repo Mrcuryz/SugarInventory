@@ -44,6 +44,7 @@ public interface EmployeeRosterMapper extends BaseMapper<EmployeeRoster> {
             "   <if test='query.name != null and query.name != \"\"'> AND name LIKE CONCAT('%', #{query.name}, '%') </if>" +
             "   <if test='query.mobile != null and query.mobile != \"\"'> AND mobile LIKE CONCAT('%', #{query.mobile}, '%') </if>" +
             "   <if test='query.department != null and query.department != \"\"'> AND department LIKE CONCAT('%', #{query.department}, '%') </if>" +
+            "   <if test='query.position != null and query.position != \"\"'> AND position LIKE CONCAT('%', #{query.position}, '%') </if>" +
             "   <if test='query.status != null and query.status != \"\"'> AND status = #{query.status} </if>" +
             "   <if test='query.roleCode != null and query.roleCode != \"\"'> AND role_code = #{query.roleCode} </if>" +
             "</where> " +
@@ -61,6 +62,7 @@ public interface EmployeeRosterMapper extends BaseMapper<EmployeeRoster> {
             "   <if test='query.name != null and query.name != \"\"'> AND name LIKE CONCAT('%', #{query.name}, '%') </if>" +
             "   <if test='query.mobile != null and query.mobile != \"\"'> AND mobile LIKE CONCAT('%', #{query.mobile}, '%') </if>" +
             "   <if test='query.department != null and query.department != \"\"'> AND department LIKE CONCAT('%', #{query.department}, '%') </if>" +
+            "   <if test='query.position != null and query.position != \"\"'> AND position LIKE CONCAT('%', #{query.position}, '%') </if>" +
             "   <if test='query.status != null and query.status != \"\"'> AND status = #{query.status} </if>" +
             "   <if test='query.roleCode != null and query.roleCode != \"\"'> AND role_code = #{query.roleCode} </if>" +
             "</where>" +

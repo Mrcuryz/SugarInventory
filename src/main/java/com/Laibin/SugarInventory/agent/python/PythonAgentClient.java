@@ -18,4 +18,8 @@ public interface PythonAgentClient {
     default void cancel(String agentSessionId, String messageId) {
         throw new PythonAgentClientException("PYTHON_AGENT_CANCEL_UNAVAILABLE", true);
     }
+
+    default void clearSession(String agentSessionId) {
+        throw new PythonAgentClientException("PYTHON_AGENT_CLEAR_SESSION_UNAVAILABLE", true);
+    }
 }

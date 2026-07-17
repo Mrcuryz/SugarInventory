@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "GoalEntityMentionV1": {
+      "additionalProperties": false,
+      "description": "A non-authoritative entity mention produced by the model.",
+      "properties": {
+        "entityType": {
+          "enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "ASSAY_RECORD"],
+          "title": "Entitytype",
+          "type": "string"
+        },
+        "mentionText": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Mentiontext",
+          "type": "string"
+        },
+        "referenceKind": {
+          "enum": ["EXPLICIT", "PRONOUN", "CONTEXT_REUSE"],
+          "title": "Referencekind",
+          "type": "string"
+        }
+      },
+      "required": ["entityType", "mentionText", "referenceKind"],
+      "title": "GoalEntityMentionV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Constrained semantic proposal; never an executable plan.",
+  "properties": {
+    "schemaVersion": {"const": "1.0", "default": "1.0", "title": "Schemaversion", "type": "string"},
+    "goalType": {
+      "enum": [
+        "CURRENT_PRODUCT_INVENTORY",
+        "PRODUCT_INVENTORY_DISTRIBUTION",
+        "WAREHOUSE_INVENTORY_DISTRIBUTION",
+        "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY",
+        "OUT_OF_SLICE",
+        "UNSUPPORTED",
+        "UNCLEAR"
+      ],
+      "title": "Goaltype",
+      "type": "string"
+    },
+    "requestedOutcome": {"maxLength": 300, "minLength": 1, "title": "Requestedoutcome", "type": "string"},
+    "entityMentions": {
+      "items": {"$ref": "#/$defs/GoalEntityMentionV1"},
+      "maxItems": 6,
+      "title": "Entitymentions",
+      "type": "array"
+    },
+    "contextReuse": {
+      "items": {"enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "ASSAY_RECORD"], "type": "string"},
+      "maxItems": 6,
+      "title": "Contextreuse",
+      "type": "array"
+    },
+    "missingEntities": {
+      "items": {"enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "ASSAY_RECORD"], "type": "string"},
+      "maxItems": 6,
+      "title": "Missingentities",
+      "type": "array"
+    },
+    "dataNeed": {
+      "enum": ["NONE", "FRESH_READ", "REUSE_CONFIRMED_FACTS", "CLARIFICATION"],
+      "title": "Dataneed",
+      "type": "string"
+    },
+    "presentationPreference": {
+      "default": "DEFAULT",
+      "enum": ["DEFAULT", "SUMMARY", "DETAIL", "NEXT_PAGE"],
+      "title": "Presentationpreference",
+      "type": "string"
+    },
+    "needsClarification": {"title": "Needsclarification", "type": "boolean"},
+    "clarificationReason": {
+      "default": "NONE",
+      "enum": ["NONE", "MISSING_ENTITY", "AMBIGUOUS_ENTITY", "INTENT_CONFLICT", "UNSUPPORTED_SCOPE"],
+      "title": "Clarificationreason",
+      "type": "string"
+    },
+    "confidence": {"maximum": 1, "minimum": 0, "title": "Confidence", "type": "number"}
+  },
+  "required": ["goalType", "requestedOutcome", "dataNeed", "needsClarification", "confidence"],
+  "title": "GoalDraftV1",
+  "type": "object"
+}

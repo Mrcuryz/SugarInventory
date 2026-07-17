@@ -21,6 +21,8 @@
 | `get_warehouse_status` | 查询 | L1 | 是 | 查询库位容量、库存明细和最近操作 |
 | `get_pallet_status` | 查询 | L1 | 是 | 扫码后了解托盘当前产品、位置、任务和流转 |
 | `get_assay_status` | 查询 | L1 | 是 | 查询产品日期化验和判定结果 |
+| `query_inventory_by_quality_standard` | 查询 | L1 | 是 | 查询当前库存中符合指定化验标准的批次 |
+| `query_inventory_by_assay_metrics` | 查询 | L1 | 是 | 按最新化验原始指标数值条件筛选当前库存批次 |
 | `preview_auto_inbound_report` | 预览 | L2 | 是 | 把报数文本解析成待确认入库任务和风险 |
 | `preview_inbound_plan` | 预览 | L2 | 是 | 预览入库会放到哪里、缺什么、是否冲突 |
 | `preview_outbound_plan` | 预览 | L2 | 是 | 预览出库会扣哪些库存、是否足够 |
@@ -117,6 +119,26 @@
 - 幂等：只读。
 - 审计：不需要业务审计。
 - 底层映射：`/api/assay/by-product-date`、`/api/assay/{id}`、`/api/assay/query`。
+
+### `query_inventory_by_quality_standard`
+
+- 描述：按当前库存批次查询最新化验，并筛选在化验生成时已保存为命中指定标准的库存。
+- 输入：`productScope?`, `warehouseScope?`, `productionDateRange?`, `standardRef`, `groupBy?`, `page?`, `size?`。
+- 输出：`dataScope=CURRENT_INVENTORY_BATCH_LATEST_ASSAY`、库存数量、批次生产日期、日期来源、最新化验版本、命中标准快照、数据质量警告。
+- 风险：L1。
+- 权限：建议 `inventory:view` + `quality:view`。
+- 限制：标准名称先解析为受控引用；多版本歧义时要求用户选择；不按当前标准重算历史化验。
+- 底层缺口：需新增统一当前库存批次化验读模型和聚合接口，不能继续直接连接 `inventory.assay_id`。
+
+### `query_inventory_by_assay_metrics`
+
+- 描述：按当前库存批次最新化验的原始数值筛选库存。
+- 输入：`productScope?`, `warehouseScope?`, `productionDateRange?`, `conditions[1..3]`, `groupBy?`, `page?`, `size?`；条件字段和运算符使用固定枚举。
+- 输出：`dataScope=CURRENT_INVENTORY_BATCH_LATEST_ASSAY`、库存数量、批次生产日期、最新化验版本、命中指标值、缺失指标数和数据质量警告。
+- 风险：L1。
+- 权限：建议 `inventory:view` + `quality:view`。
+- 限制：第一版仅支持最多 3 条 `AND` 条件；不接受 SQL、列名、公式或模型自定义单位换算；不根据指标筛选结果自动宣称产品合格。
+- 底层缺口：与标准命中查询共享统一当前库存批次化验读模型。
 
 ### `preview_auto_inbound_report`
 

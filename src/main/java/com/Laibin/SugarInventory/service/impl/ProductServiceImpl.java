@@ -10,6 +10,7 @@ import com.Laibin.SugarInventory.domain.vo.ProductInfoVO;
 import com.Laibin.SugarInventory.domain.dto.ProductUpdateDTO;
 import com.Laibin.SugarInventory.domain.vo.ProductVO;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
+import com.Laibin.SugarInventory.mapper.InventoryMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.ProductService;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -38,6 +40,9 @@ import java.util.stream.Collectors;
 public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> implements ProductService, LoggableService<Product> {
     @Autowired
     private ProductMapper productMapper;
+
+    @Autowired
+    private InventoryMapper inventoryMapper;
 
     @Override
     public List<Product> getProductsByCondition(String name, String type, String status) {
@@ -159,6 +164,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         // 2. 验证枚举值合法性
         validateEnums(dto.getProductType(), dto.getStatus(), dto.getPackagingMethod());
 
+        boolean specificationChanged = specificationChanged(product, dto);
+        if (specificationChanged && inventoryMapper.existsByProductId(dto.getProductId())) {
+            throw new BusinessException(ErrorCode.PRODUCT_SPECIFICATION_LOCKED_BY_INVENTORY);
+        }
+
         // 3. 执行动态更新
         int rows = productMapper.dynamicUpdate(
                 dto.getProductId(),
@@ -171,10 +181,14 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
                 dto.getScreenMeshId(),
                 currentUserId,
                 LocalDateTime.now(),
-                dto.getCanStack()
+                dto.getCanStack(),
+                specificationChanged
         );
 
         if (rows == 0) {
+            if (specificationChanged && inventoryMapper.existsByProductId(dto.getProductId())) {
+                throw new BusinessException(ErrorCode.PRODUCT_SPECIFICATION_LOCKED_BY_INVENTORY);
+            }
             throw new BusinessException("更新失败");
         }
 
@@ -192,6 +206,18 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         if (packaging != null && !Arrays.asList("箱", "袋", "罐", "").contains(packaging)) {
             throw new BusinessException(ErrorCode.INVALID_PACKAGING_METHOD);
         }
+    }
+
+    private boolean specificationChanged(Product product, ProductUpdateDTO dto) {
+        boolean weightChanged = dto.getWeightPerPiece() != null
+                && !sameDecimal(product.getWeightPerPiece(), dto.getWeightPerPiece());
+        boolean palletSizeChanged = dto.getPiecesPerPallet() != null
+                && !dto.getPiecesPerPallet().equals(product.getPiecesPerPallet());
+        return weightChanged || palletSizeChanged;
+    }
+
+    private boolean sameDecimal(BigDecimal left, BigDecimal right) {
+        return left != null && right != null && left.compareTo(right) == 0;
     }
 
     @Override

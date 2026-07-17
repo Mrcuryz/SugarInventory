@@ -27,9 +27,17 @@ services:
       - app-network
     volumes:
       - redis_data:/data
+    secrets:
+      - redis_password
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: always
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   clash:
     image: dreamacro/clash
@@ -43,3 +51,6 @@ services:
     restart: always
 networks:
   app-network:
+secrets:
+  redis_password:
+    file: ${REDIS_PASSWORD_FILE:?Set REDIS_PASSWORD_FILE to a protected secret file}

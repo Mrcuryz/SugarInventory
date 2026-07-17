@@ -140,6 +140,130 @@ class AgentSessionServiceImplTest {
     }
 
     @Test
+    void validateDelegationAllowsParameterizedQualifiedInventoryReadPostButRejectsNonNumericPath() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+
+        assertThat(service.validateDelegation(claims,
+                new MockHttpServletRequest("POST", "/api/inventory/qualified-inventory/8/page"), loginUser))
+                .isSameAs(session);
+        assertThatThrownBy(() -> service.validateDelegation(claims,
+                new MockHttpServletRequest("POST", "/api/inventory/qualified-inventory/anything/page"), loginUser))
+                .isInstanceOf(AgentSessionAuthenticationException.class)
+                .extracting("status")
+                .isEqualTo(403);
+    }
+
+    @Test
+    void validateDelegationAllowsAssayRecordsReadOnlyPost() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/assay/records/query");
+        AgentSession result = service.validateDelegation(claims, request, loginUser);
+
+        assertThat(result).isSameAs(session);
+        verify(sessionMapper).updateById(session);
+    }
+
+    @Test
+    void validateDelegationAllowsAssayReportDetailReadOnlyPost() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/assay/report-detail/query");
+        AgentSession result = service.validateDelegation(claims, request, loginUser);
+
+        assertThat(result).isSameAs(session);
+        verify(sessionMapper).updateById(session);
+    }
+
+    @Test
+    void validateDelegationAllowsAssayAbnormalitiesReadOnlyPost() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/assay/abnormalities/query");
+        AgentSession result = service.validateDelegation(claims, request, loginUser);
+
+        assertThat(result).isSameAs(session);
+        verify(sessionMapper).updateById(session);
+    }
+
+    @Test
+    void validateDelegationAllowsProductsWithoutRecentAssayReadOnlyPost() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/assay/products-without-recent-assay/query");
+        AgentSession result = service.validateDelegation(claims, request, loginUser);
+
+        assertThat(result).isSameAs(session);
+        verify(sessionMapper).updateById(session);
+    }
+
+    @Test
+    void validateDelegationAllowsAssayStandardCoverageReadOnlyPost() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/assay/standard-coverage/query");
+        AgentSession result = service.validateDelegation(claims, request, loginUser);
+
+        assertThat(result).isSameAs(session);
+        verify(sessionMapper).updateById(session);
+    }
+
+    @Test
+    void validateDelegationAllowsEveryRegisteredAgentReadPostPath() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+        List<String> paths = List.of(
+                "/api/production/agent-read/entities/resolve",
+                "/api/production/agent-read/orders/progress/query",
+                "/api/production/agent-read/boiling-batches/trace/query",
+                "/api/production/agent-read/orders/material-pick-trace/query",
+                "/api/production/agent-read/orders/label-completion/query",
+                "/api/production/agent-read/materials/in-process/query",
+                "/api/production/agent-read/orders/material-candidates/query",
+                "/api/logistics/agent-read/pallet-tasks/query",
+                "/api/logistics/agent-read/stock-documents/query",
+                "/api/logistics/agent-read/auto-inbound/batches/query",
+                "/api/logistics/agent-read/auto-inbound/batches/detail/query",
+                "/api/warehouse/agent-read/capacity-distribution/query",
+                "/api/warehouse/agent-read/recent-operations/query",
+                "/api/warehouse/agent-read/mixed-storage-facts/query",
+                "/api/master-data/agent-read/products/query",
+                "/api/master-data/agent-read/products/detail/query",
+                "/api/master-data/agent-read/screen-meshes/query",
+                "/api/quality/agent-read/assay-groups/query",
+                "/api/quality/agent-read/standards/query",
+                "/api/quality/agent-read/standards/detail/query",
+                "/api/quality/agent-read/product-standard-relations/query",
+                "/api/administration/agent-read/employees/query",
+                "/api/administration/agent-read/roles/query",
+                "/api/administration/agent-read/roles/permission-summary/query",
+                "/api/audit/agent-read/operation-logs/query",
+                "/api/audit/agent-read/agent-tool-audit/query",
+                "/api/audit/agent-read/agent-answer-reviews/query",
+                "/api/inventory/agent-read/ledger/query",
+                "/api/inventory/agent-read/prepare-pool-balance/query",
+                "/api/pallet-codes/agent-read/fixed-product-pool/query");
+
+        for (String path : paths) {
+            assertThat(service.validateDelegation(
+                    claims, new MockHttpServletRequest("POST", path), loginUser)).isSameAs(session);
+        }
+    }
+
+    @Test
     void validateDelegationRejectsRevokedSession() {
         Claims claims = validClaims();
         AgentSession session = activeSession();

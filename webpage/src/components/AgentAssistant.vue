@@ -26,6 +26,7 @@ const messages = ref([])
 const scrollRef = ref(null)
 const pendingSelection = ref(null)
 const debugMode = ref(false)
+const shadowCompareMode = import.meta.env.VITE_AGENT_SHADOW_COMPARE === 'true'
 const authStore = useAuthStore()
 let activeStreamController = null
 let activeAssistantMessage = null
@@ -56,10 +57,12 @@ const avatarText = (name, fallback) => {
 }
 
 const open = async () => {
-  visible.value = true
   if (!session.value) {
     await startSession()
   }
+  // Do not expose an apparently ready drawer before the replacement session
+  // has cancelled any pending interrupts owned by the previous page instance.
+  visible.value = true
 }
 
 const startSession = async () => {
@@ -135,7 +138,7 @@ const send = async (options = {}) => {
         message: text,
         pageContext: {
           path: window.location.pathname,
-          debug: debugMode.value,
+          debug: debugMode.value || shadowCompareMode,
           selectedOption,
           recentMessages: messages.value
             .filter(item => item.content)
@@ -593,6 +596,7 @@ const handleCardAction = async (action) => {
             <AgentMessageBubble
               :item="item"
               :debug-mode="debugMode"
+              :shadow-compare-mode="shadowCompareMode"
               :sending="sending"
               @choose-option="chooseOption($event, item)"
               @feedback="submitMessageFeedback"

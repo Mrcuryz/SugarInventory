@@ -31,7 +31,8 @@ public enum ErrorCode {
     MULTIPLE_USE_ASSAY_FLAGS(1025, "存在多次使用化验标记"),
     INVALID_SEMI_RECORD(1026, "无效的半成品记录"),
     ASSAY_GROUP_RECORD_NOT_FOUND(1027, "找不到批量化验组"),
-    SCREEN_MESH_NOT_FOUND(1028, "找不到关联筛网");
+    SCREEN_MESH_NOT_FOUND(1028, "找不到关联筛网"),
+    PRODUCT_SPECIFICATION_LOCKED_BY_INVENTORY(1029, "产品已有库存，不能修改每板件数或单件重量；不同规格请新建产品");
 
     private final int code;
     private final String message;

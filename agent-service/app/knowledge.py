@@ -88,7 +88,20 @@ TOOL_CAPABILITY_REGISTRY: dict[str, ToolCapability] = {
         do_not_use_when=["用户只是问助手身份、能力或无关闲聊"],
         required_slots=["product_query"],
         optional_slots=["product_type", "product_status"],
-        resolver_for=["get_inventory_overview", "get_inventory_distribution", "get_assay_status"],
+        resolver_for=[
+            "get_inventory_overview",
+            "get_inventory_distribution",
+            "get_assay_status",
+            "query_assay_records",
+            "get_assay_report_detail",
+            "query_assay_abnormalities",
+            "query_products_without_recent_assay",
+            "query_assay_standard_coverage",
+            "query_printed_not_inbound_codes",
+            "query_pallet_anomalies",
+            "query_pallet_flow_records",
+            "query_qr_batch_inbound_completion",
+        ],
         default_behavior="唯一匹配后才能继续主查询；多候选时必须追问。",
         safe_result_summary=["resolutionStatus", "candidateCount"],
         unsupported_alternatives=["请用户选择具体产品或受支持的产品范围"],
@@ -102,7 +115,7 @@ TOOL_CAPABILITY_REGISTRY: dict[str, ToolCapability] = {
         do_not_use_when=["用户没有库位语义，或只是问能力边界"],
         required_slots=["warehouse_query"],
         optional_slots=["only_available"],
-        resolver_for=["get_warehouse_status", "get_inventory_distribution"],
+        resolver_for=["get_warehouse_status", "get_inventory_distribution", "query_products_without_recent_assay", "query_pallet_anomalies", "query_pallet_flow_records"],
         default_behavior="解析成功后必须继续调用主查询工具，不能只解析后结束。",
         safe_result_summary=["resolutionStatus", "candidateCount"],
         unsupported_alternatives=["请用户换一个库位名称"],
@@ -168,6 +181,123 @@ TOOL_CAPABILITY_REGISTRY: dict[str, ToolCapability] = {
         optional_slots=["production_date"],
         safe_result_summary=["judgeResult", "needsAssay"],
         unsupported_alternatives=["可查询单日化验状态"],
+    ),
+    "query_assay_records": ToolCapability(
+        name="query_assay_records",
+        business_name="化验记录范围查询",
+        can_answer=["按产品范围、采样日期范围和判定状态查询化验记录列表与摘要"],
+        cannot_answer=["不能导入、更新、删除化验", "不能导出报表", "不能修改质量标准"],
+        use_when=["用户问最近N天化验记录、今天有哪些化验记录、范围内不合格或无标准化验记录"],
+        do_not_use_when=["用户只问单产品某一天有没有化验"],
+        required_slots=["product_scope"],
+        optional_slots=["date_range", "judge_status", "page", "size"],
+        safe_result_summary=["scopeLabel", "dateRangeLabel", "total", "latestSampleDate"],
+        unsupported_alternatives=["报告详情使用 get_assay_report_detail，导出需要后续工具"],
+    ),
+    "get_assay_report_detail": ToolCapability(
+        name="get_assay_report_detail",
+        business_name="化验报告详情查询",
+        can_answer=["查看上一轮化验记录中的单条报告指标、判定、标准和异常原因"],
+        cannot_answer=["不能根据用户手写内部 assayId 查询", "不能导入、更新、删除化验或修改指标"],
+        use_when=["用户问刚才那条化验详情、这份报告哪些指标不合格、无标准原因"],
+        do_not_use_when=["没有上一轮 recordRef 或用户只是问范围化验记录列表"],
+        required_slots=["report_ref"],
+        optional_slots=["include_metrics", "include_standard_snapshot"],
+        default_behavior="reportRef 必须来自 query_assay_records 返回或 HITL 选择，不能由模型编造。",
+        safe_result_summary=["reportLabel", "judgeLabel", "standardLabel", "riskLabels"],
+        unsupported_alternatives=["没有上下文时先用 query_assay_records 查询并让用户选择报告"],
+    ),
+    "query_assay_abnormalities": ToolCapability(
+        name="query_assay_abnormalities",
+        business_name="化验质量异常聚合查询",
+        can_answer=["按产品范围、采样日期范围和异常类型统计不合格、无标准、标准多候选化验"],
+        cannot_answer=["不能统计无化验产品", "不能导出报表", "不能修改化验或质量标准"],
+        use_when=["用户问最近化验异常、质量异常、不合格统计、无标准记录、指标越界"],
+        do_not_use_when=["用户只问普通化验记录列表", "用户问无化验产品"],
+        required_slots=["product_scope"],
+        optional_slots=["date_range", "abnormal_types", "group_by", "limit"],
+        safe_result_summary=["scopeLabel", "dateRangeLabel", "total", "groupCount"],
+        unsupported_alternatives=["无化验风险需要 query_products_without_recent_assay 或库存风险查询"],
+    ),
+    "query_products_without_recent_assay": ToolCapability(
+        name="query_products_without_recent_assay",
+        business_name="缺化验在库产品查询",
+        can_answer=["当前在库产品或库位分组在指定日期范围内没有有效化验记录"],
+        cannot_answer=["不能把无标准当作无化验", "不能导入、更新或创建化验"],
+        use_when=["用户问无化验、未化验、缺化验、没有化验的在库产品或库位"],
+        do_not_use_when=["用户问不合格或无标准化验记录"],
+        required_slots=["product_scope", "warehouse_scope"],
+        optional_slots=["date_range", "group_by", "limit"],
+        safe_result_summary=["scopeLabel", "warehouseScopeLabel", "dateRangeLabel", "totalGroups", "groupCount"],
+        unsupported_alternatives=["不合格和无标准统计使用 query_assay_abnormalities"],
+    ),
+    "query_assay_standard_coverage": ToolCapability(
+        name="query_assay_standard_coverage",
+        business_name="质量标准覆盖查询",
+        can_answer=["当前在库产品中哪些产品没有绑定有效质量标准"],
+        cannot_answer=["不能修改质量标准", "不能回答标准最近未使用的历史口径", "不能把无标准回答成不合格"],
+        use_when=["用户问哪些产品没有质量标准、未绑定标准、标准覆盖缺口"],
+        do_not_use_when=["用户问无化验或缺化验", "用户问化验记录里的无标准统计"],
+        required_slots=["product_scope"],
+        optional_slots=["date_range", "coverage_type", "limit"],
+        safe_result_summary=["scopeLabel", "coverageType", "totalGroups", "groupCount"],
+        unsupported_alternatives=["化验记录无标准统计使用 query_assay_abnormalities"],
+    ),
+    "query_qr_code_lifecycle": ToolCapability(
+        name="query_qr_code_lifecycle",
+        business_name="二维码托盘生命周期查询",
+        can_answer=["明确二维码或托盘码从打印、绑定、入库、流转到当前状态的只读时间线"],
+        cannot_answer=["不能作废、恢复、确认托盘任务或修改库存"],
+        use_when=["用户提供明确二维码或托盘码并询问经历、环节、生命周期"],
+        do_not_use_when=["用户只问当前状态且不需要时间线"],
+        required_slots=["pallet"],
+        optional_slots=["include_inventory", "include_assay", "include_flows", "include_print_info"],
+        safe_result_summary=["codeLabel", "currentStatusLabel", "eventCount", "riskCount"],
+        unsupported_alternatives=["请用户提供明确二维码或托盘码"],
+    ),
+    "query_printed_not_inbound_codes": ToolCapability(
+        name="query_printed_not_inbound_codes",
+        business_name="已打印未入库二维码查询",
+        can_answer=["已打印标签批次、订单或产品范围中尚未完成入库的二维码统计"],
+        cannot_answer=["不能打印、回收、核销或修改二维码"],
+        use_when=["用户问打印了但没入库、未入库码或打印批次完成情况"],
+        do_not_use_when=["用户只问一个二维码当前状态"],
+        required_slots=[],
+        optional_slots=["product_scope", "order_no", "batch_no", "date_range", "group_by", "limit"],
+        safe_result_summary=["printedCount", "inboundCount", "notInboundCount", "groupCount"],
+    ),
+    "query_pallet_anomalies": ToolCapability(
+        name="query_pallet_anomalies",
+        business_name="托盘生命周期异常查询",
+        can_answer=["托盘状态、库存、流转和产品绑定之间的受控异常统计"],
+        cannot_answer=["当前没有独立扫描日志，不能断言作废码被扫描"],
+        use_when=["用户问托盘异常、重复入库、无入库出库或状态库存不一致"],
+        do_not_use_when=["用户只问普通托盘状态"],
+        required_slots=[],
+        optional_slots=["product_scope", "warehouse_id", "date_range", "anomaly_types", "limit"],
+        safe_result_summary=["total", "groupCount", "notes"],
+    ),
+    "query_pallet_flow_records": ToolCapability(
+        name="query_pallet_flow_records",
+        business_name="托盘流转记录查询",
+        can_answer=["按二维码、产品、库位、时间和事件类型分页查询托盘流转"],
+        cannot_answer=["不能删除流转记录或修改托盘状态"],
+        use_when=["用户问托盘最近流转、进出记录或事件时间线"],
+        do_not_use_when=["用户只问当前状态"],
+        required_slots=[],
+        optional_slots=["code", "product_scope", "warehouse_id", "date_range", "event_types", "page", "size"],
+        safe_result_summary=["scopeLabel", "dateRangeLabel", "total", "recordCount"],
+    ),
+    "query_qr_batch_inbound_completion": ToolCapability(
+        name="query_qr_batch_inbound_completion",
+        business_name="二维码批次入库完成率查询",
+        can_answer=["标签批次、生产订单或产品范围的二维码入库完成率和未完成示例"],
+        cannot_answer=["不能核销标签、创建入库任务或执行入库"],
+        use_when=["用户问二维码批次或生产订单入库完成率"],
+        do_not_use_when=["用户没有提供批次、订单、产品或日期范围"],
+        required_slots=["batch_or_order_or_product_or_date"],
+        optional_slots=["include_unfinished_examples", "limit"],
+        safe_result_summary=["batchLabel", "printedCount", "inboundCount", "notInboundCount"],
     ),
 }
 
@@ -253,18 +383,59 @@ class IntentRouter:
                 answer=self._faq_answer(normalized),
             )
         if self._is_report_analysis(normalized):
+            supported_qr_lifecycle = self._asks_qr_code_lifecycle(normalized)
+            supported_printed_not_inbound = self._asks_printed_not_inbound(normalized)
+            supported_pallet_anomalies = self._asks_pallet_anomalies(normalized)
+            supported_pallet_flow_records = self._asks_pallet_flow_records(normalized)
+            supported_qr_batch_completion = self._asks_qr_batch_completion(normalized)
             supported_distribution = self._is_supported_distribution_analysis(normalized)
+            supported_assay_records = self._is_supported_assay_records_query(normalized)
+            supported_assay_abnormalities = self._is_supported_assay_abnormalities_query(normalized)
+            supported_missing_assay = self._asks_products_without_recent_assay(normalized)
+            supported_standard_coverage = self._asks_assay_standard_coverage(normalized)
             return IntentRoute(
                 intent_type="report_analysis",
                 intent_subtype=self._unsupported_capability_subtype(normalized)
-                if not supported_distribution
-                else "readonly_analysis",
+                if not (supported_qr_lifecycle or supported_printed_not_inbound or supported_pallet_anomalies or supported_pallet_flow_records or supported_qr_batch_completion or supported_distribution or supported_assay_records or supported_assay_abnormalities or supported_missing_assay or supported_standard_coverage)
+                else (
+                    "qr_code_lifecycle"
+                    if supported_qr_lifecycle
+                    else "printed_not_inbound_codes"
+                    if supported_printed_not_inbound
+                    else "pallet_anomalies"
+                    if supported_pallet_anomalies
+                    else "pallet_flow_records"
+                    if supported_pallet_flow_records
+                    else "qr_batch_inbound_completion"
+                    if supported_qr_batch_completion
+                    else (
+                    "assay_standard_coverage"
+                    if supported_standard_coverage
+                    else "products_without_recent_assay"
+                    if supported_missing_assay
+                    else ("assay_abnormalities" if supported_assay_abnormalities else ("assay_records" if supported_assay_records else "readonly_analysis"))
+                    )
+                ),
                 business_domain=self._business_domain(normalized),
                 business_objects=self._business_objects(normalized),
-                support_status="partially_supported" if supported_distribution else "unsupported",
-                next_action="call_tool" if supported_distribution else "explain_unsupported",
-                planned_tools=["get_inventory_distribution"] if supported_distribution else [],
-                answer=None if supported_distribution else self._unsupported_capability_answer(normalized),
+                support_status="partially_supported" if (supported_qr_lifecycle or supported_printed_not_inbound or supported_pallet_anomalies or supported_pallet_flow_records or supported_qr_batch_completion or supported_distribution or supported_assay_records or supported_assay_abnormalities or supported_missing_assay or supported_standard_coverage) else "unsupported",
+                next_action="call_tool" if (supported_qr_lifecycle or supported_printed_not_inbound or supported_pallet_anomalies or supported_pallet_flow_records or supported_qr_batch_completion or supported_distribution or supported_assay_records or supported_assay_abnormalities or supported_missing_assay or supported_standard_coverage) else "explain_unsupported",
+                planned_tools=["query_qr_code_lifecycle"]
+                if supported_qr_lifecycle
+                else ["query_printed_not_inbound_codes"]
+                if supported_printed_not_inbound
+                else ["query_pallet_anomalies"]
+                if supported_pallet_anomalies
+                else ["query_pallet_flow_records"]
+                if supported_pallet_flow_records
+                else ["query_qr_batch_inbound_completion"]
+                if supported_qr_batch_completion
+                else ["query_assay_standard_coverage"]
+                if supported_standard_coverage
+                else ["query_products_without_recent_assay"]
+                if supported_missing_assay
+                else (["query_assay_abnormalities"] if supported_assay_abnormalities else (["query_assay_records"] if supported_assay_records else (["get_inventory_distribution"] if supported_distribution else []))),
+                answer=None if (supported_qr_lifecycle or supported_printed_not_inbound or supported_pallet_anomalies or supported_pallet_flow_records or supported_qr_batch_completion or supported_distribution or supported_assay_records or supported_assay_abnormalities or supported_missing_assay or supported_standard_coverage) else self._unsupported_capability_answer(normalized),
             )
         if self._is_unsupported_business_capability(normalized):
             return IntentRoute(
@@ -290,8 +461,158 @@ class IntentRouter:
     def _data_query_route(self, text: str, state: WarehouseAgentState) -> IntentRoute:
         objects = self._business_objects(text)
         domain = self._business_domain(text)
+        if any(phrase in text for phrase in ["固定产品二维码池", "固定产品码池", "固定二维码池"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="fixed_product_qr_pool", business_domain="pallet",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_fixed_product_qr_pool"])
+        if any(phrase in text for phrase in ["备料池余额", "半成品备料余额", "历史备料余额"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="prepare_pool_balance", business_domain="inventory",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_prepare_pool_balance"])
+        if any(phrase in text for phrase in ["库存台账", "库存明细台账", "当前库存行"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="inventory_ledger", business_domain="inventory",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_inventory_ledger"])
+        if any(phrase in text for phrase in ["Agent工具审计", "Agent 工具审计", "工具调用审计"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="agent_tool_audit", business_domain="audit",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_agent_tool_audit"])
+        if any(phrase in text for phrase in ["回答复核", "回答Review", "回答 Review", "Agent回答审查", "Agent 回答审查"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="agent_answer_reviews", business_domain="audit",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_agent_answer_reviews"])
+        if any(phrase in text for phrase in ["操作日志", "业务日志", "变更日志"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="operation_logs", business_domain="audit",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["search_operation_logs"])
+        if any(phrase in text for phrase in ["员工名录", "员工名册", "员工列表", "查询员工"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="employee_roster",
+                               business_domain="administration", business_objects=objects, support_status="supported",
+                               next_action="call_tool", planned_tools=["query_employee_roster"])
+        if any(phrase in text for phrase in ["角色权限摘要", "角色权限详情", "角色有哪些权限"]) or ("角色" in text and "权限摘要" in text):
+            return IntentRoute(intent_type="data_query", intent_subtype="role_permission_summary",
+                               business_domain="administration", business_objects=objects, support_status="supported",
+                               next_action="call_tool", planned_tools=["get_role_permission_summary"])
+        if any(phrase in text for phrase in ["角色目录", "角色列表", "查询角色", "有哪些角色"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="role_catalog",
+                               business_domain="administration", business_objects=objects, support_status="supported",
+                               next_action="call_tool", planned_tools=["query_roles"])
+        if any(word in text for word in ["筛网目录", "筛网配置", "有哪些筛网"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="screen_mesh_catalog",
+                               business_domain="master_data", business_objects=objects, support_status="supported",
+                               next_action="call_tool", planned_tools=["query_screen_mesh_catalog"])
+        if any(word in text for word in ["化验组目录", "化验分组", "化验组配置"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="assay_groups", business_domain="quality",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_assay_groups"])
+        if any(word in text for word in ["质量标准目录", "化验标准目录", "有哪些质量标准"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="quality_standard_catalog", business_domain="quality",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_quality_standard_catalog"])
+        if any(word in text for word in ["质量标准详情", "化验标准详情"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="quality_standard_detail", business_domain="quality",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["get_quality_standard_detail"])
+        if any(word in text for word in ["绑定哪些标准", "产品标准关系", "产品标准绑定"]):
+            return IntentRoute(intent_type="data_query", intent_subtype="product_standard_relations", business_domain="quality",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_product_standard_relations"])
+        if any(word in text for word in ["产品目录", "产品主数据", "产品配置列表"]) or any(
+            phrase in text for phrase in ["查询所有成品产品", "查询全部成品产品", "查询所有半成品产品", "查询全部半成品产品"]
+        ):
+            return IntentRoute(intent_type="data_query", intent_subtype="product_catalog",
+                               business_domain="master_data", business_objects=objects, support_status="supported",
+                               next_action="call_tool", planned_tools=["query_product_catalog"])
+        if "产品详情" in text or ("产品配置" in text and objects.product is not None):
+            return IntentRoute(intent_type="data_query", intent_subtype="product_detail",
+                               business_domain="master_data", business_objects=objects, support_status="supported",
+                               next_action="call_tool", planned_tools=["get_product_detail"])
+        if any(word in text for word in ["智能报数批次", "自动入库批次", "报数历史"]):
+            detail = any(word in text for word in ["批次详情", "查看该批次", "第一个", "第二个", "第三个"])
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="auto_inbound_batch_detail" if detail else "auto_inbound_batches",
+                business_domain="logistics", business_objects=objects,
+                support_status="supported", next_action="call_tool",
+                planned_tools=["get_auto_inbound_batch_detail" if detail else "query_auto_inbound_batches"],
+            )
+        if "任务" in text and any(word in text for word in ["查", "查询", "哪些", "列表", "待处理", "情况"]):
+            return IntentRoute(
+                intent_type="data_query", intent_subtype="pallet_tasks", business_domain="logistics",
+                business_objects=objects, support_status="supported", next_action="call_tool",
+                planned_tools=["query_pallet_tasks"],
+            )
+        if any(word in text for word in ["单据", "入库记录", "出库记录", "半成品记录"]):
+            return IntentRoute(
+                intent_type="data_query", intent_subtype="stock_documents", business_domain="logistics",
+                business_objects=objects, support_status="supported", next_action="call_tool",
+                planned_tools=["query_stock_documents"],
+            )
+        if any(word in text for word in ["在制物料", "在制半成品", "生产中半成品"]):
+            return IntentRoute(
+                intent_type="data_query", intent_subtype="in_process_materials",
+                business_domain="production", business_objects=objects,
+                support_status="supported", next_action="call_tool",
+                planned_tools=["query_in_process_materials"],
+            )
+        if "生产订单" in text or (state.selected_production_order is not None and any(
+            phrase in text for phrase in ["这个订单", "该订单", "刚才的订单", "刚才那个订单"]
+        )):
+            material_candidates = any(word in text for word in ["领料候选", "物料候选", "可领用半成品", "候选半成品"])
+            material_trace = not material_candidates and any(word in text for word in ["领料追溯", "实际领料", "用料记录", "领过哪些物料", "领了哪些物料"])
+            label_completion = any(word in text for word in ["标签", "贴码", "绑定码", "二维码完成"])
+            subtype = "material_candidates" if material_candidates else "material_pick_trace" if material_trace else "production_label_completion" if label_completion else "production_order_progress"
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype=subtype,
+                business_domain="production",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=[
+                    "resolve_production_entities",
+                    "query_material_candidates" if material_candidates
+                    else "query_material_pick_trace" if material_trace
+                    else "query_production_label_completion" if label_completion
+                    else "query_production_order_progress",
+                ],
+            )
+        if "煮糖批次" in text or ("煮糖" in text and "批次" in text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="boiling_batch_trace",
+                business_domain="production",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["resolve_production_entities", "query_boiling_batch_trace"],
+            )
         if "库存" in text and objects.product is None and objects.warehouse is None and state.selected_product is None:
             return self._ambiguous_inventory(objects)
+        if self._asks_qr_code_lifecycle(text):
+            return IntentRoute(intent_type="data_query", intent_subtype="qr_code_lifecycle", business_domain="pallet", business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_qr_code_lifecycle"] if objects.pallet else [], missing_slots=[] if objects.pallet else ["pallet"])
+        if self._asks_printed_not_inbound(text):
+            return IntentRoute(intent_type="data_query", intent_subtype="printed_not_inbound_codes", business_domain="pallet", business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_printed_not_inbound_codes"])
+        if self._asks_pallet_anomalies(text):
+            return IntentRoute(intent_type="data_query", intent_subtype="pallet_anomalies", business_domain="pallet", business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_pallet_anomalies"])
+        if self._asks_pallet_flow_records(text):
+            return IntentRoute(intent_type="data_query", intent_subtype="pallet_flow_records", business_domain="pallet", business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_pallet_flow_records"])
+        if self._asks_qr_batch_completion(text):
+            return IntentRoute(intent_type="data_query", intent_subtype="qr_batch_inbound_completion", business_domain="pallet", business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_qr_batch_inbound_completion"])
+        if self._asks_products_without_recent_assay(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="products_without_recent_assay",
+                business_domain="assay",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_products_without_recent_assay"]
+                if objects.product in {None, "全部产品"} and objects.warehouse is None
+                else (["resolve_warehouses", "query_products_without_recent_assay"] if objects.warehouse else ["resolve_products", "query_products_without_recent_assay"]),
+            )
+        if self._asks_assay_standard_coverage(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="assay_standard_coverage",
+                business_domain="assay",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_assay_standard_coverage"]
+                if self._assay_standard_coverage_all_scope_allowed(text) or objects.product in {None, "全部产品"}
+                else ["resolve_products", "query_assay_standard_coverage"],
+            )
         if objects.warehouse is not None and self._asks_warehouse_contents(text):
             return IntentRoute(
                 intent_type="data_query",
@@ -301,6 +622,40 @@ class IntentRouter:
                 support_status="supported",
                 next_action="call_tool",
                 planned_tools=["resolve_warehouses", "get_inventory_distribution"],
+            )
+        if any(word in text for word in ["最近操作", "近期操作", "最近发生了什么", "近期流转", "最近发生过哪些流转", "最近有哪些流转"]):
+            return IntentRoute(
+                intent_type="data_query", intent_subtype="warehouse_recent_operations",
+                business_domain="warehouse", business_objects=objects,
+                support_status="supported", next_action="call_tool",
+                planned_tools=["resolve_warehouses", "query_warehouse_recent_operations"]
+                if objects.warehouse is not None else ["query_warehouse_recent_operations"],
+            )
+        if any(word in text for word in ["混放事实", "混放情况", "多个产品", "多种产品", "多个规格", "多种规格"]):
+            return IntentRoute(
+                intent_type="data_query", intent_subtype="warehouse_mixed_storage_facts",
+                business_domain="warehouse", business_objects=objects,
+                support_status="supported", next_action="call_tool",
+                planned_tools=["resolve_warehouses", "query_warehouse_mixed_storage_facts"]
+                if objects.warehouse is not None else ["query_warehouse_mixed_storage_facts"],
+            )
+        if (
+            state.selected_warehouse is not None
+            and self._has_context_reference(text)
+            and any(word in text for word in ["还有多少容量", "还能放多少板", "容量", "情况", "状态"])
+        ):
+            return IntentRoute(
+                intent_type="data_query", intent_subtype="warehouse_status",
+                business_domain="warehouse", business_objects=objects,
+                support_status="supported", next_action="call_tool",
+                planned_tools=["get_warehouse_status"],
+            )
+        if objects.warehouse is None and any(word in text for word in ["容量分布", "哪些库位空置", "哪些库位快满", "哪些库位已满", "还有多少容量", "还能放多少板"]):
+            return IntentRoute(
+                intent_type="data_query", intent_subtype="warehouse_capacity_distribution",
+                business_domain="warehouse", business_objects=objects,
+                support_status="supported", next_action="call_tool",
+                planned_tools=["query_warehouse_capacity_distribution"],
             )
         if objects.warehouse is not None and domain == "warehouse":
             return IntentRoute(
@@ -322,6 +677,38 @@ class IntentRouter:
                 support_status="ambiguous",
                 next_action="ask_clarification",
                 clarification_prompt="请提供要查询的托盘码，例如 P202606130001。",
+            )
+        if self._asks_assay_report_detail(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="assay_report_detail",
+                business_domain="assay",
+                business_objects=objects,
+                support_status="supported" if state.last_assay_records else "ambiguous",
+                next_action="call_tool" if state.last_assay_records else "ask_clarification",
+                planned_tools=["get_assay_report_detail"] if state.last_assay_records else ["query_assay_records"],
+                clarification_prompt="请先查询或选择一条化验记录，再查看报告详情。",
+                suggestions=["例如：黄冰糖最近一次化验记录", "今天有哪些化验记录"],
+            )
+        if self._asks_assay_abnormalities(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="assay_abnormalities",
+                business_domain="assay",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_assay_abnormalities"] if objects.product in {None, "全部产品"} else ["resolve_products", "query_assay_abnormalities"],
+            )
+        if self._asks_assay_records(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="assay_records",
+                business_domain="assay",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_assay_records"] if objects.product in {None, "全部产品"} else ["resolve_products", "query_assay_records"],
             )
         if "化验" in text and objects.product is None and state.selected_product is None:
             return IntentRoute(
@@ -381,13 +768,43 @@ class IntentRouter:
             return "inventory"
         if "生产订单" in text:
             return "production"
+        if "煮糖" in text:
+            return "production"
         return None
 
     def _planned_read_tools(self, text: str, state: WarehouseAgentState) -> list[str]:
         if "化验" in text:
+            if self._asks_assay_standard_coverage(text):
+                if state.selected_product is not None or self._assay_standard_coverage_all_scope_allowed(text):
+                    return ["query_assay_standard_coverage"]
+                return ["resolve_products", "query_assay_standard_coverage"]
+            if self._asks_products_without_recent_assay(text):
+                if self._extract_warehouse(text):
+                    return ["resolve_warehouses", "query_products_without_recent_assay"]
+                if state.selected_product is not None or self._products_without_recent_assay_all_scope_allowed(text):
+                    return ["query_products_without_recent_assay"]
+                return ["resolve_products", "query_products_without_recent_assay"]
+            if self._asks_assay_abnormalities(text):
+                if state.selected_product is not None or self._explicit_all_product_request(text):
+                    return ["query_assay_abnormalities"]
+                return ["resolve_products", "query_assay_abnormalities"]
+            if self._asks_assay_records(text):
+                if state.selected_product is not None or self._explicit_all_product_request(text):
+                    return ["query_assay_records"]
+                return ["resolve_products", "query_assay_records"]
             if state.selected_product is not None and self._has_context_reference(text):
                 return ["get_assay_status"]
             return ["resolve_products", "get_assay_status"]
+        if self._asks_qr_code_lifecycle(text) or self._asks_printed_not_inbound(text) or self._asks_pallet_anomalies(text) or self._asks_pallet_flow_records(text) or self._asks_qr_batch_completion(text):
+            if self._asks_qr_code_lifecycle(text):
+                return ["query_qr_code_lifecycle"] if self._extract_pallet(text) else []
+            if self._asks_printed_not_inbound(text):
+                return ["query_printed_not_inbound_codes"]
+            if self._asks_pallet_anomalies(text):
+                return ["query_pallet_anomalies"]
+            if self._asks_pallet_flow_records(text):
+                return ["query_pallet_flow_records"]
+            return ["query_qr_batch_inbound_completion"]
         if "托盘" in text:
             return ["get_pallet_status"]
         if self._asks_distribution(text):
@@ -408,10 +825,27 @@ class IntentRouter:
             tools.extend(["resolve_warehouses", "get_warehouse_status", "get_inventory_distribution"])
         if self._extract_pallet(text):
             tools.append("get_pallet_status")
+            tools.extend(["query_qr_code_lifecycle", "query_pallet_flow_records", "query_pallet_anomalies"])
         return list(dict.fromkeys(tools))
 
     def _query_subtype(self, text: str) -> str:
+        if self._asks_qr_code_lifecycle(text):
+            return "qr_code_lifecycle"
+        if self._asks_printed_not_inbound(text):
+            return "printed_not_inbound_codes"
+        if self._asks_pallet_anomalies(text):
+            return "pallet_anomalies"
+        if self._asks_pallet_flow_records(text):
+            return "pallet_flow_records"
+        if self._asks_qr_batch_completion(text):
+            return "qr_batch_inbound_completion"
         if "化验" in text:
+            if self._asks_assay_report_detail(text):
+                return "assay_report_detail"
+            if self._asks_assay_standard_coverage(text):
+                return "assay_standard_coverage"
+            if self._asks_products_without_recent_assay(text):
+                return "products_without_recent_assay"
             return "assay_status"
         if "托盘" in text:
             return "pallet_status"
@@ -434,6 +868,7 @@ class IntentRouter:
         if self._explicit_all_product_request(text):
             return "全部产品"
         cleaned = text
+        cleaned = re.sub(r"(?:最近|近)\s*\d{1,3}\s*天", "", cleaned)
         for word in [
             "帮我",
             "查询",
@@ -443,6 +878,25 @@ class IntentRouter:
             "现在",
             "库存",
             "化验",
+            "质检",
+            "质量",
+            "记录",
+            "无化验",
+            "未化验",
+            "缺化验",
+            "没有化验",
+            "没有",
+            "在库产品",
+            "在库",
+            "产品",
+            "有哪些",
+            "哪些",
+            "最近一次",
+            "最近",
+            "今天",
+            "昨天",
+            "合格",
+            "不合格",
             "状态",
             "情况",
             "分布",
@@ -451,10 +905,43 @@ class IntentRouter:
             "在哪",
             "有什么",
             "有啥",
+            "码",
+            "哪些码",
+            "打印了但没入库",
+            "打印但未入库",
+            "已打印未入库",
+            "未入库码",
+            "打印批次还有多少没入库",
+            "哪些码没入库",
+            "打印",
+            "入库",
+            "还",
+            "但",
+            "了",
+            "托盘异常",
+            "二维码异常",
+            "状态与库存不一致",
+            "重复入库",
+            "无入库出库",
+            "产品绑定不一致",
+            "作废码被扫描",
+            "流转记录",
+            "托盘最近有哪些流转",
+            "托盘进出记录",
+            "二维码流转",
+            "托盘流转",
+            "入库完成率",
+            "二维码批次",
+            "打印批次完成",
+            "标签批次入库",
+            "订单打印的托盘码",
         ]:
             cleaned = cleaned.replace(word, "")
         cleaned = cleaned.strip(" ，。？！?；;、")
-        if not cleaned or any(word in cleaned for word in ["库位", "托盘", "二维码"]):
+        # 中文查询中产品名后常带结构助词，例如“黄冰糖的化验记录”。
+        # 这些助词不属于产品名称，否则 resolver 会查询“黄冰糖的”。
+        cleaned = re.sub(r"(?:的|相关)$", "", cleaned).strip()
+        if not cleaned or cleaned in {"二维", "二维码"} or any(word in cleaned for word in ["库位", "托盘", "二维码"]):
             return None
         return cleaned[:100]
 
@@ -496,8 +983,8 @@ class IntentRouter:
 
     def _capability_answer(self) -> str:
         return (
-            "我现在主要能帮你做仓储只读查询，比如查库存、看某个库位里有什么、查托盘状态、"
-            "查产品或批次的化验情况。暂时不能直接替你入库、出库、调拨或修改基础资料，"
+            "我现在主要能帮你做只读业务查询，比如查库存、看某个库位里有什么、查托盘状态、"
+            "查产品或批次的化验情况，以及查询明确生产订单的当前进度。暂时不能直接替你入库、出库、调拨或修改基础资料，"
             "但可以先帮你查清楚相关库存、库位和化验状态。"
         )
 
@@ -579,6 +1066,30 @@ class IntentRouter:
         return any(phrase in text for phrase in ["数据不对", "没解决", "答非所问", "展示问题", "你理解错了", "不对"])
 
     def _is_write_operation(self, text: str) -> bool:
+        if any(phrase in text for phrase in ["查询固定产品二维码池", "查看固定产品二维码池", "固定产品码池查询", "固定二维码池查询"]):
+            return False
+        if any(phrase in text for phrase in ["备料池余额", "半成品备料余额", "历史备料余额", "库存台账", "库存明细台账", "当前库存行"]):
+            return False
+        if any(phrase in text for phrase in ["操作日志", "业务日志", "变更日志", "Agent工具审计", "Agent 工具审计", "工具调用审计", "回答复核", "回答Review", "回答 Review", "Agent回答审查", "Agent 回答审查"]):
+            return False
+        if any(phrase in text for phrase in ["员工名录", "员工名册", "员工列表", "查询员工", "角色目录", "角色列表", "查询角色", "有哪些角色", "角色权限摘要", "角色权限详情", "角色有哪些权限"]) or ("角色" in text and "权限摘要" in text):
+            return False
+        if any(phrase in text for phrase in ["质量标准目录", "化验标准目录", "有哪些质量标准", "质量标准详情", "化验标准详情", "绑定哪些标准", "产品标准关系", "产品标准绑定"]):
+            return False
+        if self._asks_assay_standard_coverage(text):
+            return False
+        if "任务" in text and any(word in text for word in ["查", "查询", "哪些", "列表", "待处理", "情况"]):
+            return False
+        if any(word in text for word in ["单据", "入库记录", "出库记录", "半成品记录"]):
+            return False
+        if (
+            "生产订单" in text
+            and any(word in text for word in ["查", "查询", "情况", "进度", "完成"])
+            and any(word in text for word in ["标签", "贴码", "绑定码", "二维码"])
+        ):
+            return False
+        if self._asks_qr_code_lifecycle(text) or self._asks_printed_not_inbound(text) or self._asks_pallet_anomalies(text) or self._asks_pallet_flow_records(text) or self._asks_qr_batch_completion(text):
+            return False
         if any(phrase in text for phrase in ["导出", "报表"]):
             return False
         return any(
@@ -630,10 +1141,26 @@ class IntentRouter:
         return any(word in text for word in ["分析", "报表", "导出", "趋势", "统计"]) or self._is_assay_analysis_request(text)
 
     def _is_supported_distribution_analysis(self, text: str) -> bool:
-        return self._explicit_all_product_request(text) and any(word in text for word in ["库存", "不合格", "无化验", "分类", "统计"])
+        return self._explicit_all_product_request(text) and any(word in text for word in ["库存", "不合格", "分类", "统计"])
+
+    def _is_supported_assay_records_query(self, text: str) -> bool:
+        return self._asks_assay_records(text)
+
+    def _is_supported_assay_abnormalities_query(self, text: str) -> bool:
+        return self._asks_assay_abnormalities(text)
+
+    def _products_without_recent_assay_all_scope_allowed(self, text: str) -> bool:
+        return self._explicit_all_product_request(text) or any(
+            word in text for word in ["哪些产品", "在库产品", "库存", "库位", "全部", "所有"]
+        )
+
+    def _assay_standard_coverage_all_scope_allowed(self, text: str) -> bool:
+        return self._explicit_all_product_request(text) or any(
+            word in text for word in ["哪些产品", "在库产品", "当前在库", "全部", "所有", "未绑定标准", "没有质量标准"]
+        )
 
     def _is_unsupported_business_capability(self, text: str) -> bool:
-        return "生产订单" in text
+        return False
 
     def _unsupported_capability_subtype(self, text: str) -> str:
         if "生产订单" in text:
@@ -666,8 +1193,80 @@ class IntentRouter:
             ]
         )
 
+    def _asks_assay_records(self, text: str) -> bool:
+        if "库存" in text:
+            return False
+        if self._asks_assay_report_detail(text):
+            return False
+        if any(word in text for word in ["趋势", "导出", "报表", "异常"]) or ("分析" in text and "记录" not in text):
+            return False
+        if "化验" not in text:
+            return False
+        return "记录" in text or "最近一次" in text or "有哪些化验" in text or "哪些化验" in text
+
+    def _asks_assay_report_detail(self, text: str) -> bool:
+        has_assay_context = any(word in text for word in ["化验", "报告", "指标", "标准"])
+        has_detail_word = any(word in text for word in ["详情", "明细", "哪些指标", "异常原因", "不合格原因", "这份报告", "这条记录", "刚才那条"])
+        return has_assay_context and has_detail_word
+
+    def _asks_assay_abnormalities(self, text: str) -> bool:
+        if "无化验" in text or "未化验" in text or "缺化验" in text:
+            return False
+        if self._asks_assay_standard_coverage(text):
+            return False
+        if any(word in text for word in ["趋势", "导出", "报表"]):
+            return False
+        no_standard_records = "化验" in text and "记录" in text and any(word in text for word in ["无标准", "没有标准", "未匹配标准"])
+        if "记录" in text and not no_standard_records and not any(word in text for word in ["统计", "汇总", "哪些产品"]):
+            return False
+        has_assay = any(word in text for word in ["化验", "质检", "质量"])
+        if not has_assay:
+            return False
+        return any(word in text for word in ["异常", "不合格", "未通过", "无标准", "没有标准", "未匹配标准", "越界", "哪些产品", "统计", "汇总"])
+
+    def _asks_products_without_recent_assay(self, text: str) -> bool:
+        if any(phrase in text for phrase in ["有没有化验", "是否有化验", "有化验吗"]):
+            return False
+        return any(word in text for word in ["无化验", "未化验", "缺化验", "没有化验"])
+
+    def _asks_assay_standard_coverage(self, text: str) -> bool:
+        if any(word in text for word in ["无化验", "未化验", "缺化验", "没有化验"]):
+            return False
+        # “化验记录没有标准”描述已有化验的判定异常，不是产品主数据标准覆盖缺口。
+        if "化验" in text and "记录" in text and any(word in text for word in ["无标准", "没有标准", "未匹配标准"]):
+            return False
+        has_standard = any(word in text for word in ["质量标准", "化验标准", "标准覆盖", "绑定标准", "有效标准", "无标准"])
+        has_gap = any(word in text for word in ["没有", "未绑定", "缺", "缺少", "哪些产品", "覆盖"])
+        return has_standard and has_gap
+
+    def _asks_qr_code_lifecycle(self, text: str) -> bool:
+        has_code = self._extract_pallet(text) is not None
+        lifecycle_words = any(word in text for word in ["生命周期", "经历哪些环节", "经历了哪些", "流转过程", "从打印到入库", "从生成到"])
+        return has_code and lifecycle_words
+
+    def _asks_printed_not_inbound(self, text: str) -> bool:
+        return any(phrase in text for phrase in ["打印了但没入库", "打印了但还没有入库", "打印但未入库", "已打印未入库", "未入库码", "打印批次还有多少没入库", "哪些码没入库", "哪些二维码打印了但还没有入库"])
+
+    def _asks_pallet_anomalies(self, text: str) -> bool:
+        return any(phrase in text for phrase in ["托盘异常", "二维码异常", "状态与库存不一致", "重复入库", "无入库出库", "产品绑定不一致", "作废码被扫描"])
+
+    def _asks_pallet_flow_records(self, text: str) -> bool:
+        return any(phrase in text for phrase in ["流转记录", "托盘最近有哪些流转", "托盘进出记录", "二维码流转", "托盘流转"])
+
+    def _asks_qr_batch_completion(self, text: str) -> bool:
+        return any(phrase in text for phrase in ["入库完成率", "二维码批次", "打印批次完成", "标签批次入库", "订单打印的托盘码"])
+
     def _is_data_query(self, text: str) -> bool:
-        return any(word in text for word in ["查", "查询", "库存", "剩", "库位", "仓库", "容量", "托盘", "二维码", "化验", "质量", "合格", "不合格", "有什么", "有啥"])
+        return ("角色" in text and "权限摘要" in text) or "生产订单" in text or "煮糖批次" in text or any(word in text for word in ["在制物料", "在制半成品", "生产中半成品", "查", "查询", "库存", "剩", "库位", "仓库", "容量", "托盘", "二维码", "化验", "质量", "合格", "不合格", "有什么", "有啥", "缺化验", "无化验", "未化验", "筛网", "产品目录", "产品主数据", "产品详情", "员工名录", "员工名册", "员工列表", "角色目录", "角色列表", "角色权限", "订单", "流转", "操作日志", "业务日志", "工具审计", "调用审计", "回答复核", "回答审查"]) or any(
+            detector(text)
+            for detector in [
+                self._asks_qr_code_lifecycle,
+                self._asks_printed_not_inbound,
+                self._asks_pallet_anomalies,
+                self._asks_pallet_flow_records,
+                self._asks_qr_batch_completion,
+            ]
+        )
 
     def _is_sensitive_credential_request(self, text: str) -> bool:
         return bool(

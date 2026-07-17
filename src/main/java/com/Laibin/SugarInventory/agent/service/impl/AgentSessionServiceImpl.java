@@ -45,7 +45,47 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     private static final String DEFAULT_MCP_TRANSPORT = "STDIO";
     private static final Set<String> SUPPORTED_SCOPES = Set.of(SCOPE_WAREHOUSE_READ);
     private static final Set<String> READ_ONLY_POST_PATHS = Set.of(
-            "/api/inventory/distribution"
+            "/api/inventory/distribution",
+            "/api/assay/records/query",
+            "/api/assay/report-detail/query",
+            "/api/assay/abnormalities/query",
+            "/api/assay/products-without-recent-assay/query",
+            "/api/assay/standard-coverage/query",
+            "/api/pallet-codes/lifecycle/query",
+            "/api/pallet-codes/printed-not-inbound/query",
+            "/api/pallet-codes/anomalies/query",
+            "/api/pallet-codes/flow-records/query",
+            "/api/pallet-codes/batch-inbound-completion/query",
+            "/api/production/agent-read/entities/resolve",
+            "/api/production/agent-read/orders/progress/query",
+            "/api/production/agent-read/boiling-batches/trace/query",
+            "/api/production/agent-read/orders/material-pick-trace/query",
+            "/api/production/agent-read/orders/label-completion/query",
+            "/api/production/agent-read/materials/in-process/query",
+            "/api/production/agent-read/orders/material-candidates/query",
+            "/api/logistics/agent-read/pallet-tasks/query",
+            "/api/logistics/agent-read/stock-documents/query",
+            "/api/logistics/agent-read/auto-inbound/batches/query",
+            "/api/logistics/agent-read/auto-inbound/batches/detail/query",
+            "/api/warehouse/agent-read/capacity-distribution/query",
+            "/api/warehouse/agent-read/recent-operations/query",
+            "/api/warehouse/agent-read/mixed-storage-facts/query",
+            "/api/master-data/agent-read/products/query",
+            "/api/master-data/agent-read/products/detail/query",
+            "/api/master-data/agent-read/screen-meshes/query",
+            "/api/quality/agent-read/assay-groups/query",
+            "/api/quality/agent-read/standards/query",
+            "/api/quality/agent-read/standards/detail/query",
+            "/api/quality/agent-read/product-standard-relations/query",
+            "/api/administration/agent-read/employees/query",
+            "/api/administration/agent-read/roles/query",
+            "/api/administration/agent-read/roles/permission-summary/query",
+            "/api/audit/agent-read/operation-logs/query",
+            "/api/audit/agent-read/agent-tool-audit/query",
+            "/api/audit/agent-read/agent-answer-reviews/query",
+            "/api/inventory/agent-read/ledger/query",
+            "/api/inventory/agent-read/prepare-pool-balance/query",
+            "/api/pallet-codes/agent-read/fixed-product-pool/query"
     );
 
     private final AgentSessionMapper agentSessionMapper;
@@ -360,7 +400,9 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             return true;
         }
         return "POST".equalsIgnoreCase(method)
-                && ("/api/agent/audit/tool-calls".equals(uri) || READ_ONLY_POST_PATHS.contains(uri));
+                && ("/api/agent/audit/tool-calls".equals(uri)
+                || READ_ONLY_POST_PATHS.contains(uri)
+                || uri.matches("/api/inventory/qualified-inventory/[0-9]+/page"));
     }
 
     private void markLastError(AgentSession session, String errorCode) {

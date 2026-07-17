@@ -279,6 +279,38 @@
 - 在 CI 或本地脚本中生成 `docs/openapi.json`。
 - 将 `api-inventory.md` 中记录的不一致项反向修复 Controller 注解或 DTO schema。
 
+### 12. 当前库存批次化验统一读模型
+
+现状：
+
+- 业务已确认 `assay.sample_date` 是生产日期，`product_id + sample_date` 是批次键。
+- 化验更新创建新版本，但不会同步更新所有库存、托盘和任务中的旧 `assay_id`。
+- 部分页面按产品和日期查询最新版本，库存分布、标准筛选和部分 Agent 查询仍直接关联旧 `assay_id`。
+- 当前“缺化验在库产品”查询只判断产品在日期范围内是否存在任意化验，不能证明每个在库批次是否有化验。
+
+缺口：
+
+- 缺少统一的 `inventory_current_assay_fact_v1` 只读事实模型。
+- 缺少稳定的库存批次日期解析及 `batchDateSource`、日期冲突警告。
+- 缺少基于最新批次化验的标准命中查询和原始指标条件查询。
+- `qualified_standards` 以名称为主，版本级命中证据不足。
+- 当前复合流程以“库存产品 + 产品最近化验”拼接，不能冒充库存批次质量结论。
+
+建议接口：
+
+- `POST /api/agent/inventory-quality/by-standard`
+- `POST /api/agent/inventory-quality/by-metrics`
+- 两者共享固定 Mapper/视图，不接受任意 SQL、任意字段或任意表达式。
+- 当前质量查询一律按产品和生产日期取最新化验；显式 `assay_id` 只用于历史报告下钻。
+
+支撑工具：
+
+- `query_inventory_by_quality_standard`
+- `query_inventory_by_assay_metrics`
+- 现有不合格库存、缺化验库存和托盘当前质量查询也应迁移到同一事实模型。
+
+详细口径、实施目标和验收用例见 `docs/agent/inventory-assay-batch-semantics.md`。
+
 ## 与候选工具的映射
 
 | 缺口 | 影响工具 | 阻塞级别 |

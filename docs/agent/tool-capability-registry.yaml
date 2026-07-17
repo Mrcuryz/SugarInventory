@@ -1,4 +1,4 @@
-version: m1.4r-k2
+version: m1.4r-k24
 scope: "Agent Runtime Playbook + Tool Capability Registry + LLM Wiki Lite"
 principles:
   - "本 registry 描述业务能力和工具选择边界，不替代 MCP schema。"
@@ -7,7 +7,430 @@ principles:
   - "普通用户回答不得展示 toolName、productId、warehouseId、raw JSON、SUCCESS、token、Authorization、堆栈或 chain-of-thought。"
   - "当前阶段不执行入库、出库、调拨、改库存、化验写入、基础资料修改或生产订单写入。"
 
+agent_v1_reaudit:
+  status: "DESIGN_ONLY"
+  source: "前端菜单/路由 + webpage API + 后端 Controller；docs/openapi.json 当前缺失。"
+  finding: "当前 47 个只读工具已完成所有已登记专家的 Agent v1 查询规划集；仍需通过全量构建、集成/E2E 与最终边界验收后才能声明 v1 完成。"
+  target_expert_domains:
+    - inventory
+    - warehouse
+    - logistics
+    - pallet
+    - production
+    - quality
+    - master_data
+    - administration
+    - audit
+  runtime_rule: "目标专家域在相应工具完成全链路实现、测试和登记前，不得加入运行时白名单。"
+  detail: "docs/mcp-analysis/agent-v1-module-expert-reaudit.md"
+
+expert_tool_roadmap:
+  status: "DESIGN_ONLY"
+  runtime_enabled: false
+  scope: "Agent v1 模块查询工具 + Agent v2 登记报表/分析 + preview/execute 写入占位 + 后续规划/预测/渠道治理。"
+  blueprint: "docs/mcp-analysis/agent-expert-tool-blueprint.md"
+  registry: "docs/agent/expert-tool-roadmap-registry.yaml"
+  recipe_roadmap: "docs/agent/cross-expert-recipe-roadmap-registry.yaml"
+  data_semantic_roadmap: "docs/agent/data-semantic-roadmap-registry.yaml"
+  business_rule_roadmap: "docs/agent/business-rule-roadmap-registry.yaml"
+  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 47 个只读工具、专家白名单或配方注册表。"
+
+agent_architecture:
+  main_agent:
+    responsibilities:
+      - "意图识别、上下文、HITL、安全边界和最终自然语言回答。"
+      - "通过 Agent Handoff Router 把单模块任务交给一个最小权限专家。"
+      - "对已登记的复合意图生成有界依赖图，按步骤委派多个最小权限专家。"
+    allowed_tools: []
+  handoff_rules:
+    - "普通业务工具只能由目标专家调用，主 Agent 不直接调用 MCP 业务工具。"
+    - "规划时和 Java Gateway 调用前都必须按不可变的单次执行上下文校验专家工具白名单。"
+    - "模型选择越界工具时直接拒绝，不自动改派给其他专家。"
+    - "HITL 恢复绑定创建它的专家、业务域和工具白名单。"
+    - "同一 agentSessionId 的请求串行执行；普通 SSE 不暴露完整 Router/Handoff 快照。"
+    - "多专家只能执行代码中登记的复合配方；每一步重新绑定不可变专家上下文，主 Agent 仍无业务工具。"
+    - "复合配方最多 4 步、12 次工具调用、5 个产品扇出，部分失败必须明确反馈。"
+    - "写操作和未支持能力不委派执行，由主 Agent说明安全边界。"
+    - "生产使用 Redis StateStore 与分布式 SessionLock；恢复必须通过计划版本、指纹与权限快照校验。"
+  compound_recipes:
+    warehouse_inventory_latest_assay:
+      recipe_id: warehouse_inventory_latest_assay
+      plan_version: 1
+      execution_mode: controlled_sequential
+      trigger: "明确询问某库位库存情况及这些产品的化验情况。"
+      steps:
+        - "inventory_expert: resolve_warehouses -> get_inventory_distribution(groupBy=product)"
+        - "assay_expert: resolve_products -> query_assay_records(size=1)，依赖库存产品范围"
+        - "main_agent: 汇总安全结果，不调用业务工具"
+      limits:
+        max_steps: 4
+        max_tool_calls: 12
+        max_product_fanout: 5
+      result_boundary:
+        - "dataScope 固定为 PRODUCT_LATEST_ASSAY，batchQualificationSupported 固定为 false。"
+        - "当前只表示按产品匹配的最新化验记录。"
+        - "没有批次级关联键时，不得宣称当前库存批次均已化验或均合格。"
+  experts:
+    inventory_expert:
+      domains: ["inventory", "product"]
+      allowed_tools: ["resolve_products", "resolve_warehouses", "get_inventory_overview", "get_inventory_distribution", "query_inventory_ledger", "query_prepare_pool_balance"]
+      model_policy_key: "inventory"
+    warehouse_expert:
+      domains: ["warehouse"]
+      allowed_tools: ["resolve_warehouses", "get_warehouse_status", "query_warehouse_capacity_distribution", "query_warehouse_recent_operations", "query_warehouse_mixed_storage_facts"]
+      model_policy_key: "warehouse"
+    assay_expert:
+      domains: ["assay", "quality"]
+      allowed_tools: ["resolve_products", "resolve_warehouses", "get_assay_status", "query_assay_records", "get_assay_report_detail", "query_assay_abnormalities", "query_products_without_recent_assay", "query_assay_standard_coverage", "query_assay_groups", "query_quality_standard_catalog", "get_quality_standard_detail", "query_product_standard_relations"]
+      model_policy_key: "assay"
+    pallet_expert:
+      domains: ["pallet", "qr_code"]
+      allowed_tools: ["resolve_products", "resolve_warehouses", "get_pallet_status", "query_qr_code_lifecycle", "query_printed_not_inbound_codes", "query_pallet_anomalies", "query_pallet_flow_records", "query_qr_batch_inbound_completion", "query_fixed_product_qr_pool"]
+      model_policy_key: "pallet"
+    production_expert:
+      domains: ["production"]
+      allowed_tools: ["resolve_production_entities", "query_production_order_progress", "query_boiling_batch_trace", "query_material_pick_trace", "query_production_label_completion", "query_in_process_materials", "query_material_candidates"]
+      model_policy_key: "production"
+    master_data_expert:
+      domains: ["master_data", "product_catalog", "screen_mesh"]
+      allowed_tools: ["resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog"]
+      model_policy_key: "master_data"
+    logistics_expert:
+      domains: ["logistics", "task", "document", "auto_inbound"]
+      allowed_tools: ["query_pallet_tasks", "query_stock_documents", "query_auto_inbound_batches", "get_auto_inbound_batch_detail"]
+      model_policy_key: "logistics"
+    administration_expert:
+      domains: ["administration", "employee", "rbac"]
+      allowed_tools: ["query_employee_roster", "query_roles", "get_role_permission_summary"]
+      model_policy_key: "administration"
+    audit_expert:
+      domains: ["audit", "operation_log"]
+      allowed_tools: ["search_operation_logs", "query_agent_tool_audit", "query_agent_answer_reviews"]
+      model_policy_key: "audit"
+
 tools:
+  query_fixed_product_qr_pool:
+    business_name: "固定产品二维码池查询"
+    risk_level: "L1"
+    owner_expert: "pallet_expert"
+    can_answer: ["按产品、有限二维码列表、状态和 freeOnly 查询固定产品码池当前状态及可打印事实。"]
+    cannot_answer: ["allowPrint 不表示已打印、已启用或已创建任务；不能执行绑定、打印、启用、作废、恢复或库存操作。"]
+    permission: "qrcode:pool_view"
+    data_scope: "CURRENT_FIXED_PRODUCT_QR_POOL"
+
+  query_inventory_ledger:
+    business_name: "当前库存台账明细"
+    risk_level: "L1"
+    owner_expert: "inventory_expert"
+    can_answer: ["按产品、库位、筛网、状态和入库日期查询当前库存行、位置、板件数与已登记生产日期。"]
+    cannot_answer: ["不是完整历史流水；不能把生产日期为空解释为异常，也不能证明库存批次质量合格。"]
+    permission: "inventory:view"
+    data_scope: "CURRENT_INVENTORY_LEDGER_ROWS"
+  query_prepare_pool_balance:
+    business_name: "历史半成品备料池当前余额"
+    risk_level: "L1"
+    owner_expert: "inventory_expert"
+    can_answer: ["查询 remainingPieces > 0 的现存备料池余额、入池/消耗件数和留档时间。"]
+    cannot_answer: ["不支持零余额完整历史；余额不等于订单预留、质量合格或可直接领用。"]
+    permission: "inventory:view"
+    data_scope: "CURRENT_POSITIVE_PREPARE_POOL_BALANCE"
+
+  search_operation_logs:
+    business_name: "业务操作日志查询"
+    risk_level: "L1"
+    owner_expert: "audit_expert"
+    can_answer: ["按模块、操作类型、操作人和时间查询已登记日志及变更字段名称。"]
+    cannot_answer: ["不能返回 oldData、字段值、请求正文、凭据或原始异常，也不能证明未登记操作从未发生。"]
+    permission: "log:view"
+    data_scope: "RECORDED_BUSINESS_OPERATION_LOGS"
+  query_agent_tool_audit:
+    business_name: "Agent 工具调用审计"
+    risk_level: "L1"
+    owner_expert: "audit_expert"
+    can_answer: ["查询已登记能力调用的结果类别、错误类别、耗时和时间。"]
+    cannot_answer: ["不能返回会话/用户/消息/调用内部 ID、路径、参数、请求响应摘要、Prompt、模型上下文、密钥或堆栈。"]
+    permission: "agent:audit:view"
+    data_scope: "RECORDED_AGENT_TOOL_AUDIT"
+  query_agent_answer_reviews:
+    business_name: "Agent 回答复核摘要"
+    risk_level: "L1"
+    owner_expert: "audit_expert"
+    can_answer: ["查询回答状态、置信度、失败分类、建议修复类型与 Review 状态。"]
+    cannot_answer: ["不能返回用户原问题、助手原回答、工具名、决策快照、证据正文或内部身份。"]
+    permission: "agent:review:view"
+    data_scope: "AGENT_ANSWER_REVIEW_SAFE_SUMMARY"
+
+  query_employee_roster:
+    business_name: "员工名册查询"
+    risk_level: "L1"
+    owner_expert: "administration_expert"
+    can_answer: ["按工号、姓名、部门、职位、状态或角色查询当前员工名册，手机号仅返回掩码。"]
+    cannot_answer: ["不能返回内部记录 ID、完整手机号、登录凭据、微信绑定信息或鉴权令牌，也不能证明员工当前在岗。"]
+    required_slots: []
+    permission: "rbac:user:view"
+    data_scope: "CURRENT_EMPLOYEE_ROSTER"
+  query_roles:
+    business_name: "角色目录查询"
+    risk_level: "L1"
+    owner_expert: "administration_expert"
+    can_answer: ["查询当前角色名称、编码、状态及权限/在职员工汇总数量。"]
+    cannot_answer: ["不能返回内部角色或权限 ID、员工姓名清单，也不代表请求者自动拥有这些权限。"]
+    required_slots: []
+    permission: "rbac:role:view"
+    data_scope: "CURRENT_RBAC_ROLE_CATALOG"
+  get_role_permission_summary:
+    business_name: "角色权限摘要"
+    risk_level: "L1"
+    owner_expert: "administration_expert"
+    can_answer: ["按准确角色编码或名称查询当前业务权限代码、名称与分组摘要。"]
+    cannot_answer: ["不能返回内部权限 ID、Agent 工具白名单、模型上下文或密钥；实际访问仍需重新鉴权。"]
+    required_slots: ["role_code_or_name"]
+    permission: "rbac:role:view"
+    data_scope: "CURRENT_RBAC_ROLE_PERMISSION_SUMMARY"
+
+  query_assay_groups:
+    business_name: "化验组目录"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer: ["查询当前化验产品分组配置。"]
+    cannot_answer: ["不能解释为标准、合格结论或库存批次范围。"]
+    permission: "assay:view"
+    data_scope: "CURRENT_ASSAY_GROUP_CATALOG"
+  query_quality_standard_catalog:
+    business_name: "质量标准目录"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer: ["查询当前标准代码、名称、品类、等级、版本和状态。"]
+    cannot_answer: ["不能证明某次化验采用该标准。"]
+    permission: "quality_standard:view"
+    data_scope: "CURRENT_QUALITY_STANDARD_CATALOG"
+  get_quality_standard_detail:
+    business_name: "质量标准详情"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer: ["按标准代码和版本查询指标配置与关联产品摘要。"]
+    cannot_answer: ["LLM 不作最终质量判定。"]
+    required_slots: ["standard_code", "version"]
+    permission: "quality_standard:view"
+    data_scope: "CURRENT_QUALITY_STANDARD_DETAIL"
+  query_product_standard_relations:
+    business_name: "产品质量标准关系"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer: ["查询准确产品当前绑定标准、默认项、优先级、启用和生效区间。"]
+    cannot_answer: ["不能证明某次化验采用该标准或产品已合格。"]
+    required_slots: ["product_name"]
+    permission: "quality_standard:view"
+    data_scope: "CURRENT_PRODUCT_QUALITY_STANDARD_RELATIONS"
+
+  query_product_catalog:
+    business_name: "产品目录查询"
+    risk_level: "L1"
+    owner_expert: "master_data_expert"
+    can_answer: ["查询当前产品名称、品类、半/成品状态、包装、换算、堆放和筛网配置。"]
+    cannot_answer: ["不能解释为有库存、质量合格或生产可用，也不能修改产品配置。"]
+    required_slots: []
+    permission: "product:view"
+    data_scope: "CURRENT_PRODUCT_MASTER_DATA"
+  get_product_detail:
+    business_name: "产品配置详情"
+    risk_level: "L1"
+    owner_expert: "master_data_expert"
+    can_answer: ["按准确唯一名称查询当前产品主数据详情和配置换算摘要。"]
+    cannot_answer: ["不能返回内部 ID，不能用换算配置推导库存或装载建议。"]
+    required_slots: ["product_name"]
+    permission: "product:view"
+    data_scope: "CURRENT_PRODUCT_MASTER_DETAIL"
+  query_screen_mesh_catalog:
+    business_name: "筛网目录查询"
+    risk_level: "L1"
+    owner_expert: "master_data_expert"
+    can_answer: ["查询当前筛网名称与说明。"]
+    cannot_answer: ["不能解释为产品当前实际使用情况，也不能修改筛网配置。"]
+    required_slots: []
+    permission: "screen_mesh:view"
+    data_scope: "CURRENT_SCREEN_MESH_MASTER_DATA"
+
+  query_warehouse_mixed_storage_facts:
+    business_name: "库位多产品/多规格事实"
+    risk_level: "L1"
+    owner_expert: "warehouse_expert"
+    can_answer:
+      - "查询当前同一库位存在多个产品或多个产品/筛网/状态组合的客观事实。"
+    cannot_answer:
+      - "不能将事实自动判定为混放违规、风险或调拨建议。"
+      - "不能执行移库、调拨或库存修改。"
+    required_slots: []
+    permission: "warehouse:view"
+    data_scope: "CURRENT_WAREHOUSE_MULTI_PRODUCT_SPEC_FACTS"
+
+  query_warehouse_recent_operations:
+    business_name: "库位近期流转"
+    risk_level: "L1"
+    owner_expert: "warehouse_expert"
+    can_answer:
+      - "按库位、时间和入库/出库/调拨类别查询已登记的托盘流转事件。"
+    cannot_answer:
+      - "不能解释为完整操作日志、审计日志或无缺口的历史事件账。"
+      - "不能代替当前库存内容查询，也不能执行任何流转操作。"
+    required_slots: []
+    permission: "warehouse:view"
+    data_scope: "RECORDED_WAREHOUSE_PALLET_FLOW_EVENTS"
+
+  query_warehouse_capacity_distribution:
+    business_name: "库位容量分布"
+    risk_level: "L1"
+    owner_expert: "warehouse_expert"
+    can_answer:
+      - "查询当前库位容量、占用、剩余容量、空置和满载事实。"
+    cannot_answer:
+      - "LOW/MEDIUM/HIGH 仅为固定展示分段，不能解释为业务风险、库位分配或调拨建议。"
+      - "不能修改容量、入库、调拨或声称容量单位业务口径已经统一确认。"
+    required_slots: []
+    permission: "warehouse:view"
+    data_scope: "CURRENT_WAREHOUSE_CAPACITY_FACTS"
+
+  resolve_production_entities:
+    business_name: "生产实体解析"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "按生产订单号或煮糖批次号查询候选，并返回短期、用户及权限绑定的受控引用。"
+    cannot_answer:
+      - "不能把内部数据库 ID 交给 Agent，也不能创建、修改或取消生产数据。"
+    required_slots: ["entity_type", "query"]
+    constraints:
+      - "entityType 仅支持 PRODUCTION_ORDER、BOILING_BATCH；候选最多 10 个。"
+      - "多候选时必须由用户提供完整编号，不得自动选择。"
+
+  query_production_order_progress:
+    business_name: "生产订单当前进度"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "查询当前订单状态、计划摘要、领料/产出记录数、标签及二维码绑定和入库进度。"
+    cannot_answer:
+      - "不能计算尚未确认口径的产出率、损耗率或材料消耗差异。"
+      - "不能表示质量放行或当前库存批次合格。"
+    required_slots: ["order_ref"]
+    dependencies: ["resolve_production_entities"]
+    data_scope: "CURRENT_PRODUCTION_ORDER_PROGRESS"
+
+  query_boiling_batch_trace:
+    business_name: "煮糖批次追溯"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "查询一个已确认煮糖批次的详情、使用记录、已登记追溯节点、关系边和时间线。"
+    cannot_answer:
+      - "不能推断系统未登记的上游来源、下游订单或物料关系。"
+      - "不能创建、修改、取消、预留、消耗或释放煮糖批次。"
+    required_slots: ["batch_ref"]
+    dependencies: ["resolve_production_entities"]
+    data_scope: "REGISTERED_BOILING_BATCH_TRACE"
+
+  query_material_pick_trace:
+    business_name: "生产领料追溯"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "查询生产订单已登记的实际领料、托盘来源、产品、库位、数量、状态和时间。"
+    cannot_answer:
+      - "不能推断计划差异、损耗、实际消耗率、退料或替代用料。"
+      - "不能执行领料、完成领料或库存变更。"
+    required_slots: ["order_ref"]
+    dependencies: ["resolve_production_entities"]
+    data_scope: "REGISTERED_MATERIAL_PICK_TRACE"
+
+  query_production_label_completion:
+    business_name: "生产标签完成度"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "查询一个已确认生产订单的标签预留、使用、回收及二维码需求、绑定、入库数量。"
+    cannot_answer:
+      - "不能把标签已打印解释为二维码已绑定或已入库。"
+      - "不能执行标签打印、回收、二维码绑定、入库或生产完成。"
+    required_slots: ["order_ref"]
+    dependencies: ["resolve_production_entities"]
+    data_scope: "CURRENT_PRODUCTION_LABEL_COMPLETION"
+
+  query_in_process_materials:
+    business_name: "在制半成品查询"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "按受控产品名称、类型、生产日期和分页查询当前已登记在制半成品领料记录。"
+    cannot_answer:
+      - "不能把在制记录解释为可再次领用、实时库存、质量放行或 FIFO/FEFO 推荐。"
+      - "不能领料、退料、预留或调整库存。"
+    required_slots: []
+    data_scope: "CURRENT_REGISTERED_IN_PROCESS_MATERIALS"
+
+  query_material_candidates:
+    business_name: "生产领料候选查询"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "查询一个已确认生产订单当前可展示的半成品库存候选。"
+    cannot_answer:
+      - "不能把候选或返回顺序解释为已领用、已预留、FIFO/FEFO 推荐或质量放行。"
+      - "不能执行领料、预留、退料或库存变更。"
+    required_slots: ["order_ref"]
+    dependencies: ["resolve_production_entities"]
+    data_scope: "CURRENT_MATERIAL_CANDIDATE_INVENTORY"
+
+  query_pallet_tasks:
+    business_name: "托盘任务查询"
+    risk_level: "L1"
+    owner_expert: "logistics_expert"
+    can_answer:
+      - "按任务类型、场景、状态、托盘、产品、目标库位和生产日期查询当前轮次托盘任务。"
+    cannot_answer:
+      - "不能确认、取消或执行任务，也不能执行入库、出库或调拨。"
+      - "不能返回内部任务、产品、托盘、库位或化验数据库 ID。"
+    required_slots: []
+    permission: "task:view"
+    data_scope: "CURRENT_PALLET_TASKS"
+
+  query_stock_documents:
+    business_name: "库存单据查询"
+    risk_level: "L1"
+    owner_expert: "logistics_expert"
+    can_answer:
+      - "按明确的入库、出库或半成品单据来源查询已登记记录。"
+    cannot_answer:
+      - "不能把三个异构来源拼接成可保证全局顺序的完整事件账。"
+      - "不能重建缺失历史、导出报表或执行库存操作。"
+    required_slots: ["document_type"]
+    permission: "document:view"
+    data_scope: "RECORDED_STOCK_DOCUMENTS"
+
+  query_auto_inbound_batches:
+    business_name: "智能报数批次查询"
+    risk_level: "L1"
+    owner_expert: "logistics_expert"
+    can_answer:
+      - "查询当前用户在 Redis 中尚未过期的近期智能报数解析批次。"
+    cannot_answer:
+      - "不能作为长期历史台账，也不能确认批次或执行自动入库。"
+      - "普通回答不得展示原始 batchId 或受控 batchRef。"
+    required_slots: []
+    data_scope: "CURRENT_USER_RECENT_AUTO_INBOUND_BATCHES"
+
+  get_auto_inbound_batch_detail:
+    business_name: "智能报数批次详情"
+    risk_level: "L1"
+    owner_expert: "logistics_expert"
+    can_answer:
+      - "使用列表工具返回的用户绑定受控引用，查询已选择批次的安全解析详情。"
+    cannot_answer:
+      - "不能跨用户读取，不返回原始报数文本、内部批次/任务/产品/库位 ID。"
+      - "解析结果不等同于入库确认、质量放行或库存事实。"
+    required_slots: ["batch_ref"]
+    dependencies: ["query_auto_inbound_batches"]
+    data_scope: "CURRENT_USER_AUTO_INBOUND_BATCH_DETAIL"
+
   resolve_products:
     business_name: "产品解析"
     risk_level: "L1"
@@ -35,6 +458,11 @@ tools:
       - "get_inventory_overview"
       - "get_inventory_distribution"
       - "get_assay_status"
+      - "query_assay_records"
+      - "get_assay_report_detail"
+      - "query_assay_abnormalities"
+      - "query_products_without_recent_assay"
+      - "query_assay_standard_coverage"
     main_query_for: []
     default_behavior: "唯一匹配后才继续主查询；多候选必须让用户选择；未找到时说明未找到并给出可改写的查询示例。"
     examples:
@@ -156,6 +584,7 @@ tools:
       - "某个已确认库位当前有什么产品和托盘分布。"
       - "受控范围内按产品、库位、产品+库位聚合的当前库存分布。"
       - "无化验、不合格等受控状态过滤下的库存风险摘要。"
+      - "数量按一板一码口径计算：不足满板时只取该板实际 pieces，不额外叠加整板。"
     cannot_answer:
       - "不能任意下钻全部明细。"
       - "不能导出报表或生成文件。"
@@ -342,6 +771,440 @@ tools:
     unsupported_alternatives:
       - "可查询单产品单日期化验状态。"
       - "批量趋势和报表导出需要后续新增受控工具。"
+
+  query_assay_records:
+    business_name: "化验记录范围查询"
+    risk_level: "L1"
+    can_answer:
+      - "按已确认产品范围、采样日期范围和判定状态查询化验记录列表与摘要。"
+      - "回答今天有哪些化验记录、某产品最近 N 天化验记录、最近一次化验记录。"
+      - "按合格、不合格、无标准、标准多候选过滤化验记录。"
+    cannot_answer:
+      - "不能做趋势分析、异常归因或报表导出。"
+      - "不能导入、更新、删除化验。"
+      - "不能修改质量指标或质量标准。"
+      - "不能把无标准解释为不合格。"
+    use_when:
+      - "用户明确问化验记录、最近一次化验、今天有哪些化验记录。"
+      - "用户问某产品最近 N 天的不合格化验记录。"
+    do_not_use_when:
+      - "用户只问单产品某一天有没有化验，优先用 get_assay_status。"
+      - "用户问化验异常汇总、趋势分析或导出报表，当前仍属于缺口。"
+      - "用户问无化验库存，优先用 query_products_without_recent_assay。"
+    required_slots:
+      - "product_scope"
+    optional_slots:
+      - "date_range"
+      - "judge_status"
+      - "page"
+      - "size"
+    resolver_for: []
+    main_query_for:
+      - "resolve_products"
+    default_behavior: "产品名称不明确时先 resolve_products；用户明确问全部产品或今天有哪些化验记录时可使用 productScope=ALL；默认按 sampleDate DESC、createdAt DESC 排序，分页最大 100。"
+    examples:
+      - input: "黄冰糖最近30天化验记录"
+        chain: "resolve_products -> query_assay_records(dateRange=LAST_DAYS(30))"
+      - input: "今天有哪些化验记录？"
+        chain: "query_assay_records(productScope=ALL,dateRange=EXACT(today))"
+      - input: "黄冰糖最近一次化验"
+        chain: "resolve_products -> query_assay_records(size=1,sortBy=sampleDate,sortDirection=DESC)"
+    anti_examples:
+      - input: "最近30天化验趋势怎么样？"
+        reason: "趋势分析尚未实现，不能只用记录列表冒充趋势分析。"
+      - input: "哪些库存没有化验？"
+        reason: "这是缺化验在库产品查询，应使用 query_products_without_recent_assay。"
+    safe_result_summary:
+      - "scopeLabel"
+      - "dateRangeLabel"
+      - "total"
+      - "latestSampleDate"
+      - "recordCount"
+    unsupported_alternatives:
+      - "趋势分析等待 analyze_assay_records。"
+      - "报告详情使用 get_assay_report_detail。"
+
+  get_assay_report_detail:
+    business_name: "化验报告详情查询"
+    risk_level: "L1"
+    can_answer:
+      - "按 query_assay_records 返回的受控 recordRef 查询单条化验报告详情。"
+      - "展示化验指标、判定、标准范围、异常原因和安全摘要。"
+    cannot_answer:
+      - "不能根据用户手写内部 assayId 查询。"
+      - "不能导入、更新、删除化验。"
+      - "不能修改质量指标或质量标准。"
+    use_when:
+      - "用户在已有化验记录上下文里问这份报告详情、刚才那条详情、哪些指标不合格。"
+    do_not_use_when:
+      - "没有上一轮 recordRef 或用户还没有选择具体化验记录。"
+      - "用户问范围化验记录列表、化验异常统计或趋势分析。"
+    required_slots:
+      - "report_ref"
+    optional_slots:
+      - "include_metrics"
+      - "include_standard_snapshot"
+    resolver_for: []
+    main_query_for:
+      - "query_assay_records"
+    default_behavior: "reportRef 必须来自 query_assay_records 返回或 HITL 选择；没有上下文时先查询或选择化验记录。"
+    examples:
+      - input: "刚才那条化验详情是什么？"
+        chain: "get_assay_report_detail(reportRef=上一轮记录ref)"
+      - input: "这份报告哪些指标不合格？"
+        chain: "get_assay_report_detail(reportRef=上一轮记录ref)"
+    anti_examples:
+      - input: "今天有哪些化验记录？"
+        reason: "这是范围列表查询，应使用 query_assay_records。"
+      - input: "化验ID 1001 的详情"
+        reason: "普通用户不能直接传内部 assayId，应通过 recordRef 或候选选择。"
+    safe_result_summary:
+      - "reportLabel"
+      - "judgeLabel"
+      - "standardLabel"
+      - "riskLabels"
+    unsupported_alternatives:
+      - "没有上下文时先用 query_assay_records 查询并选择报告。"
+
+  query_assay_abnormalities:
+    business_name: "化验质量异常聚合查询"
+    risk_level: "L1"
+    can_answer:
+      - "按已确认产品范围、采样日期范围和异常类型统计不合格、无标准、标准多候选化验。"
+      - "回答最近有哪些化验异常、哪些产品化验不合格、哪些记录无标准、哪些指标越界。"
+      - "按产品、日期、异常类型或指标做受控聚合。"
+    cannot_answer:
+      - "不能统计无化验产品；无化验由缺化验工具或库存风险过滤处理。"
+      - "不能做趋势预测、异常归因或报表导出。"
+      - "不能导入、更新、删除化验或修改质量标准。"
+    use_when:
+      - "用户问化验异常、质量异常、不合格统计、无标准记录、指标越界。"
+      - "用户问哪些产品有质量风险，且语义指已有化验记录的异常。"
+    do_not_use_when:
+      - "用户问普通化验记录列表，使用 query_assay_records。"
+      - "用户问无化验库存或缺化验产品。"
+      - "用户问趋势、导出或写操作。"
+    required_slots:
+      - "product_scope"
+    optional_slots:
+      - "date_range"
+      - "abnormal_types"
+      - "group_by"
+      - "limit"
+    resolver_for: []
+    main_query_for:
+      - "resolve_products"
+    default_behavior: "产品名称不明确时先 resolve_products；全局异常问题可使用 productScope=ALL；默认 abnormalTypes=FAILED+NO_STANDARD+MULTIPLE_CANDIDATES、groupBy=product、limit=50。"
+    examples:
+      - input: "最近7天有哪些化验异常？"
+        chain: "query_assay_abnormalities(productScope=ALL,dateRange=LAST_DAYS(7))"
+      - input: "黄冰糖最近90天质量异常"
+        chain: "resolve_products -> query_assay_abnormalities(dateRange=LAST_DAYS(90))"
+      - input: "哪些产品化验不合格？"
+        chain: "query_assay_abnormalities(productScope=ALL,abnormalTypes=FAILED,groupBy=product)"
+      - input: "最近有哪些指标越界？"
+        chain: "query_assay_abnormalities(productScope=ALL,abnormalTypes=FAILED,groupBy=metric)"
+    anti_examples:
+      - input: "哪些产品没有化验？"
+        reason: "无化验不属于已有化验记录异常，应使用缺化验工具或库存风险过滤。"
+      - input: "最近30天化验趋势怎么样？"
+        reason: "趋势分析尚未实现，不能用异常聚合冒充趋势。"
+    safe_result_summary:
+      - "scopeLabel"
+      - "dateRangeLabel"
+      - "total"
+      - "failedCount"
+      - "noStandardCount"
+      - "groupCount"
+    unsupported_alternatives:
+      - "无化验产品使用 query_products_without_recent_assay。"
+      - "趋势分析等待 analyze_assay_records。"
+
+  query_products_without_recent_assay:
+    business_name: "缺化验在库产品查询"
+    risk_level: "L1"
+    can_answer:
+      - "按当前在库库存查询指定日期范围内没有有效化验记录的产品、库位或产品-库位分组。"
+      - "回答今天哪些产品没有化验、最近 N 天哪些在库产品没有化验、某库位有哪些库存缺化验。"
+      - "库存数量和重量沿用一板一码口径，不重复累计不足满板记录。"
+    cannot_answer:
+      - "不能把无标准化验解释为无化验。"
+      - "不能创建、导入、更新或删除化验。"
+      - "不能下钻到任意库存明细或导出报表。"
+    use_when:
+      - "用户问无化验、未化验、缺化验、没有化验的在库产品或库位。"
+    do_not_use_when:
+      - "用户问不合格、无标准或指标越界，使用 query_assay_abnormalities。"
+      - "用户问普通化验记录列表，使用 query_assay_records。"
+    required_slots:
+      - "product_scope"
+      - "warehouse_scope"
+    optional_slots:
+      - "date_range"
+      - "group_by"
+      - "limit"
+    resolver_for: []
+    main_query_for:
+      - "resolve_products"
+      - "resolve_warehouses"
+    default_behavior: "默认 population=CURRENT_INVENTORY；未传日期范围时按今天；有效化验指产品存在采样日期落入范围的化验记录，不要求合格；默认 groupBy=product、limit=50。"
+    examples:
+      - input: "最近7天哪些在库产品没有化验？"
+        chain: "query_products_without_recent_assay(productScope=ALL,warehouseScope=ALL,dateRange=LAST_DAYS(7))"
+      - input: "1号库位有哪些库存缺化验？"
+        chain: "resolve_warehouses -> query_products_without_recent_assay(warehouseScope=SINGLE_WAREHOUSE)"
+    anti_examples:
+      - input: "最近7天哪些产品化验不合格？"
+        reason: "这是已有化验异常，使用 query_assay_abnormalities。"
+      - input: "哪些化验记录无标准？"
+        reason: "无标准表示已有化验但无法判定，不等于无化验。"
+    safe_result_summary:
+      - "scopeLabel"
+      - "warehouseScopeLabel"
+      - "dateRangeLabel"
+      - "totalGroups"
+      - "groupCount"
+    unsupported_alternatives:
+      - "库存明细下钻等待 query_inventory_records。"
+
+  query_assay_standard_coverage:
+    business_name: "质量标准覆盖查询"
+    risk_level: "L1"
+    can_answer:
+      - "按当前在库库存查询哪些产品没有绑定有效质量标准。"
+      - "回答哪些产品没有质量标准、哪些在库产品未绑定标准。"
+      - "库存数量和重量沿用一板一码口径，不重复累计不足满板记录。"
+    cannot_answer:
+      - "不能修改质量标准。"
+      - "不能回答 UNUSED_STANDARD 或 ASSAY_WITHOUT_STANDARD 的未确认口径。"
+      - "不能把无标准解释为化验不合格。"
+    use_when:
+      - "用户问没有质量标准、未绑定标准、标准覆盖缺口。"
+    do_not_use_when:
+      - "用户问无化验或缺化验，使用 query_products_without_recent_assay。"
+      - "用户问化验记录无标准统计，使用 query_assay_abnormalities。"
+    required_slots:
+      - "product_scope"
+    optional_slots:
+      - "date_range"
+      - "coverage_type"
+      - "limit"
+    resolver_for: []
+    main_query_for:
+      - "resolve_products"
+    default_behavior: "默认 coverageType=PRODUCT_WITHOUT_STANDARD、limit=50；第一版全集为当前在库产品；ASSAY_WITHOUT_STANDARD 和 UNUSED_STANDARD 当前返回待确认错误。"
+    examples:
+      - input: "哪些在库产品没有质量标准？"
+        chain: "query_assay_standard_coverage(productScope=ALL,coverageType=PRODUCT_WITHOUT_STANDARD)"
+      - input: "黄冰糖哪些规格未绑定标准？"
+        chain: "resolve_products -> query_assay_standard_coverage(coverageType=PRODUCT_WITHOUT_STANDARD)"
+    anti_examples:
+      - input: "哪些库存没有化验？"
+        reason: "这是缺化验查询，应使用 query_products_without_recent_assay。"
+      - input: "哪些化验记录无标准？"
+        reason: "这是已有化验记录的无标准统计，应使用 query_assay_abnormalities。"
+    safe_result_summary:
+      - "scopeLabel"
+      - "coverageType"
+      - "totalGroups"
+      - "groupCount"
+    unsupported_alternatives:
+      - "标准最近未使用和化验记录无标准覆盖待业务口径确认。"
+
+  query_qr_code_lifecycle:
+    business_name: "二维码 / 托盘生命周期查询"
+    risk_level: "L1"
+    can_answer:
+      - "查询明确二维码或托盘码的当前状态、库存、化验、打印信息和安全流转时间线。"
+      - "说明当前状态、库位、数量和风险标签。"
+    cannot_answer:
+      - "不能作废、恢复、重新绑定或修改托盘码。"
+      - "不能编造不存在的二维码或生命周期事件。"
+    use_when:
+      - "用户提供明确二维码 / 托盘码并询问生命周期、经历环节或流转过程。"
+    do_not_use_when:
+      - "用户只问托盘当前状态且不需要完整时间线，可使用 get_pallet_status。"
+    required_slots:
+      - "code"
+    optional_slots:
+      - "include_inventory"
+      - "include_assay"
+      - "include_flows"
+      - "include_print_info"
+      - "flow_limit"
+    resolver_for: []
+    main_query_for: []
+    default_behavior: "只接受用户明确提供的二维码 / 托盘码；默认返回库存、化验和流转摘要，不返回内部 ID。"
+    examples:
+      - input: "查询托盘码 P202607090001 的生命周期"
+        chain: "query_qr_code_lifecycle(code=P202607090001)"
+    safe_result_summary:
+      - "codeLabel"
+      - "currentStatusLabel"
+      - "warehouseLabel"
+      - "quantityText"
+      - "timeline"
+      - "riskLabels"
+    unsupported_alternatives:
+      - "作废或恢复二维码需要未来的 preview / execute 写操作链路。"
+
+  query_printed_not_inbound_codes:
+    business_name: "已打印未入库二维码查询"
+    risk_level: "L1"
+    can_answer:
+      - "统计已打印标签批次中尚未完成入库的二维码数量和分组。"
+      - "按产品、订单、批次和日期范围给出未入库数量及比例。"
+    cannot_answer:
+      - "不能把没有打印记录的数据推断为已打印。"
+      - "不能修改标签状态或执行入库。"
+    use_when:
+      - "用户问哪些码打印了但没入库、打印批次还有多少未入库。"
+    do_not_use_when:
+      - "用户问某个码的完整流转过程，使用 query_qr_code_lifecycle。"
+    required_slots: []
+    optional_slots:
+      - "product_scope"
+      - "order_no"
+      - "batch_no"
+      - "date_range"
+      - "group_by"
+      - "limit"
+    resolver_for:
+      - "resolve_products"
+    main_query_for:
+      - "resolve_products"
+    default_behavior: "默认全部产品、最近30天、按标签批次分组、limit=50；第一版打印口径为标签批次 printed_at，入库口径为输出码已关联库存、存在入库时间或状态为 INSTOCK。"
+    examples:
+      - input: "哪些码打印了但没入库？"
+        chain: "query_printed_not_inbound_codes(productScope=ALL,dateRange=LAST_DAYS(30),groupBy=batch)"
+    safe_result_summary:
+      - "scopeLabel"
+      - "dateRangeLabel"
+      - "totalPrinted"
+      - "totalInbound"
+      - "totalNotInbound"
+      - "completionRateText"
+      - "groups"
+    unsupported_alternatives:
+      - "实际入库或补打标签需要未来写操作流程。"
+
+  query_pallet_anomalies:
+    business_name: "托盘生命周期异常查询"
+    risk_level: "L1"
+    can_answer:
+      - "聚合二维码 / 托盘码、库存和流转之间的状态不一致、重复入库、无入库出库和产品绑定不一致。"
+      - "按产品、库位、日期和异常类型返回分组及证据摘要。"
+    cannot_answer:
+      - "当前没有独立二维码扫描日志，不能断言发生过作废码扫描。"
+      - "不能自动修复状态或回滚库存。"
+    use_when:
+      - "用户问托盘异常、二维码异常、状态与库存不一致或重复入库。"
+    do_not_use_when:
+      - "用户只问某个码的正常生命周期，使用 query_qr_code_lifecycle。"
+    required_slots: []
+    optional_slots:
+      - "product_scope"
+      - "warehouse_id"
+      - "date_range"
+      - "anomaly_types"
+      - "limit"
+    resolver_for:
+      - "resolve_products"
+      - "resolve_warehouses"
+    main_query_for:
+      - "resolve_products"
+      - "resolve_warehouses"
+    default_behavior: "默认全部产品、最近30天、返回已实现的四类可验证异常；VOID_CODE_SCANNED 返回扫描日志缺口说明。"
+    examples:
+      - input: "最近30天有哪些托盘异常？"
+        chain: "query_pallet_anomalies(productScope=ALL,dateRange=LAST_DAYS(30))"
+    safe_result_summary:
+      - "scopeLabel"
+      - "dateRangeLabel"
+      - "groups"
+      - "notes"
+    unsupported_alternatives:
+      - "状态修复、库存纠正和作废码处理需要审计确认及未来写操作链路。"
+
+  query_pallet_flow_records:
+    business_name: "托盘流转记录查询"
+    risk_level: "L1"
+    can_answer:
+      - "按明确托盘码、产品、库位、日期和事件类型分页查询流转记录。"
+      - "返回业务时间线、事件名称、来源和目的库位。"
+    cannot_answer:
+      - "不能修改流转记录或补写缺失事件。"
+      - "不能把内部 flow ID 当作用户业务证据。"
+    use_when:
+      - "用户问托盘最近有哪些流转、托盘进出记录或二维码流转记录。"
+    do_not_use_when:
+      - "用户需要单码完整摘要和风险标签，使用 query_qr_code_lifecycle。"
+    required_slots: []
+    optional_slots:
+      - "code"
+      - "product_scope"
+      - "warehouse_id"
+      - "date_range"
+      - "event_types"
+      - "page"
+      - "size"
+    resolver_for:
+      - "resolve_products"
+      - "resolve_warehouses"
+    main_query_for:
+      - "resolve_products"
+      - "resolve_warehouses"
+    default_behavior: "默认最近30天、第一页20条；事件类型使用受控枚举并按时间倒序。"
+    examples:
+      - input: "托盘最近有哪些流转？"
+        chain: "query_pallet_flow_records(productScope=ALL,dateRange=LAST_DAYS(30),page=1,size=20)"
+    safe_result_summary:
+      - "total"
+      - "page"
+      - "size"
+      - "records"
+    unsupported_alternatives:
+      - "审计日志和操作人责任追踪需要 search_operation_logs 或后续审计工具。"
+
+  query_qr_batch_inbound_completion:
+    business_name: "二维码批次入库完成率查询"
+    risk_level: "L1"
+    can_answer:
+      - "按标签批次、生产订单、产品或日期范围统计打印数量、入库数量、未入库数量和完成率。"
+      - "在需要时列出少量未完成二维码示例。"
+    cannot_answer:
+      - "不能在没有批次、订单、产品或日期范围时猜测统计范围。"
+      - "不能补入库或修改批次状态。"
+    use_when:
+      - "用户问某二维码批次、打印批次或订单标签的入库完成率。"
+    do_not_use_when:
+      - "用户问具体未入库码列表，使用 query_printed_not_inbound_codes。"
+    required_slots:
+      - "batch_or_order_or_product_or_date_scope"
+    optional_slots:
+      - "batch_no"
+      - "order_no"
+      - "product_id"
+      - "date_range"
+      - "include_unfinished_examples"
+      - "limit"
+    resolver_for:
+      - "resolve_products"
+    main_query_for:
+      - "resolve_products"
+    default_behavior: "必须至少提供批次号、订单号、已确认产品或日期范围；默认返回未完成示例，limit=20。"
+    examples:
+      - input: "批次 LB-001 入库完成率"
+        chain: "query_qr_batch_inbound_completion(batchNo=LB-001)"
+    safe_result_summary:
+      - "scopeLabel"
+      - "printedCount"
+      - "inboundCount"
+      - "notInboundCount"
+      - "completionRateText"
+      - "unfinishedExamples"
+    unsupported_alternatives:
+      - "批次补录、重打和回收需要未来写操作安全链路。"
 
 write_operation_boundary:
   current_behavior: "识别写操作并说明边界，不执行写入。"

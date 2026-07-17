@@ -171,12 +171,12 @@ class RuntimeRoutingAgentGatewayServiceTest {
 
         AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request("查黄冰糖库存"));
 
-        assertThat(response.getAnswer()).isEqualTo("AI 助手暂时不可用，请稍后重试。");
+        assertThat(response.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
         assertThat(response.getAnswer()).doesNotContain("SUCCESS", "toolName", "productId");
     }
 
     @Test
-    void timeoutFallsBackOnlyForFirstSimpleReadAndPinsSessionToLegacy() {
+    void timeoutFailsClosedWithoutLegacyFallback() {
         when(pythonClient.chat(any())).thenThrow(new PythonAgentClientException("PYTHON_AGENT_TIMEOUT", true));
         AgentMessageResponseVO legacy = new AgentMessageResponseVO();
         legacy.setAnswer("已通过降级路径查询库存。");
@@ -185,10 +185,10 @@ class RuntimeRoutingAgentGatewayServiceTest {
         AgentMessageResponseVO first = gateway.handleMessage(loginUser, "agt_001", request("查黄冰糖库存"));
         AgentMessageResponseVO second = gateway.handleMessage(loginUser, "agt_001", request("这些在哪些库位？"));
 
-        assertThat(first.getAnswer()).contains("降级路径");
-        assertThat(second.getAnswer()).contains("降级路径");
-        verify(pythonClient).chat(any());
-        verify(legacyGateway, org.mockito.Mockito.times(2)).handleMessage(eq(loginUser), eq("agt_001"), any());
+        assertThat(first.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
+        assertThat(second.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
+        verify(pythonClient, org.mockito.Mockito.times(2)).chat(any());
+        verify(legacyGateway, org.mockito.Mockito.never()).handleMessage(eq(loginUser), eq("agt_001"), any());
     }
 
     @Test
@@ -200,7 +200,7 @@ class RuntimeRoutingAgentGatewayServiceTest {
         gateway.handleMessage(loginUser, "agt_001", request("查黄冰糖库存"));
         AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request("它今天有化验吗？"));
 
-        assertThat(response.getAnswer()).isEqualTo("AI 助手暂时不可用，请稍后重试。");
+        assertThat(response.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
         verify(legacyGateway, never()).handleMessage(any(), any(), any());
     }
 
@@ -221,7 +221,7 @@ class RuntimeRoutingAgentGatewayServiceTest {
 
         AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request);
 
-        assertThat(response.getAnswer()).isEqualTo("AI 助手暂时不可用，请稍后重试。");
+        assertThat(response.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
         verify(legacyGateway, never()).handleMessage(any(), any(), any());
     }
 
@@ -251,6 +251,43 @@ class RuntimeRoutingAgentGatewayServiceTest {
                 "runtimeMode=python", "path=python", "requestId=", "traceId=", "fallbackUsed=false");
         assertThat(audit.getArgumentsSummary()).doesNotContain("service-secret", "Authorization", "token");
         assertThat(audit.getResultCode()).isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void clearSessionPropagatesToPythonAndLocalStateStores() {
+        gateway.clearSession("agt_001");
+
+        verify(pythonClient).clearSession("agt_001");
+        verify(interruptStateService).cancelSessionInterrupts("agt_001");
+        verify(legacyGateway).clearSession("agt_001");
+    }
+
+    @Test
+    void internalAuditEventPersistsHandoffWithoutBecomingAUserEvent() throws Exception {
+        doAnswer(invocation -> {
+            PythonAgentChatRequestDTO forwarded = invocation.getArgument(0);
+            @SuppressWarnings("unchecked")
+            Consumer<PythonAgentStreamEventDTO> consumer = invocation.getArgument(1);
+            consumer.accept(streamEvent(forwarded.getMessageId(), "audit", 1, """
+                    {"intentRouter":{"agent_handoff":{"target_agent":"inventory_expert",
+                    "business_domain":"inventory","mode":"delegate"}}}
+                    """));
+            consumer.accept(streamEvent(forwarded.getMessageId(), "message_end", 2,
+                    "{\"finishReason\":\"completed\"}"));
+            return null;
+        }).when(pythonClient).stream(any(), any());
+
+        gateway.streamMessage(loginUser, "agt_001", request("查黄冰糖库存"));
+
+        ArgumentCaptor<AgentToolAuditDTO> captor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
+        verify(sessionService, timeout(3000).times(2))
+                .recordToolAudit(eq("agt_001"), eq(2), captor.capture());
+        AgentToolAuditDTO handoffAudit = captor.getAllValues().stream()
+                .filter(audit -> "agent_handoff".equals(audit.getToolName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(handoffAudit.getArgumentsSummary()).contains(
+                "targetAgent=inventory_expert", "businessDomain=inventory", "handoffMode=delegate");
     }
 
     @Test

@@ -762,6 +762,7 @@ class WarehouseToolsTest {
                   "groups":[
                     {
                       "groupLabel":"黄冰糖（袋）",
+                      "canonicalProductName":"黄冰糖（袋）",
                       "productLabel":"黄冰糖（袋） 25kg/件 40件/板",
                       "stockText":"2板20件",
                       "totalEquivalentPieces":100,
@@ -791,6 +792,7 @@ class WarehouseToolsTest {
         assertThat(json.path("error").isMissingNode() || json.path("error").isNull()).isTrue();
         assertThat(json.path("totalStockText").asText()).isEqualTo("2板20件");
         assertThat(json.path("groups").get(0).path("productLabel").asText()).contains("黄冰糖（袋）");
+        assertThat(json.path("groups").get(0).path("canonicalProductName").asText()).isEqualTo("黄冰糖（袋）");
         RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
         assertThat(recorded).isNotNull();
         assertThat(recorded.getPath()).isEqualTo("/api/inventory/distribution");

@@ -1,0 +1,328 @@
+version: agent-tool-roadmap-2026-07-13-r2
+status: DESIGN_ONLY
+runtime_enabled: false
+runtime_effect: "NONE；本文件不是 Python 专家白名单，也不是 Java Gateway 或 warehouse-mcp 注册表。"
+source_of_design: "docs/mcp-analysis/agent-expert-tool-blueprint.md"
+related_design_registries:
+  recipeRoadmap: "docs/agent/cross-expert-recipe-roadmap-registry.yaml"
+  dataSemanticRoadmap: "docs/agent/data-semantic-roadmap-registry.yaml"
+  businessRuleRoadmap: "docs/agent/business-rule-roadmap-registry.yaml"
+
+release_boundaries:
+  v1:
+    allowed_risk_levels: [L0, L1]
+    behavior: "模块专家只读查询；原有 17 个工具行为保持不变，当前共登记 47 个只读工具。"
+  v2_analytics:
+    allowed_risk_levels: [L1, L2]
+    behavior: "登记数据集、确定性报表、趋势/对比和 dry-run preview。"
+  v2_write:
+    allowed_risk_levels: [L3, L4]
+    behavior: "仅 preview -> HITL -> execute；execute 不接收可变业务参数。"
+  v2_planning:
+    allowed_risk_levels: [L2]
+    behavior: "预测、优化和仿真只生成 advisory scenarios；不得生成 executionToken 或直接写业务。"
+
+global_rules:
+  main_agent_business_tools: []
+  arbitrary_sql: FORBIDDEN
+  arbitrary_http: FORBIDDEN
+  free_form_dag: FORBIDDEN
+  free_multi_agent_conversation: FORBIDDEN
+  runtime_default_for_new_entries: disabled
+  channel_group_execute: FORBIDDEN
+  planning_result_as_execution_token: FORBIDDEN
+  llm_final_business_decision: FORBIDDEN
+  activation_gate:
+    - java_aggregate_api
+    - java_gateway_rbac_and_allowlist
+    - warehouse_mcp_schema
+    - python_owner_expert_allowlist
+    - capability_registry
+    - deterministic_tests
+    - safe_formatter
+    - documentation
+    - startup_hash_handshake
+
+experts:
+  main_agent:
+    v1_current: []
+    v1_planned: []
+    v2_analytics: []
+    v2_write_pairs: []
+
+  inventory_expert:
+    v1_current:
+      - resolve_products
+      - resolve_warehouses
+      - get_inventory_overview
+      - get_inventory_distribution
+      - query_inventory_ledger
+      - query_prepare_pool_balance
+    v1_planned: []
+    v2_analytics:
+      - analyze_inventory_movement_trend
+      - analyze_inventory_ageing
+      - build_inventory_snapshot_report
+    blocked_analytics:
+      - analyze_inventory_level_trend
+    v2_write_pairs: []
+    blocked_write_pairs:
+      - [preview_inventory_adjustment, execute_inventory_adjustment]
+
+  warehouse_expert:
+    v1_current:
+      - resolve_warehouses
+      - get_warehouse_status
+      - query_warehouse_capacity_distribution
+      - query_warehouse_recent_operations
+      - query_warehouse_mixed_storage_facts
+    v1_planned: []
+    v2_analytics:
+      - analyze_warehouse_flow_efficiency
+      - analyze_warehouse_space_utilization
+    blocked_analytics:
+      - analyze_warehouse_capacity_trend
+      - analyze_mixed_storage_risk
+    v2_write_pairs:
+      - [preview_warehouse_change, execute_warehouse_change]
+
+  logistics_expert:
+    v1_current:
+      - resolve_products
+      - resolve_warehouses
+      - query_pallet_tasks
+      - query_stock_documents
+      - query_auto_inbound_batches
+      - get_auto_inbound_batch_detail
+    v1_planned: []
+    v2_analytics:
+      - analyze_stock_movement_throughput
+      - analyze_task_cycle_time
+    blocked_analytics:
+      - analyze_auto_inbound_reconciliation
+    v2_previews:
+      - preview_auto_inbound_report
+      - preview_inbound_plan
+      - preview_outbound_plan
+      - preview_transfer_plan
+      - preview_task_transition
+    v2_write_pairs:
+      - [preview_inbound_plan, execute_inbound_plan]
+      - [preview_outbound_plan, execute_outbound_plan]
+      - [preview_transfer_plan, execute_transfer_plan]
+      - [preview_auto_inbound_report, execute_auto_inbound_batch]
+      - [preview_task_transition, execute_task_transition]
+
+  pallet_expert:
+    v1_current:
+      - get_pallet_status
+      - query_qr_code_lifecycle
+      - query_printed_not_inbound_codes
+      - query_pallet_anomalies
+      - query_pallet_flow_records
+      - query_qr_batch_inbound_completion
+      - query_fixed_product_qr_pool
+    v1_planned: []
+    v2_analytics:
+      - analyze_pallet_state_health
+      - analyze_qr_pool_utilization
+      - build_qr_batch_reconciliation_report
+      - export_qr_labels
+    v2_write_pairs:
+      - [preview_qr_code_generation, execute_qr_code_generation]
+      - [preview_fixed_qr_binding, execute_fixed_qr_binding]
+      - [preview_fixed_qr_activation, execute_fixed_qr_activation]
+      - [preview_qr_status_change, execute_qr_status_change]
+    blocked_write_pairs:
+      - [preview_pallet_flow_deletion, execute_pallet_flow_deletion]
+
+  production_expert:
+    v1_current:
+      - resolve_production_entities
+      - query_production_order_progress
+      - query_boiling_batch_trace
+      - query_material_pick_trace
+      - query_production_label_completion
+      - query_in_process_materials
+      - query_material_candidates
+    v1_planned: []
+    v2_analytics:
+      - analyze_material_consumption_variance
+      - analyze_label_reconciliation
+      - build_boiling_trace_report
+    blocked_analytics:
+      - analyze_production_order_completion
+      - analyze_production_yield
+    v2_write_pairs:
+      - [preview_production_order_change, execute_production_order_change]
+      - [preview_boiling_batch_change, execute_boiling_batch_change]
+      - [preview_material_consumption, execute_material_consumption]
+      - [preview_production_output_change, execute_production_output_change]
+      - [preview_production_output_deletion, execute_production_output_deletion]
+      - [preview_production_label_operation, execute_production_label_operation]
+      - [preview_production_finish, execute_production_finish]
+
+  quality_expert:
+    compatibility_alias: assay_expert
+    v1_current:
+      - resolve_products
+      - resolve_warehouses
+      - get_assay_status
+      - query_assay_records
+      - get_assay_report_detail
+      - query_assay_abnormalities
+      - query_products_without_recent_assay
+      - query_assay_standard_coverage
+      - query_assay_groups
+      - query_quality_standard_catalog
+      - get_quality_standard_detail
+      - query_product_standard_relations
+    v1_planned: []
+    v2_analytics:
+      - analyze_assay_trends
+      - analyze_assay_pass_rate
+      - analyze_quality_metric_distribution
+    blocked_analytics:
+      - analyze_quality_standard_coverage
+      - analyze_inventory_batch_qualification
+    v2_previews:
+      - inspect_assay_import_file
+      - preview_assay_file_import
+    v2_write_pairs:
+      - [preview_assay_change, execute_assay_change]
+      - [preview_assay_file_import, execute_assay_file_import]
+      - [preview_assay_deletion, execute_assay_deletion]
+      - [preview_assay_group_change, execute_assay_group_change]
+      - [preview_quality_standard_change, execute_quality_standard_change]
+      - [preview_product_standard_relation_change, execute_product_standard_relation_change]
+
+  master_data_expert:
+    v1_current:
+      - resolve_products
+      - query_product_catalog
+      - get_product_detail
+      - query_screen_mesh_catalog
+    v1_planned: []
+    v2_analytics:
+      - analyze_master_data_completeness
+      - analyze_master_data_usage_impact
+    v2_write_pairs:
+      - [preview_product_change, execute_product_change]
+      - [preview_screen_mesh_change, execute_screen_mesh_change]
+
+  administration_expert:
+    v1_current:
+      - query_employee_roster
+      - query_roles
+      - get_role_permission_summary
+    v1_planned: []
+    v2_analytics:
+      - analyze_role_permission_exposure
+      - analyze_employee_access_coverage
+    v2_write_pairs:
+      - [preview_employee_change, execute_employee_change]
+      - [preview_role_change, execute_role_change]
+      - [preview_role_permission_assignment, execute_role_permission_assignment]
+
+  audit_expert:
+    v1_current:
+      - search_operation_logs
+      - query_agent_tool_audit
+      - query_agent_answer_reviews
+    v1_planned: []
+    v2_analytics:
+      - analyze_agent_quality
+      - analyze_agent_tool_usage_cost
+    blocked_analytics:
+      - analyze_operation_risk_trend
+    v2_write_pairs:
+      - [preview_agent_review_status_change, execute_agent_review_status_change]
+
+  analytics_expert:
+    enabled_from: v2_analytics
+    raw_business_tools: []
+    v1_current: []
+    v1_planned: []
+    v2_analytics:
+      - run_registered_report
+      - compare_registered_report_periods
+      - export_registered_report
+    v2_write_pairs: []
+
+  planning_expert:
+    enabled_from: v2_planning
+    raw_business_tools: []
+    execute_tools: []
+    v1_current: []
+    v1_planned: []
+    v2_analytics: []
+    planning_tools:
+      - forecast_registered_demand
+      - assess_inventory_risk
+      - generate_replenishment_scenarios
+      - generate_production_schedule_scenarios
+      - optimize_warehouse_layout_scenarios
+      - simulate_registered_scenario
+      - compare_planning_scenarios
+    v2_write_pairs: []
+
+registered_dataset_placeholders:
+  - inventory_snapshot_v1
+  - stock_movement_v1
+  - production_order_fact_v1
+  - quality_assay_fact_v1
+  - pallet_lifecycle_fact_v1
+  - agent_audit_fact_v1
+
+registered_cross_domain_report_placeholders:
+  - id: inventory_quality_overview_v1
+    runtime_registered: false
+    semantics:
+      data_scope: PRODUCT_LATEST_ASSAY
+      batch_qualification_supported: false
+  - id: production_material_output_reconciliation_v1
+    runtime_registered: false
+    blocked_by: [yield_formula, unit_conversion_rules]
+  - id: warehouse_flow_efficiency_v1
+    runtime_registered: false
+    blocked_for_history_by: [warehouse_capacity_snapshot]
+
+future_infrastructure:
+  channelIntegrationGateway:
+    status: DESIGN_ONLY
+    adapters: [WECHAT_WORK, DINGTALK]
+    groupAllowedCapabilities: [QUERY, REGISTERED_REPORT, NOTIFICATION, WEB_CONFIRMATION_LINK]
+    groupForbiddenCapabilities: [L3_EXECUTE, L4_EXECUTE, HITL_EXECUTE_RESUME]
+    requirements:
+      - signed_callback_verification
+      - verified_user_mapping
+      - message_deduplication
+      - attachment_quarantine
+      - group_safe_data_classification
+      - private_or_web_fallback_for_sensitive_data
+      - channel_audit
+  asyncJobModel:
+    status: DESIGN_ONLY
+    states: [QUEUED, RUNNING, WAITING_HITL, SUCCEEDED, PARTIAL_FAILED, FAILED, CANCELLED, EXPIRED]
+    retryRule: "仅登记为幂等且可重试的步骤允许自动重试。"
+    compensationRule: "仅登记补偿动作；禁止通用回滚和反向 SQL。"
+  futureScopes:
+    status: RESERVED_NOT_ACTIVE
+    fields: [organizationScope, plantScope, warehouseAreaScope]
+    source: trusted_identity_and_rbac
+  modelGovernance:
+    status: DESIGN_ONLY
+    approvalStates: [DRAFT, EVALUATED, APPROVED_FOR_ADVISORY, SUSPENDED, RETIRED]
+    directBusinessExecution: FORBIDDEN
+
+forbidden_capabilities:
+  - manage_reference_data
+  - arbitrary_sql_report
+  - arbitrary_http_request
+  - direct_inventory_update
+  - legacy_semi_prepare_write
+  - legacy_semi_consume_write
+  - legacy_output_qr_bind
+  - local_printer_control
+  - authentication_or_account_binding
+  - business_audit_log_mutation

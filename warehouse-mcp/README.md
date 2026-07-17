@@ -10,11 +10,51 @@
 | `resolve_warehouses` | Resolve a warehouse name/id query into unique, ambiguous, or not-found candidates. | `GET /api/warehouse/{id}`, `GET /api/warehouse/query` |
 | `get_inventory_overview` | Read paged product inventory summary and calculated totals. | `GET /api/products/{id}`, `GET /api/inventory/stock/page` |
 | `get_inventory_distribution` | Read controlled product scopes with warehouse, status, assay, pallet, date, and grouping filters. | `POST /api/inventory/distribution` (read-only aggregate) |
+| `query_assay_records` | Read controlled assay record lists and summaries by product scope, sample-date range, and judge status. | `POST /api/assay/records/query` (read-only aggregate) |
+| `get_assay_report_detail` | Read one controlled assay report detail by opaque `reportRef`. | `POST /api/assay/report-detail/query` (read-only detail) |
+| `query_assay_abnormalities` | Read grouped assay quality abnormalities by product scope, sample-date range, abnormal type, and grouping. | `POST /api/assay/abnormalities/query` (read-only aggregate) |
+| `query_products_without_recent_assay` | Read current inventory groups without a valid assay in a controlled date range. | `POST /api/assay/products-without-recent-assay/query` (read-only aggregate) |
+| `query_assay_standard_coverage` | Read current inventory product groups without an effective quality standard. | `POST /api/assay/standard-coverage/query` (read-only aggregate) |
+| `query_qr_code_lifecycle` | Read one QR / pallet code lifecycle summary with inventory, assay, print, flow, and risk labels. | `POST /api/pallet-codes/lifecycle/query` (read-only aggregate) |
+| `query_printed_not_inbound_codes` | Read printed label batches and QR codes not completed inbound, grouped by batch, order, or product. | `POST /api/pallet-codes/printed-not-inbound/query` (read-only aggregate) |
+| `query_pallet_anomalies` | Read controlled pallet, inventory, and flow inconsistency groups. | `POST /api/pallet-codes/anomalies/query` (read-only aggregate) |
+| `query_pallet_flow_records` | Read paged pallet flow records by code, product, warehouse, date, or event type. | `POST /api/pallet-codes/flow-records/query` (read-only aggregate) |
+| `query_qr_batch_inbound_completion` | Read printed/inbound counts and completion rate for a label batch, order, product, or date scope. | `POST /api/pallet-codes/batch-inbound-completion/query` (read-only aggregate) |
+| `resolve_production_entities` | Resolve a production order or boiling batch to short-lived user-bound entity references. | `POST /api/production/agent-read/entities/resolve` |
+| `query_production_order_progress` | Read current order material, output, label, QR binding, and inbound progress from a controlled orderRef. | `POST /api/production/agent-read/orders/progress/query` |
+| `query_boiling_batch_trace` | Read only registered boiling batch detail, usage, graph edges, and timeline from a controlled batchRef. | `POST /api/production/agent-read/boiling-batches/trace/query` |
+| `query_material_pick_trace` | Read registered actual material picks and pallet sources for a controlled production order. | `POST /api/production/agent-read/orders/material-pick-trace/query` |
+| `query_production_label_completion` | Read label reservation/use/recycle and QR binding/inbound completion for a controlled production order. | `POST /api/production/agent-read/orders/label-completion/query` |
+| `query_in_process_materials` | Read current registered in-process semi-finished material records with controlled filters and pagination. | `POST /api/production/agent-read/materials/in-process/query` |
+| `query_material_candidates` | Read current semi-finished inventory candidates for a controlled production order without making a pick recommendation. | `POST /api/production/agent-read/orders/material-candidates/query` |
+| `query_pallet_tasks` | Read current pallet tasks with controlled filters, explicit task permission, and no task mutation. | `POST /api/logistics/agent-read/pallet-tasks/query` |
+| `query_stock_documents` | Read one explicit inbound, outbound, or semi-product document source without merging it into a fabricated global ledger. | `POST /api/logistics/agent-read/stock-documents/query` |
+| `query_auto_inbound_batches` | Read the current user's recent non-expired intelligent reporting batches without confirming inbound. | `POST /api/logistics/agent-read/auto-inbound/batches/query` |
+| `get_auto_inbound_batch_detail` | Read a selected current-user batch through an opaque user-bound reference, omitting raw text and internal IDs. | `POST /api/logistics/agent-read/auto-inbound/batches/detail/query` |
+| `query_warehouse_capacity_distribution` | Read current capacity, occupancy and remaining-capacity facts; display bands are explicitly not business risk decisions. | `POST /api/warehouse/agent-read/capacity-distribution/query` |
+| `query_warehouse_recent_operations` | Read recorded inbound, outbound and transfer pallet-flow events for one warehouse or all warehouses; not a complete audit ledger. | `POST /api/warehouse/agent-read/recent-operations/query` |
+| `query_warehouse_mixed_storage_facts` | Read current same-warehouse multiple-product or multiple-specification facts without deciding mixed-storage risk. | `POST /api/warehouse/agent-read/mixed-storage-facts/query` |
+| `query_product_catalog` | Read current product master data without inventory, quality, or production-availability claims. | `POST /api/master-data/agent-read/products/query` |
+| `get_product_detail` | Read one exactly named product's current configuration and conversion summary without internal IDs. | `POST /api/master-data/agent-read/products/detail/query` |
+| `query_screen_mesh_catalog` | Read the current screen-mesh catalog without exposing maintenance identities or modifying configuration. | `POST /api/master-data/agent-read/screen-meshes/query` |
+| `query_assay_groups` | Read current assay product-group configuration without treating groups as standards or qualification. | `POST /api/quality/agent-read/assay-groups/query` |
+| `query_quality_standard_catalog` | Read current quality-standard codes, versions, states, and summary counts. | `POST /api/quality/agent-read/standards/query` |
+| `get_quality_standard_detail` | Read one exact standard code/version and its metric configuration without making the final quality decision. | `POST /api/quality/agent-read/standards/detail/query` |
+| `query_product_standard_relations` | Read current product-standard bindings, defaults, priorities, and effective periods without changing them. | `POST /api/quality/agent-read/product-standard-relations/query` |
+| `query_employee_roster` | Read the current employee roster with masked mobile numbers and no login/binding credentials. | `POST /api/administration/agent-read/employees/query` |
+| `query_roles` | Read the current role catalog and aggregate counts without internal IDs. | `POST /api/administration/agent-read/roles/query` |
+| `get_role_permission_summary` | Read one exact role permission summary; actual access remains subject to RBAC. | `POST /api/administration/agent-read/roles/permission-summary/query` |
+| `search_operation_logs` | Search recorded business-operation summaries without old/new field values. | `POST /api/audit/agent-read/operation-logs/query` |
+| `query_agent_tool_audit` | Query safe Agent tool-call result/error categories and duration without arguments or internal IDs. | `POST /api/audit/agent-read/agent-tool-audit/query` |
+| `query_agent_answer_reviews` | Query safe Agent answer-review status summaries without original questions, answers, tools, or decision snapshots. | `POST /api/audit/agent-read/agent-answer-reviews/query` |
+| `query_inventory_ledger` | Query current inventory rows and locations; explicitly not a historical movement ledger or qualification result. | `POST /api/inventory/agent-read/ledger/query` |
+| `query_prepare_pool_balance` | Query current positive historical semi-finished prepare-pool balances without reserving or consuming them. | `POST /api/inventory/agent-read/prepare-pool-balance/query` |
+| `query_fixed_product_qr_pool` | Query current fixed-product QR pool status without binding, printing, activating, invalidating, restoring, or changing inventory. | `POST /api/pallet-codes/agent-read/fixed-product-pool/query` |
 | `get_warehouse_status` | Read warehouse capacity, inventory details, and recent operations. | `GET /api/warehouse/{id}`, `GET /api/inventory/warehouses`, `POST /api/inventory/qualified-inventory/{warehouseId}/page`, `GET /api/inventory/warehouses/{warehouseId}/recent-operations` |
 | `get_pallet_status` | Read pallet code status, current inventory position, assay information, flow cycles, and flow details. | `GET /api/pallet-codes/parse`, `GET /api/pallet-codes/{code}/inventory`, `GET /api/pallet-codes/{code}/assay`, `GET /api/pallet-codes/{code}/flows/cycles`, `GET /api/pallet-codes/{code}/flows` |
 | `get_assay_status` | Read an assay by id, or by product and production date, including judge result, failed metrics, and applied standard details. | `GET /api/assay/{id}`, `GET /api/assay/by-product-date` |
 
-`POST /api/inventory/qualified-inventory/{warehouseId}/page` is used only as an existing read query endpoint. No business write endpoints are called. M1.1 still does not expose preview, execute, SQL, arbitrary HTTP proxy, direct database, pallet mutation, assay mutation, or quality-standard mutation tools.
+`POST /api/inventory/qualified-inventory/{warehouseId}/page`, `POST /api/inventory/distribution`, the five assay query paths, and the five `/api/pallet-codes/*/query` paths are used only as existing or dedicated read query endpoints. No business write endpoints are called. The server still does not expose preview, execute, SQL, arbitrary HTTP proxy, direct database, pallet mutation, assay mutation, label mutation, or quality-standard mutation tools.
 
 ## Environment
 
@@ -69,7 +109,7 @@ WAREHOUSE_MCP_LOG_FILE=logs/mcp/warehouse-mcp-<agent-session-id>.log
 
 The STDIO one-user-one-process model is a transition path. Production multi-user deployments should move to HTTP/Streamable HTTP MCP with request-level delegated identity injection.
 
-M1.2 did not add a login tool or new business MCP tools. M1.4a-1 adds only `get_inventory_distribution`, so the server now exposes seven read-only tools. It still exposes no login, preview, execute, SQL, arbitrary HTTP proxy, direct database, or write tools.
+M1.2 did not add a login tool or write-capable business MCP tools. M1.4 now exposes the six original read tools, `get_inventory_distribution`, five assay analysis tools, and five QR / pallet lifecycle tools, so the server exposes seventeen read-only tools. It still exposes no login, preview, execute, SQL, arbitrary HTTP proxy, direct database, or write tools.
 ## Resolver Semantics
 
 Product resolver results always follow one of three paths:
@@ -109,6 +149,16 @@ Agents should answer inventory questions using `normalizedPallets`, `normalizedL
 
 `get_inventory_distribution` accepts `SINGLE_PRODUCT`, `EXACT_PRODUCT_NAME_GROUP`, `PRODUCT_TYPE_GROUP`, or explicit `ALL`; warehouse scope is either all warehouses or one resolver-confirmed warehouse. Filters and grouping dimensions are closed enums. Product/warehouse IDs must come from resolver or user-selection state. Cross-specification totals use equivalent pieces and weight instead of inventing a common pallet scale. The backend response contains business labels and safe aggregate fields but no product, warehouse, or inventory IDs.
 
+`query_assay_records` accepts the same controlled product scopes plus `EXACT`, `LAST_DAYS`, or `RANGE` sample-date filters and closed judge statuses: `ANY`, `PASS`, `FAILED`, `NO_STANDARD`, and `MULTIPLE_CANDIDATES`. `FAILED` is mapped to the backend judge result `FAIL`. Results are paged, default to `sampleDate DESC`, and return safe business labels rather than internal assay or product IDs.
+
+`query_assay_abnormalities` uses the same controlled product scopes and sample-date filters, but only aggregates existing assay records with `FAILED`, `NO_STANDARD`, or `MULTIPLE_CANDIDATES` statuses. It does not count `NO_ASSAY`.
+
+`query_products_without_recent_assay` uses controlled product and warehouse scopes, defaults to `CURRENT_INVENTORY`, and finds current inventory groups whose product has no assay sample date in the requested range. It keeps no-assay separate from no-standard and failed-assay records.
+
+`query_assay_standard_coverage` uses controlled product scopes and finds current inventory products that do not have an effective quality standard relation. First implementation supports `PRODUCT_WITHOUT_STANDARD`; `ASSAY_WITHOUT_STANDARD` and `UNUSED_STANDARD` remain reserved until business rules are confirmed.
+
+The M1.4c lifecycle tools use these first-version semantics: printed means `production_order_label_batch.printed_at`; inbound means the output code has an inventory association, an inbound timestamp, or `INSTOCK` status. The application has no independent QR scan-log source, so `VOID_CODE_SCANNED` returns an evidence-gap note instead of an invented anomaly result.
+
 The delegated warehouse-read scope explicitly allows this exact read-only POST path. Other business POST paths remain denied. The endpoint still requires an authenticated current user and does not bypass Spring Security.
 
 ## Run with STDIO
@@ -116,7 +166,7 @@ The delegated warehouse-read scope explicitly allows this exact read-only POST p
 Run the packaged jar directly so STDOUT remains reserved for MCP protocol messages:
 
 ```powershell
-java -jar target/warehouse-mcp-0.1.0.jar
+java -jar target/warehouse-mcp-0.1.0-exec.jar
 ```
 
 STDOUT is reserved for MCP protocol messages. Application logs are written to `WAREHOUSE_MCP_LOG_FILE` or `warehouse-mcp.log`.
@@ -128,7 +178,7 @@ Use `.codex/config.toml.example` as a template after packaging:
 ```toml
 [mcp_servers.smart_warehouse]
 command = "java"
-args = ["-jar", "D:\\Laibin\\LaibinSugarInventory\\warehouse-mcp\\target\\warehouse-mcp-0.1.0.jar"]
+args = ["-jar", "D:\\Laibin\\LaibinSugarInventory\\warehouse-mcp\\target\\warehouse-mcp-0.1.0-exec.jar"]
 
 [mcp_servers.smart_warehouse.env]
 WAREHOUSE_API_BASE_URL = "http://localhost:8080"

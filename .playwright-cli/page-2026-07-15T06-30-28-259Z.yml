@@ -1,0 +1,67 @@
+- main [ref=e3]:
+  - region "系统品牌展示" [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img "数字仓储平台" [ref=e8]
+        - generic [ref=e9]: 广西糖罐子食品有限公司
+      - generic [ref=e10]:
+        - paragraph [ref=e11]: Warehouse Operation Platform
+        - heading "智能仓储管理系统" [level=1] [ref=e12]
+        - paragraph [ref=e13]: 面向仓储现场的数字化仓储作业平台，覆盖二维码追溯、库位管理与任务流转。
+      - generic "业务关键词" [ref=e14]:
+        - generic [ref=e15]: 二维码管理
+        - generic [ref=e16]: 任务流转
+        - generic [ref=e17]: 仓库平面图
+        - generic [ref=e18]: 单据与追溯
+      - generic "系统能力展示" [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e21]: 现场作业闭环
+          - strong [ref=e22]: QR Workflow
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e25]: QR
+            - generic [ref=e26]:
+              - strong [ref=e27]: 仓储二维码
+              - paragraph [ref=e28]: 一板一码，循环追溯
+          - generic [ref=e29]:
+            - generic [ref=e30]: TASK
+            - generic [ref=e31]:
+              - strong [ref=e32]: 任务流转
+              - paragraph [ref=e33]: 创建、确认、闭环记录
+          - generic [ref=e34]:
+            - generic [ref=e35]: MAP
+            - generic [ref=e36]:
+              - strong [ref=e37]: 库位平面图
+              - paragraph [ref=e38]: 现场位置可视化
+          - generic [ref=e39]:
+            - generic [ref=e40]: DOC
+            - generic [ref=e41]:
+              - strong [ref=e42]: 单据追溯
+              - paragraph [ref=e43]: 出入库全程留痕
+  - region "登录表单" [ref=e44]:
+    - generic [ref=e46]:
+      - generic [ref=e47]:
+        - img "数字仓储平台" [ref=e49]
+        - generic [ref=e50]:
+          - heading "欢迎登录" [level=2] [ref=e51]
+          - paragraph [ref=e52]: 请登录。如需注册请联系管理员
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - generic [ref=e55]: 用户名
+          - textbox "用户名" [ref=e63]:
+            - /placeholder: 请输入用户名
+            - text: __shadow_healthcheck_nonexistent__
+        - generic [ref=e64]:
+          - generic [ref=e65]: 密码
+          - generic [ref=e66]:
+            - textbox "密码" [ref=e74]:
+              - /placeholder: 请输入密码
+              - text: invalid-healthcheck
+            - generic [ref=e98]: 密码长度应为 3 到 18 个字符
+        - generic [ref=e76] [cursor=pointer]:
+          - generic [ref=e77]:
+            - checkbox "记住登录"
+          - generic [ref=e79]: 记住登录
+        - button "立即登录" [active] [ref=e80] [cursor=pointer]
+  - link "桂ICP备2025058642号-2" [ref=e83] [cursor=pointer]:
+    - /url: https://beian.miit.gov.cn/
