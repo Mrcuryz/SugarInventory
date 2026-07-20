@@ -20,6 +20,7 @@ class FastCompletionPolicy:
                 "get_assay_status": ("历史", "趋势", "最近30天", "近30天", "对比", "同时", "并且", "以及"),
                 "query_assay_records": ("趋势", "分析", "变化", "对比", "同时", "并且", "以及"),
                 "get_assay_report_detail": ("趋势", "分析", "对比", "同时", "并且", "以及"),
+                "query_pallet_tasks": ("趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
             }
         )
 
@@ -82,4 +83,6 @@ class NextActionPolicy:
     def suggestions(self, tool_name: str, safe_data: dict[str, Any]) -> list[str]:
         if tool_name == "get_inventory_overview" and safe_data.get("isEmpty") is False:
             return ["查询库存分布"]
+        if tool_name == "query_pallet_tasks" and safe_data.get("records"):
+            return ["只看入库任务", "只看出库任务", "查看第一条任务详情"]
         return []

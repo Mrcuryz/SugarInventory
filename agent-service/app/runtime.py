@@ -47,6 +47,8 @@ from app.schemas import (
     SafeInventoryDistributionResult,
     SafeInventoryLocation,
     SafeInventoryResult,
+    SafePalletTaskRecord,
+    SafePalletTaskResult,
     SafeWarehouseResult,
     UserOption,
 )
@@ -446,6 +448,14 @@ class WarehouseAgentRuntime:
         return response
 
     def _handle_message(self, request: ChatRequest, state: WarehouseAgentState, text: str) -> ChatResponse:
+        task_detail = self._task_detail_followup_response(request.agentSessionId, state, text)
+        if task_detail is not None:
+            self._attach_goal_completion(task_detail, state)
+            return task_detail
+        task_filter = self._task_filter_followup_response(request, state, text)
+        if task_filter is not None:
+            self._attach_goal_completion(task_filter, state)
+            return task_filter
         if self.planning_mode == "llm":
             self._begin_registered_goal(state, None)
             return self._handle_message_llm(request, state, text)
@@ -1098,6 +1108,13 @@ class WarehouseAgentRuntime:
                 answer = self._format_assay_records_answer(data)
             elif tool_name == "get_assay_report_detail":
                 answer = self._format_assay_report_detail_answer(data)
+            elif tool_name == "query_pallet_tasks":
+                result = SafePalletTaskResult.model_validate(data)
+                answer = self._format_pallet_tasks_answer(result)
+                suggestions = self.next_action_policy.suggestions(
+                    tool_name,
+                    result.model_dump(exclude_none=True),
+                )
         except ValueError:
             return None
         if not answer:
@@ -1375,6 +1392,11 @@ class WarehouseAgentRuntime:
             return any(word in text for word in ("库存", "库位", "仓库", "托盘", "生产订单", "煮糖"))
         if active_expert == "pallet_expert":
             return any(word in text for word in ("产品库存", "库位容量", "化验趋势", "生产订单", "煮糖", "领料"))
+        if active_expert == "logistics_expert":
+            return any(
+                word in text
+                for word in ("库存总览", "库存分布", "库位容量", "化验", "质量标准", "生产订单进度", "煮糖", "领料")
+            )
         return True
 
     def _llm_business_recovery_expert(
@@ -1485,6 +1507,32 @@ class WarehouseAgentRuntime:
                 "scopeLabel": self._safe_text(state.last_inventory_distribution.get("scopeLabel")),
                 "canonicalProducts": product_names,
             }
+        if state.last_pallet_tasks:
+            records = state.last_pallet_tasks.get("records")
+            safe_records: list[dict[str, Any]] = []
+            if isinstance(records, list):
+                for raw_record in records[:3]:
+                    record = self._dict_value(raw_record)
+                    safe_records.append(
+                        {
+                            key: record.get(key)
+                            for key in (
+                                "taskTypeLabel",
+                                "taskStatusLabel",
+                                "palletCode",
+                                "productLabel",
+                                "targetLocationLabel",
+                            )
+                            if record.get(key) is not None
+                        }
+                    )
+            context["LAST_TASK_QUERY"] = {
+                "factType": "CURRENT_PENDING_TASKS",
+                "scopeLabel": self._safe_text(state.last_pallet_tasks.get("scopeLabel")),
+                "total": state.last_pallet_tasks.get("total"),
+                "filterLabels": list(state.last_pallet_tasks.get("filterLabels") or [])[:8],
+                "records": safe_records,
+            }
         return context
 
     def _llm_safe_messages(self, state: WarehouseAgentState) -> list[dict[str, str]]:
@@ -1550,7 +1598,7 @@ class WarehouseAgentRuntime:
         """Add only obvious list breaks without imposing a rigid answer template."""
         text = value.replace("\r\n", "\n").replace("\r", "\n")
         inline_markers = re.findall(r"(?:^|[ \t]|[。！？；])\d{1,2}[.、][ \t]+", text)
-        if len(inline_markers) < 2:
+        if not inline_markers:
             return text
         text = re.sub(
             r"(?<=[。！？；])[ \t]*(?=\d{1,2}[.、][ \t]+)",
@@ -1720,6 +1768,13 @@ class WarehouseAgentRuntime:
             safe_data = report.model_dump(exclude_none=True)
             card = self._assay_report_card(report)
             cards = [card] if card is not None else []
+        elif tool_name == "query_pallet_tasks":
+            adapted_tasks = self._adapt_pallet_tasks(result, arguments)
+            safe_data = adapted_tasks.model_dump(exclude_none=True)
+            state.last_pallet_tasks = dict(safe_data)
+            state.last_pallet_task_filters = dict(arguments)
+            if adapted_tasks.records:
+                cards = [self._pallet_tasks_card(adapted_tasks)]
         else:
             safe_value = self._llm_safe_tool_data(result)
             safe_data = safe_value if isinstance(safe_value, dict) else {"value": safe_value}
@@ -2073,8 +2128,24 @@ class WarehouseAgentRuntime:
         if plan.toolName == "query_pallet_tasks":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
+            adapted = self._adapt_pallet_tasks(result, plan.arguments)
+            safe_data = adapted.model_dump(exclude_none=True)
+            state.last_pallet_tasks = dict(safe_data)
+            state.last_pallet_task_filters = dict(plan.arguments)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                safe_data=safe_data,
+            )
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_pallet_tasks_answer(result))
+            cards = [self._pallet_tasks_card(adapted)] if adapted.records else []
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_pallet_tasks_answer(adapted),
+                cards=cards,
+                suggestions=self.next_action_policy.suggestions(plan.toolName, safe_data),
+            )
         if plan.toolName == "query_stock_documents":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
@@ -4005,7 +4076,7 @@ class WarehouseAgentRuntime:
         for metric_code, value_key, metric_name in self.ASSAY_METRICS:
             actual_value = assay.get(value_key)
             standard = items_by_code.get(metric_code)
-            unit = self._safe_text(standard.get("unit")) if standard else ""
+            unit = (self._safe_text(standard.get("unit")) or "") if standard else ""
             actual_text = self._assay_scalar_text(actual_value, unit) or "未填写"
             standard_text = self._assay_standard_range_text(standard) if standard else "未配置适用标准"
             if actual_value is None or actual_value == "":
@@ -4125,17 +4196,17 @@ class WarehouseAgentRuntime:
         )
         return aliases.get(value, value)
 
-    def _assay_scalar_text(self, value: Any, unit: str = "") -> str:
+    def _assay_scalar_text(self, value: Any, unit: str | None = "") -> str:
         if value is None or value == "":
             return ""
         if isinstance(value, float) and value.is_integer():
             text = str(int(value))
         else:
             text = str(value)
-        return text + unit
+        return text + (unit or "")
 
     def _assay_standard_range_text(self, standard: dict[str, Any]) -> str:
-        unit = self._safe_text(standard.get("unit"))
+        unit = self._safe_text(standard.get("unit")) or ""
         minimum = self._assay_scalar_text(standard.get("minValue"))
         maximum = self._assay_scalar_text(standard.get("maxValue"))
         compare_type = self._safe_text(standard.get("compareType")).lower()
@@ -5149,19 +5220,387 @@ class WarehouseAgentRuntime:
         lines.append("这些记录不代表已领用或已预留，返回顺序也不是 FIFO/FEFO 推荐或质量放行结论。")
         return "".join(lines)
 
-    def _format_pallet_tasks_answer(self, result: dict[str, Any]) -> str:
+    def _adapt_pallet_tasks(
+        self,
+        result: dict[str, Any],
+        arguments: dict[str, Any] | None,
+    ) -> SafePalletTaskResult:
         source = result if isinstance(result, dict) else {}
-        records = source.get("records") if isinstance(source.get("records"), list) else []
-        total = self._first_scalar([source], "total") or 0
-        lines = [f"当前条件下共有 {total} 条托盘任务，本页返回 {len(records)} 条。"]
-        for item in records[:10]:
-            if isinstance(item, dict):
-                lines.append(f"{self._enum_label('task_type', item.get('taskType'))}任务，"
-                             f"状态为{self._enum_label('task_status', item.get('taskStatus'))}，"
-                             f"托盘 {self._safe_text(item.get('code')) or '未标明'}，"
-                             f"产品 {self._safe_text(item.get('productName')) or '未标明'}。")
-        lines.append("以上仅为只读任务记录，本次未确认、取消或执行任何入库、出库和调拨。")
-        return "".join(lines)
+        raw_records = source.get("records") if isinstance(source.get("records"), list) else []
+        records: list[SafePalletTaskRecord] = []
+        for raw_record in raw_records[:50]:
+            item = self._dict_value(raw_record)
+            task_type = self._controlled_task_label("task_type", item.get("taskType"), "任务类型未标明")
+            task_status = self._controlled_task_label("task_status", item.get("taskStatus"), "状态未标明")
+            product_name = self._safe_text(item.get("productName"))
+            product_type = self._safe_text(item.get("productType"))
+            product_label = product_name or product_type or "产品未标明"
+
+            warehouse = self._safe_text(item.get("targetWarehouseName"))
+            side = self._controlled_task_label("warehouse_side", item.get("targetSide"), "")
+            target_location = " ".join(value for value in (warehouse, side) if value) or None
+
+            weight = self._safe_text(item.get("totalWeight"))
+            if weight and not weight.lower().endswith("kg"):
+                weight = f"{weight} kg"
+            semi_item_count = self._safe_text(item.get("semiItemCount"))
+            if semi_item_count:
+                semi_item_count = f"{semi_item_count} 项半成品"
+
+            production_order = self._safe_text(item.get("productionOrderNo"))
+            production_order_status = None
+            if item.get("productionOrderStatus") is not None:
+                production_order_status = self._controlled_task_label(
+                    "production_status",
+                    item.get("productionOrderStatus"),
+                    "订单状态未标明",
+                )
+            created_summary = self._task_actor_time_summary(
+                item.get("createdBy"),
+                item.get("createdAt"),
+            )
+            confirmation_summary = self._task_actor_time_summary(
+                item.get("confirmedBy"),
+                item.get("confirmedAt"),
+            )
+            records.append(
+                SafePalletTaskRecord(
+                    taskTypeLabel=task_type,
+                    taskStatusLabel=task_status,
+                    palletCode=self._safe_text(item.get("code")) or "托盘未标明",
+                    productLabel=product_label,
+                    businessSceneLabel=(
+                        self._controlled_task_label("business_scene", item.get("bizScene"), "业务场景未标明")
+                        if item.get("bizScene") is not None else None
+                    ),
+                    productStatusLabel=self._safe_text(item.get("productStatus")),
+                    targetLocationLabel=target_location,
+                    totalWeightText=weight,
+                    productionDate=self._safe_text(item.get("productionDate")),
+                    screenMeshLabel=self._safe_text(item.get("screenMeshName")),
+                    semiItemCountText=semi_item_count,
+                    operationBatchLabel=self._safe_text(item.get("operationBatchNo")),
+                    productionOrderLabel=production_order,
+                    productionOrderStatusLabel=production_order_status,
+                    productionLabelBatchLabel=self._safe_text(item.get("productionLabelBatchNo")),
+                    createdSummary=created_summary,
+                    confirmationSummary=confirmation_summary,
+                )
+            )
+
+        filters = self._pallet_task_filter_labels(arguments or {})
+        total_value = self._first_scalar([source], "total")
+        try:
+            total = max(0, int(total_value)) if total_value is not None else len(records)
+        except (TypeError, ValueError):
+            total = len(records)
+        try:
+            page = max(1, int(self._first_scalar([source], "page") or (arguments or {}).get("page") or 1))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            size = max(1, int(self._first_scalar([source], "size") or (arguments or {}).get("size") or 20))
+        except (TypeError, ValueError):
+            size = 20
+
+        status_label = self._controlled_task_label(
+            "task_status",
+            (arguments or {}).get("status"),
+            "",
+        )
+        task_type_label = self._controlled_task_label(
+            "task_type",
+            (arguments or {}).get("taskType"),
+            "",
+        )
+        if status_label or task_type_label:
+            scope_label = f"当前{status_label}{task_type_label}任务"
+        else:
+            scope_label = "当前托盘任务"
+        return SafePalletTaskResult(
+            scopeLabel=scope_label,
+            total=total,
+            page=page,
+            size=size,
+            filterLabels=filters,
+            records=records,
+            limitations=["此次仅查询任务记录，未确认、取消或执行任何入库、出库和调拨。"],
+        )
+
+    def _pallet_task_filter_labels(self, arguments: dict[str, Any]) -> list[str]:
+        labels: list[str] = []
+        status = self._controlled_task_label("task_status", arguments.get("status"), "")
+        task_type = self._controlled_task_label("task_type", arguments.get("taskType"), "")
+        scene = self._controlled_task_label("business_scene", arguments.get("bizScene"), "")
+        if status:
+            labels.append(f"状态：{status}")
+        if task_type:
+            labels.append(f"类型：{task_type}")
+        if scene:
+            labels.append(f"业务场景：{scene}")
+        for key, prefix in (
+            ("productName", "产品"),
+            ("productType", "产品大类"),
+            ("productStatus", "产品状态"),
+            ("targetWarehouseName", "目标库位"),
+        ):
+            value = self._safe_text(arguments.get(key))
+            if value:
+                labels.append(f"{prefix}：{value}")
+        start = self._safe_text(arguments.get("productionDateStart"))
+        end = self._safe_text(arguments.get("productionDateEnd"))
+        if start or end:
+            labels.append(f"生产日期：{start or '最早'} 至 {end or '当前'}")
+        return labels
+
+    def _controlled_task_label(self, category: str, value: Any, fallback: str) -> str:
+        raw = self._safe_text(value)
+        if not raw:
+            return fallback
+        labels = {
+            "task_type": {
+                "IN": "入库", "INBOUND": "入库", "OUT": "出库", "OUTBOUND": "出库",
+                "TRANSFER": "调拨", "SEMI_IN": "半成品入库", "SEMI_OUT": "半成品出库",
+                "FINISH_IN": "成品入库", "FINISH_OUT": "成品出库",
+            },
+            "task_status": {
+                "PENDING": "待处理", "PROCESSING": "处理中", "COMPLETED": "已完成",
+                "CONFIRMED": "已确认", "CANCELED": "已取消", "CANCELLED": "已取消",
+                "FAILED": "处理失败",
+            },
+            "business_scene": {
+                "DIRECT_OUT": "半成品直接出库",
+                "PREPARE_CONSUMED": "历史生产占用",
+                "FINISH_OUT": "成品出库",
+            },
+            "warehouse_side": {"LEFT": "左侧", "RIGHT": "右侧"},
+            "production_status": {
+                "PENDING": "待处理", "WAIT_MATERIAL": "待领料", "IN_PROGRESS": "进行中",
+                "PRODUCING": "生产中", "WAIT_INBOUND": "待入库", "COMPLETED": "已完成",
+                "CANCELED": "已取消", "CANCELLED": "已取消",
+            },
+        }
+        return labels.get(category, {}).get(raw, fallback)
+
+    def _task_actor_time_summary(self, actor: Any, timestamp: Any) -> str | None:
+        actor_label = self._safe_text(actor)
+        time_label = self._safe_text(timestamp)
+        if time_label:
+            time_label = time_label.replace("T", " ")[:16]
+        if actor_label and time_label:
+            return f"{actor_label} · {time_label}"
+        return actor_label or time_label
+
+    def _pallet_tasks_card(self, result: SafePalletTaskResult) -> BusinessCard:
+        fields: list[dict[str, Any]] = []
+        for index, record in enumerate(result.records, start=1):
+            field = record.model_dump(exclude_none=True)
+            field.update(
+                {
+                    "kind": "pallet_task",
+                    "label": f"{index}. {record.taskTypeLabel}任务",
+                    "value": record.palletCode,
+                }
+            )
+            fields.append(field)
+        return BusinessCard(
+            cardType="pallet_tasks",
+            title=f"{result.scopeLabel} · 共 {result.total} 条",
+            fields=fields,
+        )
+
+    def _pallet_task_detail_card(self, record: SafePalletTaskRecord, index: int) -> BusinessCard:
+        field = record.model_dump(exclude_none=True)
+        field.update(
+            {
+                "kind": "pallet_task_detail",
+                "label": f"第 {index} 条任务",
+                "value": record.palletCode,
+            }
+        )
+        return BusinessCard(
+            cardType="pallet_task_detail",
+            title=f"{record.taskTypeLabel}任务 · {record.palletCode}",
+            fields=[field],
+        )
+
+    def _task_detail_followup_response(
+        self,
+        agent_session_id: str,
+        state: WarehouseAgentState,
+        text: str,
+    ) -> ChatResponse | None:
+        normalized = re.sub(r"\s+", "", text or "")
+        if not any(word in normalized for word in ("详情", "详细", "展开")):
+            return None
+        if "任务" not in normalized and state.active_agent != "logistics_expert":
+            return None
+        if not isinstance(state.last_pallet_tasks, dict):
+            return None
+        try:
+            result = SafePalletTaskResult.model_validate(state.last_pallet_tasks)
+        except ValueError:
+            return None
+        if not result.records:
+            return ChatResponse(
+                agentSessionId=agent_session_id,
+                answer="上一轮任务查询没有可展开的记录，请先查询任务列表。",
+                suggestions=["查询当前待处理任务"],
+            )
+
+        match = re.search(r"第?([一二三四五六七八九十\d]+)(?:条|个)", normalized)
+        if match:
+            index = self._task_ordinal(match.group(1))
+        elif len(result.records) == 1:
+            index = 1
+        else:
+            return ChatResponse(
+                agentSessionId=agent_session_id,
+                answer=f"上一轮共展示 {len(result.records)} 条任务，请告诉我要看第几条。",
+                needsUserSelection=True,
+            )
+        if index is None or index < 1 or index > len(result.records):
+            return ChatResponse(
+                agentSessionId=agent_session_id,
+                answer=f"上一轮只展示了 {len(result.records)} 条任务，请选择这个范围内的序号。",
+                needsUserSelection=True,
+            )
+        record = result.records[index - 1]
+        target = f"，目标位置为{record.targetLocationLabel}" if record.targetLocationLabel else ""
+        answer = (
+            f"第 {index} 条是{record.taskTypeLabel}任务，托盘 {record.palletCode}，"
+            f"产品为{record.productLabel}，当前状态为{record.taskStatusLabel}{target}。\n\n"
+            "具体信息见下方卡片。此次仅查看已有任务记录，没有执行或变更任务。"
+        )
+        return ChatResponse(
+            agentSessionId=agent_session_id,
+            answer=answer,
+            cards=[self._pallet_task_detail_card(record, index)],
+            reviewTrace={
+                "planningMode": "state_reuse",
+                "executionInfluence": True,
+                "stateReuse": {"source": "LAST_TASK_QUERY", "toolCalled": False},
+            },
+        )
+
+    def _task_filter_followup_response(
+        self,
+        request: ChatRequest,
+        state: WarehouseAgentState,
+        text: str,
+    ) -> ChatResponse | None:
+        normalized = re.sub(r"\s+", "", text or "")
+        if self.planning_mode != "llm" or state.active_agent != "logistics_expert":
+            return None
+        if not isinstance(state.last_pallet_task_filters, dict):
+            return None
+        prefixes = (
+            "只看", "仅看", "只查", "仅查", "筛选", "其中", "这些",
+            "再看", "再查", "换成", "改看", "全部任务", "所有任务", "清除筛选",
+        )
+        filter_words = (
+            "任务", "入库", "出库", "调拨", "半成品", "成品",
+            "待处理", "已确认", "已取消", "不限状态", "清除筛选",
+        )
+        if not normalized.startswith(prefixes) or not any(word in normalized for word in filter_words):
+            return None
+
+        arguments = self.argument_builder.validate_llm_arguments(
+            tool_name="query_pallet_tasks",
+            arguments={},
+            state=state,
+            user_message=text,
+        )
+        handoff = self.agent_router.handoff_for_agent("logistics_expert", mode="llm_delegate")
+        self.agent_router.authorize_tool(handoff.target_agent, "query_pallet_tasks")
+        state.last_agent_handoff = handoff.to_snapshot()
+        state.active_run = {
+            "traceId": request.client.traceId,
+            "sessionId": request.agentSessionId,
+            "requestId": request.client.requestId,
+            "runId": f"run_{secrets.token_hex(8)}",
+            "handoffId": f"handoff_{secrets.token_hex(8)}",
+            "startedAt": datetime.now(timezone.utc).isoformat(),
+            "planningMode": "llm_context_filter",
+        }
+        execution_context = AgentExecutionContext(
+            agent_name=handoff.target_agent,
+            allowed_tools=frozenset(handoff.allowed_tools),
+            business_domain=handoff.business_domain,
+            handoff_mode="llm_delegate",
+            handoff_id=str(state.active_run["handoffId"]),
+        )
+        with bind_execution_context(execution_context):
+            result = self._call_tool(request, "query_pallet_tasks", arguments)
+        self._raise_if_cancelled()
+        self._raise_if_tool_error_payload(result)
+        adapted = self._adapt_pallet_tasks(result, arguments)
+        safe_data = adapted.model_dump(exclude_none=True)
+        state.last_pallet_tasks = dict(safe_data)
+        state.last_pallet_task_filters = dict(arguments)
+        self._record_registered_goal_fact(
+            state=state,
+            tool_name="query_pallet_tasks",
+            arguments=arguments,
+            safe_data=safe_data,
+        )
+        self._record_tool_message(
+            state,
+            "query_pallet_tasks",
+            self._safe_tool_summary("query_pallet_tasks", result),
+        )
+        self.metrics.increment("llm_context_filter_total", tool="query_pallet_tasks")
+        cards = [self._pallet_tasks_card(adapted)] if adapted.records else []
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=self._format_pallet_tasks_answer(adapted),
+            cards=cards,
+            suggestions=self.next_action_policy.suggestions("query_pallet_tasks", safe_data),
+            reviewTrace={
+                "planningMode": "llm",
+                "executionInfluence": True,
+                "mainRouteOptimization": {
+                    "status": "BOUNDED_CONTEXT_FILTER",
+                    "expertAgent": "logistics_expert",
+                    "modelCallSkipped": True,
+                },
+            },
+        )
+
+    @staticmethod
+    def _task_ordinal(value: str) -> int | None:
+        if value.isdigit():
+            return int(value)
+        labels = {
+            "一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+            "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+        }
+        return labels.get(value)
+
+    def _format_pallet_tasks_answer(self, result: SafePalletTaskResult) -> str:
+        filter_text = "；".join(result.filterLabels) if result.filterLabels else "无额外筛选"
+        limitation = result.limitations[0] if result.limitations else "此次仅查询任务记录，没有执行或变更任务。"
+        if not result.records:
+            return (
+                f"{result.scopeLabel}中没有查询到符合条件的记录。\n\n"
+                f"筛选条件：{filter_text}。\n\n"
+                f"{limitation}"
+            )
+
+        counts: dict[str, int] = {}
+        for record in result.records:
+            counts[record.taskTypeLabel] = counts.get(record.taskTypeLabel, 0) + 1
+        composition = "、".join(f"{label} {count} 条" for label, count in counts.items())
+        lines = [
+            f"{result.scopeLabel}共有 {result.total} 条，本页展示 {len(result.records)} 条。",
+            "",
+            f"任务构成：{composition}。",
+            f"筛选条件：{filter_text}。",
+            "",
+            "具体托盘、产品、目标库位和任务状态见下方卡片。",
+            limitation,
+        ]
+        return "\n".join(lines)
 
     def _format_stock_documents_answer(self, result: dict[str, Any]) -> str:
         source = result if isinstance(result, dict) else {}
@@ -5417,7 +5856,7 @@ class WarehouseAgentRuntime:
             },
             "task_status": {
                 "PENDING": "待处理", "PROCESSING": "处理中", "COMPLETED": "已完成",
-                "CONFIRMED": "已确认", "CANCELLED": "已取消", "FAILED": "处理失败",
+                "CONFIRMED": "已确认", "CANCELED": "已取消", "CANCELLED": "已取消", "FAILED": "处理失败",
             },
             "qr_status": {
                 "FREE": "空闲、可使用", "BOUND": "已绑定", "ACTIVE": "已启用",

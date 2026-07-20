@@ -21,6 +21,7 @@ COUNTERS = (
     "model_decision_total",
     "llm_safe_fallback_total",
     "llm_fast_completion_total",
+    "llm_context_filter_total",
 )
 
 HISTOGRAMS = (

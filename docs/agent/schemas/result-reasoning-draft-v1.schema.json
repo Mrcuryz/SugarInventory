@@ -11,13 +11,13 @@
     "answeredUserGoal": {"title": "Answeredusergoal", "type": "boolean"},
     "evidenceRefs": {"items": {"type": "string"}, "maxItems": 20, "title": "Evidencerefs", "type": "array"},
     "missingFacts": {
-      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "PRODUCT_LATEST_ASSAY", "WAREHOUSE_STATUS", "ENTITY_RESOLUTION"], "type": "string"},
+      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "PRODUCT_LATEST_ASSAY", "WAREHOUSE_STATUS", "CURRENT_PENDING_TASKS", "ENTITY_RESOLUTION"], "type": "string"},
       "maxItems": 10,
       "title": "Missingfacts",
       "type": "array"
     },
     "failedFacts": {
-      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "PRODUCT_LATEST_ASSAY", "WAREHOUSE_STATUS", "ENTITY_RESOLUTION"], "type": "string"},
+      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "PRODUCT_LATEST_ASSAY", "WAREHOUSE_STATUS", "CURRENT_PENDING_TASKS", "ENTITY_RESOLUTION"], "type": "string"},
       "maxItems": 10,
       "title": "Failedfacts",
       "type": "array"

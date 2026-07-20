@@ -13,7 +13,9 @@ import {
 } from '@/api/agent'
 import { useAuthStore } from '@/stores/auth'
 import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
+import PalletTaskBatchDialog from '@/components/agent/PalletTaskBatchDialog.vue'
 import { cleanOptionLabel } from '@/components/agent/agentDisplay'
+import { applyTaskBatchCompletion } from '@/components/agent/taskCardPresentation.mjs'
 
 const visible = ref(false)
 const router = useRouter()
@@ -27,7 +29,14 @@ const scrollRef = ref(null)
 const pendingSelection = ref(null)
 const debugMode = ref(false)
 const shadowCompareMode = import.meta.env.VITE_AGENT_SHADOW_COMPARE === 'true'
+const composerAutosize = Object.freeze({ minRows: 1, maxRows: 3 })
 const authStore = useAuthStore()
+const taskBatchDialog = reactive({
+  visible: false,
+  batchAction: '',
+  taskGroupLabel: '',
+  palletCodes: []
+})
 let activeStreamController = null
 let activeAssistantMessage = null
 
@@ -537,16 +546,37 @@ const scrollToBottom = async () => {
 
 defineExpose({ open })
 const handleCardAction = async (action) => {
-  if (action?.actionKind !== 'create_assay') return
-  await router.push({
-    path: '/assay',
-    query: {
-      create: '1',
-      productName: action.productName || '',
-      sampleDate: action.sampleDate || ''
+  if (action?.actionKind === 'create_assay') {
+    await router.push({
+      path: '/assay',
+      query: {
+        create: '1',
+        productName: action.productName || '',
+        sampleDate: action.sampleDate || ''
+      }
+    })
+    suspendAssistant()
+    return
+  }
+  if (action?.actionKind === 'open_task_batch') {
+    const supportedActions = new Set(['confirmIn', 'semiOutConfirm', 'finishOutConfirm', 'transferConfirm'])
+    const palletCodes = [...new Set((action.palletCodes || []).map(code => String(code || '').trim()).filter(Boolean))]
+    if (!supportedActions.has(action.batchAction) || !palletCodes.length) {
+      ElMessage.warning('当前选择无法进入批量处理，请重新选择任务')
+      return
     }
+    taskBatchDialog.batchAction = action.batchAction
+    taskBatchDialog.taskGroupLabel = action.taskGroupLabel || '任务'
+    taskBatchDialog.palletCodes = palletCodes
+    taskBatchDialog.visible = true
+  }
+}
+
+const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
+  messages.value.forEach(message => {
+    if (!Array.isArray(message.cards)) return
+    message.cards = message.cards.map(card => applyTaskBatchCompletion(card, palletCodes).card)
   })
-  suspendAssistant()
 }
 </script>
 
@@ -620,13 +650,13 @@ const handleCardAction = async (action) => {
         <el-input
           v-model="input"
           type="textarea"
-          :rows="3"
+          :autosize="composerAutosize"
           maxlength="500"
-          show-word-limit
-          placeholder="例如：查黄冰糖（袋）库存，或问这些主要放在哪些库位"
+          placeholder="询问库存、库位、托盘或化验…"
           @keydown="handleComposerKeydown"
         />
         <div class="composer-actions">
+          <span class="composer-count">{{ input.length }} / 500</span>
           <button type="button" class="plain-action" @click="suspendAssistant">收起</button>
           <button type="button" class="plain-action danger-action" @click="closeSession">结束会话</button>
           <button v-if="sending" type="button" class="plain-action" :disabled="cancelling" @click="cancelStream">
@@ -640,6 +670,13 @@ const handleCardAction = async (action) => {
       </div>
     </div>
   </el-drawer>
+  <PalletTaskBatchDialog
+    v-model="taskBatchDialog.visible"
+    :batch-action="taskBatchDialog.batchAction"
+    :task-group-label="taskBatchDialog.taskGroupLabel"
+    :pallet-codes="taskBatchDialog.palletCodes"
+    @completed="handleTaskBatchCompleted"
+  />
 </template>
 
 <style scoped lang="scss">
@@ -874,14 +911,16 @@ const handleCardAction = async (action) => {
 }
 
 .composer :deep(.el-textarea__inner) {
-  min-height: 82px !important;
-  padding: 11px 12px 24px;
+  min-height: 42px !important;
+  max-height: 82px !important;
+  padding: 9px 12px;
   border: 1px solid #dfe7f4;
   border-radius: 10px;
   background: #fbfcff;
   box-shadow: none;
   color: var(--app-text);
-  line-height: 1.5;
+  line-height: 22px;
+  overflow-y: auto !important;
   resize: none;
 
   &:focus {
@@ -890,18 +929,20 @@ const handleCardAction = async (action) => {
   }
 }
 
-.composer :deep(.el-input__count) {
-  right: 10px;
-  bottom: 5px;
-  background: transparent;
-  color: #98a2b3;
-}
-
 .composer-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 11px;
+  margin-top: 9px;
+}
+
+.composer-count {
+  margin-right: auto;
+  color: #98a2b3;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .plain-action,

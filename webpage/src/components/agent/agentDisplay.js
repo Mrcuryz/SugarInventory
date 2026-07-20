@@ -37,6 +37,12 @@ export const visibleCards = (item) => (item?.cards || []).filter(card => card?.c
 export const isDistributionCard = (card) => card?.cardType === 'inventory_distribution'
 export const hasDistributionCard = (item) => visibleCards(item).some(card => isDistributionCard(card))
 export const hasWideBusinessCard = (item) => visibleCards(item)
-  .some(card => ['inventory_distribution', 'assay_report', 'assay_history'].includes(card?.cardType))
+  .some(card => [
+    'inventory_distribution',
+    'assay_report',
+    'assay_history',
+    'pallet_tasks',
+    'pallet_task_detail'
+  ].includes(card?.cardType))
 export const distributionRows = (card) => (card?.fields || []).filter(field => field?.kind !== 'risk_summary')
 export const distributionRiskSummary = (card) => (card?.fields || []).find(field => field?.kind === 'risk_summary')?.value

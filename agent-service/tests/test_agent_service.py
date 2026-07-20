@@ -2798,6 +2798,30 @@ def test_stream_emits_real_tool_stage_before_blocked_tool_finishes() -> None:
     assert remaining[-1]["payload"]["finishReason"] == "completed"
 
 
+def test_stream_logs_unhandled_runtime_exception_without_exposing_details_to_user(caplog: pytest.LogCaptureFixture) -> None:
+    request = ChatRequest.model_validate(chat_payload("查询化验"))
+
+    def failing_handler(_: ChatRequest) -> ChatResponse:
+        raise TypeError("internal rendering detail")
+
+    with caplog.at_level("ERROR", logger="app.streaming"):
+        events = parse_sse_events(
+            "".join(
+                sse_for_request(
+                    request,
+                    failing_handler,
+                    lambda _: ChatResponse(agentSessionId="agt_unused", answer="unused"),
+                )
+            )
+        )
+
+    error_event = next(event for event in events if event["type"] == "error")
+    assert error_event["payload"]["message"] == "AI 助手暂时不可用，请稍后重试。"
+    assert "internal rendering detail" not in json.dumps(events, ensure_ascii=False)
+    assert "Unhandled exception while streaming agent response" in caplog.text
+    assert "internal rendering detail" in caplog.text
+
+
 def test_security_negative_request_does_not_generate_interrupt() -> None:
     app = create_app(Settings(tool_mode="mock"), tool_client=MockToolClient(), checkpointer=InMemoryCheckpointer())
     response = TestClient(app).post(
@@ -3461,6 +3485,7 @@ def test_model_answer_layout_breaks_obvious_inline_numbered_list_without_forcing
     formatted = runtime._sanitize_llm_answer(
         "最近180天共有3条记录。1. 2026-07-17，合格 2. 2026-07-14，暂无法判定 3. 2026-04-23，暂无法判定"
     )
+    single_item = runtime._sanitize_llm_answer("最近30天共有1条记录。1. 2026-07-17，合格")
     plain = runtime._sanitize_llm_answer("黄冰糖（袋）今天的化验结果合格。")
 
     assert formatted == (
@@ -3469,6 +3494,7 @@ def test_model_answer_layout_breaks_obvious_inline_numbered_list_without_forcing
         "2. 2026-07-14，暂无法判定\n"
         "3. 2026-04-23，暂无法判定"
     )
+    assert single_item == "最近30天共有1条记录。\n\n1. 2026-07-17，合格"
     assert plain == "黄冰糖（袋）今天的化验结果合格。"
 
 
@@ -3567,7 +3593,7 @@ def test_assay_status_links_canonical_dry_weight_loss_and_ph_standard_codes() ->
                                 "metricCode": "ph",
                                 "minValue": 6,
                                 "maxValue": 9,
-                                "unit": "",
+                                "unit": None,
                                 "compareType": "range",
                             },
                         ]
@@ -4049,7 +4075,9 @@ def test_pending_outbound_tasks_route_to_logistics_expert_without_execution() ->
     assert tool_client.calls[0]["arguments"]["taskType"] == "OUT"
     assert tool_client.calls[0]["arguments"]["status"] == "PENDING"
     assert "出库任务" in response.json()["answer"]
-    assert "状态为待处理" in response.json()["answer"]
+    assert "筛选条件：状态：待处理；类型：出库" in response.json()["answer"]
+    assert response.json()["cards"][0]["cardType"] == "pallet_tasks"
+    assert response.json()["cards"][0]["fields"][0]["taskStatusLabel"] == "待处理"
     assert "OUT" not in response.json()["answer"]
     assert "PENDING" not in response.json()["answer"]
 

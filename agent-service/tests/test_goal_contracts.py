@@ -18,11 +18,12 @@ from app.state_store import InMemoryCheckpointer, deserialize_state, serialize_s
 from app.tools.client import MockToolClient
 
 
-def test_only_three_core_goal_contracts_are_registered() -> None:
+def test_four_core_goal_contracts_are_registered() -> None:
     assert set(GOAL_CONTRACTS) == {
         "CURRENT_PRODUCT_INVENTORY",
         "PRODUCT_INVENTORY_DISTRIBUTION",
         "WAREHOUSE_INVENTORY_DISTRIBUTION",
+        "CURRENT_PENDING_TASKS",
     }
 
 
@@ -45,6 +46,36 @@ def test_goal_mapping_distinguishes_product_and_warehouse_distribution() -> None
         },
         intent="inventory_distribution",
     ) == "WAREHOUSE_INVENTORY_DISTRIBUTION"
+
+
+def test_pending_task_goal_mapping_and_no_data_completion() -> None:
+    assert registered_goal_for_plan(
+        tool_name="query_pallet_tasks",
+        arguments={"status": "PENDING", "page": 1, "size": 20},
+        intent="pallet_tasks",
+    ) == "CURRENT_PENDING_TASKS"
+    fact = build_fact_envelope(
+        goal_type="CURRENT_PENDING_TASKS",
+        tool_name="query_pallet_tasks",
+        arguments={"status": "PENDING", "page": 1, "size": 20},
+        safe_data={
+            "scopeLabel": "当前待处理任务",
+            "total": 0,
+            "page": 1,
+            "size": 20,
+            "records": [],
+        },
+        entity_contexts={},
+    )
+
+    completion = GoalCompletionEvaluator().evaluate(
+        goal_type="CURRENT_PENDING_TASKS",
+        entity_contexts={},
+        facts=[fact],
+    )
+
+    assert fact.status == "NO_DATA"
+    assert completion.status == "COMPLETE"
 
 
 def test_no_data_is_a_complete_authoritative_inventory_answer() -> None:

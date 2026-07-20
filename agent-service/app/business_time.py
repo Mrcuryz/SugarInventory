@@ -91,6 +91,10 @@ class BusinessClock:
         if any(marker in text for marker in ("今天", "今日", "当天")):
             return BusinessDateRange("今天", today, today)
 
+        explicit_date = self._resolve_explicit_date(text, today)
+        if explicit_date is not None:
+            return explicit_date
+
         rolling_match = re.search(
             r"(?:最近|近|过去)([0-9零〇一二两三四五六七八九十百]{1,6})天",
             text,
@@ -129,6 +133,33 @@ class BusinessClock:
             return BusinessDateRange("去年", date(today.year - 1, 1, 1), date(today.year - 1, 12, 31))
         if any(marker in text for marker in ("今年", "本年", "本年度")):
             return BusinessDateRange("今年", date(today.year, 1, 1), today)
+        return None
+
+    @staticmethod
+    def _resolve_explicit_date(text: str, today: date) -> BusinessDateRange | None:
+        patterns = (
+            re.compile(
+                r"(?<!\d)(?:(?P<year>20\d{2})年)?"
+                r"(?P<month>0?[1-9]|1[0-2])月"
+                r"(?P<day>0?[1-9]|[12]\d|3[01])(?:日|号)"
+            ),
+            re.compile(
+                r"(?<!\d)(?P<year>20\d{2})[-/.]"
+                r"(?P<month>0?[1-9]|1[0-2])[-/.]"
+                r"(?P<day>0?[1-9]|[12]\d|3[01])(?!\d)"
+            ),
+        )
+        for pattern in patterns:
+            for match in pattern.finditer(text):
+                try:
+                    target = date(
+                        int(match.group("year") or today.year),
+                        int(match.group("month")),
+                        int(match.group("day")),
+                    )
+                except ValueError:
+                    continue
+                return BusinessDateRange(match.group(0), target, target)
         return None
 
     def normalize_tool_arguments(

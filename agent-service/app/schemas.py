@@ -11,6 +11,7 @@ EntityTypeV1 = Literal[
     "PRODUCTION_ORDER",
     "BOILING_BATCH",
     "PALLET",
+    "PALLET_TASK",
     "ASSAY_RECORD",
 ]
 
@@ -36,6 +37,7 @@ class GoalDraftV1(BaseModel):
         "PRODUCT_INVENTORY_DISTRIBUTION",
         "WAREHOUSE_INVENTORY_DISTRIBUTION",
         "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY",
+        "CURRENT_PENDING_TASKS",
         "OUT_OF_SLICE",
         "UNSUPPORTED",
         "UNCLEAR",
@@ -63,6 +65,7 @@ FactTypeV1 = Literal[
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
     "PRODUCT_LATEST_ASSAY",
     "WAREHOUSE_STATUS",
+    "CURRENT_PENDING_TASKS",
     "ENTITY_RESOLUTION",
 ]
 
@@ -473,6 +476,44 @@ class SafeAssayReport(BaseModel):
     standardLabel: str
     metrics: list[SafeAssayMetric] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+class SafePalletTaskRecord(BaseModel):
+    """One display-safe pallet task; raw status enums and database IDs are excluded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    taskTypeLabel: str
+    taskStatusLabel: str
+    palletCode: str
+    productLabel: str
+    businessSceneLabel: str | None = None
+    productStatusLabel: str | None = None
+    targetLocationLabel: str | None = None
+    totalWeightText: str | None = None
+    productionDate: str | None = None
+    screenMeshLabel: str | None = None
+    semiItemCountText: str | None = None
+    operationBatchLabel: str | None = None
+    productionOrderLabel: str | None = None
+    productionOrderStatusLabel: str | None = None
+    productionLabelBatchLabel: str | None = None
+    createdSummary: str | None = None
+    confirmationSummary: str | None = None
+
+
+class SafePalletTaskResult(BaseModel):
+    """Display-safe task page and its user-facing filter summary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scopeLabel: str
+    total: int
+    page: int
+    size: int
+    filterLabels: list[str] = Field(default_factory=list)
+    records: list[SafePalletTaskRecord] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):

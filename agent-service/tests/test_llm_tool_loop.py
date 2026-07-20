@@ -97,7 +97,12 @@ def runtime_for(
     model: ScriptedLlmModel,
     tool_client: MockToolClient,
     checkpointer: InMemoryCheckpointer | None = None,
-    allowed_experts: tuple[str, ...] = ("inventory_expert", "warehouse_expert", "assay_expert"),
+    allowed_experts: tuple[str, ...] = (
+        "inventory_expert",
+        "warehouse_expert",
+        "assay_expert",
+        "logistics_expert",
+    ),
 ) -> tuple[WarehouseAgentRuntime, InMemoryCheckpointer]:
     store = checkpointer or InMemoryCheckpointer()
     builder = ToolArgumentBuilder(model_client=model)
@@ -124,6 +129,7 @@ def test_llm_planning_mode_is_disabled_by_default(monkeypatch: pytest.MonkeyPatc
 
 def test_pallet_expert_remains_outside_default_llm_pilot_scope() -> None:
     assert "pallet_expert" not in Settings().llm_allowed_experts
+    assert "logistics_expert" in Settings().llm_allowed_experts
 
 
 def test_llm_limits_are_hard_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1101,3 +1107,68 @@ def test_llm_stream_uses_expert_final_answer_without_second_model_call(
     assert "需要我帮你查库存分布吗" in response.text
     assert len(model.expert_requests) == 2
     assert model.stream_call_count == 0
+
+
+def test_llm_pending_task_journey_keeps_filters_and_reuses_safe_detail_without_tool_call() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert")],
+        [
+            call("query_pallet_tasks", {"status": "PENDING", "page": 1, "size": 20}),
+            call("query_pallet_tasks", {"taskType": "OUT", "page": 1, "size": 20}),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "query_pallet_tasks": {
+                "dataScope": "CURRENT_PALLET_TASKS",
+                "total": 1,
+                "page": 1,
+                "size": 20,
+                "records": [
+                    {
+                        "id": 987,
+                        "taskType": "FINISH_IN",
+                        "taskStatus": "PENDING",
+                        "code": "BT00161C",
+                        "operationBatchNo": "OP-20260720-01",
+                        "targetWarehouseName": "2号库位",
+                        "targetSide": "LEFT",
+                        "productName": "黄冰糖（袋） 25kg/件 40件/板",
+                        "productStatus": "成品",
+                        "totalWeight": 1000,
+                        "productionDate": "2026-07-20",
+                        "productionOrderNo": "PO-001",
+                        "productionOrderStatus": "WAIT_INBOUND",
+                        "createdBy": "仓管员",
+                        "createdAt": "2026-07-20T09:30:00",
+                    }
+                ],
+            }
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+
+    first = runtime.chat(chat_request("查询当前待处理任务"))
+    second = runtime.chat(chat_request("只看出库任务"))
+    detail = runtime.chat(chat_request("查看第一条任务详情"))
+
+    assert first.error is None
+    assert first.cards[0].cardType == "pallet_tasks"
+    assert "PENDING" not in first.answer
+    assert "FINISH_IN" not in json.dumps(first.cards[0].model_dump(), ensure_ascii=False)
+    assert second.error is None
+    assert tools.calls[1]["arguments"]["status"] == "PENDING"
+    assert tools.calls[1]["arguments"]["taskType"] == "OUT"
+    assert second.reviewTrace["mainRouteOptimization"]["modelCallSkipped"] is True
+    assert detail.cards[0].cardType == "pallet_task_detail"
+    assert "2号库位 左侧" in detail.answer
+    assert detail.reviewTrace["stateReuse"]["toolCalled"] is False
+    assert len(tools.calls) == 2
+    assert len(model.expert_requests) == 1
+    assert runtime.metrics.snapshot()["counters"][
+        'llm_context_filter_total{tool="query_pallet_tasks"}'
+    ] == 1
+    state = store.get("agt_llm")
+    assert state.active_goal_type == "CURRENT_PENDING_TASKS"
+    assert state.last_goal_completion is not None
+    assert state.last_goal_completion["status"] == "COMPLETE"

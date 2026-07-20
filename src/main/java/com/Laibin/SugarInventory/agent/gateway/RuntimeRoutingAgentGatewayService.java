@@ -609,7 +609,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         event.put("agentSessionId", session.getAgentSessionId());
         event.put("type", type);
         event.put("sequence", source.getSequence());
-        event.put("payload", safeJsonValue(source.getPayload()));
+        event.put("payload", safeStreamPayload(type, source.getPayload()));
         recordInterruptEvent(activeStream, source, session);
         activeStream.observe(source);
         activeStream.updateSequence(source.getSequence());
@@ -763,6 +763,25 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             return Map.of();
         }
         return safeObjectValue(objectMapper.convertValue(node, Object.class));
+    }
+
+    private Object safeStreamPayload(String type, JsonNode node) {
+        if (!"text_delta".equals(type)) {
+            return safeJsonValue(node);
+        }
+        if (node == null || !node.isObject() || !node.path("text").isTextual()) {
+            return Map.of();
+        }
+        String text = safeStreamText(node.path("text").asText());
+        return text == null ? Map.of() : Map.of("text", text);
+    }
+
+    private String safeStreamText(String value) {
+        if (value == null || value.isEmpty() || value.length() > 2000 || INTERNAL_TEXT.matcher(value).find()) {
+            return null;
+        }
+        String safe = value.replaceAll("(?m)^\\s*at\\s+.+$", "");
+        return safe.isEmpty() ? null : safe;
     }
 
     private Object safeObjectValue(Object value) {

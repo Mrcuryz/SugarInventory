@@ -633,6 +633,12 @@ class ToolArgumentBuilder:
         self._reject_model_generated_ids(arguments)
         self._reject_display_label_execution(tool_name, arguments, state, user_message)
         materialized = self._materialize_state_refs(arguments, state)
+        if tool_name == "query_pallet_tasks":
+            materialized = self._pallet_task_followup_arguments(
+                materialized,
+                state,
+                user_message,
+            )
         materialized = self.business_clock.normalize_tool_arguments(
             tool_name,
             materialized,
@@ -2300,6 +2306,52 @@ class ToolArgumentBuilder:
         result["reportRef"] = report_ref
         result.setdefault("includeMetrics", True)
         result.setdefault("includeStandardSnapshot", True)
+        return result
+
+    def _pallet_task_followup_arguments(
+        self,
+        arguments: dict[str, Any],
+        state: WarehouseAgentState,
+        user_message: str,
+    ) -> dict[str, Any]:
+        result = dict(arguments)
+        text = re.sub(r"\s+", "", user_message or "")
+        reset_scope = any(marker in text for marker in ("全部任务", "所有任务", "不限状态", "清除筛选"))
+        is_followup = text.startswith(("只看", "仅看", "只查", "仅查", "筛选", "其中", "这些", "再看", "再查", "换成", "改看"))
+        previous = state.last_pallet_task_filters if isinstance(state.last_pallet_task_filters, dict) else {}
+        if is_followup and previous and not reset_scope:
+            for key in (
+                "status", "taskType", "bizScene", "productName", "productType", "productStatus",
+                "targetWarehouseName", "productionDateStart", "productionDateEnd", "size",
+            ):
+                if key in previous:
+                    result.setdefault(key, previous[key])
+
+        if "待处理" in text:
+            result["status"] = "PENDING"
+        elif "已确认" in text:
+            result["status"] = "CONFIRMED"
+        elif "已取消" in text:
+            result["status"] = "CANCELED"
+        elif reset_scope:
+            result.pop("status", None)
+
+        if "半成品入库" in text:
+            result["taskType"] = "SEMI_IN"
+        elif "成品入库" in text:
+            result["taskType"] = "FINISH_IN"
+        elif "调拨" in text:
+            result["taskType"] = "TRANSFER"
+        elif "出库" in text:
+            result["taskType"] = "OUT"
+        elif "入库" in text:
+            result["taskType"] = "IN"
+
+        if "半成品" in text:
+            result["productStatus"] = "半成品"
+        elif "成品" in text:
+            result["productStatus"] = "成品"
+        result["page"] = 1
         return result
 
     def _assay_records_arguments(

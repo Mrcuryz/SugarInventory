@@ -19,6 +19,7 @@ class ContextBuilder:
     PRODUCT_KEYWORDS = ("产品", "库存", "冰糖", "白砂糖", "糖")
     PALLET_KEYWORDS = ("托盘", "托盘码", "二维码")
     ASSAY_KEYWORDS = ("化验", "质检", "合格", "不合格")
+    TASK_KEYWORDS = ("任务", "待处理", "已确认", "已取消", "调拨")
 
     def build(self, message: str, state: WarehouseAgentState) -> list[DomainContextPack]:
         packs: list[DomainContextPack] = []
@@ -31,6 +32,8 @@ class ContextBuilder:
             packs.append(self._pallet_pack())
         if any(keyword in message for keyword in self.ASSAY_KEYWORDS):
             packs.append(self._assay_pack())
+        if any(keyword in message for keyword in self.TASK_KEYWORDS):
+            packs.append(self._task_pack())
         if state.selected_product is not None:
             packs.append(
                 DomainContextPack(
@@ -131,5 +134,16 @@ class ContextBuilder:
                 "单产品/单日期化验查询使用 get_assay_status。",
                 "如果用户说“它今天有没有化验”，并且 structured state 有 selected_product，可以使用该产品和今天日期。",
                 "批量趋势分析和导出尚未开放安全工具，应说明能力缺口。",
+            ],
+        )
+
+    def _task_pack(self) -> DomainContextPack:
+        return DomainContextPack(
+            name="pallet_tasks",
+            triggerReason="message contains pallet task semantics",
+            instructions=[
+                "任务查询使用 query_pallet_tasks，只允许读取当前任务记录。",
+                "待处理、已确认、已取消必须映射为受控状态过滤，不能把查询解释为执行任务。",
+                "多个任务应先给摘要，再通过可展开卡片展示安全详情。",
             ],
         )

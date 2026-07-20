@@ -23,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -104,6 +105,21 @@ class RuntimeRoutingAgentGatewayServiceTest {
         ArgumentCaptor<AgentToolAuditDTO> auditCaptor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
         verify(sessionService).recordToolAudit(eq("agt_001"), eq(2), auditCaptor.capture());
         assertThat(auditCaptor.getValue().getMessageId()).isEqualTo(forwarded.getMessageId());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void textDeltaSanitizationPreservesParagraphAndListBreaks() throws Exception {
+        String text = "查询摘要。\n\n1. 第一项\n2. 第二项\n";
+        Object safePayload = ReflectionTestUtils.invokeMethod(
+                gateway,
+                "safeStreamPayload",
+                "text_delta",
+                new ObjectMapper().readTree("{\"text\":\"查询摘要。\\n\\n1. 第一项\\n2. 第二项\\n\"}")
+        );
+
+        assertThat(safePayload).isInstanceOf(Map.class);
+        assertThat((Map<String, Object>) safePayload).containsEntry("text", text);
     }
 
     @Test

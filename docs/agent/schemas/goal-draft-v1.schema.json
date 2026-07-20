@@ -5,7 +5,7 @@
       "description": "A non-authoritative entity mention produced by the model.",
       "properties": {
         "entityType": {
-          "enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "ASSAY_RECORD"],
+          "enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "PALLET_TASK", "ASSAY_RECORD"],
           "title": "Entitytype",
           "type": "string"
         },
@@ -36,6 +36,7 @@
         "PRODUCT_INVENTORY_DISTRIBUTION",
         "WAREHOUSE_INVENTORY_DISTRIBUTION",
         "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY",
+        "CURRENT_PENDING_TASKS",
         "OUT_OF_SLICE",
         "UNSUPPORTED",
         "UNCLEAR"
@@ -51,13 +52,13 @@
       "type": "array"
     },
     "contextReuse": {
-      "items": {"enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "ASSAY_RECORD"], "type": "string"},
+      "items": {"enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "PALLET_TASK", "ASSAY_RECORD"], "type": "string"},
       "maxItems": 6,
       "title": "Contextreuse",
       "type": "array"
     },
     "missingEntities": {
-      "items": {"enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "ASSAY_RECORD"], "type": "string"},
+      "items": {"enum": ["PRODUCT", "WAREHOUSE", "PRODUCTION_ORDER", "BOILING_BATCH", "PALLET", "PALLET_TASK", "ASSAY_RECORD"], "type": "string"},
       "maxItems": 6,
       "title": "Missingentities",
       "type": "array"

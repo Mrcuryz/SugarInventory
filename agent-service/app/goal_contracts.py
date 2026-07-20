@@ -14,11 +14,13 @@ CoreGoalTypeV1 = Literal[
     "CURRENT_PRODUCT_INVENTORY",
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
+    "CURRENT_PENDING_TASKS",
 ]
 CoreFactTypeV1 = Literal[
     "CURRENT_PRODUCT_INVENTORY",
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
+    "CURRENT_PENDING_TASKS",
 ]
 FactStatusV1 = Literal["AVAILABLE", "NO_DATA", "INVALID", "TOOL_ERROR"]
 CompletionStatusV1 = Literal[
@@ -35,7 +37,7 @@ class GoalContractV1(BaseModel):
 
     schemaVersion: Literal["1.0"] = "1.0"
     goalType: CoreGoalTypeV1
-    requiredEntityTypes: tuple[Literal["PRODUCT", "WAREHOUSE"], ...]
+    requiredEntityTypes: tuple[Literal["PRODUCT", "WAREHOUSE", "PALLET_TASK"], ...]
     requiredFactTypes: tuple[CoreFactTypeV1, ...]
     allowedTools: tuple[str, ...]
     completionPolicy: Literal["ALL_REQUIRED_FACTS"] = "ALL_REQUIRED_FACTS"
@@ -93,6 +95,13 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         allowedTools=("resolve_warehouses", "get_inventory_distribution"),
         limitations=("库位库存只表达当前库存，不自动包含批次化验结论。",),
     ),
+    "CURRENT_PENDING_TASKS": GoalContractV1(
+        goalType="CURRENT_PENDING_TASKS",
+        requiredEntityTypes=(),
+        requiredFactTypes=("CURRENT_PENDING_TASKS",),
+        allowedTools=("query_pallet_tasks",),
+        limitations=("任务查询只展示当前任务记录，不代表任务已执行。",),
+    ),
 }
 
 
@@ -126,6 +135,8 @@ def registered_goal_for_plan(
             "PRODUCT_TYPE_GROUP",
         }:
             return "PRODUCT_INVENTORY_DISTRIBUTION"
+    if tool_name == "query_pallet_tasks" and str(arguments.get("status") or "").upper() == "PENDING":
+        return "CURRENT_PENDING_TASKS"
     return None
 
 
@@ -250,6 +261,14 @@ def _fact_status(
             return "INVALID", ["库存总览事实缺少 isEmpty 字段。"]
         return ("NO_DATA" if data.get("isEmpty") is True else "AVAILABLE"), []
 
+    if goal_type == "CURRENT_PENDING_TASKS":
+        required = {"scopeLabel", "total", "page", "size", "records"}
+        missing = sorted(required.difference(data))
+        if missing or not isinstance(data.get("records"), list):
+            detail = ",".join(missing) if missing else "records"
+            return "INVALID", [f"待处理任务事实缺少字段：{detail}。"]
+        return ("NO_DATA" if not data.get("records") else "AVAILABLE"), []
+
     if "groupBy" in data and isinstance(data.get("groups"), list):
         required = {"scopeLabel", "totalEquivalentPieces", "groupBy", "groups"}
         missing = sorted(required.difference(data))
@@ -276,6 +295,10 @@ def _safe_scope(arguments: dict[str, Any]) -> dict[str, str]:
     group_by = arguments.get("groupBy")
     if isinstance(group_by, str):
         scope["groupBy"] = group_by
+    for key in ("status", "taskType", "productStatus"):
+        value = arguments.get(key)
+        if isinstance(value, str):
+            scope[key] = value
     return scope
 
 

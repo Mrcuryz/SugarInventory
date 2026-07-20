@@ -29,6 +29,9 @@ def fixed_clock() -> BusinessClock:
         ("查询上季度的化验", "2026-04-01", "2026-06-30"),
         ("查询最近三十天的化验", "2026-06-18", "2026-07-17"),
         ("查询今年的化验", "2026-01-01", "2026-07-17"),
+        ("查询黄冰糖（袋）7月17日的化验情况", "2026-07-17", "2026-07-17"),
+        ("查询黄冰糖（袋）2026年7月16号的化验情况", "2026-07-16", "2026-07-16"),
+        ("查询黄冰糖（袋）2026/07/15的化验情况", "2026-07-15", "2026-07-15"),
     ],
 )
 def test_resolves_relative_dates_in_beijing_time(
@@ -91,6 +94,32 @@ def test_runtime_overrides_model_stale_today_before_assay_tool_call() -> None:
         },
         state=state,
         user_message="查询黄冰糖（袋）今天的化验情况",
+    )
+
+    assert validated == {"productId": 84, "productionDate": "2026-07-17"}
+
+
+def test_runtime_applies_current_year_to_chinese_month_day_before_assay_tool_call() -> None:
+    state = InMemoryCheckpointer().get("agt_month_day")
+    state.selected_product = SelectedEntity(
+        84,
+        "黄冰糖（袋）",
+        "tool_result",
+        {"productName": "黄冰糖（袋）", "scopeType": "SINGLE_PRODUCT"},
+        entity_type="PRODUCT",
+        entity_ref="CURRENT_PRODUCT",
+        canonical_name="黄冰糖（袋）",
+    )
+    builder = ToolArgumentBuilder(business_clock=fixed_clock())
+
+    validated = builder.validate_llm_arguments(
+        tool_name="get_assay_status",
+        arguments={
+            "productRef": "CURRENT_PRODUCT",
+            "productionDate": "2025-07-17",
+        },
+        state=state,
+        user_message="查询黄冰糖（袋）7月17日的化验情况",
     )
 
     assert validated == {"productId": 84, "productionDate": "2026-07-17"}

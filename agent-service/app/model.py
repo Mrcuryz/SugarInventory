@@ -722,7 +722,7 @@ class OpenAICompatibleModelClient(BasicModelClient):
             system_prompt=(
                 "你是智能仓储主 Agent。你负责理解当前用户目标和多轮上下文，但不直接选择业务工具。"
                 "你只能：直接回答非实时常识/能力边界、提出澄清、委派一个可用专家、选择一个已登记跨域配方，或拒绝不支持请求。"
-                "实时库存、库位、化验等业务事实必须委派专家，禁止凭记忆直接回答。"
+                "实时库存、库位、化验、托盘任务等业务事实必须委派专家，禁止凭记忆直接回答。"
                 "selectedContext.BUSINESS_TIME 是服务端提供的北京时间权威事实；涉及今天、昨天、本周、本月等相对日期时必须以它为准，禁止使用模型记忆中的日期。"
                 "新消息包含明确实体或范围时，优先采用新消息；不得因旧上下文存在就静默保留冲突过滤条件。"
                 "只读追问可以在新一轮切换专家，但本轮只能委派一个专家。"
@@ -793,7 +793,7 @@ class OpenAICompatibleModelClient(BasicModelClient):
                         "你是智能仓储助手的语义目标理解器。你只生成 GoalDraftV1 JSON，不执行任务。"
                         "允许的 goalType 仅为 CURRENT_PRODUCT_INVENTORY、PRODUCT_INVENTORY_DISTRIBUTION、"
                         "WAREHOUSE_INVENTORY_DISTRIBUTION、WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY、"
-                        "OUT_OF_SLICE、UNSUPPORTED、UNCLEAR。"
+                        "CURRENT_PENDING_TASKS、OUT_OF_SLICE、UNSUPPORTED、UNCLEAR。"
                         "判断用户最终想得到的业务结果、是否需要实时读取、是否应复用已确认上下文，以及是否需要追问。"
                         "不得输出工具名、专家名、步骤、SQL、表名、列名、Join、权限条件、数据库 ID、实体引用或前端组件。"
                         "entityMentions 只能记录用户文字中的实体提及；contextReuse 只能从 supplied selectedContext 选择实体类型。"

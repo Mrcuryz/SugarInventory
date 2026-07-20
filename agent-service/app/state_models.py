@@ -84,6 +84,8 @@ class WarehouseAgentState:
     last_pallet_flow_records: dict[str, Any] | None = None
     last_qr_batch_inbound_completion: dict[str, Any] | None = None
     last_pallet_result: dict[str, Any] | None = None
+    last_pallet_tasks: dict[str, Any] | None = None
+    last_pallet_task_filters: dict[str, Any] | None = None
     last_auto_inbound_batches: dict[str, Any] | None = None
     last_orchestration: dict[str, Any] | None = None
     pending_clarification: PendingClarification | None = None

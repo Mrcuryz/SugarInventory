@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from collections.abc import Callable
@@ -23,6 +24,9 @@ EventPayload = dict[str, Any]
 RuntimeHandler = Callable[[ChatRequest], ChatResponse]
 ResumeHandler = Callable[[ResumeRequest], ChatResponse]
 AnswerDeltaStreamer = Callable[[str], Iterator[str]]
+
+
+logger = logging.getLogger(__name__)
 
 
 def sse_for_request(
@@ -126,6 +130,7 @@ def sse_for_request(
             )
             yield _event(builder.next("message_end", _finish_payload("timeout", terminal_context)))
         except Exception:
+            logger.exception("Unhandled exception while streaming agent response")
             yield _event(
                 builder.next(
                     "error",

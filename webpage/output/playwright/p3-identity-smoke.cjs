@@ -127,6 +127,27 @@ async function main() {
   await expect(page.locator('.model-badge')).toHaveCount(0)
 
   const textarea = page.locator('.composer textarea')
+  const emptyComposerHeight = await textarea.evaluate(element => element.clientHeight)
+  await textarea.fill('第一行')
+  await expect.poll(() => textarea.evaluate(element => element.clientHeight)).toBe(emptyComposerHeight)
+  const singleLineHeight = await textarea.evaluate(element => element.clientHeight)
+  await textarea.fill('第一行\n第二行\n第三行')
+  await expect.poll(() => textarea.evaluate(element => element.clientHeight)).toBeGreaterThan(singleLineHeight)
+  const cappedComposerHeight = await textarea.evaluate(element => element.clientHeight)
+  await textarea.fill('第一行\n第二行\n第三行\n第四行\n第五行\n第六行')
+  const overflowMetrics = await textarea.evaluate(element => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    overflowY: getComputedStyle(element).overflowY
+  }))
+  if (
+    overflowMetrics.clientHeight !== cappedComposerHeight ||
+    overflowMetrics.scrollHeight <= overflowMetrics.clientHeight ||
+    !['auto', 'scroll'].includes(overflowMetrics.overflowY)
+  ) {
+    throw new Error(`Composer should cap its height and scroll internally: ${JSON.stringify(overflowMetrics)}`)
+  }
+
   await textarea.fill('第一行')
   await textarea.press('Shift+Enter')
   await textarea.type('第二行')
