@@ -95,7 +95,8 @@ class InventoryDistributionSqlProviderTest {
 
         String sql = provider.selectAggregate(Map.of("query", query));
 
-        assertThat(sql).contains("i.assay_id IS NULL");
+        assertThat(sql).contains("a.id IS NULL");
+        assertThat(sql).doesNotContain("i.assay_id IS NULL");
         assertThat(sql).contains("i.entry_date >= #{query.statusFilter.entryDateFrom}");
         assertThat(sql).contains("i.entry_date <= #{query.statusFilter.entryDateTo}");
         assertThat(sql).doesNotContain("a.sample_date >= #{query.statusFilter.entryDateFrom}");

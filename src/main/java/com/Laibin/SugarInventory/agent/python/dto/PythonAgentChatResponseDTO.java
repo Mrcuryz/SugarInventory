@@ -23,7 +23,7 @@ public class PythonAgentChatResponseDTO {
         private String title;
         private String prompt;
         private List<UserOption> options = new ArrayList<>();
-        private List<Map<String, String>> fields = new ArrayList<>();
+        private List<Map<String, Object>> fields = new ArrayList<>();
     }
 
     @Data

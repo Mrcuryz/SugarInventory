@@ -180,9 +180,25 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         recordResumeRequestedIfNeeded(sessionVO, request);
         ActiveStream activeStream = new ActiveStream(agentSessionId, messageId, emitter);
         activeStreams.put(streamKey(agentSessionId, messageId), activeStream);
+        emitter.onTimeout(() -> timeoutActiveStream(activeStream));
         CompletableFuture.runAsync(() -> streamPython(
                 loginUser, sessionVO, request, activeStream, pythonRequest, requestId, traceId));
         return emitter;
+    }
+
+    private void timeoutActiveStream(ActiveStream activeStream) {
+        if (activeStream.isClosed()) {
+            return;
+        }
+        activeStream.timeout();
+        activeStream.close();
+        CompletableFuture.runAsync(() -> {
+            try {
+                pythonAgentClient.cancel(activeStream.agentSessionId(), activeStream.messageId());
+            } catch (PythonAgentClientException e) {
+                log.warn("Python stream timeout cancellation failed; errorCode={}", safeCode(e.getCode()));
+            }
+        });
     }
 
     @Override
@@ -549,13 +565,16 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         return safe;
     }
 
-    private List<Map<String, String>> safeCardFields(List<Map<String, String>> fields) {
-        List<Map<String, String>> result = new ArrayList<>();
-        for (Map<String, String> field : safeList(fields)) {
-            Map<String, String> safe = new LinkedHashMap<>();
+    private List<Map<String, Object>> safeCardFields(List<Map<String, Object>> fields) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> field : safeList(fields).stream().limit(100).toList()) {
+            Map<String, Object> safe = new LinkedHashMap<>();
             field.forEach((key, value) -> {
-                if (isSafeScalar(key) && isSafeScalar(value)) {
-                    safe.put(key, value);
+                if (isSafeEventKey(key)) {
+                    Object safeValue = safeObjectValue(value);
+                    if (safeValue != null) {
+                        safe.put(key, safeValue);
+                    }
                 }
             });
             if (!safe.isEmpty()) {
@@ -1090,6 +1109,11 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         private void cancel() {
             cancelled.set(true);
             resultCode = "CLIENT_CANCELLED";
+        }
+
+        private void timeout() {
+            cancelled.set(true);
+            resultCode = "PYTHON_TIMEOUT";
         }
 
         private void recordInterrupt(String interruptId) {

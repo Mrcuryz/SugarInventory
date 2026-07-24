@@ -3,11 +3,14 @@ import test from 'node:test'
 
 import {
   applyTaskBatchCompletion,
+  isConfirmedTaskRecord,
   isTaskCard,
   isTaskDetailCard,
   isTaskListCard,
   isPendingTaskRecord,
   taskDetailEntries,
+  taskCardStatusSummary,
+  taskGroupStatusSummary,
   taskGroups,
   taskRecords,
   taskStatusTone
@@ -31,6 +34,7 @@ test('keeps only controlled task rows and maps status tones', () => {
   assert.equal(taskStatusTone('待处理'), 'pending')
   assert.equal(taskStatusTone('已确认'), 'success')
   assert.equal(taskStatusTone('已取消'), 'muted')
+  assert.equal(isConfirmedTaskRecord({ taskStatusLabel: '已确认' }), true)
 })
 
 test('detail entries omit empty values and never invent fields', () => {
@@ -82,6 +86,44 @@ test('groups task cards by actionable business type', () => {
   ])
   assert.equal(groups[0].records[0].selectable, true)
   assert.equal(groups[2].records[0].selectable, false)
+})
+
+test('summarizes current task state while retaining the original result rows', () => {
+  const card = {
+    cardType: 'pallet_tasks',
+    title: '任务状态（已更新）· 待处理 8 条，已确认 2 条',
+    fields: [
+      ...Array.from({ length: 8 }, (_, index) => ({
+        kind: 'pallet_task',
+        palletCode: `P-PENDING-${index}`,
+        taskTypeLabel: '成品入库',
+        taskStatusLabel: '待处理'
+      })),
+      ...Array.from({ length: 2 }, (_, index) => ({
+        kind: 'pallet_task',
+        palletCode: `P-CONFIRMED-${index}`,
+        taskTypeLabel: '成品入库',
+        taskStatusLabel: '已确认'
+      }))
+    ]
+  }
+
+  assert.deepEqual(taskCardStatusSummary(card), {
+    totalCount: 10,
+    pendingCount: 8,
+    confirmedCount: 2,
+    otherCount: 0,
+    updated: true
+  })
+  const group = taskGroups(card)[0]
+  assert.deepEqual(taskGroupStatusSummary(group), {
+    totalCount: 10,
+    pendingCount: 8,
+    confirmedCount: 2,
+    otherCount: 0,
+    selectableCount: 8
+  })
+  assert.equal(group.records.at(-1).taskStatusLabel, '已确认')
 })
 
 test('does not offer processing for legacy or unknown task groups', () => {

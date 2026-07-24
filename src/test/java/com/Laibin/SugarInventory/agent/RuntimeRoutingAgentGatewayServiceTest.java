@@ -182,6 +182,38 @@ class RuntimeRoutingAgentGatewayServiceTest {
     }
 
     @Test
+    void pythonBusinessCardsKeepSafeNestedProductionFacts() {
+        PythonAgentChatResponseDTO source = answer("生产订单进度见卡片。");
+        PythonAgentChatResponseDTO.BusinessCard card = new PythonAgentChatResponseDTO.BusinessCard();
+        card.setCardType("production_order_progress");
+        card.setTitle("生产订单 PO202606300001");
+        card.setFields(List.of(Map.of(
+                "kind", "production_output",
+                "label", "黄中冰",
+                "value", "1 板",
+                "inboundDestinations", List.of(Map.of(
+                        "warehouseName", "2号库位",
+                        "inboundCodeCount", 2,
+                        "palletCodes", List.of("BT0014LU"),
+                        "productId", 84
+                ))
+        )));
+        source.setCards(List.of(card));
+        when(pythonClient.chat(any())).thenReturn(source);
+
+        AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request("查询生产订单进度"));
+
+        Map<String, Object> field = response.getCards().getFirst().getFields().getFirst();
+        assertThat(field.get("kind")).isEqualTo("production_output");
+        assertThat(field.get("inboundDestinations")).asList().singleElement().satisfies(destination -> {
+            assertThat(destination).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                    .containsEntry("warehouseName", "2号库位")
+                    .containsEntry("inboundCodeCount", 2)
+                    .doesNotContainKey("productId");
+        });
+    }
+
+    @Test
     void pythonResponseWithInternalMarkersIsReplacedBySafeBusinessMessage() {
         when(pythonClient.chat(any())).thenReturn(answer("SUCCESS toolName=get_inventory_overview productId=84"));
 

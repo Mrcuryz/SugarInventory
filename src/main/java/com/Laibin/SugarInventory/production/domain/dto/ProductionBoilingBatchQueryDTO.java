@@ -7,6 +7,7 @@ import java.time.LocalDate;
 @Data
 public class ProductionBoilingBatchQueryDTO {
     private String batchNo;
+    private String productQuery;
     private String status;
     private LocalDate startDate;
     private LocalDate endDate;

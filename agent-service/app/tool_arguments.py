@@ -134,6 +134,52 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
         },
     },
+    "query_unqualified_inventory": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["productScope", "warehouseScope"],
+        "properties": {
+            "productScope": {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
+                "type": {"type": "string", "enum": ["SINGLE_PRODUCT", "EXACT_PRODUCT_NAME_GROUP", "PRODUCT_TYPE_GROUP", "ALL"]},
+                "productId": {"type": "integer", "minimum": 1}, "productName": {"type": "string", "minLength": 1, "maxLength": 100},
+                "productType": {"type": "string", "minLength": 1, "maxLength": 50}}},
+            "warehouseScope": {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
+                "type": {"type": "string", "enum": ["ALL", "SINGLE_WAREHOUSE"]}, "warehouseId": {"type": "integer", "minimum": 1}}},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+        },
+    },
+    "query_inventory_by_quality_standard": {
+        "type": "object", "additionalProperties": False,
+        "required": ["productScope", "warehouseScope", "standardCode"],
+        "properties": {
+            "productScope": {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
+                "type": {"type": "string", "enum": ["SINGLE_PRODUCT", "EXACT_PRODUCT_NAME_GROUP", "PRODUCT_TYPE_GROUP", "ALL"]},
+                "productId": {"type": "integer", "minimum": 1}, "productName": {"type": "string", "minLength": 1, "maxLength": 100},
+                "productType": {"type": "string", "minLength": 1, "maxLength": 50}}},
+            "warehouseScope": {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
+                "type": {"type": "string", "enum": ["ALL", "SINGLE_WAREHOUSE"]}, "warehouseId": {"type": "integer", "minimum": 1}}},
+            "standardCode": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+            "standardVersion": {"type": "integer", "minimum": 1},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+        },
+    },
+    "query_inventory_by_assay_metrics": {
+        "type": "object", "additionalProperties": False,
+        "required": ["productScope", "warehouseScope", "metricCondition"],
+        "properties": {
+            "productScope": {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
+                "type": {"type": "string", "enum": ["SINGLE_PRODUCT", "EXACT_PRODUCT_NAME_GROUP", "PRODUCT_TYPE_GROUP", "ALL"]},
+                "productId": {"type": "integer", "minimum": 1}, "productName": {"type": "string", "minLength": 1, "maxLength": 100},
+                "productType": {"type": "string", "minLength": 1, "maxLength": 50}}},
+            "warehouseScope": {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
+                "type": {"type": "string", "enum": ["ALL", "SINGLE_WAREHOUSE"]}, "warehouseId": {"type": "integer", "minimum": 1}}},
+            "metricCondition": {"type": "object", "additionalProperties": False, "required": ["metricCode", "operator"], "properties": {
+                "metricCode": {"type": "string", "enum": ["color_value", "reducing_sugar", "dry_weight_loss", "conductivity_ash", "sucrose", "insoluble_impurity", "ph"]},
+                "operator": {"type": "string", "enum": ["GT", "GTE", "LT", "LTE", "EQ", "BETWEEN"]},
+                "value": {"type": "number"}, "minValue": {"type": "number"}, "maxValue": {"type": "number"}}},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+        },
+    },
     "query_assay_records": {
         "type": "object",
         "additionalProperties": False,
@@ -369,6 +415,17 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["orderRef"],
         "properties": {"orderRef": {"type": "string", "minLength": 1, "maxLength": 500}},
     },
+    "query_boiling_batches": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "productQuery": {"type": "string", "minLength": 1, "maxLength": 100},
+            "startDate": {"type": "string", "format": "date"},
+            "endDate": {"type": "string", "format": "date"},
+            "status": {"type": "string", "enum": ["AVAILABLE", "USED_UP", "CANCELED"]},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+        },
+    },
     "query_boiling_batch_trace": {
         "type": "object",
         "additionalProperties": False,
@@ -491,6 +548,12 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                                     "properties": {"standardCode": {"type": "string", "minLength": 1, "maxLength": 100}, "version": {"type": "integer", "minimum": 1}}},
     "query_product_standard_relations": {"type": "object", "additionalProperties": False, "required": ["productName"],
                                          "properties": {"productName": {"type": "string", "minLength": 1, "maxLength": 100}}},
+    "query_product_quality_configuration": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["productId"],
+        "properties": {"productId": {"type": "integer", "minimum": 1}},
+    },
     "query_employee_roster": {"type": "object", "additionalProperties": False,
                               "properties": {"employeeId": {"type": "string", "minLength": 1, "maxLength": 50}, "name": {"type": "string", "minLength": 1, "maxLength": 100}, "department": {"type": "string", "minLength": 1, "maxLength": 100}, "position": {"type": "string", "minLength": 1, "maxLength": 100}, "status": {"type": "string", "minLength": 1, "maxLength": 20}, "roleCode": {"type": "string", "minLength": 1, "maxLength": 50}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
     "query_roles": {"type": "object", "additionalProperties": False,
@@ -534,22 +597,26 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "resolve_warehouses": "把用户明确说出的库位名称解析为受控候选；库位未确认时先调用，多候选必须由用户选择。",
     "get_inventory_overview": "查询一个已确认具体产品的当前库存总量、折合件数、重量和已有位置摘要。",
     "get_inventory_distribution": "查询当前库存按库位或产品的受控分布；用于‘在哪些库位’、‘某库位有哪些库存’和缩小过滤范围。",
-    "query_inventory_ledger": "分页查询当前库存台账明细；适合需要入库日期、状态、库位等明细过滤，不用于历史库存趋势。",
-    "query_prepare_pool_balance": "分页查询生产备料池当前正余额；不代表实际消耗、损耗或未来计划。",
+    "query_unqualified_inventory": "查询当前仍在库、且产品+生产日期对应的最新版本化验明确判定为不合格的库存；无化验和无标准不计为不合格。",
+    "query_inventory_by_quality_standard": "按指定受控标准逐项匹配当前库存批次最新化验；standardCode 应来自标准目录，不得猜内部 ID。",
+    "query_inventory_by_assay_metrics": "按一个受控原始化验指标和封闭数值条件筛选当前库存；不支持任意字段或表达式。",
+    "query_inventory_ledger": "分页查询当前库存台账明细；参数是扁平字段。已确认具体产品时，把 canonicalName 放入 productName；不要生成 productRef、productScope 或 dateRange。不用于历史库存趋势。",
+    "query_prepare_pool_balance": "分页查询生产备料池当前正余额。用户未指定筛选条件时直接查询全部当前正余额，不要求生产订单或煮糖批次；只在用户明确提出时按产品、产品类型、筛网或生产日期筛选。不代表实际消耗、损耗或未来计划。",
     "get_warehouse_status": "查询一个已确认库位的当前容量、占用和状态；不还原历史容量。",
     "query_warehouse_capacity_distribution": "分页查询多个库位当前容量分布；不是历史容量趋势。",
-    "query_warehouse_recent_operations": "查询一个已确认库位已登记的近期操作；日志缺失不代表没有发生。",
-    "query_warehouse_mixed_storage_facts": "查询一个已确认库位的混放事实和风险标签；只依据已登记规则。",
+    "query_warehouse_recent_operations": "查询已登记的近期库位操作。用户指定具体库位时先解析并使用 CURRENT_WAREHOUSE；用户未指定或明确查询全部库位时省略 warehouseRef，直接查询当前可见全局范围。日志缺失不代表没有发生。",
+    "query_warehouse_mixed_storage_facts": "查询库位混放事实和风险标签。用户问‘哪些库位’或‘全部仓库’时省略 warehouseRef，直接查询当前可见全局范围；只有用户明确指定一个库位时才解析并使用 CURRENT_WAREHOUSE。只依据已登记规则。",
     "get_assay_status": "查询一个已确认产品在指定生产日期的化验状态；未提供日期时不得声称是最新化验。",
     "query_assay_records": "按受控产品范围和日期查询化验记录列表；按 sampleDate 降序 size=1 可取最新产品化验。",
     "get_assay_report_detail": "使用上一查询返回的受控 recordRef 查看一份化验报告详情。",
     "query_assay_abnormalities": "按产品范围、日期和异常类型统计化验异常；区分不合格、无标准和标准多候选。",
-    "query_products_without_recent_assay": "查询当前在库产品中指定日期范围缺少化验的分组；不能证明库存批次是否合格。",
-    "query_assay_standard_coverage": "查询产品质量标准覆盖情况；部分覆盖类型仍可能被后端拒绝。",
+    "query_products_without_recent_assay": "查询当前在库产品中指定日期范围缺少化验的分组。用户未指定产品或仓库时使用 productScope=ALL、warehouseScope=ALL；‘最近N天’使用 dateRange.type=LAST_DAYS。不能证明库存批次是否合格。",
+    "query_assay_standard_coverage": "查询产品质量标准覆盖情况。用户问哪些当前库存没有适用标准时使用 productScope=ALL、coverageType=PRODUCT_WITHOUT_STANDARD，不要添加仓库范围。",
     "query_assay_groups": "查询已登记化验分组目录，不查询具体产品化验结果。",
     "query_quality_standard_catalog": "查询质量标准目录，不代表某产品或批次已经适用该标准。",
     "get_quality_standard_detail": "使用受控标准引用查询质量标准详情。",
     "query_product_standard_relations": "按产品规范名查询当前产品与质量标准的配置关系。",
+    "query_product_quality_configuration": "查询当前已确认具体产品的适用质量标准和所属批量化验组。必须使用 CURRENT_PRODUCT，不得按名称猜测关系。",
     "get_pallet_status": "查询用户明确提供或当前已确认托盘的状态、库存、化验和已登记流转。",
     "query_qr_code_lifecycle": "查询一个明确二维码或托盘码的已登记生命周期；不执行任何码状态变更。",
     "query_printed_not_inbound_codes": "查询已打印但尚未完成入库的二维码分组；只读且不创建任务。",
@@ -557,6 +624,10 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_pallet_flow_records": "分页查询明确托盘或受控范围的已登记流转记录；不是完整操作日志。",
     "query_qr_batch_inbound_completion": "查询二维码批次的入库完成情况；不确认或补录入库。",
     "query_fixed_product_qr_pool": "查询固定产品二维码池当前状态；不打印、启用、作废或恢复二维码。",
+    "query_pallet_tasks": "查询当前托盘任务记录；用户问待处理任务时使用 status=PENDING。只读返回分类和状态，不执行确认、取消、入库、出库或调拨。",
+    "query_stock_documents": "查询指定类型和日期范围的入库单、出库单或半成品单据；相对日期以 BUSINESS_TIME 为准。",
+    "query_auto_inbound_batches": "查询最近登记的自动报数入库批次；无须先提供产品或批次。返回空 records 或 count=0 时就是权威无数据结果，应引用该次观察直接回答。",
+    "get_auto_inbound_batch_detail": "使用上一查询返回的受控批次引用查询自动报数入库批次详情；不得猜测内部引用。",
 }
 
 
@@ -612,6 +683,27 @@ class ToolArgumentBuilder:
                         "const": "CURRENT_ASSAY_REPORT",
                         "description": "上一轮化验记录列表中的第一条受控报告引用；真实引用不提供给模型。",
                     }
+            if tool_name in {
+                "query_production_order_progress",
+                "query_material_pick_trace",
+                "query_production_label_completion",
+                "query_material_candidates",
+            }:
+                properties = model_schema.get("properties")
+                if isinstance(properties, dict):
+                    properties["orderRef"] = {
+                        "type": "string",
+                        "const": "CURRENT_PRODUCTION_ORDER",
+                        "description": "Runtime 绑定的当前已确认生产订单；真实短期引用不提供给模型。",
+                    }
+            if tool_name == "query_boiling_batch_trace":
+                properties = model_schema.get("properties")
+                if isinstance(properties, dict):
+                    properties["batchRef"] = {
+                        "type": "string",
+                        "const": "CURRENT_BOILING_BATCH",
+                        "description": "Runtime 绑定的当前已确认煮糖批次；真实短期引用不提供给模型。",
+                    }
             description = LLM_TOOL_DESCRIPTIONS.get(tool_name)
             if description:
                 model_schema["description"] = description
@@ -645,6 +737,14 @@ class ToolArgumentBuilder:
             user_message,
             TOOL_SCHEMAS.get(tool_name),
         )
+        if tool_name == "query_boiling_batches":
+            materialized = self._normalize_boiling_batch_scope(materialized, user_message)
+        if tool_name == "query_pallet_flow_records":
+            materialized = self._pallet_flow_records_arguments(
+                materialized,
+                state,
+                user_message,
+            )
         self._reject_unbound_pallet_code(
             tool_name,
             arguments,
@@ -663,6 +763,12 @@ class ToolArgumentBuilder:
                 )
                 if not self._explicit_all_product_request(user_message) and not warehouse_bounded:
                     raise ValueError("ALL product scope was not explicitly requested")
+        if tool_name in {"query_unqualified_inventory", "query_inventory_by_quality_standard", "query_inventory_by_assay_metrics"}:
+            materialized = self._inventory_quality_arguments(
+                materialized,
+                state,
+                allow_all=self._inventory_quality_all_scope_allowed(user_message),
+            )
         if tool_name == "query_assay_records":
             self._require_allowed_all_scope(
                 materialized,
@@ -686,16 +792,78 @@ class ToolArgumentBuilder:
                 self._assay_abnormalities_all_scope_allowed(user_message),
             )
         if tool_name == "query_products_without_recent_assay":
+            if self._active_goal_all_product_scope_allowed(
+                state,
+                "CURRENT_INVENTORY_ASSAY_GAPS",
+            ):
+                materialized.setdefault("productScope", {"type": "ALL"})
+                materialized.setdefault("warehouseScope", {"type": "ALL"})
+                materialized.setdefault("population", "CURRENT_INVENTORY")
             self._require_allowed_all_scope(
                 materialized,
-                self._products_without_recent_assay_all_scope_allowed(user_message),
+                self._products_without_recent_assay_all_scope_allowed(user_message)
+                or self._active_goal_all_product_scope_allowed(
+                    state,
+                    "CURRENT_INVENTORY_ASSAY_GAPS",
+                ),
             )
         if tool_name == "query_assay_standard_coverage":
+            if self._active_goal_all_product_scope_allowed(
+                state,
+                "CURRENT_INVENTORY_STANDARD_GAPS",
+            ):
+                materialized.setdefault("productScope", {"type": "ALL"})
+                materialized.setdefault("coverageType", "PRODUCT_WITHOUT_STANDARD")
             self._require_allowed_all_scope(
                 materialized,
-                self._assay_standard_coverage_all_scope_allowed(user_message),
+                self._assay_standard_coverage_all_scope_allowed(user_message)
+                or self._active_goal_all_product_scope_allowed(
+                    state,
+                    "CURRENT_INVENTORY_STANDARD_GAPS",
+                ),
             )
         return self._validate(tool_name, materialized)
+
+    @staticmethod
+    def _normalize_boiling_batch_scope(
+        arguments: dict[str, Any],
+        user_message: str,
+    ) -> dict[str, Any]:
+        """Keep model-generated scope words from becoming literal database filters."""
+        result = dict(arguments)
+        text = "".join((user_message or "").split())
+        product_query = "".join(str(result.get("productQuery") or "").split())
+        generic_product_queries = {
+            "全部产品",
+            "所有产品",
+            "全产品",
+            "全部",
+            "所有",
+            "不限产品",
+            "不限定产品",
+            "all",
+            "allproducts",
+            "any",
+            "*",
+        }
+        user_requested_all_products = any(
+            marker in text
+            for marker in ("全部产品", "所有产品", "全产品", "不限产品", "不限定产品")
+        )
+        if product_query.casefold() in generic_product_queries or user_requested_all_products:
+            result.pop("productQuery", None)
+
+        requested_statuses: set[str] = set()
+        if any(word in text for word in ("可用", "未用完", "还有剩余", "可领用")):
+            requested_statuses.add("AVAILABLE")
+        if any(word in text for word in ("已用完", "用完", "耗尽", "已耗完")):
+            requested_statuses.add("USED_UP")
+        if any(word in text for word in ("已取消", "取消的", "已作废", "作废的")):
+            requested_statuses.add("CANCELED")
+        status = str(result.get("status") or "").upper()
+        if status and status not in requested_statuses:
+            result.pop("status", None)
+        return result
 
     def _llm_visible_schema(self, value: Any) -> Any:
         if isinstance(value, list):
@@ -786,6 +954,18 @@ class ToolArgumentBuilder:
                     raise ValueError("CURRENT_ASSAY_REPORT is not available")
                 result["reportRef"] = report_ref
                 continue
+            if key == "orderRef" and item == "CURRENT_PRODUCTION_ORDER":
+                order_ref = self._selected_production_ref(state, "PRODUCTION_ORDER")
+                if order_ref is None:
+                    raise ValueError("CURRENT_PRODUCTION_ORDER is not available")
+                result["orderRef"] = order_ref
+                continue
+            if key == "batchRef" and item == "CURRENT_BOILING_BATCH":
+                batch_ref = self._selected_production_ref(state, "BOILING_BATCH")
+                if batch_ref is None:
+                    raise ValueError("CURRENT_BOILING_BATCH is not available")
+                result["batchRef"] = batch_ref
+                continue
             result[key] = self._materialize_state_refs(item, state)
         return result
 
@@ -817,16 +997,30 @@ class ToolArgumentBuilder:
 
     @staticmethod
     def _current_assay_report_ref(state: WarehouseAgentState) -> str | None:
-        records = (state.last_assay_records or {}).get("records")
-        if not isinstance(records, list):
-            return None
-        for record in records:
-            if not isinstance(record, dict):
+        for records_result in (state.last_assay_records or {}, state.last_inventory_quality or {}):
+            records = records_result.get("records")
+            if not isinstance(records, list):
                 continue
-            report_ref = str(record.get("recordRef") or "").strip()
-            if report_ref:
-                return report_ref
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                report_ref = str(record.get("recordRef") or record.get("reportRef") or "").strip()
+                if report_ref.startswith("assay_report_"):
+                    return report_ref
         return None
+
+    @staticmethod
+    def _selected_production_ref(state: WarehouseAgentState, entity_type: str) -> str | None:
+        selected = (
+            state.selected_production_order
+            if entity_type == "PRODUCTION_ORDER"
+            else state.selected_boiling_batch
+        )
+        if selected is None:
+            return None
+        key = "orderRef" if entity_type == "PRODUCTION_ORDER" else "batchRef"
+        entity_ref = str(selected.metadata.get(key) or "").strip()
+        return entity_ref if entity_ref.startswith("aer_") else None
 
     def _require_allowed_all_scope(self, arguments: dict[str, Any], allowed: bool) -> None:
         scope = arguments.get("productScope")
@@ -888,6 +1082,12 @@ class ToolArgumentBuilder:
         if tool_name == "get_inventory_distribution":
             allow_all = self._explicit_all_product_request(user_message)
             arguments = self._distribution_arguments(arguments, state, allow_all=allow_all)
+        if tool_name in {"query_unqualified_inventory", "query_inventory_by_quality_standard", "query_inventory_by_assay_metrics"}:
+            arguments = self._inventory_quality_arguments(
+                arguments,
+                state,
+                allow_all=self._inventory_quality_all_scope_allowed(user_message),
+            )
         if tool_name == "query_assay_records":
             allow_all = self._assay_records_all_scope_allowed(user_message)
             arguments = self._assay_records_arguments(arguments, state, user_message, allow_all=allow_all)
@@ -897,10 +1097,22 @@ class ToolArgumentBuilder:
             allow_all = self._assay_abnormalities_all_scope_allowed(user_message)
             arguments = self._assay_abnormalities_arguments(arguments, state, user_message, allow_all=allow_all)
         if tool_name == "query_products_without_recent_assay":
-            allow_all = self._products_without_recent_assay_all_scope_allowed(user_message)
+            allow_all = (
+                self._products_without_recent_assay_all_scope_allowed(user_message)
+                or self._active_goal_all_product_scope_allowed(
+                    state,
+                    "CURRENT_INVENTORY_ASSAY_GAPS",
+                )
+            )
             arguments = self._products_without_recent_assay_arguments(arguments, state, user_message, allow_all=allow_all)
         if tool_name == "query_assay_standard_coverage":
-            allow_all = self._assay_standard_coverage_all_scope_allowed(user_message)
+            allow_all = (
+                self._assay_standard_coverage_all_scope_allowed(user_message)
+                or self._active_goal_all_product_scope_allowed(
+                    state,
+                    "CURRENT_INVENTORY_STANDARD_GAPS",
+                )
+            )
             arguments = self._assay_standard_coverage_arguments(arguments, state, user_message, allow_all=allow_all)
         if tool_name == "query_qr_code_lifecycle":
             arguments = self._qr_code_lifecycle_arguments(arguments, user_message)
@@ -1015,6 +1227,20 @@ class ToolArgumentBuilder:
                     confidenceNote="distribution requires a confirmed selected product",
                 ), handoff, snapshot)
             arguments = self._distribution_arguments(arguments, state, allow_all=explicit_all)
+        if decision.toolName in {"query_unqualified_inventory", "query_inventory_by_quality_standard", "query_inventory_by_assay_metrics"}:
+            explicit_all = (
+                isinstance(arguments.get("productScope"), dict)
+                and arguments["productScope"].get("type") == "ALL"
+                and self._inventory_quality_all_scope_allowed(user_message)
+            )
+            if state.selected_product is None and not explicit_all:
+                return self._finalize_plan(ModelPlanDecision(
+                    action="ask_user",
+                    prompt="你想筛选哪个产品范围？也可以明确说‘全部当前库存’。",
+                    suggestions=["例如：全部当前库存中有哪些不合格产品", "黄冰糖库存中蔗糖分≥99.7的产品"],
+                    confidenceNote="inventory quality query requires a confirmed product scope or explicit current-inventory scope",
+                ), handoff, snapshot)
+            arguments = self._inventory_quality_arguments(arguments, state, allow_all=explicit_all)
         if decision.toolName == "query_assay_records":
             explicit_all = (
                 isinstance(arguments.get("productScope"), dict)
@@ -1341,6 +1567,24 @@ class ToolArgumentBuilder:
             return ModelPlanDecision(action="call_tool", toolName="query_screen_mesh_catalog",
                                      arguments=self._validate("query_screen_mesh_catalog", {"page": 1, "size": 20}),
                                      intent="screen_mesh_catalog", responseMode="screen_mesh_catalog", routeSnapshot=snapshot)
+        if route.intent_subtype == "product_quality_configuration":
+            if not objects.product:
+                return ModelPlanDecision(
+                    action="ask_user",
+                    prompt="请提供要查询质量配置的具体产品名称。",
+                    suggestions=["例如：查询黄冰糖适用的化验标准和化验组"],
+                    intent="product_quality_configuration",
+                    responseMode="product_quality_configuration",
+                    routeSnapshot=snapshot,
+                )
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="resolve_products",
+                arguments=self._validate("resolve_products", {"query": objects.product, "limit": 10}),
+                intent="product_quality_configuration",
+                responseMode="product_quality_configuration",
+                routeSnapshot=snapshot,
+            )
         if route.intent_subtype == "assay_groups":
             return ModelPlanDecision(action="call_tool", toolName="query_assay_groups", arguments=self._validate("query_assay_groups", {"page": 1, "size": 20}), intent="assay_groups", responseMode="assay_groups", routeSnapshot=snapshot)
         if route.intent_subtype == "quality_standard_catalog":
@@ -1989,6 +2233,8 @@ class ToolArgumentBuilder:
             return {"productId": product_id}
         if tool_name == "get_inventory_distribution":
             return self._validate_distribution(arguments)
+        if tool_name in {"query_unqualified_inventory", "query_inventory_by_quality_standard", "query_inventory_by_assay_metrics"}:
+            return self._validate_inventory_quality(tool_name, arguments)
         if tool_name == "query_assay_records":
             return self._validate_assay_records(arguments)
         if tool_name == "get_assay_report_detail":
@@ -2023,6 +2269,28 @@ class ToolArgumentBuilder:
             if not order_ref.startswith("aer_"):
                 raise ValueError("orderRef must be a controlled Agent entity ref")
             return {"orderRef": order_ref}
+        if tool_name == "query_boiling_batches":
+            result: dict[str, Any] = {}
+            if arguments.get("productQuery") is not None:
+                result["productQuery"] = self._required_text(arguments.get("productQuery"), 100)
+            start = self._optional_date(arguments.get("startDate"))
+            end = self._optional_date(arguments.get("endDate"))
+            if start and end and start > end:
+                raise ValueError("startDate must not be after endDate")
+            if start:
+                result["startDate"] = start
+            if end:
+                result["endDate"] = end
+            status = arguments.get("status")
+            if status is not None:
+                if status not in {"AVAILABLE", "USED_UP", "CANCELED"}:
+                    raise ValueError("unsupported boiling batch status")
+                result["status"] = status
+            limit = int(arguments.get("limit", 10))
+            if not 1 <= limit <= 20:
+                raise ValueError("invalid boiling batch limit")
+            result["limit"] = limit
+            return result
         if tool_name == "query_boiling_batch_trace":
             batch_ref = self._required_text(arguments.get("batchRef"), 500)
             if not batch_ref.startswith("aer_"):
@@ -2186,6 +2454,11 @@ class ToolArgumentBuilder:
             return {"standardCode": self._required_text(arguments.get("standardCode"), 100), "version": version}
         if tool_name == "query_product_standard_relations":
             return {"productName": self._required_text(arguments.get("productName"), 100)}
+        if tool_name == "query_product_quality_configuration":
+            product_id = int(arguments.get("productId") or 0)
+            if product_id <= 0:
+                raise ValueError("productId is required")
+            return {"productId": product_id}
         if tool_name in {"query_employee_roster", "query_roles"}:
             result: dict[str, Any] = {}
             limits = {"employeeId": 50, "name": 100, "department": 100, "position": 100, "status": 20, "roleCode": 50, "keyword": 100}
@@ -2294,6 +2567,24 @@ class ToolArgumentBuilder:
         result.setdefault("statusFilter", {})
         result.setdefault("groupBy", "warehouse")
         result.setdefault("limit", 20)
+        return result
+
+    def _inventory_quality_arguments(
+        self, arguments: dict[str, Any], state: WarehouseAgentState, *, allow_all: bool = False
+    ) -> dict[str, Any]:
+        scoped = self._distribution_arguments(
+            {**arguments, "groupBy": "warehouse", "statusFilter": {}},
+            state,
+            allow_all=allow_all,
+        )
+        result: dict[str, Any] = {
+            "productScope": scoped["productScope"],
+            "warehouseScope": scoped["warehouseScope"],
+            "limit": arguments.get("limit", 50),
+        }
+        for key in ("standardCode", "standardVersion", "metricCondition"):
+            if key in arguments:
+                result[key] = arguments[key]
         return result
 
     def _assay_report_detail_arguments(self, arguments: dict[str, Any], state: WarehouseAgentState) -> dict[str, Any]:
@@ -2552,11 +2843,25 @@ class ToolArgumentBuilder:
         result["productScope"] = self._selected_product_scope_or_all(result, state)
         if state.selected_warehouse is not None and result.get("warehouseId") is None:
             result["warehouseId"] = state.selected_warehouse.internal_id
-        result.setdefault("dateRange", self._assay_date_range_from_message(user_message))
+        if self._requests_complete_pallet_history(user_message):
+            result["dateRange"] = {
+                "type": "RANGE",
+                "from": "2000-01-01",
+                "to": self.business_clock.today().isoformat(),
+            }
+        else:
+            result.setdefault("dateRange", self._assay_date_range_from_message(user_message))
         result.setdefault("eventTypes", self._pallet_flow_event_types_from_message(user_message))
         result.setdefault("page", 1)
         result.setdefault("size", 20)
         return result
+
+    @staticmethod
+    def _requests_complete_pallet_history(user_message: str) -> bool:
+        text = re.sub(r"\s+", "", user_message or "")
+        return "历史" in text and any(
+            marker in text for marker in ("完整", "全部", "所有", "全量")
+        )
 
     def _qr_batch_inbound_arguments(self, arguments: dict[str, Any], user_message: str) -> dict[str, Any]:
         result = dict(arguments)
@@ -2769,6 +3074,51 @@ class ToolArgumentBuilder:
             result["entryDateTo"] = date_to
         return result
 
+    def _validate_inventory_quality(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "productScope": self._validate_product_scope(arguments.get("productScope")),
+            "warehouseScope": self._validate_warehouse_scope(arguments.get("warehouseScope")),
+        }
+        limit = int(arguments.get("limit", 50))
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be 1..100")
+        result["limit"] = limit
+        if tool_name == "query_inventory_by_quality_standard":
+            standard_code = str(arguments.get("standardCode") or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", standard_code):
+                raise ValueError("standardCode must be a controlled standard code")
+            result["standardCode"] = standard_code
+            if arguments.get("standardVersion") is not None:
+                version = int(arguments["standardVersion"])
+                if version < 1:
+                    raise ValueError("standardVersion must be positive")
+                result["standardVersion"] = version
+        elif tool_name == "query_inventory_by_assay_metrics":
+            condition = arguments.get("metricCondition")
+            if not isinstance(condition, dict):
+                raise ValueError("metricCondition is required")
+            metric_code = str(condition.get("metricCode") or "")
+            if metric_code not in {"color_value", "reducing_sugar", "dry_weight_loss", "conductivity_ash", "sucrose", "insoluble_impurity", "ph"}:
+                raise ValueError("unsupported assay metric")
+            operator = str(condition.get("operator") or "").upper()
+            if operator not in {"GT", "GTE", "LT", "LTE", "EQ", "BETWEEN"}:
+                raise ValueError("unsupported metric operator")
+            safe_condition: dict[str, Any] = {"metricCode": metric_code, "operator": operator}
+            if operator == "BETWEEN":
+                if condition.get("minValue") is None or condition.get("maxValue") is None:
+                    raise ValueError("BETWEEN requires minValue and maxValue")
+                min_value = float(condition["minValue"])
+                max_value = float(condition["maxValue"])
+                if min_value > max_value:
+                    raise ValueError("minValue must not exceed maxValue")
+                safe_condition.update({"minValue": min_value, "maxValue": max_value})
+            else:
+                if condition.get("value") is None:
+                    raise ValueError("metric comparison value is required")
+                safe_condition["value"] = float(condition["value"])
+            result["metricCondition"] = safe_condition
+        return result
+
     def _validate_assay_records(self, arguments: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {"productScope": self._validate_product_scope(arguments.get("productScope"))}
         date_range = self._validate_assay_date_range(arguments.get("dateRange"))
@@ -2954,14 +3304,14 @@ class ToolArgumentBuilder:
         return tokens[0][:100] if tokens else None
 
     def _latest_assay_report_ref(self, state: WarehouseAgentState) -> str | None:
-        records_result = state.last_assay_records or {}
-        records = records_result.get("records")
-        if isinstance(records, list):
-            for record in records:
-                if isinstance(record, dict):
-                    report_ref = str(record.get("recordRef") or "").strip()
-                    if report_ref.startswith("assay_report_"):
-                        return report_ref
+        for records_result in (state.last_assay_records or {}, state.last_inventory_quality or {}):
+            records = records_result.get("records")
+            if isinstance(records, list):
+                for record in records:
+                    if isinstance(record, dict):
+                        report_ref = str(record.get("recordRef") or record.get("reportRef") or "").strip()
+                        if report_ref.startswith("assay_report_"):
+                            return report_ref
         return None
 
     def _optional_date(self, value: Any) -> str | None:
@@ -2976,6 +3326,13 @@ class ToolArgumentBuilder:
 
     def _explicit_all_product_request(self, user_message: str) -> bool:
         return any(phrase in user_message for phrase in ["全部产品", "所有产品", "全产品", "全部品种", "所有品种"])
+
+    def _inventory_quality_all_scope_allowed(self, user_message: str) -> bool:
+        text = user_message or ""
+        return self._explicit_all_product_request(text) or any(
+            phrase in text
+            for phrase in ["库存中", "库存里", "库中", "在库产品", "哪些产品", "哪些库存", "不合格产品"]
+        )
 
     def _assay_date_range_from_message(self, user_message: str) -> dict[str, Any] | None:
         resolved = self.business_clock.resolve(user_message)
@@ -3053,7 +3410,28 @@ class ToolArgumentBuilder:
     def _assay_standard_coverage_all_scope_allowed(self, user_message: str) -> bool:
         text = user_message or ""
         return self._explicit_all_product_request(text) or any(
-            word in text for word in ["哪些产品", "在库产品", "当前在库", "全部", "所有", "未绑定标准", "没有质量标准"]
+            word in text
+            for word in [
+                "哪些产品",
+                "在库产品",
+                "当前在库",
+                "当前库存",
+                "全部",
+                "所有",
+                "未绑定标准",
+                "没有质量标准",
+                "没有适用",
+            ]
+        )
+
+    @staticmethod
+    def _active_goal_all_product_scope_allowed(
+        state: WarehouseAgentState,
+        expected_goal_type: str,
+    ) -> bool:
+        return (
+            state.active_goal_type == expected_goal_type
+            and state.selected_product is None
         )
 
     def _pallet_anomaly_types_from_message(self, user_message: str) -> list[str]:

@@ -2,10 +2,13 @@ package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.InventoryLedgerAgentQueryDTO;
+import com.Laibin.SugarInventory.domain.dto.InventoryQualityQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.PreparePoolBalanceAgentQueryDTO;
 import com.Laibin.SugarInventory.domain.vo.InventoryLedgerAgentVO;
+import com.Laibin.SugarInventory.domain.vo.InventoryQualityVO;
 import com.Laibin.SugarInventory.domain.vo.PreparePoolBalanceAgentVO;
 import com.Laibin.SugarInventory.service.InventoryAgentReadService;
+import com.Laibin.SugarInventory.service.InventoryQualityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class InventoryAgentReadController {
     private final InventoryAgentReadService service;
+    private final InventoryQualityService inventoryQualityService;
 
     @PostMapping("/ledger/query")
     @PreAuthorize("hasAuthority('inventory:view')")
@@ -29,5 +33,11 @@ public class InventoryAgentReadController {
     @PreAuthorize("hasAuthority('inventory:view')")
     public Result<PreparePoolBalanceAgentVO> queryPreparePoolBalance(@RequestBody(required = false) PreparePoolBalanceAgentQueryDTO query) {
         return Result.success(service.queryPreparePoolBalance(query));
+    }
+
+    @PostMapping("/quality/query")
+    @PreAuthorize("hasAuthority('inventory:view') and hasAuthority('assay:view')")
+    public Result<InventoryQualityVO> queryInventoryQuality(@RequestBody InventoryQualityQueryDTO query) {
+        return Result.success(inventoryQualityService.query(query));
     }
 }

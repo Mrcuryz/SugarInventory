@@ -30,7 +30,7 @@ class WarehouseMcpApplicationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void startsAndListsFortySevenTools() {
+    void startsAndListsFiftyTwoTools() {
         List<String> names = toolSchemas().keySet().stream().sorted().toList();
 
         assertThat(names).containsExactly(
@@ -52,9 +52,12 @@ class WarehouseMcpApplicationTest {
                 "query_assay_standard_coverage",
                 "query_auto_inbound_batches",
                 "query_boiling_batch_trace",
+                "query_boiling_batches",
                 "query_employee_roster",
                 "query_fixed_product_qr_pool",
                 "query_in_process_materials",
+                "query_inventory_by_assay_metrics",
+                "query_inventory_by_quality_standard",
                 "query_inventory_ledger",
                 "query_material_candidates",
                 "query_material_pick_trace",
@@ -64,6 +67,7 @@ class WarehouseMcpApplicationTest {
                 "query_prepare_pool_balance",
                 "query_printed_not_inbound_codes",
                 "query_product_catalog",
+                "query_product_quality_configuration",
                 "query_product_standard_relations",
                 "query_production_label_completion",
                 "query_production_order_progress",
@@ -74,6 +78,7 @@ class WarehouseMcpApplicationTest {
                 "query_roles",
                 "query_screen_mesh_catalog",
                 "query_stock_documents",
+                "query_unqualified_inventory",
                 "query_warehouse_capacity_distribution",
                 "query_warehouse_mixed_storage_facts",
                 "query_warehouse_recent_operations",
@@ -92,6 +97,9 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("resolve_warehouses"));
         assertObjectClosed(schemas.get("get_inventory_overview"));
         assertObjectClosed(schemas.get("get_inventory_distribution"));
+        assertObjectClosed(schemas.get("query_unqualified_inventory"));
+        assertObjectClosed(schemas.get("query_inventory_by_quality_standard"));
+        assertObjectClosed(schemas.get("query_inventory_by_assay_metrics"));
         assertObjectClosed(schemas.get("get_warehouse_status"));
         assertObjectClosed(schemas.get("get_pallet_status"));
         assertObjectClosed(schemas.get("get_assay_status"));
@@ -107,6 +115,7 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("query_qr_batch_inbound_completion"));
         assertObjectClosed(schemas.get("resolve_production_entities"));
         assertObjectClosed(schemas.get("query_production_order_progress"));
+        assertObjectClosed(schemas.get("query_boiling_batches"));
         assertObjectClosed(schemas.get("query_boiling_batch_trace"));
         assertObjectClosed(schemas.get("query_material_pick_trace"));
         assertObjectClosed(schemas.get("query_production_label_completion"));
@@ -126,6 +135,7 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("query_quality_standard_catalog"));
         assertObjectClosed(schemas.get("get_quality_standard_detail"));
         assertObjectClosed(schemas.get("query_product_standard_relations"));
+        assertObjectClosed(schemas.get("query_product_quality_configuration"));
         assertObjectClosed(schemas.get("query_employee_roster"));
         assertObjectClosed(schemas.get("query_roles"));
         assertObjectClosed(schemas.get("get_role_permission_summary"));
@@ -143,6 +153,10 @@ class WarehouseMcpApplicationTest {
         assertRequired(schemas.get("get_inventory_distribution"), "productScope");
         assertRequired(schemas.get("get_inventory_distribution"), "warehouseScope");
         assertRequired(schemas.get("get_inventory_distribution"), "groupBy");
+        assertRequired(schemas.get("query_unqualified_inventory"), "productScope");
+        assertRequired(schemas.get("query_unqualified_inventory"), "warehouseScope");
+        assertRequired(schemas.get("query_inventory_by_quality_standard"), "standardCode");
+        assertRequired(schemas.get("query_inventory_by_assay_metrics"), "metricCondition");
         assertRequired(schemas.get("query_assay_abnormalities"), "productScope");
         assertRequired(schemas.get("get_assay_report_detail"), "reportRef");
         assertRequired(schemas.get("query_assay_standard_coverage"), "productScope");
@@ -153,6 +167,7 @@ class WarehouseMcpApplicationTest {
         assertRequired(schemas.get("resolve_production_entities"), "entityType");
         assertRequired(schemas.get("resolve_production_entities"), "query");
         assertRequired(schemas.get("query_production_order_progress"), "orderRef");
+        assertNoRequiredFields(schemas.get("query_boiling_batches"));
         assertRequired(schemas.get("query_boiling_batch_trace"), "batchRef");
         assertRequired(schemas.get("query_material_pick_trace"), "orderRef");
         assertRequired(schemas.get("query_material_candidates"), "orderRef");
@@ -170,6 +185,9 @@ class WarehouseMcpApplicationTest {
         assertIntegerBounds(schemas.get("get_inventory_overview"), "page", 1, null);
         assertIntegerBounds(schemas.get("get_inventory_overview"), "size", 1, 100);
         assertIntegerBounds(schemas.get("get_inventory_distribution"), "limit", 1, 100);
+        assertIntegerBounds(schemas.get("query_unqualified_inventory"), "limit", 1, 100);
+        assertIntegerBounds(schemas.get("query_inventory_by_quality_standard"), "limit", 1, 100);
+        assertIntegerBounds(schemas.get("query_inventory_by_assay_metrics"), "limit", 1, 100);
         assertIntegerBounds(schemas.get("get_warehouse_status"), "page", 1, null);
         assertIntegerBounds(schemas.get("get_warehouse_status"), "size", 1, 100);
         assertStringBounds(schemas.get("get_pallet_status"), "code", 1, 100);
@@ -193,6 +211,8 @@ class WarehouseMcpApplicationTest {
         assertStringBounds(schemas.get("resolve_production_entities"), "query", 1, 100);
         assertIntegerBounds(schemas.get("resolve_production_entities"), "limit", 1, 10);
         assertStringBounds(schemas.get("query_production_order_progress"), "orderRef", 1, 500);
+        assertStringBounds(schemas.get("query_boiling_batches"), "productQuery", 1, 100);
+        assertIntegerBounds(schemas.get("query_boiling_batches"), "limit", 1, 20);
         assertStringBounds(schemas.get("query_boiling_batch_trace"), "batchRef", 1, 500);
         assertStringBounds(schemas.get("query_material_pick_trace"), "orderRef", 1, 500);
         assertStringBounds(schemas.get("query_production_label_completion"), "orderRef", 1, 500);
@@ -206,7 +226,7 @@ class WarehouseMcpApplicationTest {
     }
 
     @Test
-    void bindsAndInvokesAllFortySevenToolCallbacks() {
+    void bindsAndInvokesAllFiftyTwoToolCallbacks() {
         Map<String, ToolCallback> callbacks = providers.stream()
                 .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
                 .collect(Collectors.toMap(
@@ -230,6 +250,9 @@ class WarehouseMcpApplicationTest {
                 Map.entry("resolve_warehouses", "{\"query\":\"1号库位\"}"),
                 Map.entry("get_inventory_overview", "{}"),
                 Map.entry("get_inventory_distribution", "{\"productScope\":{\"type\":\"ALL\"},\"warehouseScope\":{\"type\":\"ALL\"},\"groupBy\":\"product\"}"),
+                Map.entry("query_unqualified_inventory", "{\"productScope\":{\"type\":\"ALL\"},\"warehouseScope\":{\"type\":\"ALL\"}}"),
+                Map.entry("query_inventory_by_quality_standard", "{\"productScope\":{\"type\":\"ALL\"},\"warehouseScope\":{\"type\":\"ALL\"},\"standardCode\":\"STD-ACCEPTANCE\"}"),
+                Map.entry("query_inventory_by_assay_metrics", "{\"productScope\":{\"type\":\"ALL\"},\"warehouseScope\":{\"type\":\"ALL\"},\"metricCondition\":{\"metricCode\":\"sucrose\",\"operator\":\"GTE\",\"value\":99.7}}"),
                 Map.entry("query_assay_records", "{\"productScope\":{\"type\":\"ALL\"}}"),
                 Map.entry("get_assay_report_detail", "{\"reportRef\":\"report_ref\"}"),
                 Map.entry("query_assay_abnormalities", "{\"productScope\":{\"type\":\"ALL\"}}"),
@@ -242,6 +265,7 @@ class WarehouseMcpApplicationTest {
                 Map.entry("query_qr_batch_inbound_completion", "{\"batchNo\":\"BATCH-ACCEPTANCE\"}"),
                 Map.entry("resolve_production_entities", "{\"entityType\":\"PRODUCTION_ORDER\",\"query\":\"ORDER-ACCEPTANCE\"}"),
                 Map.entry("query_production_order_progress", "{\"orderRef\":\"order_ref\"}"),
+                Map.entry("query_boiling_batches", "{}"),
                 Map.entry("query_boiling_batch_trace", "{\"batchRef\":\"batch_ref\"}"),
                 Map.entry("query_material_pick_trace", "{\"orderRef\":\"order_ref\"}"),
                 Map.entry("query_production_label_completion", "{\"orderRef\":\"order_ref\"}"),
@@ -261,6 +285,7 @@ class WarehouseMcpApplicationTest {
                 Map.entry("query_quality_standard_catalog", "{}"),
                 Map.entry("get_quality_standard_detail", "{\"standardCode\":\"STD-ACCEPTANCE\",\"version\":1}"),
                 Map.entry("query_product_standard_relations", "{\"productName\":\"验收产品\"}"),
+                Map.entry("query_product_quality_configuration", "{\"productId\":1}"),
                 Map.entry("query_employee_roster", "{}"),
                 Map.entry("query_roles", "{}"),
                 Map.entry("get_role_permission_summary", "{\"roleCodeOrName\":\"ADMIN\"}"),

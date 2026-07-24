@@ -1,0 +1,195 @@
+version: "1.0"
+updated_at: "2026-07-24"
+scope: "52 个 Agent v1 L1 只读工具的用户目标归属"
+current_contract_count: 43
+planned_contract_count: 0
+classified_tool_count: 52
+
+principles:
+  - "GoalContract 按用户业务结果登记，不按工具数量一对一生成。"
+  - "primary_tools 能直接形成完成事实；supporting_tools 只负责解析、目录发现或详情下钻。"
+  - "Runtime 中 evidenceTools 必须与 primary_tools 一致；supporting_tools 不得生成目标完成证据。"
+  - "CURRENT 表示已进入 Runtime GoalContract、FactEnvelope 和 CompletionEvaluator。"
+  - "PLANNED 表示工具已经可用但目标合同尚未进入 Runtime；当前 planned_goals 为空。"
+  - "同一工具可以在一个目标中作为主查询工具，在另一个目标中作为支撑工具。"
+
+current_goals:
+  CURRENT_PRODUCT_INVENTORY:
+    owner_expert: inventory_expert
+    primary_tools: [get_inventory_overview]
+    supporting_tools: [resolve_products]
+  PRODUCT_INVENTORY_DISTRIBUTION:
+    owner_expert: inventory_expert
+    primary_tools: [get_inventory_distribution, get_inventory_overview]
+    supporting_tools: [resolve_products]
+  WAREHOUSE_INVENTORY_DISTRIBUTION:
+    owner_expert: inventory_expert
+    primary_tools: [get_inventory_distribution]
+    supporting_tools: [resolve_warehouses]
+  CURRENT_PENDING_TASKS:
+    owner_expert: logistics_expert
+    primary_tools: [query_pallet_tasks]
+    supporting_tools: []
+  BOILING_BATCH_TRACE:
+    owner_expert: production_expert
+    primary_tools: [query_boiling_batch_trace]
+    supporting_tools: [resolve_production_entities]
+  PRODUCTION_ORDER_PROGRESS:
+    owner_expert: production_expert
+    primary_tools: [query_production_order_progress]
+    supporting_tools: [resolve_production_entities]
+  PRODUCTION_MATERIAL_TRACE:
+    owner_expert: production_expert
+    primary_tools: [query_material_pick_trace]
+    supporting_tools: [resolve_production_entities]
+  PALLET_CURRENT_STATUS:
+    owner_expert: pallet_expert
+    primary_tools: [get_pallet_status, query_qr_code_lifecycle]
+    supporting_tools: []
+  PALLET_FLOW_HISTORY:
+    owner_expert: pallet_expert
+    primary_tools: [query_qr_code_lifecycle, query_pallet_flow_records]
+    supporting_tools: []
+  PRODUCT_ASSAY_REPORT:
+    owner_expert: assay_expert
+    primary_tools: [get_assay_status, get_assay_report_detail]
+    supporting_tools: [resolve_products]
+  PRODUCT_ASSAY_HISTORY:
+    owner_expert: assay_expert
+    primary_tools: [query_assay_records]
+    supporting_tools: [resolve_products]
+  BOILING_BATCH_LIST:
+    owner_expert: production_expert
+    primary_tools: [query_boiling_batches]
+    supporting_tools: []
+  PRODUCTION_OUTPUT_DESTINATIONS:
+    owner_expert: production_expert
+    primary_tools: [query_production_order_progress]
+    supporting_tools: [resolve_production_entities]
+  CURRENT_UNQUALIFIED_INVENTORY:
+    owner_expert: assay_expert
+    primary_tools: [query_unqualified_inventory]
+    supporting_tools: [resolve_products, resolve_warehouses]
+  CURRENT_INVENTORY_MATCHING_STANDARD:
+    owner_expert: assay_expert
+    primary_tools: [query_inventory_by_quality_standard]
+    supporting_tools: [resolve_products, resolve_warehouses, query_quality_standard_catalog]
+  CURRENT_INVENTORY_MATCHING_METRIC:
+    owner_expert: assay_expert
+    primary_tools: [query_inventory_by_assay_metrics]
+    supporting_tools: [resolve_products, resolve_warehouses]
+  CURRENT_INVENTORY_ASSAY_GAPS:
+    owner_expert: assay_expert
+    primary_tools: [query_products_without_recent_assay]
+    supporting_tools: [resolve_products, resolve_warehouses]
+  CURRENT_INVENTORY_LEDGER:
+    owner_expert: inventory_expert
+    primary_tools: [query_inventory_ledger]
+    supporting_tools: [resolve_products, resolve_warehouses]
+  PREPARE_POOL_BALANCE:
+    owner_expert: inventory_expert
+    primary_tools: [query_prepare_pool_balance]
+    supporting_tools: [resolve_products]
+  WAREHOUSE_STATUS:
+    owner_expert: warehouse_expert
+    primary_tools: [get_warehouse_status]
+    supporting_tools: [resolve_warehouses]
+  WAREHOUSE_CAPACITY_DISTRIBUTION:
+    owner_expert: warehouse_expert
+    primary_tools: [query_warehouse_capacity_distribution]
+    supporting_tools: [resolve_warehouses]
+  WAREHOUSE_RECENT_OPERATIONS:
+    owner_expert: warehouse_expert
+    primary_tools: [query_warehouse_recent_operations]
+    supporting_tools: [resolve_warehouses]
+  WAREHOUSE_MIXED_STORAGE_FACTS:
+    owner_expert: warehouse_expert
+    primary_tools: [query_warehouse_mixed_storage_facts]
+    supporting_tools: [resolve_warehouses]
+  ASSAY_ABNORMALITY_SUMMARY:
+    owner_expert: assay_expert
+    primary_tools: [query_assay_abnormalities]
+    supporting_tools: [resolve_products]
+  CURRENT_INVENTORY_STANDARD_GAPS:
+    owner_expert: assay_expert
+    primary_tools: [query_assay_standard_coverage]
+    supporting_tools: [resolve_products]
+  PALLET_ANOMALY_SUMMARY:
+    owner_expert: pallet_expert
+    primary_tools: [query_pallet_anomalies]
+    supporting_tools: [resolve_products, resolve_warehouses]
+  PRINTED_NOT_INBOUND_QR_CODES:
+    owner_expert: pallet_expert
+    primary_tools: [query_printed_not_inbound_codes]
+    supporting_tools: [resolve_products]
+  QR_BATCH_INBOUND_COMPLETION:
+    owner_expert: pallet_expert
+    primary_tools: [query_qr_batch_inbound_completion]
+    supporting_tools: []
+  PRODUCTION_LABEL_COMPLETION:
+    owner_expert: production_expert
+    primary_tools: [query_production_label_completion]
+    supporting_tools: [resolve_production_entities]
+  IN_PROCESS_MATERIALS:
+    owner_expert: production_expert
+    primary_tools: [query_in_process_materials]
+    supporting_tools: [resolve_products]
+  STOCK_DOCUMENTS:
+    owner_expert: logistics_expert
+    primary_tools: [query_stock_documents]
+    supporting_tools: [resolve_products, resolve_warehouses]
+  AUTO_INBOUND_BATCH_STATUS:
+    owner_expert: logistics_expert
+    primary_tools: [query_auto_inbound_batches, get_auto_inbound_batch_detail]
+    supporting_tools: []
+
+  ASSAY_REFERENCE_DATA:
+    owner_expert: assay_expert
+    primary_tools:
+      - query_assay_groups
+      - query_quality_standard_catalog
+      - get_quality_standard_detail
+      - query_product_standard_relations
+    supporting_tools: [resolve_products]
+  PRODUCT_QUALITY_CONFIGURATION:
+    owner_expert: assay_expert
+    primary_tools: [query_product_quality_configuration]
+    supporting_tools: [resolve_products]
+  FIXED_PRODUCT_QR_POOL:
+    owner_expert: pallet_expert
+    primary_tools: [query_fixed_product_qr_pool]
+    supporting_tools: [resolve_products]
+  MATERIAL_CANDIDATES:
+    owner_expert: production_expert
+    primary_tools: [query_material_candidates]
+    supporting_tools: [resolve_production_entities]
+  PRODUCT_MASTER_DATA:
+    owner_expert: master_data_expert
+    primary_tools: [query_product_catalog, get_product_detail]
+    supporting_tools: [resolve_products]
+  SCREEN_MESH_CATALOG:
+    owner_expert: master_data_expert
+    primary_tools: [query_screen_mesh_catalog]
+    supporting_tools: []
+  EMPLOYEE_ROSTER:
+    owner_expert: administration_expert
+    primary_tools: [query_employee_roster]
+    supporting_tools: []
+  ROLE_PERMISSION_CATALOG:
+    owner_expert: administration_expert
+    primary_tools: [query_roles, get_role_permission_summary]
+    supporting_tools: []
+  BUSINESS_OPERATION_LOGS:
+    owner_expert: audit_expert
+    primary_tools: [search_operation_logs]
+    supporting_tools: []
+  AGENT_TOOL_AUDIT:
+    owner_expert: audit_expert
+    primary_tools: [query_agent_tool_audit]
+    supporting_tools: []
+  AGENT_ANSWER_REVIEWS:
+    owner_expert: audit_expert
+    primary_tools: [query_agent_answer_reviews]
+    supporting_tools: []
+
+planned_goals: {}

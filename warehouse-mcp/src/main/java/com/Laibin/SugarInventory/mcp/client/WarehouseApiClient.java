@@ -173,10 +173,10 @@ public class WarehouseApiClient {
 
     private static String mapBusinessCode(int code) {
         return switch (code) {
-            case 400 -> "UPSTREAM_BAD_REQUEST";
+            case 400, 1030 -> "UPSTREAM_BAD_REQUEST";
             case 401 -> "UPSTREAM_UNAUTHORIZED";
             case 403 -> "UPSTREAM_PERMISSION_DENIED";
-            case 404 -> "UPSTREAM_NOT_FOUND";
+            case 404, 1001, 1010, 1016, 1017, 1020, 1023, 1027, 1028, 1031 -> "UPSTREAM_NOT_FOUND";
             default -> code >= 500 ? "UPSTREAM_SERVER_ERROR" : "UPSTREAM_BUSINESS_ERROR";
         };
     }
@@ -193,7 +193,7 @@ public class WarehouseApiClient {
     }
 
     private static boolean isRetryableBusinessCode(int code) {
-        return code >= 500;
+        return "UPSTREAM_SERVER_ERROR".equals(mapBusinessCode(code));
     }
 
     private static void logUpstreamMessage(String context, String message) {

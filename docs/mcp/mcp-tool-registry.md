@@ -381,7 +381,7 @@ M1.1 只增加 L1 查询工具，不增加预览和执行。
 
 ### 5.3 `get_production_order_trace`
 
-状态：未实现，计划 M1.1 或 M1.2
+状态：旧聚合候选，已由 `resolve_production_entities`、`query_production_order_progress`、`query_material_pick_trace` 和 `query_boiling_batch_trace` 分步实现
 风险：L1
 用途：查询生产订单领料、产出、标签和入库进度。
 
@@ -389,7 +389,7 @@ M1.1 只增加 L1 查询工具，不增加预览和执行。
 
 ```json
 {
-  "orderId": 123,
+  "orderRef": "受控生产订单引用",
   "includeMaterials": true,
   "includeOutputs": true,
   "includeLabels": true
@@ -399,6 +399,7 @@ M1.1 只增加 L1 查询工具，不增加预览和执行。
 输出建议：
 
 * `baseInfo`
+* `boilingSources`
 * `materials`
 * `outputs`
 * `labelBatches`
@@ -406,14 +407,26 @@ M1.1 只增加 L1 查询工具，不增加预览和执行。
 * `warnings`
 * `error`
 
-底层接口候选：
+当前实现：
 
-* `GET /api/production/orders/{id}`
-* `GET /api/production/orders/{id}/trace`
+* 先用 `resolve_production_entities` 解析订单号或具体煮糖批次号；
+* 用 `query_boiling_batches` 按可选产品、北京时间业务日期范围和可选状态列出已登记煮糖批次；产品不是时间范围查询的必填条件；
+* 用 `query_production_order_progress` 查询订单当前进度、关联煮糖批次的投入/预留、实际领料、产出明细与已确认的实际入库去向；
+* 用 `query_material_pick_trace` 查询实际登记的领料与来源托盘；
+* 用 `query_boiling_batch_trace` 查询煮糖批次使用记录和流转摘要。
 
-待补：
+生产阶段语义约束：
 
-* 如果用户只提供订单号，需要订单号解析接口。
+* `boilingSources` 表示订单与煮糖批次之间已登记的投入、引用或预留关系，必须携带用户可读数量和状态；
+* `RESERVED` 等预留状态不得累计到实际领料、实际消耗或实际产出中；只有相应业务记录真正完成后，才可作为实际事实统计；
+* 一个批次关联多个订单时，用户明确要求“这两个/这些/全部”可在受控上限内分别查询并返回多张订单卡片；否则返回结构化候选项供选择；
+* 返回给普通用户的文本和卡片必须映射为中文业务状态，不得直接展示 `PREPRINTED`、`USED_UP`、`RESERVED` 等内部枚举值。
+
+实际入库去向判定：
+
+* 只有产出二维码已经关联库存、已有入库时间，或状态明确为 `INSTOCK` 时，才计入实际入库去向；
+* 任务目标库位仅代表待执行目标，不得作为实际入库事实返回；
+* 输出只包含库位名称、入库码数量和托盘码，不返回订单、产出、库存等内部数据库 ID。
 
 ---
 
@@ -978,19 +991,23 @@ delete_any_record
 | `get_warehouse_status`        | 已实现           |        M1 | L1 | 是     | 库位状态查询        |
 | `get_pallet_status`           | 已实现           |      M1.1 | L1 | 是     | 托盘码状态和流转查询    |
 | `get_assay_status`            | 已实现           |      M1.1 | L1 | 是     | 单产品/单日期化验状态查询 |
-| `get_production_order_trace`  | 计划            | M1.1/M1.2 | L1 | 否     | 生产订单追踪        |
+| `get_production_order_trace`  | 已由分步工具替代 | M1.1/M1.2 | L1 | 否 | 不再建设单一大而全工具 |
 | `query_assay_records`         | 已实现          |     M1.4b | L1 | 是     | 受控化验记录范围查询    |
 | `get_assay_report_detail`     | 已实现          |     M1.4b | L1 | 是     | 受控化验报告详情查询    |
 | `query_assay_abnormalities`   | 已实现          |     M1.4b | L1 | 是     | 受控化验质量异常聚合查询 |
 | `query_products_without_recent_assay` | 已实现 | M1.4b | L1 | 是 | 受控缺化验在库分组查询 |
 | `query_assay_standard_coverage` | 已实现 | M1.4b | L1 | 是 | 当前在库产品质量标准覆盖查询 |
+| `query_unqualified_inventory` | 已实现 | Agent v1 quality-02 | L1 | 是 | 当前库存批次最新化验明确判定为不合格的库存筛选 |
+| `query_inventory_by_quality_standard` | 已实现 | Agent v1 quality-02 | L1 | 是 | 以当前批次最新化验原始值逐项匹配指定完整标准 |
+| `query_inventory_by_assay_metrics` | 已实现 | Agent v1 quality-02 | L1 | 是 | 按单一白名单原始化验指标和数值条件筛选当前库存 |
 | `query_qr_code_lifecycle` | 已实现 | M1.4c | L1 | 是 | 单个二维码 / 托盘码生命周期查询 |
 | `query_printed_not_inbound_codes` | 已实现 | M1.4c | L1/L2 | 是 | 已打印但未完成入库的二维码分组查询 |
 | `query_pallet_anomalies` | 已实现 | M1.4c | L1/L2 | 是 | 托盘状态、库存和流转异常聚合查询 |
 | `query_pallet_flow_records` | 已实现 | M1.4c | L1 | 是 | 受控托盘流转记录分页查询 |
 | `query_qr_batch_inbound_completion` | 已实现 | M1.4c | L1/L2 | 是 | 二维码标签批次入库完成率查询 |
 | `resolve_production_entities` | 已实现 | Agent v1 production-01 | L1 | 是 | 生产订单/煮糖批次受控实体解析 |
-| `query_production_order_progress` | 已实现 | Agent v1 production-01 | L1 | 是 | 生产订单当前领料、产出、标签及入库进度 |
+| `query_boiling_batches` | 已实现 | Agent v1 production-02 | L1 | 是 | 按可选产品、北京时间业务日期范围和状态列出煮糖批次，返回后续详情查询所需的受控候选引用 |
+| `query_production_order_progress` | 已实现 | Agent v1 production-01 | L1 | 是 | 生产订单关联煮糖批次投入/预留、实际领料、产出、标签、入库进度及有事实依据的产出入库去向 |
 | `query_boiling_batch_trace` | 已实现 | Agent v1 production-02 | L1 | 是 | 煮糖批次已登记详情、使用记录和追溯关系 |
 | `query_material_pick_trace` | 已实现 | Agent v1 production-03 | L1 | 是 | 生产订单已登记实际领料和托盘来源 |
 | `query_production_label_completion` | 已实现 | Agent v1 production-04 | L1 | 是 | 生产订单标签预留/使用/回收与二维码绑定/入库完成度 |
@@ -1010,6 +1027,7 @@ delete_any_record
 | `query_quality_standard_catalog` | 已实现 | Agent v1 quality-01 | L1 | 是 | 当前质量标准目录及版本状态；`quality_standard:view` |
 | `get_quality_standard_detail` | 已实现 | Agent v1 quality-01 | L1 | 是 | 按准确代码和版本查询指标配置；LLM 不作最终判定 |
 | `query_product_standard_relations` | 已实现 | Agent v1 quality-01 | L1 | 是 | 产品当前标准绑定、默认项和生效区间；不证明报告采用或产品合格 |
+| `query_product_quality_configuration` | 已实现 | Agent v1 quality-02 | L1 | 是 | 按已确认产品聚合当前适用质量标准和所属批量化验组；不按名称推断关系 |
 | `query_employee_roster` | 已实现 | Agent v1 administration-01 | L1 | 是 | 当前员工名册；`rbac:user:view`；手机号脱敏且不返回凭据/绑定信息 |
 | `query_roles` | 已实现 | Agent v1 administration-01 | L1 | 是 | 当前角色目录和汇总数量；不返回内部 ID 或员工姓名清单 |
 | `get_role_permission_summary` | 已实现 | Agent v1 administration-01 | L1 | 是 | 按准确角色编码/名称查询权限摘要；实际访问仍重新鉴权 |
@@ -1160,7 +1178,7 @@ M1.2 完成时只有以下 6 个已实现业务工具：
 * `get_pallet_status`
 * `get_assay_status`
 
-M1.3/M1.4 及 Agent v1 全模块查询完成后，当前白名单已扩展为 47 个只读业务工具。在原 6 个基础工具之外，新增：
+M1.3/M1.4 及 Agent v1 全模块查询完成后，当前白名单已扩展为 52 个只读业务工具。在原 6 个基础工具之外，新增：
 
 * `get_inventory_distribution`
 * `query_assay_records`
@@ -1168,12 +1186,16 @@ M1.3/M1.4 及 Agent v1 全模块查询完成后，当前白名单已扩展为 47
 * `query_assay_abnormalities`
 * `query_products_without_recent_assay`
 * `query_assay_standard_coverage`
+* `query_unqualified_inventory`
+* `query_inventory_by_quality_standard`
+* `query_inventory_by_assay_metrics`
 * `query_qr_code_lifecycle`
 * `query_printed_not_inbound_codes`
 * `query_pallet_anomalies`
 * `query_pallet_flow_records`
 * `query_qr_batch_inbound_completion`
 * `resolve_production_entities`
+* `query_boiling_batches`
 * `query_production_order_progress`
 * `query_boiling_batch_trace`
 * `query_material_pick_trace`
@@ -1194,6 +1216,7 @@ M1.3/M1.4 及 Agent v1 全模块查询完成后，当前白名单已扩展为 47
 * `query_quality_standard_catalog`
 * `get_quality_standard_detail`
 * `query_product_standard_relations`
+* `query_product_quality_configuration`
 * `query_employee_roster`
 * `query_roles`
 * `get_role_permission_summary`
@@ -1282,15 +1305,23 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 * 单一板件规格输出 `normalizedPallets` / `normalizedLoosePieces`；跨规格汇总不虚构统一板数，改用 `totalEquivalentPieces`、总重量和“跨规格”展示文本；
 * 普通回答、SSE 和卡片只接收 safe adapter 白名单字段，不显示内部 ID、工具名或原始 JSON。
 
-当前 internal agent gateway 白名单已有 47 个只读工具。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC 和审计域的 Agent v1 查询工具；仍未增加 login、`preview_*`、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
+当前 internal agent gateway 白名单已有 52 个只读工具。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC、审计和当前库存质量筛选工具；仍未增加 login、`preview_*`、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
 
 仍不支持：库区范围、任意状态字段、库龄分桶、明细下钻和报表导出。这些能力需要独立工具或后续规格评审，不扩展为任意 SQL/HTTP 能力。
+
+当前库存质量筛选统一复用 `inventory_current_assay_fact_v1`：托盘库存以 `product_id + pallet_code.production_date` 作为批次，非托盘库存兼容回退 `product_id + inventory.entry_date`，并读取同批次最新版本化验，不使用 `inventory.assay_id`。三个工具语义严格分开：
+
+* `query_unqualified_inventory` 只返回最新化验保存判定为明确不合格的当前库存；无化验、无标准和多候选不计入不合格；
+* `query_inventory_by_quality_standard` 由后端用最新原始指标逐项匹配用户明确指定的标准代码和版本，所有受约束指标都满足才命中；它不改写历史判定，也不证明产品已绑定该标准；
+* `query_inventory_by_assay_metrics` 当前只接受一个白名单指标、一个受控比较运算符和一个数值，不由 LLM 计算或拼接 SQL。
+
+三类结果均可携带仅供 Runtime 受控追问使用的化验报告引用；普通回答和卡片不得展示该引用、数据库 ID、`FAIL` 等后端枚举或原始 JSON。
 
 ---
 
 ## 18. M1.4 后续模块工具设计索引
 
-状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、主数据、员工/RBAC、审计和库存补充工具均已实现并加入当前 47 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
+状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、当前库存质量筛选、主数据、员工/RBAC、审计和库存补充工具均已实现并加入当前 52 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
 
 详细设计见 `docs/mcp-analysis/m14-module-tool-design.md`。该文档基于已完成的审计、HITL、LLM Wiki Lite、Answer Review 和 `get_inventory_distribution` 链路，拆分 M1.4b-f 后续只读分析工具。
 
@@ -1327,9 +1358,13 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 
 M1.4c 第一版口径：打印以 `production_order_label_batch.printed_at` 为来源；二维码入库以输出码已关联库存、存在入库时间或状态为 `INSTOCK` 判定。当前系统没有独立二维码扫描日志来源，因此 `VOID_CODE_SCANNED` 只返回能力缺口说明，不虚构异常结果。
 
+2026-07-23 托盘旅程验收补充：`query_pallet_flow_records` 同时承担“最近流转”和“完整历史”业务目标。用户明确说完整/全部/所有历史时，Python Runtime 必须把模型参数规范化为受控全量日期范围；MCP 仍接收明确范围以避免后端默认最近窗口，但安全适配结果只输出“完整历史”，不向模型最终答案或普通卡片暴露内部日期下界。专家若误选 `get_pallet_status` 或 `query_qr_code_lifecycle` 代替完整历史，Runtime 拒绝该计划并允许专家重新选择 `query_pallet_flow_records`，不由确定性 Router 直接调用工具。
+
+托盘码校验与不存在必须保持不同错误语义：业务码 `1030` 映射为不可重试的 `UPSTREAM_BAD_REQUEST`，提示用户核对格式/校验位；业务码 `1031` 映射为不可重试的 `UPSTREAM_NOT_FOUND`，表示格式合法但无记录。两类终态都禁止同签名循环重试。`cycle` / `cycleNo` 只允许在内部事实中存在，模型观察和普通展示统一转换为“第 N 次流转”。
+
 未标注“已实现”的工具仍必须逐个实现、测试和登记。设计文档不是白名单授权；未实现前 Agent 不得声称已支持这些能力。
 
-2026-07-14 模块重新审计补充：当前共 47 个工具，9 个业务专家的 Agent v1 查询规划集均已完成全链路登记。详细覆盖矩阵和专家划分见 `docs/mcp-analysis/agent-v1-module-expert-reaudit.md` 与 `docs/mcp-analysis/agent-expert-tool-blueprint.md`。
+2026-07-20 生产范围查询补充：当时共 48 个工具；新增 `query_boiling_batches`，用于按可选产品和北京时间业务日期范围查询煮糖批次。9 个业务专家的 Agent v1 查询规划集均已完成全链路登记。详细覆盖矩阵和专家划分见 `docs/mcp-analysis/agent-v1-module-expert-reaudit.md` 与 `docs/mcp-analysis/agent-expert-tool-blueprint.md`。
 
 ---
 
@@ -1351,7 +1386,7 @@ Python Agent Runtime 已加入第一版主 Agent / 专家 Agent handoff 骨架�
 
 当前专家运行在同一 Python 进程内，默认共享现有模型客户端；已预留按专家注入不同 `ModelClient` 和参数策略的扩展点。详细设计见 `docs/agent/modular-agent-architecture.md`。
 
-生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、47 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。9 个专家的精确白名单和主 Agent 空工具集必须由确定性测试锁定；专家映射 hash 尚未纳入启动握手时，应作为上线阻断项处理。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
+生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、52 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。9 个专家的精确白名单和主 Agent 空工具集必须由确定性测试锁定；专家映射 hash 尚未纳入启动握手时，应作为上线阻断项处理。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
 
 ---
 

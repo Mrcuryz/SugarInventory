@@ -41,8 +41,11 @@ export const hasWideBusinessCard = (item) => visibleCards(item)
     'inventory_distribution',
     'assay_report',
     'assay_history',
+    'inventory_quality',
     'pallet_tasks',
-    'pallet_task_detail'
+    'pallet_task_detail',
+    'pallet_status',
+    'pallet_flow_history'
   ].includes(card?.cardType))
 export const distributionRows = (card) => (card?.fields || []).filter(field => field?.kind !== 'risk_summary')
 export const distributionRiskSummary = (card) => (card?.fields || []).find(field => field?.kind === 'risk_summary')?.value

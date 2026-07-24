@@ -149,6 +149,29 @@ public final class ToolModels {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = false)
+    public record InventoryQualityMetricCondition(
+            @JsonProperty(value = "metricCode", required = true) String metricCode,
+            @JsonProperty(value = "operator", required = true) String operator,
+            BigDecimal value,
+            BigDecimal minValue,
+            BigDecimal maxValue
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record InventoryQualityRequest(
+            @JsonProperty(value = "productScope", required = true) ProductScope productScope,
+            @JsonProperty(value = "warehouseScope", required = true) WarehouseScope warehouseScope,
+            @JsonProperty(value = "mode", required = true) String mode,
+            String judgeStatus,
+            @Size(min = 1, max = 64) String standardCode,
+            @Min(1) Integer standardVersion,
+            InventoryQualityMetricCondition metricCondition,
+            @Min(1) @Max(100) Integer limit
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
     public record DateRange(
             @JsonProperty(value = "type", required = true) String type,
             LocalDate date,
@@ -509,6 +532,39 @@ public final class ToolModels {
         public static InventoryDistributionResponse error(ToolError error) {
             return new InventoryDistributionResponse(null, null, null, 0, 0, null, null, 0, null, null,
                     0, 0, 0, null, List.of(), List.of(), error);
+        }
+    }
+
+    public record InventoryQualityRecord(
+            String productLabel,
+            LocalDate productionDate,
+            String warehouseLabel,
+            String stockText,
+            String totalWeightText,
+            long palletCount,
+            String judgeStatus,
+            String judgeLabel,
+            String standardLabel,
+            String failedMetricText,
+            String metricLabel,
+            String metricValueText,
+            String reportRef
+    ) {
+    }
+
+    public record InventoryQualityResponse(
+            String queryType,
+            String queryLabel,
+            long totalGroups,
+            long totalEquivalentPieces,
+            String totalWeightText,
+            boolean truncated,
+            List<InventoryQualityRecord> records,
+            List<String> notes,
+            ToolError error
+    ) {
+        public static InventoryQualityResponse error(ToolError error) {
+            return new InventoryQualityResponse(null, null, 0, 0, null, false, List.of(), List.of(), error);
         }
     }
 
@@ -968,6 +1024,29 @@ public final class ToolModels {
         }
     }
 
+    public record ProductionBoilingBatchListRequest(
+            String productQuery,
+            String startDate,
+            String endDate,
+            String status,
+            Integer limit
+    ) {
+    }
+
+    public record ProductionBoilingBatchListResponse(
+            String dataScope,
+            String scopeLabel,
+            String dateRangeLabel,
+            long total,
+            List<ProductionEntityCandidate> candidates,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductionBoilingBatchListResponse error(ToolError error) {
+            return new ProductionBoilingBatchListResponse(null, null, null, 0, List.of(), List.of(), error);
+        }
+    }
+
     public record ProductionOrderProgressRequest(String orderRef) {
     }
 
@@ -990,6 +1069,8 @@ public final class ToolModels {
             int reservedLabelCount,
             int usedLabelCount,
             int recycledLabelCount,
+            List<JsonNode> boilingSources,
+            List<JsonNode> outputs,
             LocalDateTime updatedAt,
             LocalDateTime completedAt,
             List<String> limitations,
@@ -997,7 +1078,7 @@ public final class ToolModels {
     ) {
         public static ProductionOrderProgressResponse error(ToolError error) {
             return new ProductionOrderProgressResponse(null, null, null, null, null, null, null, null, null,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, null, null, List.of(), error);
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), null, null, List.of(), error);
         }
     }
 
@@ -1244,6 +1325,27 @@ public final class ToolModels {
     }
     public record ProductStandardRelationsResponse(String dataScope, String productName, int count, List<JsonNode> records, List<String> limitations, ToolError error) {
         public static ProductStandardRelationsResponse error(ToolError e) { return new ProductStandardRelationsResponse(null, null, 0, List.of(), List.of(), e); }
+    }
+    public record ProductQualityConfigurationResponse(
+            String dataScope,
+            String productName,
+            String productType,
+            String productStatus,
+            String packagingMethod,
+            BigDecimal weightPerPiece,
+            Integer piecesPerPallet,
+            int standardCount,
+            List<JsonNode> standards,
+            int assayGroupCount,
+            List<JsonNode> assayGroups,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static ProductQualityConfigurationResponse error(ToolError e) {
+            return new ProductQualityConfigurationResponse(
+                    null, null, null, null, null, null, null,
+                    0, List.of(), 0, List.of(), List.of(), e);
+        }
     }
     public record EmployeeRosterResponse(String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error) {
         public static EmployeeRosterResponse error(ToolError e) { return new EmployeeRosterResponse(null, 0, 0, 0, List.of(), List.of(), e); }

@@ -9,6 +9,8 @@ import com.Laibin.SugarInventory.domain.vo.AssayGroupVO;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.util.List;
+
 @Mapper
 public interface AssayGroupService extends IService<AssayGroup> {
 
@@ -21,6 +23,11 @@ public interface AssayGroupService extends IService<AssayGroup> {
      * 查询批量化验组数据
      */
     PageResult<AssayGroupVO> queryAssays(AssayGroupQueryDTO query);
+
+    /**
+     * 按产品 ID 精确查询当前批量化验组配置。
+     */
+    List<AssayGroup> listByProductId(Integer productId);
 
     /**
      * 更新批量化验组数据

@@ -20,7 +20,13 @@ class FastCompletionPolicy:
                 "get_assay_status": ("历史", "趋势", "最近30天", "近30天", "对比", "同时", "并且", "以及"),
                 "query_assay_records": ("趋势", "分析", "变化", "对比", "同时", "并且", "以及"),
                 "get_assay_report_detail": ("趋势", "分析", "对比", "同时", "并且", "以及"),
+                "query_unqualified_inventory": ("趋势", "分析", "原因", "对比", "同时", "并且", "以及"),
+                "query_inventory_by_quality_standard": ("趋势", "分析", "原因", "对比", "同时", "并且", "以及"),
+                "query_inventory_by_assay_metrics": ("趋势", "分析", "原因", "对比", "同时", "并且", "以及"),
                 "query_pallet_tasks": ("趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
+                "query_production_order_progress": ("原料", "领料", "趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
+                "query_material_pick_trace": ("产出", "去向", "趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
+                "query_boiling_batch_trace": ("原料", "产出", "趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
             }
         )
 
@@ -41,7 +47,7 @@ class SafeFallbackPolicy:
         return cls(
             recoverable_model_errors=frozenset({"MODEL_TIMEOUT", "MODEL_ACTION_INVALID"}),
             pre_fallback_observation_tools=frozenset(
-                {"resolve_products", "resolve_warehouses", "USER_SELECTION"}
+                {"resolve_products", "resolve_warehouses", "resolve_production_entities", "USER_SELECTION"}
             ),
             allowed_plan_tools=frozenset(
                 {
@@ -51,6 +57,14 @@ class SafeFallbackPolicy:
                     "get_inventory_distribution",
                     "get_warehouse_status",
                     "get_assay_status",
+                    "query_unqualified_inventory",
+                    "query_inventory_by_quality_standard",
+                    "query_inventory_by_assay_metrics",
+                    "resolve_production_entities",
+                    "query_boiling_batches",
+                    "query_production_order_progress",
+                    "query_material_pick_trace",
+                    "query_boiling_batch_trace",
                 }
             ),
         )
@@ -85,4 +99,10 @@ class NextActionPolicy:
             return ["查询库存分布"]
         if tool_name == "query_pallet_tasks" and safe_data.get("records"):
             return ["只看入库任务", "只看出库任务", "查看第一条任务详情"]
+        if tool_name == "query_boiling_batch_trace" and safe_data.get("usages"):
+            return ["查看关联生产订单"]
+        if tool_name == "query_production_order_progress":
+            return ["查看实际领料", "查看产出入库去向"]
+        if tool_name == "query_material_pick_trace":
+            return ["查看产出情况", "查看产出入库去向"]
         return []

@@ -42,4 +42,13 @@ public interface AssayGroupMapper extends BaseMapper<AssayGroup> {
             "</where> " +
             "</script>")
     Long countAssay(@Param("query") AssayGroupQueryDTO query);
+
+    @Select("""
+            SELECT a.*
+            FROM assay_group a
+            WHERE FIND_IN_SET(CAST(#{productId} AS CHAR), REPLACE(a.related_products, ' ', '')) > 0
+            ORDER BY a.created_at DESC, a.id DESC
+            LIMIT 100
+            """)
+    List<AssayGroup> selectByProductId(@Param("productId") Integer productId);
 }

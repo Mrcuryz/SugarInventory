@@ -19,8 +19,12 @@ class FixedProductQrPoolAgentReadServiceImplTest {
         when(pallets.pageFixedProductPool(any())).thenReturn(new PageResult<>(1L, List.of(row)));
         var service = new FixedProductQrPoolAgentReadServiceImpl(pallets);
         var result = service.queryFixedProductQrPool(new FixedProductQrPoolAgentQueryDTO());
-        assertThat(result.getRecords()).singleElement().satisfies(item -> assertThat(item.getCode()).isEqualTo("QR001"));
-        assertThat(result.toString()).doesNotContain("99", "77");
+        assertThat(result.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getCode()).isEqualTo("QR001");
+            assertThat(java.util.Arrays.stream(item.getClass().getDeclaredFields())
+                    .map(java.lang.reflect.Field::getName)
+                    .toList()).doesNotContain("id", "fixedProductId");
+        });
         assertThat(result.getLimitations()).anyMatch(value -> value.contains("不表示标签已打印"));
         assertThat(result.getLimitations()).anyMatch(value -> value.contains("不执行绑定"));
     }

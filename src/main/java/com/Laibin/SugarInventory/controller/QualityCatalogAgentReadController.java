@@ -19,4 +19,10 @@ public class QualityCatalogAgentReadController {
     public Result<QualityCatalogAgentVO.StandardDetail> detail(@RequestBody QualityCatalogAgentQueries.StandardDetail q) { return Result.success(service.getStandardDetail(q)); }
     @PostMapping("/product-standard-relations/query") @PreAuthorize("hasAuthority('quality_standard:view')")
     public Result<QualityCatalogAgentVO.ProductRelations> relations(@RequestBody QualityCatalogAgentQueries.ProductRelations q) { return Result.success(service.queryProductRelations(q)); }
+    @PostMapping("/product-quality-configuration/query")
+    @PreAuthorize("hasAuthority('quality_standard:view') and hasAuthority('assay:view')")
+    public Result<QualityCatalogAgentVO.ProductQualityConfiguration> productQualityConfiguration(
+            @RequestBody QualityCatalogAgentQueries.ProductQualityConfiguration q) {
+        return Result.success(service.queryProductQualityConfiguration(q));
+    }
 }

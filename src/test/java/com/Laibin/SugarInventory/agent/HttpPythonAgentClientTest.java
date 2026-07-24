@@ -87,7 +87,7 @@ class HttpPythonAgentClientTest {
         server.createContext("/internal/agent/health", exchange -> respond(exchange, 200,
                 "{\"status\":\"UP\",\"dependencies\":{\"toolGateway\":\"UP\"}}"));
         server.createContext("/internal/agent/capabilities", exchange -> respond(exchange, 200,
-                expectedCapabilities().replace("\"toolCount\":47", "\"toolCount\":46")));
+                expectedCapabilities().replace("\"toolCount\":52", "\"toolCount\":51")));
         server.start();
 
         AgentRuntimeProperties properties = new AgentRuntimeProperties();
@@ -106,7 +106,7 @@ class HttpPythonAgentClientTest {
                 "{\"status\":\"UP\",\"dependencies\":{\"toolGateway\":\"UP\"}}"));
         server.createContext("/internal/agent/capabilities", exchange -> respond(exchange, 200,
                 expectedCapabilities().replace(
-                        "0f7da43814511eff9eeb2ba6bea4c250d47bd071a5a28859f2fe77cdc7637c87",
+                        "d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062",
                         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")));
         server.start();
 
@@ -121,7 +121,7 @@ class HttpPythonAgentClientTest {
     @Test
     void javaExpertProfileRegistryMatchesThePythonCanonicalHash() {
         assertThat(McpInternalAgentToolGatewayService.agentProfileRegistryHash(new ObjectMapper()))
-                .isEqualTo("0f7da43814511eff9eeb2ba6bea4c250d47bd071a5a28859f2fe77cdc7637c87");
+                .isEqualTo("d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062");
     }
 
     @Test
@@ -231,10 +231,10 @@ class HttpPythonAgentClientTest {
     private String expectedCapabilities() {
         return """
                 {"runtimeVersion":"0.2.0","protocolVersion":"1.0",
-                 "toolRegistryHash":"b6fd218f6ac17e3817f26e898348743ea92a7331b8f70eabee76ec2c91bd93b1",
+                 "toolRegistryHash":"5cb3d9d529f8268c4cd9135436720e9e9dbb70df4fcbb95e6b93bba85881e82d",
                  "recipeRegistryHash":"c5ee0907e4134024138ff5489bd9b58d92c4103663a00f0d0d14fa5a40d12385",
-                 "agentProfileRegistryHash":"0f7da43814511eff9eeb2ba6bea4c250d47bd071a5a28859f2fe77cdc7637c87",
-                 "toolCount":47,"recipeCount":1,"agentProfiles":[]}
+                 "agentProfileRegistryHash":"d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062",
+                 "toolCount":52,"recipeCount":1,"agentProfiles":[]}
                 """;
     }
 }

@@ -137,9 +137,17 @@ class CompoundIntentPlanner:
         return f"{number}号库位"
 
     def is_unsupported_batch_qualification(self, user_message: str) -> bool:
+        supported_inventory_quality = (
+            any(scope in user_message for scope in ("库存中", "库存里", "库中", "在库产品", "哪些库存", "哪些产品"))
+            and any(word in user_message for word in (
+                "不合格", "符合", "满足", "达标", "色值", "还原糖", "干燥失重",
+                "电导灰分", "蔗糖", "不溶于水杂质", "pH", "ph",
+            ))
+        )
         return (
             any(scope in user_message for scope in ("库存批次", "这批库存", "当前批次"))
             and any(word in user_message for word in ("合格", "化验", "质检"))
+            and not supported_inventory_quality
         )
 
     def _is_warehouse_inventory_assay(self, user_message: str) -> bool:

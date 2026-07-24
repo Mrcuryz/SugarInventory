@@ -228,6 +228,7 @@ class AgentSessionServiceImplTest {
         List<String> paths = List.of(
                 "/api/production/agent-read/entities/resolve",
                 "/api/production/agent-read/orders/progress/query",
+                "/api/production/agent-read/boiling-batches/query",
                 "/api/production/agent-read/boiling-batches/trace/query",
                 "/api/production/agent-read/orders/material-pick-trace/query",
                 "/api/production/agent-read/orders/label-completion/query",
@@ -247,6 +248,7 @@ class AgentSessionServiceImplTest {
                 "/api/quality/agent-read/standards/query",
                 "/api/quality/agent-read/standards/detail/query",
                 "/api/quality/agent-read/product-standard-relations/query",
+                "/api/quality/agent-read/product-quality-configuration/query",
                 "/api/administration/agent-read/employees/query",
                 "/api/administration/agent-read/roles/query",
                 "/api/administration/agent-read/roles/permission-summary/query",
@@ -255,6 +257,7 @@ class AgentSessionServiceImplTest {
                 "/api/audit/agent-read/agent-answer-reviews/query",
                 "/api/inventory/agent-read/ledger/query",
                 "/api/inventory/agent-read/prepare-pool-balance/query",
+                "/api/inventory/agent-read/quality/query",
                 "/api/pallet-codes/agent-read/fixed-product-pool/query");
 
         for (String path : paths) {

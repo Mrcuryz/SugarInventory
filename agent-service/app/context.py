@@ -20,6 +20,7 @@ class ContextBuilder:
     PALLET_KEYWORDS = ("托盘", "托盘码", "二维码")
     ASSAY_KEYWORDS = ("化验", "质检", "合格", "不合格")
     TASK_KEYWORDS = ("任务", "待处理", "已确认", "已取消", "调拨")
+    PRODUCTION_KEYWORDS = ("生产订单", "煮糖", "领料", "原料消耗", "产出", "入库去向")
 
     def build(self, message: str, state: WarehouseAgentState) -> list[DomainContextPack]:
         packs: list[DomainContextPack] = []
@@ -34,6 +35,8 @@ class ContextBuilder:
             packs.append(self._assay_pack())
         if any(keyword in message for keyword in self.TASK_KEYWORDS):
             packs.append(self._task_pack())
+        if any(keyword in message for keyword in self.PRODUCTION_KEYWORDS):
+            packs.append(self._production_pack())
         if state.selected_product is not None:
             packs.append(
                 DomainContextPack(
@@ -64,6 +67,17 @@ class ContextBuilder:
                     instructions=[
                         f"最近已确认生产订单：{state.selected_production_order.display_label}。",
                         "涉及“这个订单、该订单、刚才的订单”时，必须沿用受控 orderRef，不得重新猜测订单。",
+                    ],
+                )
+            )
+        if state.selected_boiling_batch is not None:
+            packs.append(
+                DomainContextPack(
+                    name="selected_boiling_batch",
+                    triggerReason="current conversation has selected boiling batch",
+                    instructions=[
+                        f"最近已确认煮糖批次：{state.selected_boiling_batch.display_label}。",
+                        "涉及‘这个批次、该批次、刚才的煮糖批次’时，必须沿用受控 batchRef，不得猜测批次。",
                     ],
                 )
             )
@@ -145,5 +159,16 @@ class ContextBuilder:
                 "任务查询使用 query_pallet_tasks，只允许读取当前任务记录。",
                 "待处理、已确认、已取消必须映射为受控状态过滤，不能把查询解释为执行任务。",
                 "多个任务应先给摘要，再通过可展开卡片展示安全详情。",
+            ],
+        )
+
+    def _production_pack(self) -> DomainContextPack:
+        return DomainContextPack(
+            name="production_trace",
+            triggerReason="message contains production order or boiling batch semantics",
+            instructions=[
+                "生产订单和煮糖批次必须先通过 resolve_production_entities 解析受控引用。",
+                "生产追踪按煮糖批次、关联订单、实际领料、产出与已确认入库去向逐步展开。",
+                "没有登记的原料、产出或去向不得推断；计划数据不能当作实际数据。",
             ],
         )

@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.agent.security.AgentEntityRefCodec;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionBoilingBatchQueryDTO;
+import com.Laibin.SugarInventory.production.domain.dto.ProductionBoilingBatchListQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionBoilingBatchTraceQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionEntityResolveQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOrderProgressQueryDTO;
@@ -15,6 +16,7 @@ import com.Laibin.SugarInventory.production.domain.dto.ProductionMaterialCandida
 import com.Laibin.SugarInventory.production.domain.dto.ProductionMaterialCandidateQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOrderQueryDTO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchListVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchTraceNodeVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchTraceVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchUsageVO;
@@ -29,6 +31,8 @@ import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialPickTrac
 import com.Laibin.SugarInventory.production.domain.vo.ProductionLabelCompletionVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionInProcessMaterialsVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialCandidatesVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionTraceOutputCodeRowVO;
+import com.Laibin.SugarInventory.production.mapper.ProductionBoilingBatchTraceMapper;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialCandidateVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOutputVO;
@@ -44,6 +48,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -57,6 +62,7 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
     private final ProductionOrderService orderService;
     private final ProductionBoilingBatchService boilingBatchService;
     private final AgentEntityRefCodec refCodec;
+    private final ProductionBoilingBatchTraceMapper traceMapper;
 
     @Override
     public ProductionEntityResolutionVO resolveEntities(ProductionEntityResolveQueryDTO query, int userId) {
@@ -94,6 +100,9 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
         ProductionOrderBaseVO base = detail.getBaseInfo();
         List<ProductionOutputVO> outputs = safe(detail.getOutputs());
         List<ProductionLabelBatchVO> labels = safe(detail.getLabelBatches());
+        List<ProductionBoilingBatchUsageVO> boilingSources = safe(detail.getBoilingSources());
+        List<ProductionTraceOutputCodeRowVO> outputCodeRows = safe(
+                traceMapper.listOutputCodeRowsByOrder(decoded.entityId()));
         return ProductionOrderProgressVO.builder()
                 .dataScope("CURRENT_PRODUCTION_ORDER_PROGRESS")
                 .orderRef(query.getOrderRef().trim())
@@ -113,12 +122,71 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
                 .reservedLabelCount(sumLabels(labels, ProductionLabelBatchVO::getReservedCount))
                 .usedLabelCount(sumLabels(labels, ProductionLabelBatchVO::getUsedCount))
                 .recycledLabelCount(sumLabels(labels, ProductionLabelBatchVO::getRecycledCount))
+                .boilingSources(boilingSources.stream().map(this::toSafeBoilingSource).toList())
+                .outputs(outputs.stream().map(output -> toSafeOutputProgress(output, outputCodeRows)).toList())
                 .updatedAt(base.getUpdatedAt())
                 .completedAt(base.getCompletedAt())
                 .limitations(List.of(
                         "本结果仅表示当前订单记录中的计划、领料、产出、标签和入库进度。",
                         "不计算产出率、损耗率或材料消耗差异，也不代表质量放行结论。"))
                 .build();
+    }
+
+    private ProductionOrderProgressVO.BoilingSource toSafeBoilingSource(
+            ProductionBoilingBatchUsageVO usage) {
+        return ProductionOrderProgressVO.BoilingSource.builder()
+                .batchNo(usage.getBatchNo())
+                .usageUnit(usage.getUsageUnit())
+                .usageQuantity(usage.getUsageQuantity())
+                .bucketQuantity(usage.getBucketQuantity())
+                .weightKg(usage.getWeightKg())
+                .status(usage.getStatus())
+                .build();
+    }
+
+    private ProductionOrderProgressVO.OutputProgress toSafeOutputProgress(
+            ProductionOutputVO output,
+            List<ProductionTraceOutputCodeRowVO> outputCodeRows) {
+        Map<String, List<ProductionTraceOutputCodeRowVO>> inboundByWarehouse = outputCodeRows.stream()
+                .filter(row -> Objects.equals(row.getOutputId(), output.getId()))
+                .filter(this::isInboundOutputCode)
+                .filter(row -> row.getWarehouseName() != null && !row.getWarehouseName().isBlank())
+                .collect(java.util.stream.Collectors.groupingBy(
+                        ProductionTraceOutputCodeRowVO::getWarehouseName,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()));
+        List<ProductionOrderProgressVO.InboundDestination> destinations = inboundByWarehouse.entrySet().stream()
+                .map(entry -> ProductionOrderProgressVO.InboundDestination.builder()
+                        .warehouseName(entry.getKey())
+                        .inboundCodeCount(entry.getValue().size())
+                        .palletCodes(entry.getValue().stream()
+                                .map(ProductionTraceOutputCodeRowVO::getPalletCode)
+                                .filter(Objects::nonNull)
+                                .filter(value -> !value.isBlank())
+                                .distinct()
+                                .limit(20)
+                                .toList())
+                        .build())
+                .toList();
+        return ProductionOrderProgressVO.OutputProgress.builder()
+                .productName(output.getProductName())
+                .productStatus(output.getProductStatus())
+                .boardCount(output.getBoardCount())
+                .pieceCount(output.getPieceCount())
+                .totalPieces(output.getTotalPieces())
+                .totalWeight(output.getTotalWeight())
+                .requiredQrCount(output.getRequiredQrCount())
+                .boundQrCount(output.getBoundQrCount())
+                .inboundQrCount(output.getInboundQrCount())
+                .status(output.getStatus())
+                .inboundDestinations(destinations)
+                .build();
+    }
+
+    private boolean isInboundOutputCode(ProductionTraceOutputCodeRowVO row) {
+        return row.getInventoryId() != null
+                || row.getInboundAt() != null
+                || "INSTOCK".equalsIgnoreCase(row.getCodeStatus());
     }
 
     @Override
@@ -194,8 +262,59 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
                 .edges(edges)
                 .timeline(timeline)
                 .limitations(List.of(
-                        "仅展示系统已登记的煮糖批次详情、使用记录、追溯节点和关系边。",
-                        "缺失的上游来源、下游订单或物料关系不会由 Agent 推断。"))
+                        "仅展示系统已登记的煮糖批次详情、使用记录、追溯节点和关系边。"))
+                .build();
+    }
+
+    @Override
+    public ProductionBoilingBatchListVO queryBoilingBatches(ProductionBoilingBatchListQueryDTO query, int userId) {
+        ProductionBoilingBatchListQueryDTO source = query == null ? new ProductionBoilingBatchListQueryDTO() : query;
+        if (source.getStartDate() != null && source.getEndDate() != null
+                && source.getStartDate().isAfter(source.getEndDate())) {
+            throw new BusinessException(400, "startDate 不能晚于 endDate");
+        }
+        String status = source.getStatus() == null ? null : source.getStatus().trim().toUpperCase(Locale.ROOT);
+        if (status != null && !status.isBlank()
+                && !Set.of("AVAILABLE", "USED_UP", "CANCELED").contains(status)) {
+            throw new BusinessException(400, "status 仅支持 AVAILABLE、USED_UP 或 CANCELED");
+        }
+        int limit = source.getLimit() == null ? 10 : Math.max(1, Math.min(source.getLimit(), 20));
+        ProductionBoilingBatchQueryDTO pageQuery = new ProductionBoilingBatchQueryDTO();
+        pageQuery.setProductQuery(source.getProductQuery() == null ? null : source.getProductQuery().trim());
+        pageQuery.setStartDate(source.getStartDate());
+        pageQuery.setEndDate(source.getEndDate());
+        pageQuery.setStatus(status);
+        pageQuery.setPage(1);
+        pageQuery.setSize(limit);
+        PageResult<ProductionBoilingBatchVO> page = boilingBatchService.pageBatches(pageQuery);
+        List<ProductionEntityCandidateVO> candidates = safe(page.getRecords()).stream()
+                .map(batch -> ProductionEntityCandidateVO.builder()
+                        .entityRef(refCodec.encode(BOILING_TYPE, batch.getId(), userId, BOILING_SCOPE))
+                        .entityType(BOILING_TYPE)
+                        .displayCode(batch.getBatchNo())
+                        .status(batch.getStatus())
+                        .businessDate(batch.getBoilingDate())
+                        .summary(joinSummary(batch.getProductName(), batch.getSugarType(), batch.getTeamName(),
+                                batch.getTotalWeightKg() == null ? null : batch.getTotalWeightKg().stripTrailingZeros().toPlainString() + " kg"))
+                        .build())
+                .toList();
+        String productLabel = pageQuery.getProductQuery() == null || pageQuery.getProductQuery().isBlank()
+                ? "全部产品" : pageQuery.getProductQuery();
+        String dateLabel = source.getStartDate() == null && source.getEndDate() == null
+                ? "全部日期"
+                : (source.getStartDate() == null ? "截至 " + source.getEndDate()
+                : source.getEndDate() == null ? source.getStartDate() + " 起"
+                : source.getStartDate().equals(source.getEndDate()) ? source.getStartDate().toString()
+                : source.getStartDate() + " 至 " + source.getEndDate());
+        return ProductionBoilingBatchListVO.builder()
+                .dataScope("BOILING_BATCH_LIST")
+                .scopeLabel(productLabel)
+                .dateRangeLabel(dateLabel)
+                .total(page.getTotal() == null ? candidates.size() : page.getTotal())
+                .candidates(candidates)
+                .limitations(List.of(
+                        "仅返回当前筛选范围内已登记的煮糖批次，不推断缺失记录。",
+                        "候选项中的 batchRef 仅用于后续只读详情查询。"))
                 .build();
     }
 

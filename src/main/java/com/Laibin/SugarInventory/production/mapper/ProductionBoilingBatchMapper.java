@@ -30,6 +30,7 @@ public interface ProductionBoilingBatchMapper extends BaseMapper<ProductionBoili
             "FROM production_boiling_batch b " +
             "WHERE 1=1 " +
             "<if test='query.batchNo != null and query.batchNo != \"\"'>AND b.batch_no LIKE CONCAT('%', #{query.batchNo}, '%') </if>" +
+            "<if test='query.productQuery != null and query.productQuery != \"\"'>AND (b.product_name_snapshot LIKE CONCAT('%', #{query.productQuery}, '%') OR b.sugar_type LIKE CONCAT('%', #{query.productQuery}, '%')) </if>" +
             "<if test='query.status != null and query.status != \"\"'>AND b.status = #{query.status} </if>" +
             "<if test='query.startDate != null'>AND b.boiling_date &gt;= #{query.startDate} </if>" +
             "<if test='query.endDate != null'>AND b.boiling_date &lt;= #{query.endDate} </if>" +
@@ -42,6 +43,7 @@ public interface ProductionBoilingBatchMapper extends BaseMapper<ProductionBoili
     @Select("<script>" +
             "SELECT COUNT(*) FROM production_boiling_batch b WHERE 1=1 " +
             "<if test='query.batchNo != null and query.batchNo != \"\"'>AND b.batch_no LIKE CONCAT('%', #{query.batchNo}, '%') </if>" +
+            "<if test='query.productQuery != null and query.productQuery != \"\"'>AND (b.product_name_snapshot LIKE CONCAT('%', #{query.productQuery}, '%') OR b.sugar_type LIKE CONCAT('%', #{query.productQuery}, '%')) </if>" +
             "<if test='query.status != null and query.status != \"\"'>AND b.status = #{query.status} </if>" +
             "<if test='query.startDate != null'>AND b.boiling_date &gt;= #{query.startDate} </if>" +
             "<if test='query.endDate != null'>AND b.boiling_date &lt;= #{query.endDate} </if>" +

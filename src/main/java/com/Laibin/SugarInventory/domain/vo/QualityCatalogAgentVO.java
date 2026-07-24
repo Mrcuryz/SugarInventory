@@ -17,4 +17,19 @@ public final class QualityCatalogAgentVO {
     @Value @Builder public static class Metric { String metricCode; String metricName; BigDecimal minValue; BigDecimal maxValue; String unit; String compareType; Integer sortOrder; String remark; }
     @Value @Builder public static class ProductRelations { String dataScope; String productName; int count; List<Relation> records; List<String> limitations; }
     @Value @Builder public static class Relation { String standardCode; String standardName; Integer standardVersion; String standardStatus; Boolean isDefault; Integer priority; Boolean enabled; LocalDateTime effectiveFrom; LocalDateTime effectiveTo; String remark; }
+    @Value @Builder public static class ProductQualityConfiguration {
+        String dataScope;
+        String productName;
+        String productType;
+        String productStatus;
+        String packagingMethod;
+        BigDecimal weightPerPiece;
+        Integer piecesPerPallet;
+        int standardCount;
+        List<Relation> standards;
+        int assayGroupCount;
+        List<ProductAssayGroup> assayGroups;
+        List<String> limitations;
+    }
+    @Value @Builder public static class ProductAssayGroup { String groupName; String remark; }
 }

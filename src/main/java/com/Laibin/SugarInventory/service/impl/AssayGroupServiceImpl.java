@@ -86,6 +86,14 @@ public class AssayGroupServiceImpl extends ServiceImpl<AssayGroupMapper, AssayGr
     }
 
     @Override
+    public List<AssayGroup> listByProductId(Integer productId) {
+        if (productId == null || productId <= 0) {
+            throw new BusinessException(400, "产品不能为空");
+        }
+        return assayGroupMapper.selectByProductId(productId);
+    }
+
+    @Override
     public AssayGroup updateAssay(Integer id, AssayGroupSubmitDTO dto, User user) {
         AssayGroup assayGroup = assayGroupMapper.selectById(id);
         if (assayGroup == null) {

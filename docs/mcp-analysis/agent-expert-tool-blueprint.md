@@ -302,6 +302,9 @@ execute 不再接收可修改的业务字段。预览内容、用户、权限快
 | `query_assay_abnormalities` | `CURRENT` | L1 | 不合格、无标准、多候选等已登记异常 |
 | `query_products_without_recent_assay` | `CURRENT` | L1 | 当前在库产品的缺化验事实 |
 | `query_assay_standard_coverage` | `CURRENT` | L1 | 第一版仅 `PRODUCT_WITHOUT_STANDARD` |
+| `query_unqualified_inventory` | `CURRENT` | L1 | 当前库存批次最新化验明确判定为不合格；无化验/无标准不并入 |
+| `query_inventory_by_quality_standard` | `CURRENT` | L1 | 按指定标准逐项确定性匹配当前库存批次最新化验 |
+| `query_inventory_by_assay_metrics` | `CURRENT` | L1 | 按一个受控原始指标数值条件筛选当前库存批次 |
 | `query_assay_groups` | `CURRENT` | L1 | 批量化验组目录、包含产品和状态 |
 | `query_quality_standard_catalog` | `CURRENT` | L1 | 标准目录按品类、状态、版本查询 |
 | `get_quality_standard_detail` | `CURRENT` | L1 | 标准 7 项指标、范围、版本和备注 |
@@ -311,14 +314,15 @@ v1 质量查询目标权限建议从 `quality:test` 拆成 `quality:view`；标�
 
 ### 10.1.1 已确认的库存批次质量增量
 
-业务已确认 `product_id + production_date` 是产品批次键，`assay.sample_date` 的业务语义就是生产日期。因此“库存批次没有稳定关联键”的旧结论不再成立，但现有运行时查询尚未统一到该口径。
+业务已确认 `product_id + production_date` 是产品批次键，`assay.sample_date` 的业务语义就是生产日期。因此“库存批次没有稳定关联键”的旧结论不再成立。当前 Agent 质量筛选和库存分布已统一复用该读模型；托盘库存优先使用 `pallet_code.production_date`，非托盘库存回退 `inventory.entry_date`。
 
 | 工具 | 风险 | 目标 | 状态 |
 | --- | --- | --- | --- |
-| `query_inventory_by_quality_standard` | L1 | 按当前库存批次最新化验筛选命中指定标准的库存 | `PLANNED_READ_MODEL_REQUIRED` |
-| `query_inventory_by_assay_metrics` | L1 | 按当前库存批次最新化验的受控原始指标条件筛选库存 | `PLANNED_READ_MODEL_REQUIRED` |
+| `query_unqualified_inventory` | L1 | 筛选最新化验明确为 FAIL 的当前库存 | `CURRENT` |
+| `query_inventory_by_quality_standard` | L1 | 按当前库存批次最新化验逐项匹配指定标准 | `CURRENT` |
+| `query_inventory_by_assay_metrics` | L1 | 按当前库存批次最新化验的受控原始指标条件筛选库存 | `CURRENT` |
 
-两者必须共享 `inventory_current_assay_fact_v1`，不得以 Agent 多次调用“库存 + 产品最近化验”代替。运行时白名单只能在统一读模型、权限、回归测试和工具登记完成后扩展。
+三者共享 `inventory_current_assay_fact_v1`，不得以 Agent 多次调用“库存 + 产品最近化验”代替。共享读模型按产品与批次生产日期取最新化验版本，不使用 `inventory.assay_id`。
 
 ### 10.2 v2 报表/分析占位
 

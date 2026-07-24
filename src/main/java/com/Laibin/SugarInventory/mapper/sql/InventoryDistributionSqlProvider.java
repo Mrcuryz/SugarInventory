@@ -18,24 +18,18 @@ public class InventoryDistributionSqlProvider {
             COUNT(DISTINCT i.warehouse_id) AS warehouseCount,
             COUNT(DISTINCT i.product_id) AS productCount,
             COUNT(DISTINCT i.pallet_code_id) AS palletCount,
-            SUM(CASE WHEN i.assay_id IS NULL THEN 1 ELSE 0 END) AS missingAssayCount,
+            SUM(CASE WHEN a.id IS NULL THEN 1 ELSE 0 END) AS missingAssayCount,
             SUM(CASE WHEN a.judge_result = 'FAIL' THEN 1 ELSE 0 END) AS failedAssayCount,
             SUM(CASE WHEN a.judge_result = 'NO_STANDARD' THEN 1 ELSE 0 END) AS noStandardAssayCount,
             SUM(CASE WHEN pc.id IS NOT NULL AND pc.status <> 'INSTOCK' THEN 1 ELSE 0 END) AS abnormalPalletCount,
             MIN(p.pieces_per_pallet) AS minPiecesPerPallet,
             MAX(p.pieces_per_pallet) AS maxPiecesPerPallet
             """;
-    private static final String FROM = """
-            FROM inventory i
-            INNER JOIN product p ON p.id = i.product_id
-            INNER JOIN warehouse w ON w.id = i.warehouse_id
-            LEFT JOIN pallet_code pc ON pc.id = i.pallet_code_id
-            LEFT JOIN assay a ON a.id = i.assay_id
-            """;
+    private static final String FROM = InventoryCurrentAssayFactSql.INVENTORY_FROM;
 
     public String selectAggregate(Map<String, Object> params) {
         InventoryDistributionQueryDTO query = query(params);
-        return "SELECT " + METRICS + FROM + where(query);
+        return InventoryCurrentAssayFactSql.CTE + "SELECT " + METRICS + FROM + where(query);
     }
 
     public String selectGroups(Map<String, Object> params) {
@@ -51,7 +45,8 @@ public class InventoryDistributionSqlProvider {
             case "warehouse_product" -> " GROUP BY i.warehouse_id, w.warehouse_name, i.product_id, p.product_name, p.packaging_method, p.weight_per_piece, p.pieces_per_pallet";
             default -> " GROUP BY i.warehouse_id, w.warehouse_name";
         };
-        return "SELECT " + dimensions + METRICS + ", MAX(i.entry_date) AS latestInboundTime "
+        return InventoryCurrentAssayFactSql.CTE
+                + "SELECT " + dimensions + METRICS + ", MAX(i.entry_date) AS latestInboundTime "
                 + FROM + where(query) + grouping
                 + " ORDER BY totalEquivalentPieces DESC, warehouseName ASC, productName ASC LIMIT #{query.limit}";
     }
@@ -78,9 +73,9 @@ public class InventoryDistributionSqlProvider {
         appendIn(sql, "w.status", "warehouseStatuses", filter.getWarehouseStatuses());
         appendIn(sql, "pc.status", "palletStatuses", filter.getPalletStatuses());
         if ("HAS_ASSAY".equals(filter.getAssayStatus())) {
-            sql.append(" AND i.assay_id IS NOT NULL");
+            sql.append(" AND a.id IS NOT NULL");
         } else if ("MISSING_ASSAY".equals(filter.getAssayStatus())) {
-            sql.append(" AND i.assay_id IS NULL");
+            sql.append(" AND a.id IS NULL");
         } else if (filter.getAssayStatus() != null) {
             sql.append(" AND a.judge_result = #{query.statusFilter.assayStatus}");
         }

@@ -6,6 +6,7 @@ import com.Laibin.SugarInventory.mcp.tool.AssayReportDetailToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AssayRecordsToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AssayStandardCoverageToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.InventoryDistributionToolCallback;
+import com.Laibin.SugarInventory.mcp.tool.InventoryQualityToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.ProductsWithoutRecentAssayToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.PalletLifecycleToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.PrintedNotInboundCodesToolCallback;
@@ -51,6 +52,18 @@ public class ToolConfiguration {
                         inventoryOverviewSchema(),
                         WarehouseTools.class.getMethod("getInventoryOverview", Integer.class, String.class, String.class, Integer.class, Integer.class)),
                 new InventoryDistributionToolCallback(warehouseTools, objectMapper, inventoryDistributionSchema()),
+                new InventoryQualityToolCallback(warehouseTools, objectMapper,
+                        "query_unqualified_inventory", "JUDGE_STATUS",
+                        "Read current inventory whose latest product-and-production-date assay is explicitly unqualified.",
+                        unqualifiedInventorySchema()),
+                new InventoryQualityToolCallback(warehouseTools, objectMapper,
+                        "query_inventory_by_quality_standard", "STANDARD",
+                        "Read current inventory whose latest batch assay satisfies every metric of a controlled quality standard.",
+                        inventoryByQualityStandardSchema()),
+                new InventoryQualityToolCallback(warehouseTools, objectMapper,
+                        "query_inventory_by_assay_metrics", "METRIC",
+                        "Read current inventory whose latest batch assay meets one closed, numeric metric condition.",
+                        inventoryByAssayMetricSchema()),
                 new AssayRecordsToolCallback(warehouseTools, objectMapper, assayRecordsSchema()),
                 new AssayReportDetailToolCallback(warehouseTools, objectMapper, assayReportDetailSchema()),
                 new AssayAbnormalitiesToolCallback(warehouseTools, objectMapper, assayAbnormalitiesSchema()),
@@ -65,6 +78,11 @@ public class ToolConfiguration {
                         "Resolve a production order number or boiling batch number to short-lived user-bound entity references.",
                         resolveProductionEntitiesSchema(),
                         WarehouseTools.class.getMethod("resolveProductionEntities", String.class, String.class, Integer.class)),
+                methodTool(warehouseTools, "query_boiling_batches",
+                        "List registered boiling batches by optional product, Beijing business-date range, and status without modifying production data.",
+                        boilingBatchListSchema(),
+                        WarehouseTools.class.getMethod("queryBoilingBatches", String.class, java.time.LocalDate.class,
+                                java.time.LocalDate.class, String.class, Integer.class)),
                 methodTool(warehouseTools, "query_production_order_progress",
                         "Read current production order plan, material, output, label, QR binding, and inbound progress using a controlled orderRef.",
                         productionOrderProgressSchema(),
@@ -111,6 +129,10 @@ public class ToolConfiguration {
                         qualityStandardDetailSchema(), WarehouseTools.class.getMethod("getQualityStandardDetail", String.class, Integer.class)),
                 methodTool(warehouseTools, "query_product_standard_relations", "Read current product-to-quality-standard bindings without changing them.",
                         productStandardRelationsSchema(), WarehouseTools.class.getMethod("queryProductStandardRelations", String.class)),
+                methodTool(warehouseTools, "query_product_quality_configuration",
+                        "Read one resolved product's current quality-standard bindings and assay-group memberships as one controlled fact.",
+                        productQualityConfigurationSchema(),
+                        WarehouseTools.class.getMethod("queryProductQualityConfiguration", Integer.class)),
                 methodTool(warehouseTools, "query_employee_roster", "Read the current employee roster with masked mobile numbers and no credentials.",
                         employeeRosterSchema(), WarehouseTools.class.getMethod("queryEmployeeRoster", String.class, String.class, String.class, String.class, String.class, String.class, Integer.class, Integer.class)),
                 methodTool(warehouseTools, "query_roles", "Read the current RBAC role catalog without internal identifiers.",
@@ -178,6 +200,24 @@ public class ToolConfiguration {
     private static String inventoryDistributionSchema() {
         return """
                 {"type":"object","additionalProperties":false,"required":["productScope","warehouseScope","groupBy"],"properties":{"productScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["SINGLE_PRODUCT","EXACT_PRODUCT_NAME_GROUP","PRODUCT_TYPE_GROUP","ALL"]},"productId":{"type":"integer","minimum":1},"productName":{"type":"string","minLength":1,"maxLength":100},"productType":{"type":"string","minLength":1,"maxLength":50}}},"warehouseScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["ALL","SINGLE_WAREHOUSE"]},"warehouseId":{"type":"integer","minimum":1}}},"statusFilter":{"type":"object","additionalProperties":false,"properties":{"productStatuses":{"type":"array","maxItems":10,"items":{"type":"string","enum":["半成品","成品"]}},"warehouseStatuses":{"type":"array","maxItems":10,"items":{"type":"string","enum":["正常","空置","满仓","维护","临期预警"]}},"palletStatuses":{"type":"array","maxItems":10,"items":{"type":"string","enum":["FREE","PENDING","INSTOCK","INVALID","ORDER_RESERVED"]}},"assayStatus":{"type":"string","enum":["HAS_ASSAY","MISSING_ASSAY","PASS","FAIL","NO_STANDARD","MULTIPLE_CANDIDATES"]},"entryDateFrom":{"type":"string","format":"date"},"entryDateTo":{"type":"string","format":"date"}}},"groupBy":{"type":"string","enum":["warehouse","product","warehouse_product"]},"limit":{"type":"integer","minimum":1,"maximum":100,"default":20}}}
+                """;
+    }
+
+    private static String unqualifiedInventorySchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["productScope","warehouseScope"],"properties":{"productScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["SINGLE_PRODUCT","EXACT_PRODUCT_NAME_GROUP","PRODUCT_TYPE_GROUP","ALL"]},"productId":{"type":"integer","minimum":1},"productName":{"type":"string","minLength":1,"maxLength":100},"productType":{"type":"string","minLength":1,"maxLength":50}}},"warehouseScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["ALL","SINGLE_WAREHOUSE"]},"warehouseId":{"type":"integer","minimum":1}}},"limit":{"type":"integer","minimum":1,"maximum":100,"default":50}}}
+                """;
+    }
+
+    private static String inventoryByQualityStandardSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["productScope","warehouseScope","standardCode"],"properties":{"productScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["SINGLE_PRODUCT","EXACT_PRODUCT_NAME_GROUP","PRODUCT_TYPE_GROUP","ALL"]},"productId":{"type":"integer","minimum":1},"productName":{"type":"string","minLength":1,"maxLength":100},"productType":{"type":"string","minLength":1,"maxLength":50}}},"warehouseScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["ALL","SINGLE_WAREHOUSE"]},"warehouseId":{"type":"integer","minimum":1}}},"standardCode":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,64}$","description":"Controlled standardCode returned by query_quality_standard_catalog."},"standardVersion":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":100,"default":50}}}
+                """;
+    }
+
+    private static String inventoryByAssayMetricSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["productScope","warehouseScope","metricCondition"],"properties":{"productScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["SINGLE_PRODUCT","EXACT_PRODUCT_NAME_GROUP","PRODUCT_TYPE_GROUP","ALL"]},"productId":{"type":"integer","minimum":1},"productName":{"type":"string","minLength":1,"maxLength":100},"productType":{"type":"string","minLength":1,"maxLength":50}}},"warehouseScope":{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["ALL","SINGLE_WAREHOUSE"]},"warehouseId":{"type":"integer","minimum":1}}},"metricCondition":{"type":"object","additionalProperties":false,"required":["metricCode","operator"],"properties":{"metricCode":{"type":"string","enum":["color_value","reducing_sugar","dry_weight_loss","conductivity_ash","sucrose","insoluble_impurity","ph"]},"operator":{"type":"string","enum":["GT","GTE","LT","LTE","EQ","BETWEEN"]},"value":{"type":"number"},"minValue":{"type":"number"},"maxValue":{"type":"number"}}},"limit":{"type":"integer","minimum":1,"maximum":100,"default":50}}}
                 """;
     }
 
@@ -250,6 +290,12 @@ public class ToolConfiguration {
     private static String productionOrderProgressSchema() {
         return """
                 {"type":"object","additionalProperties":false,"required":["orderRef"],"properties":{"orderRef":{"type":"string","minLength":1,"maxLength":500,"description":"Short-lived opaque orderRef returned by resolve_production_entities; never invent from an internal id."}}}
+                """;
+    }
+
+    private static String boilingBatchListSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"properties":{"productQuery":{"type":"string","minLength":1,"maxLength":100},"startDate":{"type":"string","format":"date"},"endDate":{"type":"string","format":"date"},"status":{"type":"string","enum":["AVAILABLE","USED_UP","CANCELED"]},"limit":{"type":"integer","minimum":1,"maximum":20,"default":10}}}
                 """;
     }
 
@@ -351,6 +397,9 @@ public class ToolConfiguration {
             """; }
     private static String productStandardRelationsSchema() { return """
             {"type":"object","additionalProperties":false,"required":["productName"],"properties":{"productName":{"type":"string","minLength":1,"maxLength":100}}}
+            """; }
+    private static String productQualityConfigurationSchema() { return """
+            {"type":"object","additionalProperties":false,"required":["productId"],"properties":{"productId":{"type":"integer","minimum":1,"description":"Unique product id returned by resolve_products; never guess."}}}
             """; }
     private static String employeeRosterSchema() { return """
             {"type":"object","additionalProperties":false,"properties":{"employeeId":{"type":"string","minLength":1,"maxLength":50},"name":{"type":"string","minLength":1,"maxLength":100},"department":{"type":"string","minLength":1,"maxLength":100},"position":{"type":"string","minLength":1,"maxLength":100},"status":{"type":"string","minLength":1,"maxLength":20},"roleCode":{"type":"string","minLength":1,"maxLength":50},"page":{"type":"integer","minimum":1,"default":1},"size":{"type":"integer","minimum":1,"maximum":50,"default":20}}}

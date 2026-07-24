@@ -205,7 +205,7 @@ class InternalAgentToolGatewayServiceTest {
     }
 
     @Test
-    void whitelistContainsExactlyFortySevenReadOnlyToolsAndNeverDispatchesWriteToolNames() {
+    void whitelistContainsExactlyFiftyTwoReadOnlyToolsAndNeverDispatchesWriteToolNames() {
         Set<String> expected = Set.of(
                 "resolve_products",
                 "resolve_warehouses",
@@ -216,12 +216,16 @@ class InternalAgentToolGatewayServiceTest {
                 "query_assay_abnormalities",
                 "query_products_without_recent_assay",
                 "query_assay_standard_coverage",
+                "query_unqualified_inventory",
+                "query_inventory_by_quality_standard",
+                "query_inventory_by_assay_metrics",
                 "query_qr_code_lifecycle",
                 "query_printed_not_inbound_codes",
                 "query_pallet_anomalies",
                 "query_pallet_flow_records",
                 "query_qr_batch_inbound_completion",
                 "resolve_production_entities",
+                "query_boiling_batches",
                 "query_production_order_progress",
                 "query_boiling_batch_trace",
                 "query_material_pick_trace",
@@ -242,6 +246,7 @@ class InternalAgentToolGatewayServiceTest {
                 "query_quality_standard_catalog",
                 "get_quality_standard_detail",
                 "query_product_standard_relations",
+                "query_product_quality_configuration",
                 "query_employee_roster",
                 "query_roles",
                 "get_role_permission_summary",

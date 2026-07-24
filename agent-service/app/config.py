@@ -10,6 +10,9 @@ ModelMode = Literal["basic", "openai_compatible"]
 StateBackend = Literal["memory", "redis"]
 PlanningMode = Literal["deterministic", "llm"]
 
+DEFAULT_MODEL_BASE_URL = "https://api.deepseek.com"
+DEFAULT_MODEL_NAME = "deepseek-v4-flash"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -31,6 +34,8 @@ class Settings:
         "warehouse_expert",
         "assay_expert",
         "logistics_expert",
+        "production_expert",
+        "pallet_expert",
     )
     llm_max_tool_calls: int = 3
     llm_max_tool_retries: int = 1
@@ -76,15 +81,15 @@ class Settings:
                 "AGENT_RUN_TIMEOUT_MS",
                 90000 if planning_mode == "llm" else 20000,
             ),
-            model_base_url=os.getenv("AGENT_MODEL_BASE_URL", "").rstrip("/"),
+            model_base_url=os.getenv("AGENT_MODEL_BASE_URL", DEFAULT_MODEL_BASE_URL).rstrip("/"),
             model_api_key=os.getenv("AGENT_MODEL_API_KEY", ""),
-            model_name=os.getenv("AGENT_MODEL_NAME", ""),
+            model_name=os.getenv("AGENT_MODEL_NAME", DEFAULT_MODEL_NAME),
             model_timeout_ms=_int_env("AGENT_MODEL_TIMEOUT_MS", 30000),
             goal_draft_shadow_enabled=_bool_env("AGENT_GOAL_DRAFT_SHADOW_ENABLED", False),
             planning_mode=planning_mode,  # type: ignore[arg-type]
             llm_allowed_experts=_csv_env(
                 "AGENT_LLM_ALLOWED_EXPERTS",
-                ("inventory_expert", "warehouse_expert", "assay_expert", "logistics_expert"),
+                ("inventory_expert", "warehouse_expert", "assay_expert", "logistics_expert", "production_expert", "pallet_expert"),
             ),
             llm_max_tool_calls=_bounded_int_env("AGENT_LLM_MAX_TOOL_CALLS", 3, 1, 3),
             llm_max_tool_retries=_bounded_int_env("AGENT_LLM_MAX_TOOL_RETRIES", 1, 0, 1),

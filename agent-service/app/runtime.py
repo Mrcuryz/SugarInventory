@@ -49,6 +49,17 @@ from app.schemas import (
     SafeInventoryResult,
     SafePalletTaskRecord,
     SafePalletTaskResult,
+    SafePalletLifecycleEvent,
+    SafePalletFlowRecords,
+    SafePalletStatus,
+    SafeBoilingBatchTrace,
+    SafeBoilingBatchUsage,
+    SafeProductionInboundDestination,
+    SafeProductionBoilingSource,
+    SafeProductionMaterialRecord,
+    SafeProductionMaterialTrace,
+    SafeProductionOrderProgress,
+    SafeProductionOutput,
     SafeWarehouseResult,
     UserOption,
 )
@@ -431,12 +442,42 @@ class WarehouseAgentRuntime:
                 resolved_at=datetime.now(timezone.utc),
             )
             state.pending_clarification = None
-            response = self._answer_selected_production_order(
-                request,
-                state,
-                pending.intent,
-                order_ref,
+            if pending.intent == "llm_tool_loop":
+                response = self._resume_llm_tool_loop(request, state, pending, "PRODUCTION_ORDER")
+            else:
+                response = self._answer_selected_production_order(
+                    request,
+                    state,
+                    pending.intent,
+                    order_ref,
+                )
+        elif pending.kind == "boiling_batch":
+            batch_ref = self._safe_text(internal.get("batchRef"))
+            if not batch_ref or not batch_ref.startswith("aer_"):
+                response = ChatResponse(
+                    agentSessionId=request.agentSessionId,
+                    answer="该煮糖批次候选缺少有效的受控引用，请重新查询。",
+                    needsUserSelection=True,
+                )
+                self._raise_if_cancelled()
+                self.checkpointer.save(request.agentSessionId, state)
+                return response
+            state.selected_boiling_batch = SelectedEntity(
+                internal_id=None,
+                display_label=self._safe_display_label(str(option.get("displayLabel") or "所选煮糖批次")),
+                source="user_selection",
+                metadata={"batchRef": batch_ref},
+                entity_type="BOILING_BATCH",
+                entity_ref="CURRENT_BOILING_BATCH",
+                canonical_name=self._safe_display_label(str(option.get("displayLabel") or "所选煮糖批次")),
+                resolved_by="USER_SELECTION",
+                resolved_at=datetime.now(timezone.utc),
             )
+            state.pending_clarification = None
+            if pending.intent == "llm_tool_loop":
+                response = self._resume_llm_tool_loop(request, state, pending, "BOILING_BATCH")
+            else:
+                response = self._answer_selected_boiling_batch(request, state, batch_ref)
         else:
             response = ChatResponse(agentSessionId=request.agentSessionId, answer="已记录你的选择。")
 
@@ -448,6 +489,17 @@ class WarehouseAgentRuntime:
         return response
 
     def _handle_message(self, request: ChatRequest, state: WarehouseAgentState, text: str) -> ChatResponse:
+        # LLM mode must use the same main-agent -> expert -> tool -> analysis loop
+        # for production as inventory and assay. These deterministic production
+        # handlers remain available only for the explicitly selected fallback mode.
+        if self.planning_mode != "llm":
+            boiling_batch_list = self._boiling_batch_list_response(request, state, text)
+            if boiling_batch_list is not None:
+                return boiling_batch_list
+            production_followup = self._production_trace_followup_response(request, state, text)
+            if production_followup is not None:
+                self._attach_goal_completion(production_followup, state)
+                return production_followup
         task_detail = self._task_detail_followup_response(request.agentSessionId, state, text)
         if task_detail is not None:
             self._attach_goal_completion(task_detail, state)
@@ -541,6 +593,30 @@ class WarehouseAgentRuntime:
                 or self._warehouse_display_name(state.selected_warehouse.display_label)
             )
             contexts["WAREHOUSE"] = state.selected_warehouse
+        if state.selected_production_order is not None:
+            state.selected_production_order.entity_type = "PRODUCTION_ORDER"
+            state.selected_production_order.entity_ref = "CURRENT_PRODUCTION_ORDER"
+            state.selected_production_order.canonical_name = (
+                state.selected_production_order.canonical_name
+                or self._safe_display_label(state.selected_production_order.display_label)
+            )
+            contexts["PRODUCTION_ORDER"] = state.selected_production_order
+        if state.selected_boiling_batch is not None:
+            state.selected_boiling_batch.entity_type = "BOILING_BATCH"
+            state.selected_boiling_batch.entity_ref = "CURRENT_BOILING_BATCH"
+            state.selected_boiling_batch.canonical_name = (
+                state.selected_boiling_batch.canonical_name
+                or self._safe_display_label(state.selected_boiling_batch.display_label)
+            )
+            contexts["BOILING_BATCH"] = state.selected_boiling_batch
+        if state.selected_pallet is not None:
+            state.selected_pallet.entity_type = "PALLET"
+            state.selected_pallet.entity_ref = "CURRENT_PALLET"
+            state.selected_pallet.canonical_name = (
+                state.selected_pallet.canonical_name
+                or self._safe_display_label(state.selected_pallet.display_label)
+            )
+            contexts["PALLET"] = state.selected_pallet
         return contexts
 
     def _record_registered_goal_fact(
@@ -553,6 +629,8 @@ class WarehouseAgentRuntime:
     ) -> None:
         goal_type = state.active_goal_type
         contract = GOAL_CONTRACTS.get(goal_type) if goal_type else None
+        if contract is not None and tool_name in contract.allowedTools and tool_name not in contract.evidenceTools:
+            return
         if contract is None or tool_name not in contract.allowedTools:
             goal_type = registered_goal_for_plan(
                 tool_name=tool_name,
@@ -560,7 +638,7 @@ class WarehouseAgentRuntime:
                 intent=None,
             )
             contract = GOAL_CONTRACTS.get(goal_type) if goal_type else None
-        if goal_type is None or contract is None or tool_name not in contract.allowedTools:
+        if goal_type is None or contract is None or tool_name not in contract.evidenceTools:
             return
         if state.active_goal_type != goal_type:
             state.active_goal_type = goal_type
@@ -575,6 +653,25 @@ class WarehouseAgentRuntime:
         )
         state.fact_envelopes.append(envelope.model_dump(mode="json"))
         state.fact_envelopes[:] = state.fact_envelopes[-20:]
+
+    def _record_raw_registered_goal_fact(
+        self,
+        *,
+        state: WarehouseAgentState,
+        tool_name: str,
+        arguments: dict[str, Any] | None,
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        safe_value = self._llm_safe_tool_data(result)
+        safe_data = safe_value if isinstance(safe_value, dict) else {"value": safe_value}
+        safe_data = self._redact_control_refs(safe_data)
+        self._record_registered_goal_fact(
+            state=state,
+            tool_name=tool_name,
+            arguments=arguments,
+            safe_data=safe_data,
+        )
+        return safe_data
 
     def _evaluate_registered_goal(
         self,
@@ -649,17 +746,15 @@ class WarehouseAgentRuntime:
             }
             trace["mainDecision"] = self._safe_main_decision_trace(decision)
         registered_recipe_plan: Any | None = None
+        route_correction: dict[str, Any] | None = None
         for route_attempt in (range(2) if decision is None else ()):
             report_business_progress("routing")
             selected_context = self._llm_selected_context(state)
             registered_recipes = [CompoundIntentPlanner.WAREHOUSE_INVENTORY_ASSAY]
-            if route_attempt == 1:
+            if route_correction is not None:
+                selected_context["RUNTIME_ROUTE_CORRECTION"] = route_correction
+            if route_correction and route_correction.get("rejectedAction") == "RUN_REGISTERED_RECIPE":
                 registered_recipes = []
-                selected_context["RUNTIME_ROUTE_CORRECTION"] = {
-                    "rejectedAction": "RUN_REGISTERED_RECIPE",
-                    "reason": "CURRENT_MESSAGE_DID_NOT_MATCH_REGISTERED_RECIPE",
-                    "allowedAlternatives": ["DELEGATE", "ASK_CLARIFICATION", "UNSUPPORTED"],
-                }
             reset_model_decision_diagnostics()
             try:
                 decision = self.model_client.route_main_agent(
@@ -684,6 +779,29 @@ class WarehouseAgentRuntime:
             trace["mainDecision" if route_attempt == 0 else "mainDecisionCorrection"] = (
                 self._safe_main_decision_trace(decision)
             )
+            if decision.action == "DELEGATE" and decision.expertAgent and decision.goalType:
+                expected_expert = GOAL_CONTRACTS[decision.goalType].ownerExpert
+                if expected_expert != decision.expertAgent:
+                    trace["mainRouteGuard"] = {
+                        "status": "REJECTED",
+                        "reason": "GOAL_OWNER_MISMATCH",
+                        "correctionAttempted": route_attempt == 0,
+                    }
+                    if route_attempt == 1:
+                        return self._llm_boundary_rejection(
+                            request.agentSessionId,
+                            trace,
+                            "主模型连续提出了目标与专家权限边界不一致的路由。",
+                        )
+                    route_correction = {
+                        "rejectedAction": "DELEGATE",
+                        "rejectedGoalType": decision.goalType,
+                        "rejectedExpertAgent": decision.expertAgent,
+                        "expectedExpertAgent": expected_expert,
+                        "reason": "GOAL_OWNER_MISMATCH",
+                        "allowedAlternatives": ["DELEGATE", "ASK_CLARIFICATION", "UNSUPPORTED"],
+                    }
+                    continue
             if decision.action != "RUN_REGISTERED_RECIPE":
                 break
             matched_recipe = CompoundIntentPlanner(self.agent_router).plan(text)
@@ -701,6 +819,11 @@ class WarehouseAgentRuntime:
                     trace,
                     "模型连续提出了与当前问题不匹配的跨域配方。",
                 )
+            route_correction = {
+                "rejectedAction": "RUN_REGISTERED_RECIPE",
+                "reason": "CURRENT_MESSAGE_DID_NOT_MATCH_REGISTERED_RECIPE",
+                "allowedAlternatives": ["DELEGATE", "ASK_CLARIFICATION", "UNSUPPORTED"],
+            }
         if decision is None:
             return self._llm_model_error(request.agentSessionId, "主模型没有生成路由决策。", trace)
         if decision.action == "DIRECT_ANSWER":
@@ -768,6 +891,15 @@ class WarehouseAgentRuntime:
                 trace,
                 "该专家尚未进入本地 LLM Tool Loop 实验白名单。",
             )
+        if decision.goalType is not None:
+            contract = GOAL_CONTRACTS[decision.goalType]
+            if contract.ownerExpert != decision.expertAgent:
+                return self._llm_boundary_rejection(
+                    request.agentSessionId,
+                    trace,
+                    "主模型提出的目标与专家权限边界不一致。",
+                )
+            self._begin_registered_goal(state, decision.goalType)
         handoff = self.agent_router.handoff_for_agent(decision.expertAgent, mode="llm_delegate")
         state.active_agent = handoff.target_agent
         state.last_agent_handoff = handoff.to_snapshot()
@@ -892,6 +1024,18 @@ class WarehouseAgentRuntime:
                 return self._finish_llm_response(response, trace, request)
             loop_trace["events"].append(self._safe_expert_decision_trace(decision))
 
+            structured = self._llm_structured_expert_clarification(
+                request=request,
+                state=state,
+                user_message=user_message,
+                expert_agent=expert_agent,
+                observations=observations,
+                tool_call_count=tool_call_count,
+                retry_count=retry_count,
+                trace=trace,
+            )
+            if structured is not None:
+                return self._finish_llm_response(structured, trace, request)
             if decision.action == "ASK_CLARIFICATION":
                 response = ChatResponse(
                     agentSessionId=request.agentSessionId,
@@ -908,12 +1052,67 @@ class WarehouseAgentRuntime:
             if decision.action in {"FINAL_ANSWER", "PARTIAL_ANSWER"}:
                 validation_error = self._validate_llm_completion(decision, observations, state)
                 if validation_error:
-                    return self._finish_llm_response(
-                        self._llm_boundary_rejection(request.agentSessionId, trace, validation_error),
-                        trace,
-                        request,
+                    planning_rejections += 1
+                    if planning_rejections > 1:
+                        no_data_fallback = self._llm_authoritative_no_data_fallback(
+                            request.agentSessionId,
+                            state,
+                            observations,
+                            latest_cards,
+                        )
+                        if no_data_fallback is not None:
+                            loop_trace["completionMode"] = "SAFE_NO_DATA_FALLBACK"
+                            loop_trace["events"].append(
+                                {
+                                    "action": "FINAL_ANSWER",
+                                    "status": "AUTHORITATIVE_NO_DATA_FALLBACK",
+                                }
+                            )
+                            return self._finish_llm_response(no_data_fallback, trace, request)
+                        return self._finish_llm_response(
+                            self._llm_boundary_rejection(
+                                request.agentSessionId,
+                                trace,
+                                validation_error,
+                            ),
+                            trace,
+                            request,
+                        )
+                    observations.append(
+                        {
+                            "observationId": f"obs_{len(observations) + 1}",
+                            "status": "PLAN_REJECTED",
+                            "message": (
+                                f"{validation_error}"
+                                "请继续遵守 ACTIVE_GOAL，并在完整或部分回答的 "
+                                "citedObservationIds 中引用已存在的权威观察。"
+                            ),
+                        }
                     )
-                answer = self._sanitize_llm_answer(decision.answer or "")
+                    loop_trace["events"].append(
+                        {
+                            "action": "PLAN_REJECTED",
+                            "status": "COMPLETION_VALIDATION_FAILED",
+                        }
+                    )
+                    continue
+                answer = self._sanitize_llm_answer(decision.answer or "", state=state)
+                if answer.startswith("模型回答包含不应向用户展示的内部"):
+                    no_data_fallback = self._llm_authoritative_no_data_fallback(
+                        request.agentSessionId,
+                        state,
+                        observations,
+                        latest_cards,
+                    )
+                    if no_data_fallback is not None:
+                        loop_trace["completionMode"] = "SAFE_NO_DATA_FALLBACK"
+                        loop_trace["events"].append(
+                            {
+                                "action": "FINAL_ANSWER",
+                                "status": "UNSAFE_ANSWER_NO_DATA_FALLBACK",
+                            }
+                        )
+                        return self._finish_llm_response(no_data_fallback, trace, request)
                 if decision.action == "PARTIAL_ANSWER" and not answer.startswith("部分"):
                     answer = "部分完成：" + answer
                 completion = self._evaluate_registered_goal(state)
@@ -931,6 +1130,69 @@ class WarehouseAgentRuntime:
                     trace,
                     request,
                 )
+            rediscovery_error = self._llm_selection_rediscovery_error(
+                decision.toolName,
+                decision.arguments,
+                observations,
+            )
+            if rediscovery_error is not None:
+                planning_rejections += 1
+                if planning_rejections > 1:
+                    return self._finish_llm_response(
+                        self._llm_boundary_rejection(
+                            request.agentSessionId,
+                            trace,
+                            "模型在用户完成选择后重复执行候选发现，Runtime 已终止循环。",
+                        ),
+                        trace,
+                        request,
+                    )
+                observations.append(
+                    {
+                        "observationId": f"obs_{len(observations) + 1}",
+                        "status": "PLAN_REJECTED",
+                        "message": rediscovery_error,
+                    }
+                )
+                loop_trace["events"].append(
+                    {
+                        "action": "PLAN_REJECTED",
+                        "toolName": decision.toolName,
+                        "status": "SELECTION_ALREADY_COMPLETED",
+                    }
+                )
+                continue
+            intent_tool_error = self._llm_intent_tool_error(
+                user_message,
+                decision.toolName,
+            )
+            if intent_tool_error is not None:
+                planning_rejections += 1
+                if planning_rejections > 1:
+                    return self._finish_llm_response(
+                        self._llm_boundary_rejection(
+                            request.agentSessionId,
+                            trace,
+                            "模型连续选择了与用户目标不一致的工具。",
+                        ),
+                        trace,
+                        request,
+                    )
+                observations.append(
+                    {
+                        "observationId": f"obs_{len(observations) + 1}",
+                        "status": "PLAN_REJECTED",
+                        "message": intent_tool_error,
+                    }
+                )
+                loop_trace["events"].append(
+                    {
+                        "action": "PLAN_REJECTED",
+                        "toolName": decision.toolName,
+                        "status": "INTENT_TOOL_MISMATCH",
+                    }
+                )
+                continue
             if tool_call_count >= self.llm_max_tool_calls:
                 return self._finish_llm_response(
                     self._llm_boundary_rejection(request.agentSessionId, trace, "本轮只读工具调用已达到上限。"),
@@ -967,6 +1229,22 @@ class WarehouseAgentRuntime:
                 continue
 
             call_signature = self._llm_call_signature(decision.toolName, arguments)
+            previous_terminal = self._latest_terminal_empty_result(observations, call_signature)
+            if previous_terminal is not None:
+                status = str(previous_terminal.get("status") or "")
+                if status == "INVALID_INPUT":
+                    response = ChatResponse(
+                        agentSessionId=request.agentSessionId,
+                        answer=self._invalid_input_answer(decision.toolName),
+                        needsUserSelection=True,
+                    )
+                    return self._finish_llm_response(response, trace, request)
+                if status == "NO_DATA":
+                    response = ChatResponse(
+                        agentSessionId=request.agentSessionId,
+                        answer=self._no_data_answer(decision.toolName),
+                    )
+                    return self._finish_llm_response(response, trace, request)
             previous_error = self._latest_unresolved_error(observations, call_signature)
             if previous_error is not None:
                 if not previous_error.get("retryable") or retry_count >= self.llm_max_tool_retries:
@@ -992,6 +1270,10 @@ class WarehouseAgentRuntime:
                     status = "AUTHENTICATION_FAILED"
                 elif exc.code in {"UPSTREAM_PERMISSION_DENIED", "AGENT_SCOPE_DENIED"}:
                     status = "PERMISSION_DENIED"
+                elif exc.code == "UPSTREAM_NOT_FOUND":
+                    status = "NO_DATA"
+                elif exc.code == "UPSTREAM_BAD_REQUEST":
+                    status = "INVALID_INPUT"
                 else:
                     status = "TOOL_ERROR"
                 observation = {
@@ -1036,6 +1318,7 @@ class WarehouseAgentRuntime:
                 user_message=user_message,
                 expert_agent=expert_agent,
                 tool_name=decision.toolName,
+                arguments=arguments,
                 result=result,
                 observations=observations,
                 tool_call_count=tool_call_count,
@@ -1053,7 +1336,16 @@ class WarehouseAgentRuntime:
                 call_signature=call_signature,
             )
             observations.append(observation)
-            latest_cards = cards or latest_cards
+            if cards:
+                if (
+                    decision.toolName == "query_qr_code_lifecycle"
+                    and state.active_goal_type == "PALLET_FLOW_HISTORY"
+                ):
+                    latest_cards[:] = [
+                        card for card in latest_cards if card.cardType != "pallet_flow_history"
+                    ]
+                existing_card_types = {card.cardType for card in latest_cards}
+                latest_cards.extend(card for card in cards if card.cardType not in existing_card_types)
             self._record_tool_message(state, decision.toolName, observation)
             loop_trace["events"].append(
                 {"action": "TOOL_RESULT", "toolName": decision.toolName, "status": observation["status"]}
@@ -1108,6 +1400,12 @@ class WarehouseAgentRuntime:
                 answer = self._format_assay_records_answer(data)
             elif tool_name == "get_assay_report_detail":
                 answer = self._format_assay_report_detail_answer(data)
+            elif tool_name in {
+                "query_unqualified_inventory",
+                "query_inventory_by_quality_standard",
+                "query_inventory_by_assay_metrics",
+            }:
+                answer = self._format_inventory_quality_answer(data)
             elif tool_name == "query_pallet_tasks":
                 result = SafePalletTaskResult.model_validate(data)
                 answer = self._format_pallet_tasks_answer(result)
@@ -1115,6 +1413,18 @@ class WarehouseAgentRuntime:
                     tool_name,
                     result.model_dump(exclude_none=True),
                 )
+            elif tool_name == "query_production_order_progress":
+                result = SafeProductionOrderProgress.model_validate(data)
+                answer = self._format_production_order_progress_answer(result)
+                suggestions = self.next_action_policy.suggestions(tool_name, result.model_dump(exclude_none=True))
+            elif tool_name == "query_material_pick_trace":
+                result = SafeProductionMaterialTrace.model_validate(data)
+                answer = self._format_material_pick_trace_answer(result)
+                suggestions = self.next_action_policy.suggestions(tool_name, result.model_dump(exclude_none=True))
+            elif tool_name == "query_boiling_batch_trace":
+                result = SafeBoilingBatchTrace.model_validate(data)
+                answer = self._format_boiling_batch_trace_answer(result)
+                suggestions = self.next_action_policy.suggestions(tool_name, result.model_dump(exclude_none=True))
         except ValueError:
             return None
         if not answer:
@@ -1242,6 +1552,20 @@ class WarehouseAgentRuntime:
                     "canonicalName": self._safe_display_label(state.selected_warehouse.display_label),
                 }
             )
+        if entity_type == "PRODUCTION_ORDER" and state.selected_production_order is not None:
+            selected.update(
+                {
+                    "stateRef": "CURRENT_PRODUCTION_ORDER",
+                    "canonicalName": self._safe_display_label(state.selected_production_order.display_label),
+                }
+            )
+        if entity_type == "BOILING_BATCH" and state.selected_boiling_batch is not None:
+            selected.update(
+                {
+                    "stateRef": "CURRENT_BOILING_BATCH",
+                    "canonicalName": self._safe_display_label(state.selected_boiling_batch.display_label),
+                }
+            )
         safe_observations.append(
             {
                 "observationId": f"obs_{len(safe_observations) + 1}",
@@ -1250,12 +1574,25 @@ class WarehouseAgentRuntime:
                 "data": selected,
             }
         )
+        resumed_user_message = str(
+            continuation.get("userMessage") or self._latest_user_message(state)
+        )
+        if entity_type == "BOILING_BATCH":
+            selected_label = self._safe_display_label(
+                state.selected_boiling_batch.display_label
+                if state.selected_boiling_batch is not None
+                else "所选煮糖批次"
+            )
+            resumed_user_message = (
+                f"用户已从候选列表选择煮糖批次 {selected_label}。"
+                "请继续查询该批次的流转详情；候选发现已经完成，不要再次询问用户要查看什么。"
+            )
         trace = continuation.get("trace")
         safe_trace = dict(trace) if isinstance(trace, dict) else {"planningMode": "llm"}
         return self._run_llm_expert_loop(
             request=request,
             state=state,
-            user_message=str(continuation.get("userMessage") or self._latest_user_message(state)),
+            user_message=resumed_user_message,
             expert_agent=expert_agent,
             observations=safe_observations,
             tool_call_count=self._bounded_int(
@@ -1368,6 +1705,13 @@ class WarehouseAgentRuntime:
             return None
         if self._llm_followup_crosses_expert_boundary(active_expert, normalized):
             return None
+        active_goal = GOAL_CONTRACTS.get(state.active_goal_type)
+        if (
+            active_goal is not None
+            and active_goal.ownerExpert == active_expert
+            and self._llm_scope_only_followup(normalized)
+        ):
+            return active_expert
         if not normalized.startswith(followup_prefixes):
             if not normalized.startswith(("查", "查询", "帮我查", "看看")):
                 return None
@@ -1379,6 +1723,31 @@ class WarehouseAgentRuntime:
             if str(route_handoff.get("target_agent") or "") != active_expert:
                 return None
         return active_expert
+
+    @staticmethod
+    def _llm_scope_only_followup(text: str) -> bool:
+        normalized = re.sub(r"\s+", "", text or "").strip()
+        if normalized in {
+            "全部",
+            "所有",
+            "全部产品",
+            "所有产品",
+            "不限产品",
+            "不限定产品",
+            "全部仓库",
+            "所有仓库",
+            "全部库位",
+            "所有库位",
+        }:
+            return True
+        if re.fullmatch(r"(?:最近|近|过去)?\d+(?:天|日|周|个月|月|年)", normalized):
+            return True
+        return bool(
+            re.fullmatch(
+                r"\d{4}(?:[-/.]\d{1,2}(?:[-/.]\d{1,2})?|年\d{1,2}月(?:\d{1,2}日)?)",
+                normalized,
+            )
+        )
 
     @staticmethod
     def _llm_followup_crosses_expert_boundary(active_expert: str, text: str) -> bool:
@@ -1459,6 +1828,18 @@ class WarehouseAgentRuntime:
 
     def _llm_selected_context(self, state: WarehouseAgentState) -> dict[str, Any]:
         context: dict[str, Any] = {"BUSINESS_TIME": self.business_clock.context()}
+        active_goal = GOAL_CONTRACTS.get(state.active_goal_type)
+        if active_goal is not None:
+            context["ACTIVE_GOAL"] = {
+                "goalType": active_goal.goalType,
+                "businessResult": active_goal.factValidation.factLabel,
+                "ownerExpert": active_goal.ownerExpert,
+                "requiredEntityTypes": list(active_goal.requiredEntityTypes),
+                "requiredFactTypes": list(active_goal.requiredFactTypes),
+                "allowedTools": list(active_goal.allowedTools),
+                "evidenceTools": list(active_goal.evidenceTools),
+                "limitations": list(active_goal.limitations),
+            }
         if state.selected_product is not None:
             canonical_name = self._safe_text(state.selected_product.metadata.get("productName"))
             context["PRODUCT"] = {
@@ -1472,10 +1853,14 @@ class WarehouseAgentRuntime:
                 "canonicalName": self._safe_display_label(state.selected_warehouse.display_label),
             }
         if state.selected_production_order is not None:
-            order_ref = self._safe_text(state.selected_production_order.metadata.get("orderRef"))
             context["PRODUCTION_ORDER"] = {
-                "entityRef": order_ref,
+                "stateRef": "CURRENT_PRODUCTION_ORDER",
                 "displayCode": self._safe_display_label(state.selected_production_order.display_label),
+            }
+        if state.selected_boiling_batch is not None:
+            context["BOILING_BATCH"] = {
+                "stateRef": "CURRENT_BOILING_BATCH",
+                "displayCode": self._safe_display_label(state.selected_boiling_batch.display_label),
             }
         if state.selected_pallet is not None:
             context["PALLET"] = {
@@ -1533,6 +1918,25 @@ class WarehouseAgentRuntime:
                 "filterLabels": list(state.last_pallet_tasks.get("filterLabels") or [])[:8],
                 "records": safe_records,
             }
+        if state.last_boiling_batch_trace:
+            usages = state.last_boiling_batch_trace.get("usages")
+            context["LAST_BOILING_BATCH_TRACE"] = {
+                "batchNo": self._safe_text(state.last_boiling_batch_trace.get("batchNo")),
+                "productLabel": self._safe_text(state.last_boiling_batch_trace.get("productLabel")),
+                "relatedOrders": [
+                    self._safe_text(item.get("orderNo"))
+                    for item in (usages if isinstance(usages, list) else [])[:10]
+                    if isinstance(item, dict) and self._safe_text(item.get("orderNo"))
+                ],
+            }
+        if state.last_production_order_progress:
+            context["LAST_PRODUCTION_ORDER_PROGRESS"] = {
+                "orderNo": self._safe_text(state.last_production_order_progress.get("orderNo")),
+                "statusLabel": self._safe_text(state.last_production_order_progress.get("statusLabel")),
+                "materialRecordCount": state.last_production_order_progress.get("materialRecordCount"),
+                "outputRecordCount": state.last_production_order_progress.get("outputRecordCount"),
+                "inboundQrCount": state.last_production_order_progress.get("inboundQrCount"),
+            }
         return context
 
     def _llm_safe_messages(self, state: WarehouseAgentState) -> list[dict[str, str]]:
@@ -1566,6 +1970,7 @@ class WarehouseAgentRuntime:
         return {
             "action": decision.action,
             "expertAgent": decision.expertAgent,
+            "goalType": decision.goalType,
             "recipeId": decision.recipeId,
             "semanticReason": decision.semanticReason,
             "confidence": decision.confidence,
@@ -1579,7 +1984,12 @@ class WarehouseAgentRuntime:
             "citedObservationCount": len(decision.citedObservationIds),
         }
 
-    def _sanitize_llm_answer(self, answer: str) -> str:
+    def _sanitize_llm_answer(
+        self,
+        answer: str,
+        *,
+        state: WarehouseAgentState | None = None,
+    ) -> str:
         value = self._sanitize_llm_context_text(answer)[:2500]
         if re.search(
             r"(?i)(productId|warehouseId|assayId|toolCallId|recordRef|reportRef|raw\s*json|chain[- ]?of[- ]?thought|"
@@ -1590,13 +2000,42 @@ class WarehouseAgentRuntime:
         if any(tool_name in value for tool_name in ALLOWED_TOOLS):
             return "模型回答包含不应向用户展示的内部工具信息，本次回答已被 Runtime 拦截。"
         value = re.sub(r"\b[a-z_]+_expert\b", "业务专家", value)
+        value = value.replace("INVALID_INPUT", "输入不符合要求")
+        value = re.sub(
+            r"[（(]\s*(?:数据)?来源\s*[：:]\s*obs_\d+(?:\s*[,，、]\s*obs_\d+)*\s*[）)]",
+            "",
+            value,
+            flags=re.IGNORECASE,
+        )
+        value = re.sub(
+            r"(?:数据来源|证据(?:来源)?|来源|参见|依据)\s*[：:]?\s*"
+            r"obs_\d+(?:\s*[,，、]\s*obs_\d+)*(?:[。；;，,]?\s*)",
+            "",
+            value,
+            flags=re.IGNORECASE,
+        )
+        value = re.sub(r"\bobs_\d+\b", "已核验数据", value, flags=re.IGNORECASE)
         value = self._sanitize_assay_business_text(value)
+        value = self._sanitize_production_business_text(value)
+        value = self._sanitize_pallet_business_text(value)
+        if state is not None and self._requests_complete_pallet_history(
+            self._latest_user_message(state)
+        ):
+            value = re.sub(
+                r"(?:自|从)?\s*(?:19|20)\d{2}-\d{2}-\d{2}\s*至\s*(?:19|20)\d{2}-\d{2}-\d{2}",
+                "完整历史范围内",
+                value,
+            )
         value = self._normalize_user_facing_layout(value)
         return value or "模型没有生成可安全展示的回答。"
 
     def _normalize_user_facing_layout(self, value: str) -> str:
         """Add only obvious list breaks without imposing a rigid answer template."""
         text = value.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"(?m)^[ \t]{0,3}#{1,6}[ \t]+", "", text)
+        text = re.sub(r"\*\*([^*\n]+)\*\*", r"\1", text)
+        text = re.sub(r"`([^`\n]+)`", r"\1", text)
+        text = re.sub(r"(?m)^[ \t]*[-*][ \t]+", "• ", text)
         inline_markers = re.findall(r"(?:^|[ \t]|[。！？；])\d{1,2}[.、][ \t]+", text)
         if not inline_markers:
             return text
@@ -1631,6 +2070,248 @@ class WarehouseAgentRuntime:
                 return observation
         return None
 
+    def _latest_terminal_empty_result(
+        self,
+        observations: list[dict[str, Any]],
+        call_signature: str,
+    ) -> dict[str, Any] | None:
+        for observation in reversed(observations):
+            if (
+                observation.get("status") in {"INVALID_INPUT", "NO_DATA"}
+                and observation.get("callSignature") == call_signature
+            ):
+                return observation
+        return None
+
+    def _invalid_input_answer(self, tool_name: str) -> str:
+        if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
+            return "托盘码不符合系统规则，请核对完整托盘码后重试。"
+        return "查询条件不符合当前业务要求，请核对后重试。"
+
+    def _no_data_answer(self, tool_name: str) -> str:
+        if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
+            return "未找到该托盘，请核对托盘码后重试。"
+        if tool_name == "query_employee_roster":
+            return "当前没有查询到符合条件的员工记录。"
+        return "当前条件下没有查询到相关业务数据。"
+
+    def _llm_selection_rediscovery_error(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any] | None,
+        observations: list[dict[str, Any]],
+    ) -> str | None:
+        selected_type = ""
+        for observation in reversed(observations):
+            if observation.get("tool") != "USER_SELECTION" or observation.get("status") != "AVAILABLE":
+                continue
+            data = observation.get("data")
+            if isinstance(data, dict):
+                selected_type = str(data.get("entityType") or "").upper()
+            break
+        if not selected_type:
+            return None
+
+        entity_type = str((arguments or {}).get("entityType") or "").upper()
+        if selected_type == "BOILING_BATCH" and (
+            tool_name == "query_boiling_batches"
+            or (tool_name == "resolve_production_entities" and entity_type == "BOILING_BATCH")
+        ):
+            return (
+                "用户已经选择煮糖批次，候选发现阶段已经完成。"
+                "不得再次查询批次列表；请使用 CURRENT_BOILING_BATCH 调用 query_boiling_batch_trace。"
+            )
+        if selected_type == "PRODUCTION_ORDER" and (
+            tool_name == "resolve_production_entities" and entity_type == "PRODUCTION_ORDER"
+        ):
+            return "用户已经选择生产订单；请使用 CURRENT_PRODUCTION_ORDER 查询所需订单事实。"
+        if selected_type == "PRODUCT" and tool_name == "resolve_products":
+            return "用户已经选择产品；请使用 CURRENT_PRODUCT 查询所需产品事实。"
+        if selected_type == "WAREHOUSE" and tool_name == "resolve_warehouses":
+            return "用户已经选择库位；请使用 CURRENT_WAREHOUSE 查询所需库位事实。"
+        return None
+
+    def _llm_intent_tool_error(
+        self,
+        user_message: str,
+        tool_name: str,
+    ) -> str | None:
+        if (
+            self._requests_complete_pallet_history(user_message)
+            and tool_name != "query_pallet_flow_records"
+        ):
+            return (
+                "用户明确要求完整托盘历史；请改用 query_pallet_flow_records，"
+                "不要用托盘状态或生命周期摘要替代完整记录。"
+            )
+        return None
+
+    def _llm_structured_expert_clarification(
+        self,
+        *,
+        request: ChatRequest | ResumeRequest,
+        state: WarehouseAgentState,
+        user_message: str,
+        expert_agent: str,
+        observations: list[dict[str, Any]],
+        tool_call_count: int,
+        retry_count: int,
+        trace: dict[str, Any],
+    ) -> ChatResponse | None:
+        explicit_batch_order_scope = (
+            self._production_order_ordinal(user_message) is not None
+            or self._requests_all_linked_production_orders(user_message)
+        )
+        if (
+            expert_agent != "production_expert"
+            or not (
+                self._requires_single_production_order_context(user_message)
+                or explicit_batch_order_scope
+            )
+            or (
+                state.selected_production_order is not None
+                and not explicit_batch_order_scope
+            )
+        ):
+            return None
+        source = state.last_boiling_batch_trace
+        usages = source.get("usages") if isinstance(source, dict) else None
+        order_numbers = list(
+            dict.fromkeys(
+                order_no
+                for item in (usages if isinstance(usages, list) else [])
+                if isinstance(item, dict)
+                and (order_no := self._safe_text(item.get("orderNo")))
+                and order_no != "生产订单未标明"
+            )
+        )
+        if (
+            1 < len(order_numbers) <= 5
+            and self._requests_all_linked_production_orders(user_message)
+        ):
+            trace.setdefault("expertLoop", {}).setdefault("events", []).append(
+                {
+                    "action": "CONTROLLED_MULTI_ENTITY_QUERY",
+                    "status": "ALL_LINKED_PRODUCTION_ORDERS",
+                    "candidateCount": len(order_numbers),
+                }
+            )
+            return self._answer_linked_production_orders(request, state, order_numbers)
+        ordinal = self._production_order_ordinal(user_message)
+        if ordinal is not None:
+            if ordinal < 1 or ordinal > len(order_numbers):
+                return ChatResponse(
+                    agentSessionId=request.agentSessionId,
+                    answer=f"当前只查询到 {len(order_numbers)} 个关联生产订单，请选择这个范围内的序号。",
+                    needsUserSelection=True,
+                )
+            order_no = order_numbers[ordinal - 1]
+            candidate = self._resolve_linked_production_order(request, state, order_no)
+            if candidate is None:
+                return ChatResponse(
+                    agentSessionId=request.agentSessionId,
+                    answer=f"没有找到关联生产订单 {order_no} 的有效查询引用，请重新查询。",
+                    needsUserSelection=True,
+                )
+            self._remember_unique_production_resolution(
+                state,
+                {
+                    "resolutionStatus": "EXACT",
+                    "needsUserSelection": False,
+                    "entityType": "PRODUCTION_ORDER",
+                    "candidates": [candidate],
+                },
+            )
+            self._begin_registered_goal(state, "PRODUCTION_ORDER_PROGRESS")
+            trace.setdefault("expertLoop", {}).setdefault("events", []).append(
+                {
+                    "action": "CONTROLLED_ENTITY_SELECTION",
+                    "status": "LINKED_PRODUCTION_ORDER_ORDINAL",
+                    "ordinal": ordinal,
+                }
+            )
+            return self._answer_production_tool(
+                request,
+                state,
+                "query_production_order_progress",
+                {"orderRef": self._safe_text(candidate.get("entityRef"))},
+            )
+        if len(order_numbers) <= 1:
+            return None
+
+        candidates = [
+            candidate
+            for order_no in order_numbers[:10]
+            if (candidate := self._resolve_linked_production_order(request, state, order_no)) is not None
+        ]
+        if len(candidates) <= 1:
+            return None
+        pending = self._production_entity_clarification(
+            {
+                "resolutionStatus": "AMBIGUOUS",
+                "needsUserSelection": True,
+                "entityType": "PRODUCTION_ORDER",
+                "candidates": candidates,
+            },
+            request,
+            "llm_tool_loop",
+        )
+        pending.prompt = "这个煮糖批次关联了多个生产订单，请选择一个，再查询该订单的原料消耗及产出。"
+        pending.continuation = {
+            "planningMode": "llm",
+            "userMessage": user_message,
+            "expertAgent": expert_agent,
+            "observations": list(observations),
+            "toolCallCount": tool_call_count,
+            "retryCount": retry_count,
+            "trace": trace,
+        }
+        state.pending_clarification = pending
+        state.interrupt_status[pending.interrupt_id] = pending.status
+        trace.setdefault("expertLoop", {}).setdefault("events", []).append(
+            {
+                "action": "STRUCTURED_CLARIFICATION",
+                "status": "MULTIPLE_PRODUCTION_ORDERS",
+                "candidateCount": len(candidates),
+            }
+        )
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=pending.prompt,
+            needsUserSelection=True,
+            cards=[self._clarification_card(pending)],
+        )
+
+    @staticmethod
+    def _requires_single_production_order_context(user_message: str) -> bool:
+        text = "".join((user_message or "").split())
+        return any(
+            marker in text
+            for marker in (
+                "原料",
+                "领料",
+                "消耗",
+                "产出",
+                "入库去向",
+                "生产订单详情",
+                "生产订单的具体",
+                "关联生产订单的具体",
+            )
+        )
+
+    @staticmethod
+    def _requests_all_linked_production_orders(user_message: str) -> bool:
+        text = "".join((user_message or "").split())
+        return "订单" in text and any(
+            marker in text for marker in ("这两个", "两个", "这些", "全部", "所有", "都")
+        )
+
+    @staticmethod
+    def _production_order_ordinal(user_message: str) -> int | None:
+        text = "".join((user_message or "").split())
+        match = re.search(r"第?([一二三四五六七八九十\d]+)(?:个|条)?订单", text)
+        return WarehouseAgentRuntime._task_ordinal(match.group(1)) if match else None
+
     def _validate_llm_completion(
         self,
         decision: ExpertLoopDecisionV1,
@@ -1641,7 +2322,7 @@ class WarehouseAgentRuntime:
         if any(observation_id not in by_id for observation_id in decision.citedObservationIds):
             return "模型引用了不存在的工具观察，Runtime 未接受完成结论。"
         cited = [by_id[observation_id] for observation_id in decision.citedObservationIds]
-        if not any(item.get("status") in {"AVAILABLE", "NO_DATA"} for item in cited):
+        if not any(item.get("status") in {"AVAILABLE", "NO_DATA", "INVALID_INPUT"} for item in cited):
             return "模型没有引用可用或明确无数据的权威观察，不能形成业务结论。"
         unresolved_errors = [
             item for item in observations
@@ -1656,9 +2337,58 @@ class WarehouseAgentRuntime:
             if not any(word in answer for word in ("失败", "暂时无法", "查询异常", "未完成")):
                 return "部分回答必须明确说明工具失败，不能把失败表述成无数据。"
         completion = self._evaluate_registered_goal(state)
-        if completion is not None and decision.action == "FINAL_ANSWER" and completion["status"] != "COMPLETE":
+        cited_terminal_empty = any(item.get("status") in {"NO_DATA", "INVALID_INPUT"} for item in cited)
+        if (
+            completion is not None
+            and decision.action == "FINAL_ANSWER"
+            and completion["status"] != "COMPLETE"
+            and not cited_terminal_empty
+        ):
             return "登记目标的实体或必需事实尚未完成，模型不能自行宣布完成。"
         return None
+
+    def _llm_authoritative_no_data_fallback(
+        self,
+        agent_session_id: str,
+        state: WarehouseAgentState,
+        observations: list[dict[str, Any]],
+        cards: list[BusinessCard],
+    ) -> ChatResponse | None:
+        """Safely finish an authoritative empty result after the model twice omits its citation."""
+        completion = self._evaluate_registered_goal(state)
+        if completion is None or completion.get("status") != "COMPLETE":
+            return None
+        contract = GOAL_CONTRACTS.get(state.active_goal_type)
+        if contract is None:
+            return None
+        if any(
+            item.get("status") == "TOOL_ERROR" and not item.get("resolved")
+            for item in observations
+        ):
+            return None
+        evidence_tools = set(contract.evidenceTools)
+        observation = next(
+            (
+                item
+                for item in reversed(observations)
+                if item.get("status") == "NO_DATA" and item.get("tool") in evidence_tools
+            ),
+            None,
+        )
+        if observation is None:
+            return None
+        tool_name = str(observation.get("tool") or "")
+        data = observation.get("data")
+        safe_data = data if isinstance(data, dict) else {}
+        if tool_name == "query_auto_inbound_batches":
+            answer = self._format_auto_inbound_batches_answer(safe_data)
+        else:
+            answer = self._no_data_answer(tool_name)
+        return ChatResponse(
+            agentSessionId=agent_session_id,
+            answer=answer,
+            cards=list(cards),
+        )
 
     def _llm_resolver_interrupt(
         self,
@@ -1668,24 +2398,93 @@ class WarehouseAgentRuntime:
         user_message: str,
         expert_agent: str,
         tool_name: str,
+        arguments: dict[str, Any],
         result: dict[str, Any],
         observations: list[dict[str, Any]],
         tool_call_count: int,
         retry_count: int,
         trace: dict[str, Any],
     ) -> ChatResponse | None:
-        if tool_name not in {"resolve_products", "resolve_warehouses"}:
+        if tool_name == "query_boiling_batches":
+            candidates = result.get("candidates") if isinstance(result.get("candidates"), list) else []
+            candidates = [item for item in candidates if isinstance(item, dict)]
+            if not candidates:
+                return None
+            safe_value = self._redact_control_refs(self._llm_safe_tool_data(result))
+            safe_result = safe_value if isinstance(safe_value, dict) else {}
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name=tool_name,
+                arguments=arguments,
+                safe_data=safe_result,
+            )
+            completion = self._evaluate_registered_goal(state)
+            if completion is not None:
+                trace["goalCompletion"] = completion
+            observations.append(
+                {
+                    "observationId": f"obs_{len(observations) + 1}",
+                    "status": "AVAILABLE",
+                    "tool": tool_name,
+                    "candidateCount": len(candidates),
+                    "total": self._bounded_int(
+                        result.get("total"), default=len(candidates), minimum=0, maximum=1_000_000
+                    ),
+                }
+            )
+            pending = self._production_entity_clarification(
+                {
+                    "resolutionStatus": "AMBIGUOUS",
+                    "needsUserSelection": True,
+                    "entityType": "BOILING_BATCH",
+                    "candidates": candidates,
+                },
+                request,
+                "llm_tool_loop",
+            )
+            total = self._bounded_int(
+                result.get("total"), default=len(candidates), minimum=0, maximum=1_000_000
+            )
+            scope_label = self._safe_display_label(str(result.get("scopeLabel") or "全部产品"))
+            date_range_label = self._safe_display_label(str(result.get("dateRangeLabel") or "当前时间范围"))
+            date_scope_text = self._production_date_scope_text(date_range_label)
+            shown_note = f"，当前展示前 {len(candidates)} 个" if total > len(candidates) else ""
+            pending.prompt = (
+                f"{date_scope_text}共查询到 {total} 个{scope_label}煮糖批次{shown_note}。"
+                "请选择一个查看流转详情。"
+            )
+            pending.continuation = {
+                "planningMode": "llm",
+                "userMessage": user_message,
+                "expertAgent": expert_agent,
+                "observations": observations,
+                "toolCallCount": tool_call_count,
+                "retryCount": retry_count,
+                "trace": trace,
+            }
+            state.pending_clarification = pending
+            state.interrupt_status[pending.interrupt_id] = pending.status
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=pending.prompt,
+                needsUserSelection=True,
+                cards=[self._clarification_card(pending)],
+            )
+
+        if tool_name not in {"resolve_products", "resolve_warehouses", "resolve_production_entities"}:
             return None
         status = str(result.get("resolutionStatus") or "").upper()
-        if status == "UNIQUE":
+        if status in {"UNIQUE", "EXACT"}:
             if tool_name == "resolve_products":
                 entity = self._single_product_entity(result)
                 if entity is not None:
                     state.selected_product = entity
-            else:
+            elif tool_name == "resolve_warehouses":
                 entity = self._single_warehouse_entity(result)
                 if entity is not None:
                     state.selected_warehouse = entity
+            else:
+                self._remember_unique_production_resolution(state, result)
             return None
         if status != "AMBIGUOUS":
             return None
@@ -1698,8 +2497,10 @@ class WarehouseAgentRuntime:
         observations.append(ambiguous_observation)
         if tool_name == "resolve_products":
             pending = self._product_clarification(result, "llm_tool_loop", request)
-        else:
+        elif tool_name == "resolve_warehouses":
             pending = self._warehouse_clarification(result, request, intent="llm_tool_loop")
+        else:
+            pending = self._production_entity_clarification(result, request, "llm_tool_loop")
         pending.continuation = {
             "planningMode": "llm",
             "userMessage": user_message,
@@ -1768,6 +2569,17 @@ class WarehouseAgentRuntime:
             safe_data = report.model_dump(exclude_none=True)
             card = self._assay_report_card(report)
             cards = [card] if card is not None else []
+        elif tool_name in {
+            "query_unqualified_inventory",
+            "query_inventory_by_quality_standard",
+            "query_inventory_by_assay_metrics",
+        }:
+            raw_safe_value = self._llm_safe_tool_data(result)
+            raw_safe = raw_safe_value if isinstance(raw_safe_value, dict) else {}
+            state.last_inventory_quality = dict(raw_safe)
+            safe_data = self._redact_control_refs(raw_safe)
+            card = self._inventory_quality_card(raw_safe)
+            cards = [card] if card is not None else []
         elif tool_name == "query_pallet_tasks":
             adapted_tasks = self._adapt_pallet_tasks(result, arguments)
             safe_data = adapted_tasks.model_dump(exclude_none=True)
@@ -1775,14 +2587,44 @@ class WarehouseAgentRuntime:
             state.last_pallet_task_filters = dict(arguments)
             if adapted_tasks.records:
                 cards = [self._pallet_tasks_card(adapted_tasks)]
+        elif tool_name == "query_production_order_progress":
+            adapted_progress = self._adapt_production_order_progress(result)
+            safe_data = adapted_progress.model_dump(exclude_none=True)
+            state.last_production_order_progress = dict(safe_data)
+            cards = [self._production_order_progress_card(adapted_progress)]
+        elif tool_name == "query_material_pick_trace":
+            adapted_materials = self._adapt_production_material_trace(result)
+            safe_data = adapted_materials.model_dump(exclude_none=True)
+            state.last_production_material_trace = dict(safe_data)
+            cards = [self._production_material_trace_card(adapted_materials)]
+        elif tool_name == "query_boiling_batch_trace":
+            adapted_batch = self._adapt_boiling_batch_trace(result)
+            safe_data = adapted_batch.model_dump(exclude_none=True)
+            state.last_boiling_batch_trace = dict(safe_data)
+            cards = [self._boiling_batch_trace_card(adapted_batch)]
+        elif tool_name in {"get_pallet_status", "query_qr_code_lifecycle"}:
+            adapted_pallet = self._adapt_pallet_status(result, arguments)
+            if tool_name == "query_qr_code_lifecycle":
+                state.last_qr_code_lifecycle = adapted_pallet.model_dump(exclude_none=True)
+            self._remember_pallet(state, adapted_pallet.codeLabel)
+            if tool_name == "query_qr_code_lifecycle" and state.active_goal_type == "PALLET_FLOW_HISTORY":
+                adapted_flow = self._adapt_pallet_lifecycle_history(adapted_pallet)
+                safe_data = adapted_flow.model_dump(exclude_none=True)
+                state.last_pallet_flow_records = dict(safe_data)
+                cards = [self._pallet_flow_card(adapted_flow)]
+            else:
+                safe_data = adapted_pallet.model_dump(exclude_none=True)
+                state.last_pallet_result = dict(safe_data)
+                cards = [self._pallet_status_card(adapted_pallet)]
+        elif tool_name == "query_pallet_flow_records":
+            adapted_flow = self._adapt_pallet_flow_records(result, arguments, state)
+            safe_data = adapted_flow.model_dump(exclude_none=True)
+            self._remember_pallet(state, arguments.get("code"))
+            state.last_pallet_flow_records = dict(safe_data)
+            cards = [self._pallet_flow_card(adapted_flow)]
         else:
             safe_value = self._llm_safe_tool_data(result)
             safe_data = safe_value if isinstance(safe_value, dict) else {"value": safe_value}
-            if tool_name == "get_pallet_status":
-                state.last_pallet_result = dict(safe_data)
-                self._remember_pallet(state, arguments.get("code"))
-            elif tool_name == "query_pallet_flow_records":
-                state.last_pallet_flow_records = dict(safe_data)
             safe_data = self._redact_control_refs(safe_data)
         self._record_registered_goal_fact(
             state=state,
@@ -1797,13 +2639,13 @@ class WarehouseAgentRuntime:
                 "status": status,
                 "tool": tool_name,
                 "callSignature": call_signature,
-                "data": safe_data,
+                "data": self._llm_safe_tool_data(safe_data),
             },
             cards,
         )
 
     def _llm_result_status(self, tool_name: str, data: dict[str, Any]) -> str:
-        if tool_name in {"resolve_products", "resolve_warehouses"}:
+        if tool_name in {"resolve_products", "resolve_warehouses", "resolve_production_entities"}:
             status = str(data.get("resolutionStatus") or "").upper()
             return "NO_DATA" if status in {"NOT_FOUND", "NO_MATCH"} else "AVAILABLE"
         if data.get("isEmpty") is True or data.get("needsAssay") is True:
@@ -1831,6 +2673,13 @@ class WarehouseAgentRuntime:
                     or key_text.endswith("_id")
                     or any(secret in lowered for secret in ("authorization", "password", "secret", "token", "rawjson", "stacktrace"))
                 ):
+                    continue
+                if key_text == "cycleNo":
+                    try:
+                        cycle_number = int(item)
+                    except (TypeError, ValueError):
+                        continue
+                    safe["flowSequenceLabel"] = f"第 {cycle_number} 次流转"
                     continue
                 safe[key_text] = self._llm_safe_tool_data(item, depth=depth + 1)
             return safe
@@ -1943,10 +2792,17 @@ class WarehouseAgentRuntime:
             self._record_tool_message(state, "get_assay_status", self._safe_tool_summary("get_assay_status", result))
             label = state.selected_product.display_label if state.selected_product else "该产品"
             report = self._adapt_assay_status(result, label)
+            safe_data = report.model_dump(exclude_none=True)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name="get_assay_status",
+                arguments=plan.arguments,
+                safe_data=safe_data,
+            )
             card = self._assay_report_card(report)
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
-                answer=self._format_assay_answer(label, report.model_dump(exclude_none=True)),
+                answer=self._format_assay_answer(label, safe_data),
                 cards=[card] if card is not None else [],
             )
         if plan.toolName == "query_assay_records":
@@ -1956,6 +2812,12 @@ class WarehouseAgentRuntime:
             state.last_assay_records = result
             self._record_tool_message(state, "query_assay_records", self._safe_tool_summary("query_assay_records", result))
             safe_result = self._adapt_assay_records(result)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name="query_assay_records",
+                arguments=plan.arguments,
+                safe_data=safe_result,
+            )
             card = self._assay_history_card(safe_result)
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
@@ -1969,10 +2831,17 @@ class WarehouseAgentRuntime:
             state.last_assay_report_detail = result
             self._record_tool_message(state, "get_assay_report_detail", self._safe_tool_summary("get_assay_report_detail", result))
             report = self._adapt_assay_report_detail(result)
+            safe_data = report.model_dump(exclude_none=True)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name="get_assay_report_detail",
+                arguments=plan.arguments,
+                safe_data=safe_data,
+            )
             card = self._assay_report_card(report)
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
-                answer=self._format_assay_report_detail_answer(report.model_dump(exclude_none=True)),
+                answer=self._format_assay_report_detail_answer(safe_data),
                 cards=[card] if card is not None else [],
             )
         if plan.toolName == "query_assay_abnormalities":
@@ -1981,7 +2850,37 @@ class WarehouseAgentRuntime:
             self._raise_if_tool_error_payload(result)
             state.last_assay_abnormalities = result
             self._record_tool_message(state, "query_assay_abnormalities", self._safe_tool_summary("query_assay_abnormalities", result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_assay_abnormalities_answer(result))
+        if plan.toolName in {
+            "query_unqualified_inventory",
+            "query_inventory_by_quality_standard",
+            "query_inventory_by_assay_metrics",
+        }:
+            result = self._call_tool(request, plan.toolName, plan.arguments)
+            self._raise_if_cancelled()
+            self._raise_if_tool_error_payload(result)
+            safe_value = self._llm_safe_tool_data(result)
+            safe_result = safe_value if isinstance(safe_value, dict) else {}
+            state.last_inventory_quality = dict(safe_result)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                safe_data=safe_result,
+            )
+            self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, safe_result))
+            card = self._inventory_quality_card(safe_result)
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_inventory_quality_answer(safe_result),
+                cards=[card] if card is not None else [],
+            )
         if plan.toolName == "query_products_without_recent_assay":
             return self._answer_products_without_recent_assay(
                 request.agentSessionId,
@@ -2000,6 +2899,12 @@ class WarehouseAgentRuntime:
                 state,
                 "query_assay_standard_coverage",
                 self._safe_tool_summary("query_assay_standard_coverage", result),
+            )
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
             )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_assay_standard_coverage_answer(result))
         if plan.toolName in {
@@ -2045,13 +2950,7 @@ class WarehouseAgentRuntime:
                     answer="生产实体解析结果缺少有效的受控引用，本次未继续查询。",
                     needsUserSelection=True,
                 )
-            if entity_type == "PRODUCTION_ORDER":
-                state.selected_production_order = SelectedEntity(
-                    internal_id=None,
-                    display_label=self._safe_display_label(str(candidate.get("displayCode") or candidate.get("displayLabel") or "该生产订单")),
-                    source="resolver",
-                    metadata={"orderRef": entity_ref},
-                )
+            self._remember_unique_production_resolution(state, resolution)
             detail_tool = (
                 "query_boiling_batch_trace"
                 if entity_type == "BOILING_BATCH"
@@ -2064,66 +2963,68 @@ class WarehouseAgentRuntime:
                 else "query_production_order_progress"
             )
             detail_arguments = {"batchRef": entity_ref} if entity_type == "BOILING_BATCH" else {"orderRef": entity_ref}
+            if detail_tool in {
+                "query_boiling_batch_trace",
+                "query_material_pick_trace",
+                "query_production_order_progress",
+            }:
+                return self._answer_production_tool(request, state, detail_tool, detail_arguments)
             result = self._call_tool(request, detail_tool, detail_arguments)
             self._raise_if_cancelled()
             self._raise_if_tool_error_payload(result)
-            self._record_tool_message(
-                state,
-                detail_tool,
-                self._safe_tool_summary(detail_tool, result),
+            self._record_tool_message(state, detail_tool, self._safe_tool_summary(detail_tool, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=detail_tool,
+                arguments=detail_arguments,
+                result=result,
             )
-            return ChatResponse(
-                agentSessionId=request.agentSessionId,
-                answer=(self._format_boiling_batch_trace_answer(result)
-                        if detail_tool == "query_boiling_batch_trace"
-                        else self._format_material_pick_trace_answer(result)
-                        if detail_tool == "query_material_pick_trace"
-                        else self._format_material_candidates_answer(result)
-                        if detail_tool == "query_material_candidates"
-                        else self._format_production_label_completion_answer(result)
-                        if detail_tool == "query_production_label_completion"
-                        else self._format_production_order_progress_answer(result)),
+            answer = (
+                self._format_material_candidates_answer(result)
+                if detail_tool == "query_material_candidates"
+                else self._format_production_label_completion_answer(result)
             )
-        if plan.toolName == "query_production_order_progress":
-            result = self._call_tool(request, plan.toolName, plan.arguments)
-            self._raise_if_cancelled()
-            self._raise_if_tool_error_payload(result)
-            self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
-            return ChatResponse(
-                agentSessionId=request.agentSessionId,
-                answer=self._format_production_order_progress_answer(result),
-            )
-        if plan.toolName == "query_boiling_batch_trace":
-            result = self._call_tool(request, plan.toolName, plan.arguments)
-            self._raise_if_cancelled()
-            self._raise_if_tool_error_payload(result)
-            self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
-            return ChatResponse(
-                agentSessionId=request.agentSessionId,
-                answer=self._format_boiling_batch_trace_answer(result),
-            )
-        if plan.toolName == "query_material_pick_trace":
-            result = self._call_tool(request, plan.toolName, plan.arguments)
-            self._raise_if_cancelled()
-            self._raise_if_tool_error_payload(result)
-            self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_material_pick_trace_answer(result))
+            return ChatResponse(agentSessionId=request.agentSessionId, answer=answer)
+        if plan.toolName in {
+            "query_production_order_progress",
+            "query_boiling_batch_trace",
+            "query_material_pick_trace",
+        }:
+            return self._answer_production_tool(request, state, plan.toolName, plan.arguments)
         if plan.toolName == "query_production_label_completion":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled()
             self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_production_label_completion_answer(result))
         if plan.toolName == "query_in_process_materials":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled()
             self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_in_process_materials_answer(result))
         if plan.toolName == "query_material_candidates":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_material_candidates_answer(result))
         if plan.toolName == "query_pallet_tasks":
             result = self._call_tool(request, plan.toolName, plan.arguments)
@@ -2150,22 +3051,46 @@ class WarehouseAgentRuntime:
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_stock_documents_answer(result))
         if plan.toolName == "query_auto_inbound_batches":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             state.last_auto_inbound_batches = result
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_auto_inbound_batches_answer(result))
         if plan.toolName == "get_auto_inbound_batch_detail":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_auto_inbound_batch_detail_answer(result))
         if plan.toolName == "query_warehouse_capacity_distribution":
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_warehouse_capacity_distribution_answer(result))
         if plan.toolName == "query_warehouse_recent_operations":
             return self._answer_warehouse_recent_operations(request, state, plan.arguments)
@@ -2175,21 +3100,46 @@ class WarehouseAgentRuntime:
             result = self._call_tool(request, plan.toolName, plan.arguments)
             self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             formatter = {"query_product_catalog": self._format_product_catalog_answer,
                          "get_product_detail": self._format_product_detail_answer,
                          "query_screen_mesh_catalog": self._format_screen_mesh_catalog_answer}[plan.toolName]
             return ChatResponse(agentSessionId=request.agentSessionId, answer=formatter(result))
-        if plan.toolName in {"query_assay_groups", "query_quality_standard_catalog", "get_quality_standard_detail", "query_product_standard_relations"}:
+        if plan.toolName in {
+            "query_assay_groups",
+            "query_quality_standard_catalog",
+            "get_quality_standard_detail",
+            "query_product_standard_relations",
+            "query_product_quality_configuration",
+        }:
             result = self._call_tool(request, plan.toolName, plan.arguments); self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             formatter = {"query_assay_groups": self._format_assay_groups_answer,
                          "query_quality_standard_catalog": self._format_quality_standard_catalog_answer,
                          "get_quality_standard_detail": self._format_quality_standard_detail_answer,
-                         "query_product_standard_relations": self._format_product_standard_relations_answer}[plan.toolName]
+                         "query_product_standard_relations": self._format_product_standard_relations_answer,
+                         "query_product_quality_configuration": self._format_product_quality_configuration_answer}[plan.toolName]
             return ChatResponse(agentSessionId=request.agentSessionId, answer=formatter(result))
         if plan.toolName in {"query_employee_roster", "query_roles", "get_role_permission_summary"}:
             result = self._call_tool(request, plan.toolName, plan.arguments); self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             formatter = {"query_employee_roster": self._format_employee_roster_answer,
                          "query_roles": self._format_role_catalog_answer,
                          "get_role_permission_summary": self._format_role_permission_summary_answer}[plan.toolName]
@@ -2197,6 +3147,12 @@ class WarehouseAgentRuntime:
         if plan.toolName in {"search_operation_logs", "query_agent_tool_audit", "query_agent_answer_reviews"}:
             result = self._call_tool(request, plan.toolName, plan.arguments); self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             formatter = {"search_operation_logs": self._format_operation_logs_answer,
                          "query_agent_tool_audit": self._format_agent_tool_audit_answer,
                          "query_agent_answer_reviews": self._format_agent_answer_reviews_answer}[plan.toolName]
@@ -2204,20 +3160,45 @@ class WarehouseAgentRuntime:
         if plan.toolName in {"query_inventory_ledger", "query_prepare_pool_balance"}:
             result = self._call_tool(request, plan.toolName, plan.arguments); self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             formatter = {"query_inventory_ledger": self._format_inventory_ledger_answer,
                          "query_prepare_pool_balance": self._format_prepare_pool_balance_answer}[plan.toolName]
             return ChatResponse(agentSessionId=request.agentSessionId, answer=formatter(result))
         if plan.toolName == "query_fixed_product_qr_pool":
             result = self._call_tool(request, plan.toolName, plan.arguments); self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_fixed_product_qr_pool_answer(result))
         if plan.toolName == "get_pallet_status":
             result = self._call_tool(request, "get_pallet_status", plan.arguments)
             self._raise_if_cancelled()
-            state.last_pallet_result = result
-            self._remember_pallet(state, plan.arguments.get("code"))
+            self._raise_if_tool_error_payload(result)
+            adapted = self._adapt_pallet_status(result, plan.arguments)
+            safe_data = adapted.model_dump(exclude_none=True)
+            state.last_pallet_result = safe_data
+            self._remember_pallet(state, adapted.codeLabel)
             self._record_tool_message(state, "get_pallet_status", self._safe_tool_summary("get_pallet_status", result))
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_pallet_answer(result))
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name="get_pallet_status",
+                arguments=plan.arguments,
+                safe_data=safe_data,
+            )
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_pallet_answer(adapted),
+                cards=[self._pallet_status_card(adapted)],
+            )
 
         return ChatResponse(
             agentSessionId=request.agentSessionId,
@@ -2829,6 +3810,39 @@ class WarehouseAgentRuntime:
         request_id: str | None,
         message_id: str | None,
     ) -> ChatResponse:
+        if intent == "product_quality_configuration":
+            if state.selected_product is None or state.selected_product.internal_id is None:
+                return ChatResponse(
+                    agentSessionId=agent_session_id,
+                    answer="产品质量配置查询需要先确认具体产品。",
+                    needsUserSelection=True,
+                )
+            arguments = {"productId": state.selected_product.internal_id}
+            result = self._call_tool_values(
+                agent_session_id=agent_session_id,
+                tool_name="query_product_quality_configuration",
+                arguments=arguments,
+                trace_id=trace_id,
+                request_id=request_id,
+                message_id=message_id,
+            )
+            self._raise_if_cancelled()
+            self._raise_if_tool_error_payload(result)
+            self._record_tool_message(
+                state,
+                "query_product_quality_configuration",
+                self._safe_tool_summary("query_product_quality_configuration", result),
+            )
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name="query_product_quality_configuration",
+                arguments=arguments,
+                result=result,
+            )
+            return ChatResponse(
+                agentSessionId=agent_session_id,
+                answer=self._format_product_quality_configuration_answer(result),
+            )
         if intent == "product_detail":
             if state.selected_product is None:
                 return ChatResponse(agentSessionId=agent_session_id, answer="产品详情查询需要先确认产品。", needsUserSelection=True)
@@ -2846,6 +3860,12 @@ class WarehouseAgentRuntime:
             self._raise_if_cancelled()
             self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, "get_product_detail", self._safe_tool_summary("get_product_detail", result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name="get_product_detail",
+                arguments={"productName": product_name},
+                result=result,
+            )
             return ChatResponse(agentSessionId=agent_session_id, answer=self._format_product_detail_answer(result))
         if intent == "assay":
             if state.selected_product is None or state.selected_product.internal_id is None:
@@ -2865,12 +3885,22 @@ class WarehouseAgentRuntime:
             state.last_assay_result = result
             self._record_tool_message(state, "get_assay_status", self._safe_tool_summary("get_assay_status", result))
             report = self._adapt_assay_status(result, state.selected_product.display_label)
+            report_data = report.model_dump(exclude_none=True)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name="get_assay_status",
+                arguments={
+                    "productId": state.selected_product.internal_id,
+                    "productionDate": self.business_clock.today().isoformat(),
+                },
+                safe_data=report_data,
+            )
             card = self._assay_report_card(report)
             return ChatResponse(
                 agentSessionId=agent_session_id,
                 answer=self._format_assay_answer(
                     state.selected_product.display_label,
-                    report.model_dump(exclude_none=True),
+                    report_data,
                 ),
                 cards=[card] if card is not None else [],
             )
@@ -2894,6 +3924,12 @@ class WarehouseAgentRuntime:
             state.last_assay_records = result
             self._record_tool_message(state, "query_assay_records", self._safe_tool_summary("query_assay_records", result))
             safe_result = self._adapt_assay_records(result)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name="query_assay_records",
+                arguments=arguments,
+                safe_data=safe_result,
+            )
             card = self._assay_history_card(safe_result)
             return ChatResponse(
                 agentSessionId=agent_session_id,
@@ -2919,6 +3955,12 @@ class WarehouseAgentRuntime:
             self._raise_if_tool_error_payload(result)
             state.last_assay_abnormalities = result
             self._record_tool_message(state, "query_assay_abnormalities", self._safe_tool_summary("query_assay_abnormalities", result))
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name="query_assay_abnormalities",
+                arguments=arguments,
+                result=result,
+            )
             return ChatResponse(agentSessionId=agent_session_id, answer=self._format_assay_abnormalities_answer(result))
         if intent == "products_without_recent_assay":
             if state.selected_product is None:
@@ -2961,6 +4003,12 @@ class WarehouseAgentRuntime:
                 state,
                 "query_assay_standard_coverage",
                 self._safe_tool_summary("query_assay_standard_coverage", result),
+            )
+            self._record_raw_registered_goal_fact(
+                state=state,
+                tool_name="query_assay_standard_coverage",
+                arguments=arguments,
+                result=result,
             )
             return ChatResponse(agentSessionId=agent_session_id, answer=self._format_assay_standard_coverage_answer(result))
         if intent in {"printed_not_inbound_codes", "pallet_anomalies", "pallet_flow_records"}:
@@ -3155,6 +4203,14 @@ class WarehouseAgentRuntime:
         self._raise_if_cancelled()
         self._raise_if_tool_error_payload(result)
         state.last_products_without_recent_assay = result
+        safe_value = self._llm_safe_tool_data(result)
+        safe_result = safe_value if isinstance(safe_value, dict) else {}
+        self._record_registered_goal_fact(
+            state=state,
+            tool_name="query_products_without_recent_assay",
+            arguments=arguments,
+            safe_data=safe_result,
+        )
         self._record_tool_message(
             state,
             "query_products_without_recent_assay",
@@ -3201,6 +4257,55 @@ class WarehouseAgentRuntime:
         }[tool_name]
         setattr(state, state_field, result)
         self._record_tool_message(state, tool_name, self._safe_tool_summary(tool_name, result))
+        if tool_name == "query_qr_code_lifecycle":
+            adapted_status = self._adapt_pallet_status(result, arguments)
+            status_data = adapted_status.model_dump(exclude_none=True)
+            state.last_pallet_result = dict(status_data)
+            state.last_qr_code_lifecycle = dict(status_data)
+            self._remember_pallet(state, adapted_status.codeLabel)
+            if state.active_goal_type == "PALLET_FLOW_HISTORY":
+                adapted_flow = self._adapt_pallet_lifecycle_history(adapted_status)
+                safe_data = adapted_flow.model_dump(exclude_none=True)
+                state.last_pallet_flow_records = dict(safe_data)
+                self._record_registered_goal_fact(
+                    state=state,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    safe_data=safe_data,
+                )
+                return ChatResponse(
+                    agentSessionId=agent_session_id,
+                    answer=self._format_pallet_flow_records_answer(safe_data),
+                    cards=[self._pallet_flow_card(adapted_flow)],
+                )
+            safe_data = status_data
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name=tool_name,
+                arguments=arguments,
+                safe_data=safe_data,
+            )
+            return ChatResponse(
+                agentSessionId=agent_session_id,
+                answer=self._format_pallet_answer(adapted_status),
+                cards=[self._pallet_status_card(adapted_status)],
+            )
+        if tool_name == "query_pallet_flow_records":
+            adapted_flow = self._adapt_pallet_flow_records(result, arguments, state)
+            safe_data = adapted_flow.model_dump(exclude_none=True)
+            self._remember_pallet(state, arguments.get("code"))
+            state.last_pallet_flow_records = dict(safe_data)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name=tool_name,
+                arguments=arguments,
+                safe_data=safe_data,
+            )
+            return ChatResponse(
+                agentSessionId=agent_session_id,
+                answer=self._format_pallet_flow_records_answer(safe_data),
+                cards=[self._pallet_flow_card(adapted_flow)],
+            )
         formatter = {
             "query_qr_code_lifecycle": self._format_qr_code_lifecycle_answer,
             "query_printed_not_inbound_codes": self._format_printed_not_inbound_answer,
@@ -3208,6 +4313,12 @@ class WarehouseAgentRuntime:
             "query_pallet_flow_records": self._format_pallet_flow_records_answer,
             "query_qr_batch_inbound_completion": self._format_qr_batch_inbound_answer,
         }[tool_name]
+        self._record_raw_registered_goal_fact(
+            state=state,
+            tool_name=tool_name,
+            arguments=arguments,
+            result=result,
+        )
         return ChatResponse(agentSessionId=agent_session_id, answer=formatter(result))
 
     def _resolve_warehouse_and_continue(
@@ -3301,6 +4412,12 @@ class WarehouseAgentRuntime:
         self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
         self._record_tool_message(state, "query_warehouse_recent_operations",
                                   self._safe_tool_summary("query_warehouse_recent_operations", result))
+        self._record_raw_registered_goal_fact(
+            state=state,
+            tool_name="query_warehouse_recent_operations",
+            arguments=arguments,
+            result=result,
+        )
         return ChatResponse(agentSessionId=request.agentSessionId,
                             answer=self._format_warehouse_recent_operations_answer(result))
 
@@ -3311,6 +4428,12 @@ class WarehouseAgentRuntime:
         self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
         self._record_tool_message(state, "query_warehouse_mixed_storage_facts",
                                   self._safe_tool_summary("query_warehouse_mixed_storage_facts", result))
+        self._record_raw_registered_goal_fact(
+            state=state,
+            tool_name="query_warehouse_mixed_storage_facts",
+            arguments=arguments,
+            result=result,
+        )
         return ChatResponse(agentSessionId=request.agentSessionId,
                             answer=self._format_warehouse_mixed_storage_facts_answer(result))
 
@@ -3339,6 +4462,12 @@ class WarehouseAgentRuntime:
             state,
             "get_warehouse_status",
             self._safe_tool_summary("get_warehouse_status", safe_result.model_dump(exclude_none=True)),
+        )
+        self._record_registered_goal_fact(
+            state=state,
+            tool_name="get_warehouse_status",
+            arguments=tool_arguments,
+            safe_data=safe_result.model_dump(exclude_none=True),
         )
         return ChatResponse(
             agentSessionId=agent_session_id,
@@ -3523,34 +4652,50 @@ class WarehouseAgentRuntime:
         request: ChatRequest,
         intent: str,
     ) -> PendingClarification:
-        self.metrics.increment("hitl_created_total", kind="production_order")
+        return self._production_entity_clarification(result, request, intent)
+
+    def _production_entity_clarification(
+        self,
+        result: dict[str, Any],
+        request: ChatRequest | ResumeRequest,
+        intent: str,
+    ) -> PendingClarification:
+        entity_type = self._safe_text(result.get("entityType")) or "PRODUCTION_ORDER"
+        is_batch = entity_type == "BOILING_BATCH"
+        kind = "boiling_batch" if is_batch else "production_order"
+        ref_key = "batchRef" if is_batch else "orderRef"
+        self.metrics.increment("hitl_created_total", kind=kind)
         raw_options = result.get("candidates") or []
         options = []
         for idx, option in enumerate(raw_options[:10], start=1):
             if not isinstance(option, dict):
                 continue
-            label = self._safe_display_label(
-                str(option.get("displayCode") or option.get("displayLabel") or "候选生产订单")
-            )
-            order_ref = self._safe_text(option.get("entityRef"))
+            fallback = "候选煮糖批次" if is_batch else "候选生产订单"
+            label = self._safe_display_label(str(option.get("displayCode") or option.get("displayLabel") or fallback))
+            entity_ref = self._safe_text(option.get("entityRef"))
+            description = self._safe_text(option.get("description") or option.get("summary"))
+            if not is_batch and description:
+                description = self._sanitize_production_business_text(description)
+                description = re.sub(r"；\s*-$", "；暂无产出摘要", description)
             options.append(
                 {
                     "optionId": f"opt_{idx:03d}",
-                    "optionType": "PRODUCTION_ORDER",
+                    "optionType": entity_type,
                     "displayLabel": label,
-                    "description": self._safe_text(option.get("description")),
-                    "supported": bool(order_ref and order_ref.startswith("aer_")),
-                    "disabledReason": None if order_ref and order_ref.startswith("aer_") else "该候选缺少有效的受控引用。",
-                    "_internal": {"orderRef": order_ref},
+                    "description": description,
+                    "supported": bool(entity_ref and entity_ref.startswith("aer_")),
+                    "disabledReason": None if entity_ref and entity_ref.startswith("aer_") else "该候选缺少有效的受控引用。",
+                    "_internal": {ref_key: entity_ref},
                 }
             )
         token = self._new_resume_token()
         labels = [str(option["displayLabel"]) for option in options[:5]]
-        prompt = "找到多个匹配的生产订单，请选择要继续查询的订单"
+        subject = "煮糖批次" if is_batch else "生产订单"
+        prompt = f"找到多个匹配的{subject}，请选择要继续查询的{subject}"
         if labels:
             prompt += "：" + "、".join(labels)
         return PendingClarification(
-            kind="production_order",
+            kind=kind,
             intent=intent,
             prompt=prompt + "。",
             options=options,
@@ -3561,6 +4706,36 @@ class WarehouseAgentRuntime:
             **self._pending_agent_binding(),
             user_id=request.user.userId if request.user else None,
         )
+
+    def _remember_unique_production_resolution(
+        self,
+        state: WarehouseAgentState,
+        result: dict[str, Any],
+    ) -> None:
+        candidates = result.get("candidates") if isinstance(result.get("candidates"), list) else []
+        candidate = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+        entity_ref = self._safe_text(candidate.get("entityRef"))
+        entity_type = self._safe_text(candidate.get("entityType") or result.get("entityType"))
+        if not entity_ref or not entity_ref.startswith("aer_"):
+            return
+        display_label = self._safe_display_label(
+            str(candidate.get("displayCode") or candidate.get("displayLabel") or "生产实体")
+        )
+        selected = SelectedEntity(
+            internal_id=None,
+            display_label=display_label,
+            source="resolver",
+            metadata={"batchRef" if entity_type == "BOILING_BATCH" else "orderRef": entity_ref},
+            entity_type=entity_type,
+            entity_ref="CURRENT_BOILING_BATCH" if entity_type == "BOILING_BATCH" else "CURRENT_PRODUCTION_ORDER",
+            canonical_name=display_label,
+            resolved_by="RESOLVER",
+            resolved_at=datetime.now(timezone.utc),
+        )
+        if entity_type == "BOILING_BATCH":
+            state.selected_boiling_batch = selected
+        elif entity_type == "PRODUCTION_ORDER":
+            state.selected_production_order = selected
 
     def _answer_selected_production_order(
         self,
@@ -3574,10 +4749,18 @@ class WarehouseAgentRuntime:
             "material_candidates": "query_material_candidates",
             "production_label_completion": "query_production_label_completion",
         }.get(intent, "query_production_order_progress")
+        if tool_name in {"query_production_order_progress", "query_material_pick_trace"}:
+            return self._answer_production_tool(request, state, tool_name, {"orderRef": order_ref})
         result = self._call_tool(request, tool_name, {"orderRef": order_ref})
         self._raise_if_cancelled()
         self._raise_if_tool_error_payload(result)
         self._record_tool_message(state, tool_name, self._safe_tool_summary(tool_name, result))
+        self._record_raw_registered_goal_fact(
+            state=state,
+            tool_name=tool_name,
+            arguments={"orderRef": order_ref},
+            result=result,
+        )
         answer = (
             self._format_material_pick_trace_answer(result)
             if tool_name == "query_material_pick_trace"
@@ -3588,6 +4771,65 @@ class WarehouseAgentRuntime:
             else self._format_production_order_progress_answer(result)
         )
         return ChatResponse(agentSessionId=request.agentSessionId, answer=answer)
+
+    def _answer_selected_boiling_batch(
+        self,
+        request: ChatRequest | ResumeRequest,
+        state: WarehouseAgentState,
+        batch_ref: str,
+    ) -> ChatResponse:
+        return self._answer_production_tool(
+            request,
+            state,
+            "query_boiling_batch_trace",
+            {"batchRef": batch_ref},
+        )
+
+    def _answer_production_tool(
+        self,
+        request: ChatRequest | ResumeRequest,
+        state: WarehouseAgentState,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> ChatResponse:
+        result = self._call_tool(request, tool_name, arguments)
+        self._raise_if_cancelled()
+        self._raise_if_tool_error_payload(result)
+        self._record_tool_message(state, tool_name, self._safe_tool_summary(tool_name, result))
+
+        if tool_name == "query_production_order_progress":
+            adapted: SafeProductionOrderProgress | SafeProductionMaterialTrace | SafeBoilingBatchTrace = (
+                self._adapt_production_order_progress(result)
+            )
+            state.last_production_order_progress = adapted.model_dump(exclude_none=True)
+            answer = self._format_production_order_progress_answer(adapted)
+            card = self._production_order_progress_card(adapted)
+        elif tool_name == "query_material_pick_trace":
+            adapted = self._adapt_production_material_trace(result)
+            state.last_production_material_trace = adapted.model_dump(exclude_none=True)
+            answer = self._format_material_pick_trace_answer(adapted)
+            card = self._production_material_trace_card(adapted)
+        elif tool_name == "query_boiling_batch_trace":
+            adapted = self._adapt_boiling_batch_trace(result)
+            state.last_boiling_batch_trace = adapted.model_dump(exclude_none=True)
+            answer = self._format_boiling_batch_trace_answer(adapted)
+            card = self._boiling_batch_trace_card(adapted)
+        else:
+            raise ValueError(f"unsupported production presentation tool: {tool_name}")
+
+        safe_data = adapted.model_dump(exclude_none=True)
+        self._record_registered_goal_fact(
+            state=state,
+            tool_name=tool_name,
+            arguments=arguments,
+            safe_data=safe_data,
+        )
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=answer,
+            cards=[card],
+            suggestions=self.next_action_policy.suggestions(tool_name, safe_data),
+        )
 
     def _clarification_card(self, pending: PendingClarification) -> BusinessCard:
         return BusinessCard(
@@ -3937,15 +5179,228 @@ class WarehouseAgentRuntime:
             return f"{display_name}当前状态：" + "，".join(fields) + "。"
         return f"{display_name}当前工具已返回库位状态，但缺少容量明细字段。"
 
-    def _format_pallet_answer(self, result: dict[str, Any]) -> str:
-        info = result.get("palletInfo") or result.get("baseInfo") or result
-        info = info if isinstance(info, dict) else {}
-        status = self._safe_text(info.get("status") or info.get("bindStatus")) or "状态未明确"
-        location = result.get("inventory", {}).get("warehouseName") if isinstance(result.get("inventory"), dict) else None
-        location = self._safe_text(location)
-        if location:
-            return f"该托盘当前状态为 {status}，当前位置在 {location}。"
-        return f"该托盘当前状态为 {status}。"
+    def _format_pallet_answer(self, result: SafePalletStatus | dict[str, Any]) -> str:
+        adapted = result if isinstance(result, SafePalletStatus) else self._adapt_pallet_status(result, {})
+        lines = [f"托盘 {adapted.codeLabel} 当前状态为{adapted.currentStatusLabel}。"]
+        details: list[str] = []
+        if adapted.productLabel:
+            details.append(f"产品：{adapted.productLabel}")
+        if adapted.quantityText:
+            details.append(f"数量：{adapted.quantityText}")
+        if adapted.warehouseLabel:
+            details.append(f"当前位置：{adapted.warehouseLabel}")
+        if adapted.productionDate:
+            details.append(f"生产日期：{adapted.productionDate}")
+        if details:
+            lines.append("\n".join(f"• {item}" for item in details))
+        if adapted.assaySummary:
+            lines.append(f"化验：{adapted.assaySummary}")
+        if adapted.timeline:
+            lines.append("最近流转见下方卡片；需要时可以继续查看完整历史流转。")
+        if adapted.riskLabels:
+            lines.append("注意：" + "；".join(adapted.riskLabels))
+        return "\n\n".join(lines)
+
+    def _adapt_pallet_status(
+        self,
+        result: dict[str, Any],
+        arguments: dict[str, Any] | None,
+    ) -> SafePalletStatus:
+        source = self._dict_value(result)
+        self._raise_if_tool_error_payload(source)
+        arguments = arguments or {}
+        info = self._dict_value(source.get("palletInfo") or source.get("baseInfo"))
+        inventory = self._dict_value(source.get("inventory"))
+        assay = self._dict_value(source.get("assay"))
+
+        code = self._first_safe_text([source, info], "codeLabel", "code")
+        if not code:
+            code = self._safe_text(arguments.get("code")) or "未标明托盘"
+        status = self._first_safe_text([source], "currentStatusLabel")
+        if not status:
+            status = self._pallet_status_label(
+                self._first_safe_text([info, source], "status", "bindStatus")
+            )
+        product = self._first_safe_text([source, info, inventory], "productLabel", "productName")
+        warehouse = self._first_safe_text([source, inventory], "warehouseLabel", "warehouseName")
+        if inventory:
+            location_parts = [warehouse]
+            side = self._safe_text(inventory.get("side"))
+            row = self._safe_text(inventory.get("rowNumber"))
+            layer = self._safe_text(inventory.get("layer"))
+            if side:
+                location_parts.append(f"{side}侧")
+            if row:
+                location_parts.append(f"{row}排")
+            if layer:
+                location_parts.append(f"{layer}层")
+            warehouse = " ".join(item for item in location_parts if item) or None
+
+        quantity_text = self._first_safe_text([source], "quantityText")
+        if not quantity_text and inventory.get("quantity") is not None:
+            unit = "件" if inventory.get("unit") is True else "板"
+            quantity_text = f"{inventory.get('quantity')}{unit}"
+        production_date = self._first_safe_text([source, info], "productionDate") or None
+        assay_summary = self._first_safe_text([source], "assaySummary") or None
+        if not assay_summary and assay:
+            assay_status = self._safe_text(
+                assay.get("judgeLabel") or assay.get("judgeResult") or assay.get("isQualified")
+            )
+            if assay_status:
+                assay_summary = self._assay_status_label(assay_status)
+
+        raw_timeline = source.get("timeline")
+        if not isinstance(raw_timeline, list):
+            raw_timeline = source.get("flows") if isinstance(source.get("flows"), list) else []
+        timeline = [
+            event
+            for raw_event in raw_timeline[:50]
+            if (event := self._adapt_pallet_event(raw_event)) is not None
+        ]
+        risks = self._safe_text_list(source.get("riskLabels"))
+        notes = self._safe_text_list(source.get("notes"))
+        return SafePalletStatus(
+            codeLabel=code,
+            currentStatusLabel=status or "状态未明确",
+            productLabel=product or None,
+            warehouseLabel=warehouse,
+            quantityText=quantity_text or None,
+            productionDate=production_date,
+            assaySummary=assay_summary,
+            timeline=timeline,
+            riskLabels=risks,
+            notes=notes,
+        )
+
+    def _adapt_pallet_flow_records(
+        self,
+        result: dict[str, Any],
+        arguments: dict[str, Any] | None,
+        state: WarehouseAgentState | None,
+    ) -> SafePalletFlowRecords:
+        source = self._dict_value(result)
+        self._raise_if_tool_error_payload(source)
+        raw_records = source.get("records") if isinstance(source.get("records"), list) else []
+        records = [
+            event
+            for raw_event in raw_records[:100]
+            if (event := self._adapt_pallet_event(raw_event)) is not None
+        ]
+        code = self._safe_text((arguments or {}).get("code"))
+        if not code and state is not None and state.selected_pallet is not None:
+            code = self._safe_display_label(state.selected_pallet.display_label)
+        scope_label = self._safe_text(source.get("scopeLabel")) or (
+            f"托盘 {code}" if code else "当前查询范围"
+        )
+        total = self._bounded_int(
+            source.get("total"), default=len(records), minimum=0, maximum=1_000_000
+        )
+        date_range = self._safe_text(source.get("dateRangeLabel")) or None
+        requested_range = self._dict_value((arguments or {}).get("dateRange"))
+        complete_history_requested = bool(
+            state is not None
+            and self._requests_complete_pallet_history(self._latest_user_message(state))
+        )
+        if complete_history_requested or (
+            str(requested_range.get("type") or "").upper() == "RANGE"
+            and self._safe_text(requested_range.get("from")) == "2000-01-01"
+        ):
+            date_range = "完整历史"
+        summary = self._safe_text(source.get("summaryText"))
+        if complete_history_requested:
+            summary = ""
+        if not summary:
+            summary = f"{scope_label}共查询到 {total} 条已登记流转记录。"
+        return SafePalletFlowRecords(
+            scopeLabel=scope_label,
+            dateRangeLabel=date_range,
+            total=total,
+            summaryText=summary,
+            records=records,
+            notes=self._safe_text_list(source.get("notes")),
+        )
+
+    def _adapt_pallet_lifecycle_history(
+        self,
+        pallet: SafePalletStatus,
+    ) -> SafePalletFlowRecords:
+        total = len(pallet.timeline)
+        summary = (
+            f"托盘 {pallet.codeLabel} 共查询到 {total} 条已登记历史流转记录。"
+            if total
+            else f"托盘 {pallet.codeLabel} 暂无已登记历史流转记录。"
+        )
+        return SafePalletFlowRecords(
+            scopeLabel=f"托盘 {pallet.codeLabel}",
+            dateRangeLabel="完整历史",
+            total=total,
+            summaryText=summary,
+            records=list(pallet.timeline),
+            notes=list(pallet.notes),
+        )
+
+    def _adapt_pallet_event(self, value: Any) -> SafePalletLifecycleEvent | None:
+        event = self._dict_value(value)
+        label = self._first_safe_text([event], "eventLabel", "operationName")
+        if not label:
+            label = self._pallet_event_label(
+                self._first_safe_text([event], "eventType", "operationType")
+            )
+        if not label:
+            return None
+        cycle_no = event.get("cycleNo")
+        try:
+            safe_cycle = int(cycle_no) if cycle_no is not None else None
+        except (TypeError, ValueError):
+            safe_cycle = None
+        return SafePalletLifecycleEvent(
+            time=self._first_safe_text([event], "time", "operationTime") or None,
+            eventLabel=label,
+            productLabel=self._first_safe_text([event], "productLabel", "productName") or None,
+            fromWarehouseLabel=self._first_safe_text(
+                [event], "fromWarehouseLabel", "fromWarehouseName"
+            ) or None,
+            toWarehouseLabel=self._first_safe_text(
+                [event], "toWarehouseLabel", "toWarehouseName"
+            ) or None,
+            operatorLabel=self._first_safe_text(
+                [event], "operatorLabel", "operatorName"
+            ) or None,
+            cycleNo=safe_cycle,
+        )
+
+    def _pallet_status_label(self, value: Any) -> str:
+        raw = self._safe_text(value)
+        return {
+            "FREE": "空闲",
+            "PENDING": "待入库",
+            "INSTOCK": "在库",
+            "INVALID": "已作废",
+            "ORDER_RESERVED": "订单预留",
+        }.get(raw.upper(), raw or "状态未明确")
+
+    def _pallet_event_label(self, value: Any) -> str:
+        raw = self._safe_text(value)
+        return {
+            "INBOUND": "入库",
+            "OUTBOUND": "出库",
+            "TRANSFER": "调拨",
+            "BIND": "绑定产品",
+            "ASSAY": "关联化验",
+            "CANCEL": "作废",
+            "LABEL": "标签操作",
+        }.get(raw.upper(), raw)
+
+    def _safe_text_list(self, value: Any, *, limit: int = 20) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return list(
+            dict.fromkeys(
+                text
+                for item in value[:limit]
+                if (text := self._safe_display_label(self._safe_text(item)))
+            )
+        )
 
     def _adapt_assay_status(self, result: dict[str, Any], label: str) -> SafeAssayReport:
         if "hasAssay" in result and "judgeLabel" in result and "standardLabel" in result:
@@ -4239,6 +5694,81 @@ class WarehouseAgentRuntime:
         text = re.sub(r"(无标准|标准多候选|不合格|合格)[（(]\1[)）]", r"\1", text)
         return text
 
+    def _sanitize_production_business_text(self, value: str) -> str:
+        """Translate known production implementation terms at the user-facing boundary."""
+        text = self._safe_text(value) or ""
+        enum_labels = {
+            "FINISHED_PRODUCT": "成品生产",
+            "SEMI_PRODUCT": "半成品生产",
+            "PREPRINTED": "已预打印",
+            "USED_UP": "已用完",
+            "RESERVED": "已预留",
+            "COMPLETED": "已完成",
+            "IN_PROGRESS": "进行中",
+            "NOT_STARTED": "未开始",
+            "PENDING": "待处理",
+            "CANCELLED": "已取消",
+            "FINISH": "成品生产",
+            "SEMI": "半成品生产",
+        }
+        field_labels = {
+            "materialRecordCount": "实际领料记录数",
+            "outputRecordCount": "产出记录数",
+            "labelBatchCount": "标签批次数",
+            "requiredQrCount": "应生成二维码数",
+            "inboundQrCount": "已入库二维码数",
+            "orderStatus": "生产订单状态",
+            "orderNo": "生产订单号",
+            "batchNo": "煮糖批次号",
+            "dataScope": "数据范围",
+        }
+        for raw, label in enum_labels.items():
+            text = re.sub(rf"(?<![A-Z0-9_]){re.escape(raw)}(?![A-Z0-9_])", label, text)
+        for raw, label in field_labels.items():
+            text = re.sub(rf"(?<![A-Za-z0-9_]){re.escape(raw)}(?![A-Za-z0-9_])", label, text)
+        text = re.sub(r"(\d{4}-\d{2}-\d{2})\s*至\s*\1", r"\1 当天", text)
+        text = text.replace("当天内", "当天")
+        return text
+
+    def _sanitize_pallet_business_text(self, value: str) -> str:
+        """Translate pallet lifecycle implementation fields at the user-facing boundary."""
+        text = self._safe_text(value) or ""
+
+        def replace_cycle_sequence(match: re.Match[str]) -> str:
+            numbers = re.findall(r"\d+", match.group(1))
+            return f"第 {'、'.join(numbers)} 次流转" if numbers else "流转周期"
+
+        text = re.sub(
+            r"(?i)\bcycle(?:No)?\s*[:#]?\s*(\d+(?:\s*(?:→|->|至)\s*\d+)+)",
+            replace_cycle_sequence,
+            text,
+        )
+        text = re.sub(
+            r"(?i)\bcycle(?:No)?\s*[:#]?\s*(\d+)\b",
+            r"第 \1 次流转",
+            text,
+        )
+        return text
+
+    @staticmethod
+    def _requests_complete_pallet_history(value: str) -> bool:
+        text = re.sub(r"\s+", "", value or "")
+        return "历史" in text and any(
+            marker in text for marker in ("完整", "全部", "所有", "全量")
+        )
+
+    @staticmethod
+    def _production_date_scope_text(date_range_label: str) -> str:
+        exact_range = re.fullmatch(
+            r"(\d{4}-\d{2}-\d{2})\s*至\s*\1",
+            date_range_label,
+        )
+        if exact_range:
+            return f"{exact_range.group(1)} 当天"
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_range_label):
+            return f"{date_range_label} 当天"
+        return f"{date_range_label}内"
+
     def _assay_report_card(self, report: SafeAssayReport) -> BusinessCard | None:
         if not report.hasAssay:
             return None
@@ -4299,6 +5829,87 @@ class WarehouseAgentRuntime:
         scope = self._safe_text(result.get("scopeLabel")) or "所选范围"
         date_range = self._safe_text(result.get("dateRangeLabel")) or "历史"
         return BusinessCard(cardType="assay_history", title=f"{scope} · {date_range}化验", fields=fields)
+
+    def _inventory_quality_card(self, result: dict[str, Any]) -> BusinessCard | None:
+        records = result.get("records") if isinstance(result.get("records"), list) else []
+        if not records:
+            return None
+        fields: list[dict[str, Any]] = [
+            {
+                "kind": "inventory_quality_summary",
+                "label": self._safe_text(result.get("queryLabel")) or "库存质量筛选结果",
+                "value": f"共 {self._first_scalar([result], 'totalGroups') or 0} 个库存批次",
+                "totalGroups": self._first_scalar([result], "totalGroups") or 0,
+                "totalEquivalentPieces": self._first_scalar([result], "totalEquivalentPieces") or 0,
+                "totalWeightText": self._safe_text(result.get("totalWeightText")) or "0 kg",
+                "truncated": bool(result.get("truncated")),
+            }
+        ]
+        for index, raw_record in enumerate(records[:50], start=1):
+            record = self._dict_value(raw_record)
+            product_label = self._safe_text(record.get("productLabel")) or "产品未明"
+            production_date = self._safe_text(record.get("productionDate")) or "生产日期未明"
+            fields.append(
+                {
+                    "kind": "inventory_quality_record",
+                    "label": f"{index}. {product_label}",
+                    "value": self._safe_text(record.get("judgeLabel")) or self._safe_text(record.get("metricValueText")) or "符合查询条件",
+                    "productLabel": product_label,
+                    "productionDate": production_date,
+                    "warehouseLabel": self._safe_text(record.get("warehouseLabel")) or "库位未明",
+                    "stockText": self._safe_text(record.get("stockText")) or "库存数量未明",
+                    "totalWeightText": self._safe_text(record.get("totalWeightText")),
+                    "palletCount": self._first_scalar([record], "palletCount") or 0,
+                    "judgeLabel": self._safe_text(record.get("judgeLabel")),
+                    "standardLabel": self._safe_text(record.get("standardLabel")),
+                    "failedMetricText": self._safe_text(record.get("failedMetricText")),
+                    "metricLabel": self._safe_text(record.get("metricLabel")),
+                    "metricValueText": self._safe_text(record.get("metricValueText")),
+                }
+            )
+        return BusinessCard(
+            cardType="inventory_quality",
+            title=self._safe_text(result.get("queryLabel")) or "库存质量筛选",
+            fields=fields,
+        )
+
+    def _format_inventory_quality_answer(self, result: dict[str, Any]) -> str:
+        self._raise_if_tool_error_payload(result)
+        query_label = self._safe_text(result.get("queryLabel")) or "库存质量筛选"
+        total_groups = self._first_scalar([result], "totalGroups") or 0
+        total_pieces = self._first_scalar([result], "totalEquivalentPieces") or 0
+        total_weight = self._safe_text(result.get("totalWeightText")) or "0 kg"
+        records = result.get("records") if isinstance(result.get("records"), list) else []
+        if not records:
+            return f"{query_label}未查询到符合条件的当前库存。"
+        lines = [
+            f"{query_label}共找到 {total_groups} 个当前库存批次，折合 {total_pieces} 件，总重量 {total_weight}。",
+            "",
+        ]
+        for index, raw_record in enumerate(records[:5], start=1):
+            record = self._dict_value(raw_record)
+            product = self._safe_text(record.get("productLabel")) or "产品未明"
+            production_date = self._safe_text(record.get("productionDate")) or "生产日期未明"
+            warehouse = self._safe_text(record.get("warehouseLabel")) or "库位未明"
+            stock = self._safe_text(record.get("stockText")) or "库存数量未明"
+            details = [product, f"生产日期 {production_date}", warehouse, stock]
+            judge = self._safe_text(record.get("judgeLabel"))
+            failed = self._safe_text(record.get("failedMetricText"))
+            standard = self._safe_text(record.get("standardLabel"))
+            metric_label = self._safe_text(record.get("metricLabel"))
+            metric_value = self._safe_text(record.get("metricValueText"))
+            if judge:
+                details.append(judge)
+            if failed:
+                details.append(f"未达标指标：{failed}")
+            if standard:
+                details.append(f"标准：{standard}")
+            if metric_label and metric_value:
+                details.append(f"{metric_label}：{metric_value}")
+            lines.append(f"{index}. " + "，".join(details))
+        if total_groups and float(total_groups) > 5:
+            lines.append(f"其余 {int(float(total_groups)) - 5} 个批次可在下方卡片中继续查看。")
+        return "\n".join(lines)
 
     def _format_assay_answer(self, label: str, result: dict[str, Any]) -> str:
         report = self._adapt_assay_status(result, label)
@@ -4523,15 +6134,23 @@ class WarehouseAgentRuntime:
 
     def _format_pallet_flow_records_answer(self, result: dict[str, Any]) -> str:
         self._raise_if_tool_error_payload(result)
-        summary = self._safe_text(result.get("summaryText")) or "已查询到托盘流转记录。"
-        lines = [summary]
+        scope = self._safe_text(result.get("scopeLabel")) or "当前查询范围"
+        total = self._bounded_int(result.get("total"), default=0, minimum=0, maximum=1_000_000)
+        summary = self._safe_text(result.get("summaryText")) or f"{scope}共查询到 {total} 条已登记流转记录。"
+        if total == 0:
+            return summary
+        lines = [summary, "最近记录："]
         records = result.get("records") if isinstance(result.get("records"), list) else []
         for index, raw_record in enumerate(records[:5], start=1):
             record = self._dict_value(raw_record)
             time = self._safe_text(record.get("time")) or "时间未明"
             label = self._safe_text(record.get("eventLabel")) or "流转事件"
-            code = self._safe_text(record.get("codeLabel"))
-            lines.append(f"{index}. {time}：{label}" + (f"，托盘 {code}" if code else ""))
+            source = self._safe_text(record.get("fromWarehouseLabel"))
+            target = self._safe_text(record.get("toWarehouseLabel"))
+            route = f"（{source} → {target}）" if source and target else f"（到 {target}）" if target else ""
+            lines.append(f"{index}. {time}｜{label}{route}")
+        if total > min(len(records), 5):
+            lines.append("其余记录可在下方卡片中展开查看。")
         return "\n".join(lines)
 
     def _format_qr_batch_inbound_answer(self, result: dict[str, Any]) -> str:
@@ -4649,6 +6268,8 @@ class WarehouseAgentRuntime:
             return "当前用户没有执行该只读查询的权限。"
         if code == "UPSTREAM_TIMEOUT":
             return "查询仓储数据超时。"
+        if code == "UPSTREAM_BAD_REQUEST":
+            return "查询条件不符合当前业务要求，请核对后重试。"
         if code == "UPSTREAM_NOT_FOUND":
             return "未找到符合条件的业务数据。"
         if code == "UPSTREAM_SERVER_ERROR":
@@ -4982,6 +6603,14 @@ class WarehouseAgentRuntime:
         if tool_name in {"query_assay_groups", "query_quality_standard_catalog", "query_product_standard_relations"}:
             source = result if isinstance(result, dict) else {}
             return {"dataScope": self._safe_text(source.get("dataScope")), "total": self._first_scalar([source], "total") or self._first_scalar([source], "count"), "recordCount": len(source.get("records") or [])}
+        if tool_name == "query_product_quality_configuration":
+            source = result if isinstance(result, dict) else {}
+            return {
+                "dataScope": self._safe_text(source.get("dataScope")),
+                "productName": self._safe_text(source.get("productName")),
+                "standardCount": self._first_scalar([source], "standardCount") or 0,
+                "assayGroupCount": self._first_scalar([source], "assayGroupCount") or 0,
+            }
         if tool_name in {"query_employee_roster", "query_roles"}:
             source = result if isinstance(result, dict) else {}
             return {"dataScope": self._safe_text(source.get("dataScope")), "total": self._first_scalar([source], "total"), "recordCount": len(source.get("records") or [])}
@@ -5055,6 +6684,19 @@ class WarehouseAgentRuntime:
                 "standardLabel": self._safe_text(source.get("standardLabel")),
                 "riskLabels": source.get("riskLabels") if isinstance(source.get("riskLabels"), list) else [],
             }
+        if tool_name in {
+            "query_unqualified_inventory",
+            "query_inventory_by_quality_standard",
+            "query_inventory_by_assay_metrics",
+        }:
+            source = result if isinstance(result, dict) else {}
+            return {
+                "queryLabel": self._safe_text(source.get("queryLabel")),
+                "totalGroups": self._first_scalar([source], "totalGroups"),
+                "totalEquivalentPieces": self._first_scalar([source], "totalEquivalentPieces"),
+                "totalWeightText": self._safe_text(source.get("totalWeightText")),
+                "recordCount": self._list_size(source.get("records")),
+            }
         if tool_name == "query_assay_abnormalities":
             source = result if isinstance(result, dict) else {}
             return {
@@ -5103,72 +6745,342 @@ class WarehouseAgentRuntime:
             return {"status": self._safe_text(info.get("status") or info.get("bindStatus"))}
         return {}
 
-    def _format_production_order_progress_answer(self, result: dict[str, Any]) -> str:
-        source = result if isinstance(result, dict) else {}
-        order_no = self._safe_text(source.get("orderNo")) or "该生产订单"
-        status = self._production_status_label(source.get("status"))
-        production_date = self._safe_text(source.get("productionDate"))
-        material_count = self._first_scalar([source], "materialRecordCount") or 0
-        output_count = self._first_scalar([source], "outputRecordCount") or 0
-        required = self._first_scalar([source], "requiredQrCount") or 0
-        bound = self._first_scalar([source], "boundQrCount") or 0
-        inbound = self._first_scalar([source], "inboundQrCount") or 0
-        labels = self._first_scalar([source], "reservedLabelCount") or 0
-        pieces = [f"生产订单 {order_no} 当前状态为 {status}"]
-        if production_date:
-            pieces.append(f"生产日期 {production_date}")
-        pieces.append(f"已登记 {material_count} 条领料记录、{output_count} 条产出记录")
-        pieces.append(f"标签预留 {labels} 个，二维码需求 {required} 个、已绑定 {bound} 个、已入库 {inbound} 个")
-        pieces.append("数据范围仅为当前订单记录；不代表产出率、损耗率或质量放行结论。")
-        return "；".join(pieces) + "。"
+    def _adapt_production_order_progress(self, result: dict[str, Any]) -> SafeProductionOrderProgress:
+        source = self._dict_value(result)
+        boiling_sources: list[SafeProductionBoilingSource] = []
+        for raw_source in (
+            source.get("boilingSources") if isinstance(source.get("boilingSources"), list) else []
+        )[:30]:
+            item = self._dict_value(raw_source)
+            boiling_sources.append(
+                SafeProductionBoilingSource(
+                    batchNo=self._safe_text(item.get("batchNo")) or "煮糖批次未标明",
+                    quantityText=self._boiling_usage_quantity_text(item),
+                    statusLabel=self._production_status_label(item.get("status")),
+                )
+            )
+        outputs: list[SafeProductionOutput] = []
+        for raw_output in (source.get("outputs") if isinstance(source.get("outputs"), list) else [])[:30]:
+            item = self._dict_value(raw_output)
+            destinations: list[SafeProductionInboundDestination] = []
+            for raw_destination in (
+                item.get("inboundDestinations") if isinstance(item.get("inboundDestinations"), list) else []
+            )[:30]:
+                destination = self._dict_value(raw_destination)
+                warehouse_name = self._safe_text(destination.get("warehouseName"))
+                if not warehouse_name:
+                    continue
+                pallet_codes = [
+                    code
+                    for code in (
+                        self._safe_text(value)
+                        for value in (destination.get("palletCodes") if isinstance(destination.get("palletCodes"), list) else [])[:20]
+                    )
+                    if code
+                ]
+                destinations.append(
+                    SafeProductionInboundDestination(
+                        warehouseName=warehouse_name,
+                        inboundCodeCount=self._safe_count(destination.get("inboundCodeCount")),
+                        palletCodes=pallet_codes,
+                    )
+                )
+            outputs.append(
+                SafeProductionOutput(
+                    productLabel=self._safe_text(item.get("productName")) or "产出产品未标明",
+                    quantityText=self._production_output_quantity_text(item),
+                    statusLabel=self._production_status_label(item.get("status")),
+                    requiredQrCount=self._safe_count(item.get("requiredQrCount")),
+                    boundQrCount=self._safe_count(item.get("boundQrCount")),
+                    inboundQrCount=self._safe_count(item.get("inboundQrCount")),
+                    inboundDestinations=destinations,
+                )
+            )
+        return SafeProductionOrderProgress(
+            orderNo=self._safe_text(source.get("orderNo")) or "生产订单未标明",
+            orderTypeLabel=self._production_order_type_label(source.get("orderType")),
+            statusLabel=self._production_status_label(source.get("status")),
+            productionDate=self._safe_text(source.get("productionDate")),
+            teamName=self._safe_text(source.get("teamName")),
+            plannedMaterialText=self._safe_text(source.get("plannedMaterialText")),
+            plannedOutputText=self._safe_text(source.get("plannedOutputText")),
+            materialRecordCount=self._safe_count(source.get("materialRecordCount")),
+            outputRecordCount=self._safe_count(source.get("outputRecordCount")),
+            reservedLabelCount=self._safe_count(source.get("reservedLabelCount")),
+            requiredQrCount=self._safe_count(source.get("requiredQrCount")),
+            boundQrCount=self._safe_count(source.get("boundQrCount")),
+            inboundQrCount=self._safe_count(source.get("inboundQrCount")),
+            boilingSources=boiling_sources,
+            outputs=outputs,
+            limitations=self._safe_limitations(source.get("limitations")),
+        )
 
-    def _format_boiling_batch_trace_answer(self, result: dict[str, Any]) -> str:
-        source = result if isinstance(result, dict) else {}
-        batch_no = self._safe_text(source.get("batchNo")) or "该煮糖批次"
-        status = self._safe_text(source.get("status")) or "未知"
-        product = self._safe_text(source.get("productName"))
-        total_weight = self._first_scalar([source], "totalWeightKg")
-        remaining_weight = self._first_scalar([source], "remainingWeightKg")
-        usage_count = self._first_scalar([source], "usageCount") or 0
-        node_count = self._first_scalar([source], "nodeCount") or 0
-        edge_count = self._first_scalar([source], "edgeCount") or 0
-        pieces = [f"煮糖批次 {batch_no} 当前状态为 {status}"]
-        if product:
-            pieces.append(f"产品为 {product}")
-        if total_weight is not None:
-            pieces.append(f"登记总重量 {total_weight} kg")
-        if remaining_weight is not None:
-            pieces.append(f"剩余重量 {remaining_weight} kg")
-        pieces.append(f"系统已登记 {usage_count} 条使用记录、{node_count} 个追溯节点和 {edge_count} 条关系边")
-        pieces.append("仅展示系统已有追溯证据；缺失的上下游关系不会由 Agent 推断。")
-        return "；".join(pieces) + "。"
+    def _adapt_production_material_trace(self, result: dict[str, Any]) -> SafeProductionMaterialTrace:
+        source = self._dict_value(result)
+        records: list[SafeProductionMaterialRecord] = []
+        for raw_record in (source.get("records") if isinstance(source.get("records"), list) else [])[:50]:
+            item = self._dict_value(raw_record)
+            warehouse = self._safe_text(item.get("warehouseName")) or "来源库位未标明"
+            position = self._safe_text(item.get("positionText"))
+            source_location = f"{warehouse} {position}" if position else warehouse
+            picked_by = self._safe_text(item.get("pickedByName"))
+            picked_at = self._safe_text(item.get("pickedAt"))
+            if picked_at:
+                picked_at = picked_at.replace("T", " ")[:16]
+            picked_summary = " · ".join(value for value in (picked_by, picked_at) if value) or None
+            records.append(
+                SafeProductionMaterialRecord(
+                    productLabel=self._safe_text(item.get("productName")) or "原料产品未标明",
+                    palletCode=self._safe_text(item.get("palletCode")) or "托盘未标明",
+                    sourceLocation=source_location,
+                    quantityText=self._production_material_quantity_text(item),
+                    productionDate=self._safe_text(item.get("productionDate")),
+                    statusLabel=self._enum_label("material_status", item.get("status")),
+                    pickedSummary=picked_summary,
+                )
+            )
+        return SafeProductionMaterialTrace(
+            orderNo=self._safe_text(source.get("orderNo")) or "生产订单未标明",
+            statusLabel=self._production_status_label(source.get("orderStatus")),
+            materialRecordCount=self._safe_count(source.get("materialRecordCount")) or len(records),
+            records=records,
+            limitations=self._safe_limitations(source.get("limitations")),
+        )
 
-    def _format_material_pick_trace_answer(self, result: dict[str, Any]) -> str:
-        source = result if isinstance(result, dict) else {}
-        order_no = self._safe_text(source.get("orderNo")) or "该生产订单"
-        status = self._production_status_label(source.get("orderStatus"))
-        records = source.get("records") if isinstance(source.get("records"), list) else []
-        lines = [f"生产订单 {order_no} 当前状态为 {status}，已登记 {len(records)} 条实际领料记录。"]
-        for item in records[:5]:
-            if not isinstance(item, dict):
-                continue
-            product = self._safe_text(item.get("productName")) or "未标明产品"
-            pallet = self._safe_text(item.get("palletCode")) or "未标明托盘"
-            warehouse = self._safe_text(item.get("warehouseName")) or "未标明库位"
-            quantity = self._first_scalar([item], "totalWeight", "totalPieces", "quantity")
-            quantity_text = f"，登记数量 {quantity}" if quantity is not None else ""
-            lines.append(f"{product}，托盘 {pallet}，来源 {warehouse}{quantity_text}。")
-        lines.append("这里只展示已登记实际领料，不计算计划差异、损耗或实际消耗率。")
-        return "".join(lines)
+    def _adapt_boiling_batch_trace(self, result: dict[str, Any]) -> SafeBoilingBatchTrace:
+        source = self._dict_value(result)
+        usages: list[SafeBoilingBatchUsage] = []
+        for raw_usage in (source.get("usages") if isinstance(source.get("usages"), list) else [])[:30]:
+            item = self._dict_value(raw_usage)
+            usages.append(
+                SafeBoilingBatchUsage(
+                    orderNo=self._safe_text(item.get("orderNo")) or "生产订单未标明",
+                    orderTypeLabel=self._production_order_type_label(item.get("orderType")),
+                    orderStatusLabel=self._production_status_label(item.get("orderStatus")),
+                    quantityText=self._boiling_usage_quantity_text(item),
+                    statusLabel=self._production_status_label(item.get("status")),
+                )
+            )
+        trace_summary: list[str] = []
+        for raw_item in (source.get("timeline") if isinstance(source.get("timeline"), list) else [])[:20]:
+            item = self._dict_value(raw_item)
+            summary = self._production_timeline_summary(item)
+            if summary:
+                trace_summary.append(summary)
+        product = self._safe_text(source.get("productName")) or self._safe_text(source.get("sugarType")) or "产品未标明"
+        return SafeBoilingBatchTrace(
+            batchNo=self._safe_text(source.get("batchNo")) or "煮糖批次未标明",
+            boilingDate=self._safe_text(source.get("boilingDate")),
+            productLabel=product,
+            statusLabel=self._production_status_label(source.get("status")),
+            totalWeightText=self._kg_text(source.get("totalWeightKg")),
+            reservedWeightText=self._kg_text(source.get("reservedWeightKg")),
+            consumedWeightText=self._kg_text(source.get("consumedWeightKg")),
+            remainingWeightText=self._kg_text(source.get("remainingWeightKg")),
+            usages=usages,
+            traceSummary=trace_summary,
+            limitations=self._safe_limitations(source.get("limitations")),
+        )
+
+    def _format_production_order_progress_answer(self, result: SafeProductionOrderProgress | dict[str, Any]) -> str:
+        safe = result if isinstance(result, SafeProductionOrderProgress) else self._adapt_production_order_progress(result)
+        destination_count = sum(len(output.inboundDestinations) for output in safe.outputs)
+        lines = [f"生产订单 {safe.orderNo} 当前状态为{safe.statusLabel}。"]
+        facts = []
+        if safe.productionDate:
+            facts.append(f"生产日期：{safe.productionDate}")
+        if safe.teamName:
+            facts.append(f"班组：{safe.teamName}")
+        if facts:
+            lines.extend(["", "；".join(facts) + "。"])
+        lines.extend(
+            [
+                "",
+                (
+                    f"已登记 {len(safe.boilingSources)} 条煮糖批次投入或预留记录，具体阶段见下方卡片。"
+                    if safe.boilingSources
+                    else "当前没有登记煮糖批次投入或预留记录。"
+                ),
+                f"实际进度：已登记 {safe.materialRecordCount} 条领料、{safe.outputRecordCount} 条产出。",
+                f"二维码进度：需求 {safe.requiredQrCount} 个，已绑定 {safe.boundQrCount} 个，已入库 {safe.inboundQrCount} 个。",
+                (
+                    f"已确认的产出入库去向共 {destination_count} 个，具体产出和库位见下方卡片。"
+                    if destination_count
+                    else "当前还没有可确认的产出入库去向；需要时可继续查看实际领料或标签进度。"
+                ),
+                "以上仅反映系统已登记的实际进度，不代表产出率、损耗率或质量放行结论。",
+            ]
+        )
+        return "\n".join(lines)
+
+    def _format_boiling_batch_trace_answer(self, result: SafeBoilingBatchTrace | dict[str, Any]) -> str:
+        safe = result if isinstance(result, SafeBoilingBatchTrace) else self._adapt_boiling_batch_trace(result)
+        lines = [f"煮糖批次 {safe.batchNo} 当前状态为{safe.statusLabel}，产品为{safe.productLabel}。"]
+        weight_facts = []
+        if safe.totalWeightText:
+            weight_facts.append(f"登记总重量 {safe.totalWeightText}")
+        if safe.consumedWeightText:
+            weight_facts.append(f"已消耗 {safe.consumedWeightText}")
+        if safe.remainingWeightText:
+            weight_facts.append(f"剩余 {safe.remainingWeightText}")
+        if weight_facts:
+            lines.extend(["", "；".join(weight_facts) + "。"])
+        unique_orders = list(dict.fromkeys(usage.orderNo for usage in safe.usages if usage.orderNo != "生产订单未标明"))
+        lines.extend(
+            [
+                "",
+                (
+                    f"该批次已关联 {len(unique_orders)} 个生产订单：{'、'.join(unique_orders[:5])}。"
+                    if unique_orders
+                    else "当前没有查询到已登记的关联生产订单。"
+                ),
+                "使用记录和关联生产订单见下方卡片。",
+            ]
+        )
+        return "\n".join(lines)
+
+    def _format_material_pick_trace_answer(self, result: SafeProductionMaterialTrace | dict[str, Any]) -> str:
+        safe = result if isinstance(result, SafeProductionMaterialTrace) else self._adapt_production_material_trace(result)
+        if not safe.records:
+            return (
+                f"生产订单 {safe.orderNo} 当前状态为{safe.statusLabel}，暂未查询到已登记的实际领料记录。\n\n"
+                "这不代表计划用料为零，也不代表没有发生尚未登记的现场操作。"
+            )
+        products = list(dict.fromkeys(record.productLabel for record in safe.records))
+        return (
+            f"生产订单 {safe.orderNo} 当前状态为{safe.statusLabel}，共登记 {safe.materialRecordCount} 条实际领料记录。\n\n"
+            f"涉及原料：{'、'.join(products[:5])}。原料的来源托盘、来源库位和数量见下方卡片。\n\n"
+            "这里只展示实际登记，不计算计划差异、损耗或实际消耗率。"
+        )
 
     def _production_status_label(self, value: Any) -> str:
         status = self._safe_text(value)
-        return {
+        label = {
+            "DRAFT": "草稿",
+            "ISSUED": "已下发",
+            "MATERIALING": "领料中",
+            "MATERIALED": "已领料",
+            "OUTPUT_BINDING": "产出绑定中",
+            "PREPRINTED": "已预打印",
             "PENDING": "待处理",
+            "WAIT_MATERIAL": "待领料",
             "IN_PROGRESS": "进行中",
+            "PRODUCING": "生产中",
+            "WAIT_INBOUND": "待入库",
             "COMPLETED": "已完成",
+            "AVAILABLE": "可用",
+            "USED_UP": "已用完",
+            "RESERVED": "已预留",
+            "CONSUMED": "已消耗",
+            "RELEASED": "已释放",
+            "PICKED": "已领用",
+            "BOUND": "已绑定",
+            "PENDING_INBOUND": "待入库",
+            "PART_INBOUND": "部分入库",
+            "INSTOCK": "已入库",
+            "PRINTED": "已打印",
+            "CLOSED": "已关闭",
+            "USED": "已使用",
+            "RECYCLED": "已回收",
+            "ORDER_RESERVED": "订单预留",
+            "CANCELED": "已取消",
             "CANCELLED": "已取消",
-        }.get(status or "", status or "未知")
+        }.get(status or "")
+        if label:
+            return label
+        if status and re.search(r"[\u4e00-\u9fff]", status):
+            return status
+        return "状态未标明"
+
+    def _production_order_type_label(self, value: Any) -> str:
+        raw = self._safe_text(value)
+        label = {
+            "SEMI_PRODUCT": "半成品生产",
+            "FINISHED_PRODUCT": "成品生产",
+            "SEMI": "半成品生产",
+            "FINISH": "成品生产",
+        }.get(raw or "")
+        if label:
+            return label
+        if raw and re.search(r"[\u4e00-\u9fff]", raw):
+            return raw
+        return "类型未标明"
+
+    def _production_output_quantity_text(self, item: dict[str, Any]) -> str:
+        values: list[str] = []
+        boards = self._safe_count(item.get("boardCount"))
+        pieces = self._safe_count(item.get("pieceCount"))
+        if boards:
+            values.append(f"{boards} 板")
+        if pieces:
+            values.append(f"{pieces} 件")
+        total_pieces = self._safe_count(item.get("totalPieces"))
+        if total_pieces and not values:
+            values.append(f"共 {total_pieces} 件")
+        weight = self._kg_text(item.get("totalWeight"))
+        if weight:
+            values.append(weight)
+        return "、".join(values) or "数量未标明"
+
+    def _production_material_quantity_text(self, item: dict[str, Any]) -> str:
+        weight = self._kg_text(item.get("totalWeight"))
+        if weight:
+            return weight
+        total_pieces = self._safe_count(item.get("totalPieces"))
+        if total_pieces:
+            return f"{total_pieces} 件"
+        quantity = self._safe_count(item.get("quantity"))
+        unit = "件" if self._safe_text(item.get("unit")) == "1" else "板"
+        return f"{quantity} {unit}" if quantity else "数量未标明"
+
+    def _boiling_usage_quantity_text(self, item: dict[str, Any]) -> str:
+        weight = self._kg_text(item.get("weightKg"))
+        if weight:
+            return weight
+        quantity = self._first_scalar([item], "usageQuantity", "bucketQuantity")
+        unit = self._safe_text(item.get("usageUnit"))
+        unit_label = {"KG": "kg", "BUCKET": "桶", "BATCH": "批"}.get(unit or "", "")
+        return f"{quantity} {unit_label}".strip() if quantity is not None else "数量未标明"
+
+    def _production_timeline_summary(self, item: dict[str, Any]) -> str | None:
+        action = {
+            "CREATED": "创建记录",
+            "USED_BY": "用于生产订单",
+            "MATERIAL_PICKED": "完成领料登记",
+            "OUTPUT_CREATED": "登记产出",
+            "QR_BOUND": "绑定二维码",
+            "INBOUND": "确认入库",
+            "SEMI_INSTOCK": "半成品入库",
+            "FINISH_INSTOCK": "成品入库",
+        }.get(self._safe_text(item.get("actionType")) or "", "追溯记录")
+        details = [
+            self._safe_text(item.get("documentNo")),
+            self._safe_text(item.get("productName")),
+            self._safe_text(item.get("quantityText")),
+            self._safe_text(item.get("warehouseName")),
+        ]
+        detail_text = " · ".join(value for value in details if value)
+        occurred_at = self._safe_text(item.get("occurredAt"))
+        if occurred_at:
+            occurred_at = occurred_at.replace("T", " ")[:16]
+        parts = [occurred_at, action, detail_text]
+        return "｜".join(value for value in parts if value) or None
+
+    def _kg_text(self, value: Any) -> str | None:
+        scalar = self._first_scalar([{"value": value}], "value")
+        return f"{scalar} kg" if scalar is not None else None
+
+    def _safe_limitations(self, value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [text for text in (self._safe_text(item) for item in value[:10]) if text]
+
+    @staticmethod
+    def _safe_count(value: Any) -> int:
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
 
     def _format_production_label_completion_answer(self, result: dict[str, Any]) -> str:
         source = result if isinstance(result, dict) else {}
@@ -5391,6 +7303,160 @@ class WarehouseAgentRuntime:
             return f"{actor_label} · {time_label}"
         return actor_label or time_label
 
+    def _production_order_progress_card(self, result: SafeProductionOrderProgress) -> BusinessCard:
+        summary: dict[str, Any] = {
+            "kind": "production_order_summary",
+            "label": result.orderNo,
+            "value": result.statusLabel,
+            "orderNo": result.orderNo,
+            "orderTypeLabel": result.orderTypeLabel,
+            "statusLabel": result.statusLabel,
+            "productionDate": result.productionDate,
+            "teamName": result.teamName,
+            "plannedMaterialText": result.plannedMaterialText,
+            "plannedOutputText": result.plannedOutputText,
+            "materialRecordCount": result.materialRecordCount,
+            "outputRecordCount": result.outputRecordCount,
+            "reservedLabelCount": result.reservedLabelCount,
+            "requiredQrCount": result.requiredQrCount,
+            "boundQrCount": result.boundQrCount,
+            "inboundQrCount": result.inboundQrCount,
+        }
+        fields = [summary]
+        for index, source in enumerate(result.boilingSources, start=1):
+            field = source.model_dump(exclude_none=True)
+            field.update(
+                {
+                    "kind": "production_boiling_source",
+                    "label": f"{index}. 煮糖批次 {source.batchNo}",
+                    "value": source.quantityText,
+                }
+            )
+            fields.append(field)
+        for index, output in enumerate(result.outputs, start=1):
+            field = output.model_dump(exclude_none=True)
+            field.update(
+                {
+                    "kind": "production_output",
+                    "label": f"{index}. {output.productLabel}",
+                    "value": output.quantityText,
+                }
+            )
+            fields.append(field)
+        return BusinessCard(
+            cardType="production_order_progress",
+            title=f"生产订单 {result.orderNo}",
+            fields=fields,
+        )
+
+    def _production_material_trace_card(self, result: SafeProductionMaterialTrace) -> BusinessCard:
+        fields: list[dict[str, Any]] = []
+        for index, record in enumerate(result.records, start=1):
+            field = record.model_dump(exclude_none=True)
+            field.update(
+                {
+                    "kind": "production_material",
+                    "label": f"{index}. {record.productLabel}",
+                    "value": record.quantityText,
+                }
+            )
+            fields.append(field)
+        return BusinessCard(
+            cardType="production_material_trace",
+            title=f"{result.orderNo} · 实际领料 {result.materialRecordCount} 条",
+            fields=fields,
+        )
+
+    def _boiling_batch_trace_card(self, result: SafeBoilingBatchTrace) -> BusinessCard:
+        fields: list[dict[str, Any]] = [
+            {
+                "kind": "boiling_batch_summary",
+                "label": result.batchNo,
+                "value": result.statusLabel,
+                **result.model_dump(exclude={"usages", "traceSummary", "limitations"}, exclude_none=True),
+            }
+        ]
+        for index, usage in enumerate(result.usages, start=1):
+            field = usage.model_dump(exclude_none=True)
+            field.update(
+                {
+                    "kind": "boiling_batch_usage",
+                    "label": f"{index}. 生产订单 {usage.orderNo}",
+                    "value": usage.quantityText,
+                }
+            )
+            fields.append(field)
+        for index, summary in enumerate(result.traceSummary, start=1):
+            fields.append(
+                {
+                    "kind": "production_trace_step",
+                    "label": f"追溯 {index}",
+                    "value": summary,
+                }
+            )
+        return BusinessCard(
+            cardType="boiling_batch_trace",
+            title=f"煮糖批次 {result.batchNo}",
+            fields=fields,
+        )
+
+    def _pallet_status_card(self, result: SafePalletStatus) -> BusinessCard:
+        fields: list[dict[str, Any]] = [
+            {
+                "kind": "pallet_status_summary",
+                "label": result.codeLabel,
+                "value": result.currentStatusLabel,
+                **result.model_dump(
+                    exclude={"timeline", "riskLabels", "notes"},
+                    exclude_none=True,
+                ),
+            }
+        ]
+        for index, event in enumerate(result.timeline[:10], start=1):
+            field = event.model_dump(exclude_none=True)
+            field.update(
+                {
+                    "kind": "pallet_flow_event",
+                    "label": f"{index}. {event.eventLabel}",
+                    "value": event.time or "时间未标明",
+                }
+            )
+            fields.append(field)
+        for risk in result.riskLabels:
+            fields.append({"kind": "pallet_risk", "label": "风险提示", "value": risk})
+        return BusinessCard(
+            cardType="pallet_status",
+            title=f"托盘 {result.codeLabel}",
+            fields=fields,
+        )
+
+    def _pallet_flow_card(self, result: SafePalletFlowRecords) -> BusinessCard:
+        fields: list[dict[str, Any]] = [
+            {
+                "kind": "pallet_flow_summary",
+                "label": result.scopeLabel,
+                "value": f"共 {result.total} 条",
+                "scopeLabel": result.scopeLabel,
+                "dateRangeLabel": result.dateRangeLabel,
+                "total": result.total,
+            }
+        ]
+        for index, event in enumerate(result.records[:50], start=1):
+            field = event.model_dump(exclude_none=True)
+            field.update(
+                {
+                    "kind": "pallet_flow_event",
+                    "label": f"{index}. {event.eventLabel}",
+                    "value": event.time or "时间未标明",
+                }
+            )
+            fields.append(field)
+        return BusinessCard(
+            cardType="pallet_flow_history",
+            title=f"{result.scopeLabel} · 流转历史",
+            fields=fields,
+        )
+
     def _pallet_tasks_card(self, result: SafePalletTaskResult) -> BusinessCard:
         fields: list[dict[str, Any]] = []
         for index, record in enumerate(result.records, start=1):
@@ -5422,6 +7488,468 @@ class WarehouseAgentRuntime:
             cardType="pallet_task_detail",
             title=f"{record.taskTypeLabel}任务 · {record.palletCode}",
             fields=[field],
+        )
+
+    def _boiling_batch_list_response(
+        self,
+        request: ChatRequest,
+        state: WarehouseAgentState,
+        text: str,
+    ) -> ChatResponse | None:
+        normalized = re.sub(r"\s+", "", text or "")
+        query_text = normalized
+        date_range = self.business_clock.resolve(query_text)
+        product_query: str | None = None
+
+        if "煮糖批次" not in query_text and not ("煮糖" in query_text and "批次" in query_text):
+            recent_assistant = next(
+                (
+                    str(item.get("content") or "")
+                    for item in reversed(state.messages[:-1])
+                    if item.get("role") == "assistant"
+                ),
+                "",
+            )
+            previous_query = next(
+                (
+                    str(item.get("content") or "")
+                    for item in reversed(state.messages[:-1])
+                    if item.get("role") == "user" and "煮糖批次" in str(item.get("content") or "")
+                ),
+                "",
+            )
+            previous_range = self.business_clock.resolve(previous_query)
+            is_legacy_product_followup = bool(
+                previous_range
+                and "产品" in recent_assistant
+                and ("煮糖批次" in recent_assistant or "提供产品名称" in recent_assistant)
+                and normalized
+                and len(normalized) <= 100
+            )
+            if not is_legacy_product_followup:
+                return None
+            query_text = re.sub(r"\s+", "", previous_query)
+            date_range = previous_range
+            product_query = normalized.strip("的，。？?") or None
+
+        if date_range is None:
+            return None
+        if product_query is None:
+            product_query = self._extract_boiling_batch_product_query(query_text)
+
+        arguments: dict[str, Any] = {
+            "startDate": date_range.start.isoformat(),
+            "endDate": date_range.end.isoformat(),
+            "limit": 10,
+        }
+        if product_query:
+            arguments["productQuery"] = product_query
+        if any(word in query_text for word in ("未用完", "可用", "有余量")):
+            arguments["status"] = "AVAILABLE"
+        elif any(word in query_text for word in ("已用完", "用完", "耗尽")):
+            arguments["status"] = "USED_UP"
+        elif any(word in query_text for word in ("已取消", "取消的")):
+            arguments["status"] = "CANCELED"
+
+        handoff = self.agent_router.handoff_for_agent("production_expert", mode="deterministic_range_query")
+        state.active_agent = handoff.target_agent
+        state.last_agent_handoff = handoff.to_snapshot()
+        state.active_run = {
+            "traceId": request.client.traceId,
+            "sessionId": request.agentSessionId,
+            "requestId": request.client.requestId,
+            "runId": f"run_{secrets.token_hex(8)}",
+            "handoffId": f"handoff_{secrets.token_hex(8)}",
+            "startedAt": datetime.now(timezone.utc).isoformat(),
+            "planningMode": "deterministic_range_query",
+        }
+        context = AgentExecutionContext(
+            agent_name=handoff.target_agent,
+            allowed_tools=frozenset(handoff.allowed_tools),
+            business_domain=handoff.business_domain,
+            handoff_mode="deterministic_range_query",
+            handoff_id=str(state.active_run["handoffId"]),
+        )
+        with bind_execution_context(context):
+            validated_arguments = self.argument_builder.validate_llm_arguments(
+                tool_name="query_boiling_batches",
+                arguments=arguments,
+                state=state,
+                user_message=query_text,
+            )
+            result = self._call_tool(request, "query_boiling_batches", validated_arguments)
+        self._raise_if_cancelled()
+        self._raise_if_tool_error_payload(result)
+        self._record_tool_message(
+            state,
+            "query_boiling_batches",
+            self._safe_tool_summary("query_boiling_batches", result),
+        )
+        safe_value = self._redact_control_refs(self._llm_safe_tool_data(result))
+        safe_result = safe_value if isinstance(safe_value, dict) else {}
+        self._record_registered_goal_fact(
+            state=state,
+            tool_name="query_boiling_batches",
+            arguments=validated_arguments,
+            safe_data=safe_result,
+        )
+
+        raw_candidates = result.get("candidates") if isinstance(result.get("candidates"), list) else []
+        candidates = [item for item in raw_candidates if isinstance(item, dict)]
+        total = self._bounded_int(result.get("total"), default=len(candidates), minimum=0, maximum=1_000_000)
+        scope_label = self._safe_display_label(str(result.get("scopeLabel") or product_query or "全部产品"))
+        if not candidates:
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=f"{date_range.label}内未查询到{scope_label}已登记的煮糖批次。",
+                reviewTrace={
+                    "planningMode": "deterministic_range_query",
+                    "executionInfluence": True,
+                    "toolCalled": True,
+                },
+            )
+
+        with bind_execution_context(context):
+            pending = self._production_entity_clarification(
+                {
+                    "resolutionStatus": "AMBIGUOUS",
+                    "needsUserSelection": True,
+                    "entityType": "BOILING_BATCH",
+                    "candidates": candidates,
+                },
+                request,
+                "boiling_batch_trace",
+            )
+        shown_note = f"，当前展示前 {len(candidates)} 个" if total > len(candidates) else ""
+        pending.prompt = (
+            f"{date_range.label}内共查询到 {total} 个{scope_label}煮糖批次{shown_note}。"
+            "请选择一个查看流转详情。"
+        )
+        state.pending_clarification = pending
+        state.interrupt_status[pending.interrupt_id] = pending.status
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=pending.prompt,
+            needsUserSelection=True,
+            cards=[self._clarification_card(pending)],
+            reviewTrace={
+                "planningMode": "deterministic_range_query",
+                "executionInfluence": True,
+                "toolCalled": True,
+                "dateRange": {
+                    "timezone": "Asia/Shanghai",
+                    "startDate": date_range.start.isoformat(),
+                    "endDate": date_range.end.isoformat(),
+                },
+            },
+        )
+
+    @staticmethod
+    def _extract_boiling_batch_product_query(text: str) -> str | None:
+        candidate = re.sub(r"\s+", "", text or "")
+        candidate = re.sub(r"(?:最近|近|过去)(?:[0-9零〇一二两三四五六七八九十百]+天|一周|半个月|一个月|半年)", "", candidate)
+        candidate = re.sub(r"(?:大前天|前天|昨天|昨日|今天|今日|当天|上周|上星期|上个星期|本周|这周|本星期|这个星期|上个月|上月|本月|这个月|当月|上季度|上个季度|本季度|这个季度|当季|去年|上年度|今年|本年|本年度)", "", candidate)
+        candidate = re.sub(r"(?:(?:20\d{2})年)?(?:0?[1-9]|1[0-2])月(?:0?[1-9]|[12]\d|3[01])(?:日|号)", "", candidate)
+        candidate = re.sub(r"20\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])", "", candidate)
+        for phrase in (
+            "请帮我", "帮我", "查询", "查看", "查找", "统计", "列出", "查", "看",
+            "煮糖批次", "煮糖", "批次记录", "批次列表", "批次", "记录", "列表",
+            "有哪些", "有多少", "多少个", "情况", "范围", "最近的", "最近", "的",
+            "未用完", "已用完", "用完", "耗尽", "已取消", "取消的", "可用", "有余量",
+        ):
+            candidate = candidate.replace(phrase, "")
+        candidate = candidate.strip("，。！？、,.;；:?？")
+        return candidate[:100] if candidate else None
+
+    def _production_trace_followup_response(
+        self,
+        request: ChatRequest,
+        state: WarehouseAgentState,
+        text: str,
+    ) -> ChatResponse | None:
+        normalized = re.sub(r"\s+", "", text or "")
+        if not normalized or len(normalized) > 80:
+            return None
+        has_production_context = any(
+            value is not None
+            for value in (
+                state.selected_production_order,
+                state.selected_boiling_batch,
+                state.last_production_order_progress,
+                state.last_boiling_batch_trace,
+            )
+        )
+        if not has_production_context:
+            return None
+
+        asks_material = any(word in normalized for word in ("原料", "领料", "用料", "消耗"))
+        asks_destination = any(word in normalized for word in ("去向", "去了哪里", "入到哪里", "入库位置", "入库库位"))
+        asks_output = asks_destination or any(word in normalized for word in ("产出", "产品结果"))
+        asks_order = "订单" in normalized and any(
+            word in normalized for word in ("关联", "情况", "进度", "查看", "看看", "第一", "第二", "第三", "第1", "第2", "第3")
+        )
+        if not (asks_material or asks_output or asks_order):
+            return None
+
+        handoff = self.agent_router.handoff_for_agent("production_expert", mode="llm_context_followup")
+        state.active_agent = handoff.target_agent
+        state.last_agent_handoff = handoff.to_snapshot()
+        state.active_run = {
+            "traceId": request.client.traceId,
+            "sessionId": request.agentSessionId,
+            "requestId": request.client.requestId,
+            "runId": f"run_{secrets.token_hex(8)}",
+            "handoffId": f"handoff_{secrets.token_hex(8)}",
+            "startedAt": datetime.now(timezone.utc).isoformat(),
+            "planningMode": "production_context_followup",
+        }
+        context = AgentExecutionContext(
+            agent_name=handoff.target_agent,
+            allowed_tools=frozenset(handoff.allowed_tools),
+            business_domain=handoff.business_domain,
+            handoff_mode="llm_context_followup",
+            handoff_id=str(state.active_run["handoffId"]),
+        )
+        with bind_execution_context(context):
+            explicit_batch_order_scope = bool(
+                re.search(r"第?([一二三四五六七八九十\d]+)(?:个|条)?订单", normalized)
+            ) or self._requests_all_linked_production_orders(normalized)
+            should_transition_from_batch = bool(
+                asks_order
+                and state.last_boiling_batch_trace
+                and (
+                    state.selected_production_order is None
+                    or "关联" in normalized
+                    or explicit_batch_order_scope
+                )
+            )
+            if should_transition_from_batch:
+                response = self._follow_boiling_batch_to_order(request, state, normalized)
+                if response is not None:
+                    response.reviewTrace = {
+                        "planningMode": "state_reuse",
+                        "executionInfluence": True,
+                        "stateReuse": {"source": "BOILING_BATCH_TRACE_CONTEXT", "toolCalled": True},
+                    }
+                    return response
+
+            selected = state.selected_production_order
+            order_ref = self._safe_text(selected.metadata.get("orderRef")) if selected else None
+            if not order_ref or not order_ref.startswith("aer_"):
+                return ChatResponse(
+                    agentSessionId=request.agentSessionId,
+                    answer="请先查询或选择一个关联生产订单，再查看原料、产出或入库去向。",
+                    needsUserSelection=True,
+                )
+
+            responses: list[ChatResponse] = []
+            if asks_material:
+                self._begin_registered_goal(state, "PRODUCTION_MATERIAL_TRACE")
+                responses.append(
+                    self._answer_production_tool(
+                        request,
+                        state,
+                        "query_material_pick_trace",
+                        {"orderRef": order_ref},
+                    )
+                )
+            if asks_output or (asks_order and not asks_material):
+                self._begin_registered_goal(state, "PRODUCTION_ORDER_PROGRESS")
+                responses.append(
+                    self._answer_production_tool(
+                        request,
+                        state,
+                        "query_production_order_progress",
+                        {"orderRef": order_ref},
+                    )
+                )
+        if not responses:
+            return None
+        if len(responses) == 1:
+            response = responses[0]
+        else:
+            response = ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="\n\n".join(item.answer for item in responses),
+                cards=[card for item in responses for card in item.cards],
+                suggestions=["查看产出入库去向"],
+            )
+        response.reviewTrace = {
+            "planningMode": "state_reuse",
+            "executionInfluence": True,
+            "stateReuse": {"source": "PRODUCTION_TRACE_CONTEXT", "toolCalled": True},
+        }
+        return response
+
+    def _follow_boiling_batch_to_order(
+        self,
+        request: ChatRequest,
+        state: WarehouseAgentState,
+        normalized_text: str,
+    ) -> ChatResponse | None:
+        source = state.last_boiling_batch_trace or {}
+        raw_usages = source.get("usages") if isinstance(source.get("usages"), list) else []
+        order_numbers = list(
+            dict.fromkeys(
+                value
+                for value in (
+                    self._safe_text(item.get("orderNo"))
+                    for item in raw_usages
+                    if isinstance(item, dict)
+                )
+                if value and value != "生产订单未标明"
+            )
+        )
+        if not order_numbers:
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="这个煮糖批次目前没有查询到已登记的关联生产订单。",
+            )
+        index = self._production_order_ordinal(normalized_text)
+        asks_all_orders = len(order_numbers) > 1 and self._requests_all_linked_production_orders(
+            normalized_text
+        )
+        if index is None and asks_all_orders and len(order_numbers) <= 5:
+            return self._answer_linked_production_orders(request, state, order_numbers)
+        if index is None and len(order_numbers) > 1:
+            return self._linked_production_order_selection(request, state, order_numbers)
+        index = index or 1
+        if index < 1 or index > len(order_numbers):
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=f"当前只查询到 {len(order_numbers)} 个关联生产订单，请选择这个范围内的序号。",
+                needsUserSelection=True,
+            )
+        order_no = order_numbers[index - 1]
+        candidate = self._resolve_linked_production_order(request, state, order_no)
+        if candidate is None:
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=f"没有找到关联生产订单 {order_no} 的有效查询引用，请重新查询。",
+                needsUserSelection=True,
+            )
+        resolution = {
+            "resolutionStatus": "EXACT",
+            "needsUserSelection": False,
+            "entityType": "PRODUCTION_ORDER",
+            "candidates": [candidate],
+        }
+        self._remember_unique_production_resolution(state, resolution)
+        order_ref = self._safe_text(candidate.get("entityRef"))
+        self._begin_registered_goal(state, "PRODUCTION_ORDER_PROGRESS")
+        return self._answer_production_tool(
+            request,
+            state,
+            "query_production_order_progress",
+            {"orderRef": order_ref},
+        )
+
+    def _resolve_linked_production_order(
+        self,
+        request: ChatRequest | ResumeRequest,
+        state: WarehouseAgentState,
+        order_no: str,
+    ) -> dict[str, Any] | None:
+        resolution = self._call_tool(
+            request,
+            "resolve_production_entities",
+            {"entityType": "PRODUCTION_ORDER", "query": order_no, "limit": 5},
+        )
+        self._raise_if_cancelled()
+        self._raise_if_tool_error_payload(resolution)
+        self._record_tool_message(
+            state,
+            "resolve_production_entities",
+            self._safe_tool_summary("resolve_production_entities", resolution),
+        )
+        candidates = resolution.get("candidates") if isinstance(resolution.get("candidates"), list) else []
+        if len(candidates) != 1 or bool(resolution.get("needsUserSelection")):
+            return None
+        candidate = candidates[0] if isinstance(candidates[0], dict) else None
+        entity_ref = self._safe_text(candidate.get("entityRef")) if candidate else None
+        return candidate if entity_ref and entity_ref.startswith("aer_") else None
+
+    def _linked_production_order_selection(
+        self,
+        request: ChatRequest,
+        state: WarehouseAgentState,
+        order_numbers: list[str],
+    ) -> ChatResponse:
+        candidates = [
+            candidate
+            for order_no in order_numbers[:10]
+            if (candidate := self._resolve_linked_production_order(request, state, order_no)) is not None
+        ]
+        if not candidates:
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="这些关联生产订单目前缺少有效的查询引用，请重新查询煮糖批次。",
+                needsUserSelection=True,
+            )
+        pending = self._production_entity_clarification(
+            {
+                "resolutionStatus": "AMBIGUOUS",
+                "needsUserSelection": True,
+                "entityType": "PRODUCTION_ORDER",
+                "candidates": candidates,
+            },
+            request,
+            "production_order_progress",
+        )
+        pending.prompt = "这个煮糖批次关联了多个生产订单，请选择一个查看具体情况。"
+        state.pending_clarification = pending
+        state.interrupt_status[pending.interrupt_id] = pending.status
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=pending.prompt,
+            needsUserSelection=True,
+            cards=[self._clarification_card(pending)],
+        )
+
+    def _answer_linked_production_orders(
+        self,
+        request: ChatRequest,
+        state: WarehouseAgentState,
+        order_numbers: list[str],
+    ) -> ChatResponse:
+        responses: list[ChatResponse] = []
+        missing: list[str] = []
+        for order_no in order_numbers:
+            candidate = self._resolve_linked_production_order(request, state, order_no)
+            if candidate is None:
+                missing.append(order_no)
+                continue
+            resolution = {
+                "resolutionStatus": "EXACT",
+                "needsUserSelection": False,
+                "entityType": "PRODUCTION_ORDER",
+                "candidates": [candidate],
+            }
+            self._remember_unique_production_resolution(state, resolution)
+            self._begin_registered_goal(state, "PRODUCTION_ORDER_PROGRESS")
+            responses.append(
+                self._answer_production_tool(
+                    request,
+                    state,
+                    "query_production_order_progress",
+                    {"orderRef": self._safe_text(candidate.get("entityRef"))},
+                )
+            )
+        if not responses:
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="这些关联生产订单目前都缺少有效的查询引用，请重新查询煮糖批次。",
+                needsUserSelection=True,
+            )
+        if len(responses) > 1:
+            state.selected_production_order = None
+        answer = f"已查询这个煮糖批次关联的 {len(responses)} 个生产订单，具体情况见下方卡片。"
+        if missing:
+            answer += f"\n\n其中 {len(missing)} 个订单暂时无法读取：{'、'.join(missing)}。"
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=answer,
+            cards=[card for response in responses for card in response.cards],
         )
 
     def _task_detail_followup_response(
@@ -5772,6 +8300,40 @@ class WarehouseAgentRuntime:
         for item in records[:20]:
             if isinstance(item, dict): lines.append(f"{self._safe_text(item.get('standardCode')) or '代码未标明'} {self._safe_text(item.get('standardName')) or '名称未标明'}，版本 {self._first_scalar([item], 'standardVersion') or 0}，{'默认' if item.get('isDefault') else '非默认'}，{'启用' if item.get('enabled') else '停用'}。")
         lines.append("绑定关系不证明某次化验采用该标准或产品已合格，本次未修改任何绑定。")
+        return "".join(lines)
+
+    def _format_product_quality_configuration_answer(self, result: dict[str, Any]) -> str:
+        source = result if isinstance(result, dict) else {}
+        product_name = self._safe_text(source.get("productName")) or "该产品"
+        standards = source.get("standards") if isinstance(source.get("standards"), list) else []
+        assay_groups = source.get("assayGroups") if isinstance(source.get("assayGroups"), list) else []
+
+        lines = [f"{product_name}当前质量配置如下："]
+        lines.append("\n\n适用质量标准：")
+        if not standards:
+            lines.append("\n- 暂未关联质量标准")
+        for item in standards[:20]:
+            if not isinstance(item, dict):
+                continue
+            name = self._safe_text(item.get("standardName")) or "名称未标明"
+            version = self._first_scalar([item], "standardVersion") or 0
+            default_label = "，默认标准" if item.get("isDefault") else ""
+            enabled_label = "启用" if item.get("enabled") else "停用"
+            lines.append(f"\n- {name}，版本 {version}，{enabled_label}{default_label}")
+
+        lines.append("\n\n所属批量化验组：")
+        if not assay_groups:
+            lines.append("\n- 暂未关联批量化验组")
+        for item in assay_groups[:20]:
+            if not isinstance(item, dict):
+                continue
+            name = self._safe_text(item.get("groupName")) or "名称未标明"
+            remark = self._safe_text(item.get("remark"))
+            lines.append(f"\n- {name}" + (f"：{remark}" if remark else ""))
+
+        lines.append(
+            "\n\n以上是当前配置关系，不代表某次化验采用了该标准，也不代表产品已经合格。"
+        )
         return "".join(lines)
 
     def _format_employee_roster_answer(self, result: dict[str, Any]) -> str:

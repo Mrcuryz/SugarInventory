@@ -50,6 +50,11 @@ const taskBatchDescriptor = (record) => {
 
 export const isPendingTaskRecord = (record) => String(record?.taskStatusLabel || '').includes('待处理')
 
+export const isConfirmedTaskRecord = (record) => {
+  const status = String(record?.taskStatusLabel || '')
+  return status.includes('已确认') || status.includes('已完成')
+}
+
 export const taskGroups = (card) => {
   const groups = new Map()
   taskRecords(card).forEach((record, index) => {
@@ -63,8 +68,33 @@ export const taskGroups = (card) => {
       selectable: Boolean(descriptor.batchAction) && isPendingTaskRecord(record)
     })
   })
+  groups.forEach(group => {
+    group.records.sort((left, right) => Number(right.selectable) - Number(left.selectable))
+  })
   return [...groups.values()]
 }
+
+const statusSummary = (records) => {
+  const source = Array.isArray(records) ? records : []
+  const pendingCount = source.filter(isPendingTaskRecord).length
+  const confirmedCount = source.filter(isConfirmedTaskRecord).length
+  return {
+    totalCount: source.length,
+    pendingCount,
+    confirmedCount,
+    otherCount: Math.max(0, source.length - pendingCount - confirmedCount)
+  }
+}
+
+export const taskCardStatusSummary = (card) => ({
+  ...statusSummary(taskRecords(card)),
+  updated: String(card?.title || '').includes('已更新')
+})
+
+export const taskGroupStatusSummary = (group) => ({
+  ...statusSummary(group?.records),
+  selectableCount: (group?.records || []).filter(record => record.selectable).length
+})
 
 export const applyTaskBatchCompletion = (card, palletCodes) => {
   if (!isTaskCard(card)) return { card, changedCount: 0 }

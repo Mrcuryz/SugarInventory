@@ -36,6 +36,11 @@ export const streamAgentInterruptResume = async (agentSessionId, interruptId, da
 }
 
 const streamAgentSse = async (url, data, onEvent, options = {}) => {
+  let receivedTerminalEvent = false
+  const handleEvent = (event) => {
+    if (event?.type === 'message_end') receivedTerminalEvent = true
+    onEvent(event)
+  }
   const tokenStore = useTokenStore()
   const response = await fetch(url, {
     method: 'POST',
@@ -56,10 +61,13 @@ const streamAgentSse = async (url, data, onEvent, options = {}) => {
     const { value, done } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    buffer = consumeSseBuffer(buffer, onEvent)
+    buffer = consumeSseBuffer(buffer, handleEvent)
   }
   buffer += decoder.decode()
-  consumeSseBuffer(buffer, onEvent, true)
+  consumeSseBuffer(buffer, handleEvent, true)
+  if (!receivedTerminalEvent && !options.signal?.aborted) {
+    throw new Error('Agent stream ended without a terminal event')
+  }
 }
 
 export const revokeAgentSession = (agentSessionId, data = {}) => request.delete(`/agent/sessions/${agentSessionId}`, { data })

@@ -16,6 +16,9 @@ ALLOWED_TOOLS = {
     "resolve_warehouses",
     "get_inventory_overview",
     "get_inventory_distribution",
+    "query_unqualified_inventory",
+    "query_inventory_by_quality_standard",
+    "query_inventory_by_assay_metrics",
     "query_assay_records",
     "get_assay_report_detail",
     "query_assay_abnormalities",
@@ -27,6 +30,7 @@ ALLOWED_TOOLS = {
     "query_pallet_flow_records",
     "query_qr_batch_inbound_completion",
     "resolve_production_entities",
+    "query_boiling_batches",
     "query_production_order_progress",
     "query_boiling_batch_trace",
     "query_material_pick_trace",
@@ -47,6 +51,7 @@ ALLOWED_TOOLS = {
     "query_quality_standard_catalog",
     "get_quality_standard_detail",
     "query_product_standard_relations",
+    "query_product_quality_configuration",
     "query_employee_roster",
     "query_roles",
     "get_role_permission_summary",
@@ -244,6 +249,8 @@ def _safe_error_message(code: str) -> str:
         return "当前用户没有执行该只读查询的权限。"
     if code == "UPSTREAM_TIMEOUT":
         return "查询仓储数据超时。"
+    if code == "UPSTREAM_BAD_REQUEST":
+        return "查询条件不符合当前业务要求，请核对后重试。"
     if code == "UPSTREAM_NOT_FOUND":
         return "未找到符合条件的业务数据。"
     if code == "UPSTREAM_SERVER_ERROR":

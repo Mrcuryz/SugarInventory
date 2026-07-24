@@ -8,4 +8,6 @@ public interface QualityCatalogAgentReadService {
     QualityCatalogAgentVO.Standards queryStandards(QualityCatalogAgentQueries.Standards query);
     QualityCatalogAgentVO.StandardDetail getStandardDetail(QualityCatalogAgentQueries.StandardDetail query);
     QualityCatalogAgentVO.ProductRelations queryProductRelations(QualityCatalogAgentQueries.ProductRelations query);
+    QualityCatalogAgentVO.ProductQualityConfiguration queryProductQualityConfiguration(
+            QualityCatalogAgentQueries.ProductQualityConfiguration query);
 }

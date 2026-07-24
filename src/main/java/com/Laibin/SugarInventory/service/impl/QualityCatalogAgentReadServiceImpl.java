@@ -9,6 +9,7 @@ import com.Laibin.SugarInventory.service.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Comparator;
 import java.util.List;
 
 @Service @RequiredArgsConstructor
@@ -79,6 +80,66 @@ public class QualityCatalogAgentReadServiceImpl implements QualityCatalogAgentRe
                         .standardStatus(item.getStandardStatus()).isDefault(item.getIsDefault()).priority(item.getPriority()).enabled(item.getEnabled())
                         .effectiveFrom(item.getEffectiveFrom()).effectiveTo(item.getEffectiveTo()).remark(item.getRemark()).build()).toList())
                 .limitations(List.of("绑定关系只表示当前配置和生效区间，不证明某次化验采用该标准或产品已合格。", "结果不包含关系、产品或标准内部 ID，也不执行绑定修改。"))
+                .build();
+    }
+
+    @Override
+    public QualityCatalogAgentVO.ProductQualityConfiguration queryProductQualityConfiguration(
+            QualityCatalogAgentQueries.ProductQualityConfiguration query) {
+        Integer productId = query == null ? null : query.getProductId();
+        if (productId == null || productId <= 0) {
+            throw new BusinessException(400, "productId 不能为空");
+        }
+        Product product = productService.getById(productId);
+        if (product == null) {
+            throw new BusinessException(404, "未找到指定产品");
+        }
+
+        List<ProductQualityStandardRelationVO> standardRows = relationService.listByProductId(productId);
+        standardRows = standardRows == null ? List.of() : standardRows;
+        List<QualityCatalogAgentVO.Relation> standards = standardRows.stream()
+                .sorted(Comparator
+                        .comparing((ProductQualityStandardRelationVO item) -> !Boolean.TRUE.equals(item.getIsDefault()))
+                        .thenComparing(item -> item.getPriority() == null ? Integer.MAX_VALUE : item.getPriority()))
+                .map(item -> QualityCatalogAgentVO.Relation.builder()
+                        .standardCode(item.getStandardCode())
+                        .standardName(item.getStandardName())
+                        .standardVersion(item.getStandardVersion())
+                        .standardStatus(item.getStandardStatus())
+                        .isDefault(item.getIsDefault())
+                        .priority(item.getPriority())
+                        .enabled(item.getEnabled())
+                        .effectiveFrom(item.getEffectiveFrom())
+                        .effectiveTo(item.getEffectiveTo())
+                        .remark(item.getRemark())
+                        .build())
+                .toList();
+
+        List<QualityCatalogAgentVO.ProductAssayGroup> assayGroups = assayGroupService
+                .listByProductId(productId)
+                .stream()
+                .map(item -> QualityCatalogAgentVO.ProductAssayGroup.builder()
+                        .groupName(item.getStandardName())
+                        .remark(item.getRemark())
+                        .build())
+                .toList();
+
+        return QualityCatalogAgentVO.ProductQualityConfiguration.builder()
+                .dataScope("CURRENT_PRODUCT_QUALITY_CONFIGURATION")
+                .productName(product.getProductName())
+                .productType(product.getProductType())
+                .productStatus(product.getStatus())
+                .packagingMethod(product.getPackagingMethod())
+                .weightPerPiece(product.getWeightPerPiece())
+                .piecesPerPallet(product.getPiecesPerPallet())
+                .standardCount(standards.size())
+                .standards(standards)
+                .assayGroupCount(assayGroups.size())
+                .assayGroups(assayGroups)
+                .limitations(List.of(
+                        "适用质量标准表示当前产品绑定配置，不证明某次化验实际采用该标准或产品已经合格。",
+                        "所属批量化验组只表示当前批量化验分组，不是质量标准或库存批次范围。",
+                        "结果不包含产品、标准、化验组或关系内部 ID，也不执行配置修改。"))
                 .build();
     }
 

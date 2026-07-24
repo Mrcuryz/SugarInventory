@@ -1,4 +1,4 @@
-version: m1.4r-k24
+version: m1.4r-k26
 scope: "Agent Runtime Playbook + Tool Capability Registry + LLM Wiki Lite"
 principles:
   - "本 registry 描述业务能力和工具选择边界，不替代 MCP schema。"
@@ -10,7 +10,7 @@ principles:
 agent_v1_reaudit:
   status: "DESIGN_ONLY"
   source: "前端菜单/路由 + webpage API + 后端 Controller；docs/openapi.json 当前缺失。"
-  finding: "当前 47 个只读工具已完成所有已登记专家的 Agent v1 查询规划集；仍需通过全量构建、集成/E2E 与最终边界验收后才能声明 v1 完成。"
+  finding: "当前 52 个只读工具已完成所有已登记专家的 Agent v1 查询规划集；仍需通过全量构建、集成/E2E 与最终边界验收后才能声明 v1 完成。"
   target_expert_domains:
     - inventory
     - warehouse
@@ -33,7 +33,7 @@ expert_tool_roadmap:
   recipe_roadmap: "docs/agent/cross-expert-recipe-roadmap-registry.yaml"
   data_semantic_roadmap: "docs/agent/data-semantic-roadmap-registry.yaml"
   business_rule_roadmap: "docs/agent/business-rule-roadmap-registry.yaml"
-  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 47 个只读工具、专家白名单或配方注册表。"
+  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 52 个只读工具、专家白名单或配方注册表。"
 
 agent_architecture:
   main_agent:
@@ -81,7 +81,7 @@ agent_architecture:
       model_policy_key: "warehouse"
     assay_expert:
       domains: ["assay", "quality"]
-      allowed_tools: ["resolve_products", "resolve_warehouses", "get_assay_status", "query_assay_records", "get_assay_report_detail", "query_assay_abnormalities", "query_products_without_recent_assay", "query_assay_standard_coverage", "query_assay_groups", "query_quality_standard_catalog", "get_quality_standard_detail", "query_product_standard_relations"]
+      allowed_tools: ["resolve_products", "resolve_warehouses", "get_assay_status", "query_assay_records", "get_assay_report_detail", "query_assay_abnormalities", "query_products_without_recent_assay", "query_assay_standard_coverage", "query_unqualified_inventory", "query_inventory_by_quality_standard", "query_inventory_by_assay_metrics", "query_assay_groups", "query_quality_standard_catalog", "get_quality_standard_detail", "query_product_standard_relations", "query_product_quality_configuration"]
       model_policy_key: "assay"
     pallet_expert:
       domains: ["pallet", "qr_code"]
@@ -89,7 +89,7 @@ agent_architecture:
       model_policy_key: "pallet"
     production_expert:
       domains: ["production"]
-      allowed_tools: ["resolve_production_entities", "query_production_order_progress", "query_boiling_batch_trace", "query_material_pick_trace", "query_production_label_completion", "query_in_process_materials", "query_material_candidates"]
+      allowed_tools: ["resolve_production_entities", "query_boiling_batches", "query_production_order_progress", "query_boiling_batch_trace", "query_material_pick_trace", "query_production_label_completion", "query_in_process_materials", "query_material_candidates"]
       model_policy_key: "production"
     master_data_expert:
       domains: ["master_data", "product_catalog", "screen_mesh"]
@@ -222,6 +222,15 @@ tools:
     required_slots: ["product_name"]
     permission: "quality_standard:view"
     data_scope: "CURRENT_PRODUCT_QUALITY_STANDARD_RELATIONS"
+  query_product_quality_configuration:
+    business_name: "产品质量配置聚合查询"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer: ["查询已确认具体产品当前适用的质量标准和所属批量化验组。"]
+    cannot_answer: ["不能把配置关系解释为某次化验采用该标准，也不能据此判定产品合格。"]
+    required_slots: ["product_ref"]
+    permission: "quality_standard:view + assay:view"
+    data_scope: "CURRENT_PRODUCT_QUALITY_CONFIGURATION"
 
   query_product_catalog:
     business_name: "产品目录查询"
@@ -302,6 +311,21 @@ tools:
     constraints:
       - "entityType 仅支持 PRODUCTION_ORDER、BOILING_BATCH；候选最多 10 个。"
       - "多候选时必须由用户提供完整编号，不得自动选择。"
+
+  query_boiling_batches:
+    business_name: "煮糖批次范围查询"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "按可选产品、北京时间业务日期范围和可选状态查询已登记煮糖批次，并返回受控候选引用。"
+    cannot_answer:
+      - "不能推断未登记批次，不能把产品名称设为日期范围查询的强制条件。"
+      - "不能创建、修改、取消、预留、消耗或释放煮糖批次。"
+    required_slots: []
+    constraints:
+      - "用户使用今天、昨天、本月、上周、最近一个月等相对日期时，必须按 Asia/Shanghai 解析为明确日期范围。"
+      - "产品未指定时查询全部产品；结果最多返回 20 个候选。"
+    data_scope: "BOILING_BATCH_LIST"
 
   query_production_order_progress:
     business_name: "生产订单当前进度"
@@ -463,6 +487,7 @@ tools:
       - "query_assay_abnormalities"
       - "query_products_without_recent_assay"
       - "query_assay_standard_coverage"
+      - "query_product_quality_configuration"
     main_query_for: []
     default_behavior: "唯一匹配后才继续主查询；多候选必须让用户选择；未找到时说明未找到并给出可改写的查询示例。"
     examples:
@@ -611,6 +636,9 @@ tools:
       - "resolve_products"
       - "resolve_warehouses"
     default_behavior: "库位内容查询使用 productScope=ALL、已确认 warehouseScope、groupBy=product；单产品位置查询使用已确认产品范围、warehouseScope=ALL、groupBy=warehouse。"
+    data_semantics:
+      - "化验状态通过当前库存产品 ID + 批次生产日期关联同批次最新版本化验：托盘库存使用 pallet_code.production_date，非托盘库存兼容回退 inventory.entry_date；不得使用 inventory.assay_id。"
+      - "最新版本按 version、created_at、id 倒序确定；库存先入库而化验尚未产生时必须保留为无化验。"
     examples:
       - input: "1号库位有什么？"
         chain: "resolve_warehouses -> get_inventory_distribution(productScope=ALL, warehouseScope=已确认库位, groupBy=product)"
@@ -1011,6 +1039,57 @@ tools:
     unsupported_alternatives:
       - "标准最近未使用和化验记录无标准覆盖待业务口径确认。"
 
+  query_unqualified_inventory:
+    business_name: "当前不合格库存查询"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer:
+      - "查询当前仍在库、且产品 ID + 生产日期对应的最新版本化验明确判定为不合格的库存批次。"
+      - "按全部库存、已确认产品或已确认库位范围返回库存数量、重量、库位、未达标指标和受控化验详情引用。"
+    cannot_answer:
+      - "无化验、无适用标准或标准多候选均不等同于不合格，不得并入结果。"
+      - "不能使用 inventory.assay_id，不能由 Agent 分别查询库存和化验后自行拼接。"
+      - "不能修改库存、化验或质量标准。"
+    required_slots: ["product_scope", "warehouse_scope"]
+    data_scope: "CURRENT_INVENTORY_WITH_LATEST_ASSAY"
+    default_behavior: "固定 judgeStatus=FAIL、limit=50；只使用共享 inventory_current_assay_fact_v1 读模型。"
+    examples:
+      - input: "库存中有哪些不合格产品？"
+        chain: "query_unqualified_inventory(productScope=ALL,warehouseScope=ALL)"
+
+  query_inventory_by_quality_standard:
+    business_name: "按质量标准筛选当前库存"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer:
+      - "使用指定标准代码和版本，对当前库存批次最新化验逐项确定性匹配，返回满足该完整标准的库存。"
+    cannot_answer:
+      - "不能由 LLM 自行判断指标合格；不能猜测标准代码、版本或内部 ID。"
+      - "匹配某标准表示实测指标满足该标准，不等同于该产品当前已绑定或该化验历史上采用了该标准。"
+    required_slots: ["product_scope", "warehouse_scope", "standard_code"]
+    dependencies: ["query_quality_standard_catalog"]
+    data_scope: "CURRENT_INVENTORY_WITH_LATEST_ASSAY"
+    default_behavior: "标准代码必须来自用户明确输入或质量标准目录；未指定版本时由后端解析当前启用版本。"
+    examples:
+      - input: "库存中哪些产品符合黄冰糖标准？"
+        chain: "query_quality_standard_catalog -> query_inventory_by_quality_standard"
+
+  query_inventory_by_assay_metrics:
+    business_name: "按原始化验指标筛选当前库存"
+    risk_level: "L1"
+    owner_expert: "assay_expert"
+    can_answer:
+      - "按一个封闭指标和 GT/GTE/LT/LTE/EQ/BETWEEN 数值条件筛选当前库存批次最新化验。"
+    cannot_answer:
+      - "不支持任意字段、任意 SQL、公式或由模型计算的质量结论。"
+      - "指标条件命中只说明原始数值满足筛选条件，不自动表示符合任何完整质量标准。"
+    required_slots: ["product_scope", "warehouse_scope", "metric_condition"]
+    data_scope: "CURRENT_INVENTORY_WITH_LATEST_ASSAY"
+    default_behavior: "仅支持色值、还原糖分、干燥失重、电导灰分、蔗糖分、不溶于水杂质和 pH；limit=50。"
+    examples:
+      - input: "库存中哪些产品蔗糖分不低于 99.7？"
+        chain: "query_inventory_by_assay_metrics(metricCode=sucrose,operator=GTE,value=99.7)"
+
   query_qr_code_lifecycle:
     business_name: "二维码 / 托盘生命周期查询"
     risk_level: "L1"
@@ -1132,13 +1211,16 @@ tools:
     can_answer:
       - "按明确托盘码、产品、库位、日期和事件类型分页查询流转记录。"
       - "返回业务时间线、事件名称、来源和目的库位。"
+      - "按已确认托盘查询最近流转或完整历史流转。"
     cannot_answer:
       - "不能修改流转记录或补写缺失事件。"
       - "不能把内部 flow ID 当作用户业务证据。"
     use_when:
       - "用户问托盘最近有哪些流转、托盘进出记录或二维码流转记录。"
+      - "用户明确要求某托盘的完整、全部或所有历史流转。"
     do_not_use_when:
       - "用户需要单码完整摘要和风险标签，使用 query_qr_code_lifecycle。"
+      - "用户只问托盘当前在哪、装了什么或当前状态，使用 get_pallet_status。"
     required_slots: []
     optional_slots:
       - "code"
@@ -1154,11 +1236,13 @@ tools:
     main_query_for:
       - "resolve_products"
       - "resolve_warehouses"
-    default_behavior: "默认最近30天、第一页20条；事件类型使用受控枚举并按时间倒序。"
+    default_behavior: "默认最近30天、第一页20条；事件类型使用受控枚举并按时间倒序。用户明确要求完整历史时，Runtime 将日期规范化为受控全量范围，并只向用户展示‘完整历史’。"
     examples:
       - input: "托盘最近有哪些流转？"
         chain: "query_pallet_flow_records(productScope=ALL,dateRange=LAST_DAYS(30),page=1,size=20)"
     safe_result_summary:
+      - "scopeLabel"
+      - "dateRangeLabel"
       - "total"
       - "page"
       - "size"

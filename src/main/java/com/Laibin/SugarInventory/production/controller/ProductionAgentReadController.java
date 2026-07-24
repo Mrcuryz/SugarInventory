@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionEntityResolveQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionBoilingBatchTraceQueryDTO;
+import com.Laibin.SugarInventory.production.domain.dto.ProductionBoilingBatchListQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOrderProgressQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionMaterialPickTraceQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionLabelCompletionQueryDTO;
@@ -11,6 +12,7 @@ import com.Laibin.SugarInventory.production.domain.dto.ProductionInProcessMateri
 import com.Laibin.SugarInventory.production.domain.dto.ProductionMaterialCandidatesAgentQueryDTO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionEntityResolutionVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchTraceVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchListVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderProgressVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialPickTraceVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionLabelCompletionVO;
@@ -53,6 +55,14 @@ public class ProductionAgentReadController {
             @RequestBody ProductionBoilingBatchTraceQueryDTO query,
             @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(service.queryBoilingBatchTrace(query, loginUser.getUser().getId()));
+    }
+
+    @PostMapping("/boiling-batches/query")
+    @PreAuthorize("hasAuthority('production:boiling:view')")
+    public Result<ProductionBoilingBatchListVO> queryBoilingBatches(
+            @RequestBody ProductionBoilingBatchListQueryDTO query,
+            @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(service.queryBoilingBatches(query, loginUser.getUser().getId()));
     }
 
     @PostMapping("/orders/material-pick-trace/query")

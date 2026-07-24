@@ -31,6 +31,7 @@ import com.Laibin.SugarInventory.domain.dto.TaskSemiItemDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapBatchOperationDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapSlotInboundDTO;
 import com.Laibin.SugarInventory.domain.bo.AssayResolveResult;
+import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.Assay;
 import com.Laibin.SugarInventory.domain.po.Inventory;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
@@ -220,16 +221,16 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         }
         code = code == null ? null : code.toUpperCase();
         if (!PalletCodeGenerator.isValidFormat(code)) {
-            throw new BusinessException("托盘码格式非法");
+            throw new BusinessException(ErrorCode.INVALID_PALLET_CODE);
         }
         if (!PalletCodeGenerator.verifyCheckChar(code)) {
-            throw new BusinessException("托盘码校验失败");
+            throw new BusinessException(ErrorCode.INVALID_PALLET_CODE);
         }
         PalletCode palletCode = this.lambdaQuery()
                 .eq(PalletCode::getCode, code)
                 .one();
         if (palletCode == null) {
-            throw new BusinessException("托盘码不存在");
+            throw new BusinessException(ErrorCode.PALLET_CODE_NOT_FOUND);
         }
         return palletCode;
     }
@@ -454,7 +455,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         PalletCode palletCode = parseAndFind(code);
         Inventory inventory = this.lambdaQueryInventoryByPalletId(palletCode.getId());
         if (inventory == null) {
-            throw new BusinessException("产品未入库");
+            throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND.getCode(), "产品未入库");
         }
         Warehouse warehouse = null;
         if (inventory.getWarehouseId() != null) {

@@ -37,20 +37,28 @@ $env:AGENT_PYTHON_SERVICE_KEY="<java-to-python-service-key>"
 $env:REQUEST_TIMEOUT_MS="15000"
 $env:AGENT_RUN_TIMEOUT_MS="90000" # llm mode default; whole bounded Agent turn
 $env:AGENT_MODEL_MODE="openai_compatible" # or basic
-$env:AGENT_MODEL_BASE_URL="https://example-model-gateway/v1"
-$env:AGENT_MODEL_NAME="<model-name>"
+$env:AGENT_MODEL_BASE_URL="https://api.deepseek.com" # project default
+$env:AGENT_MODEL_NAME="deepseek-v4-flash" # project default
 $env:AGENT_MODEL_API_KEY="<model-service-key>"
 $env:AGENT_MODEL_TIMEOUT_MS="30000"
 $env:AGENT_GOAL_DRAFT_SHADOW_ENABLED="false"
 $env:AGENT_PLANNING_MODE="deterministic" # deterministic or local/UAT-only llm
-$env:AGENT_LLM_ALLOWED_EXPERTS="inventory_expert,warehouse_expert,assay_expert"
+$env:AGENT_LLM_ALLOWED_EXPERTS="inventory_expert,warehouse_expert,assay_expert,logistics_expert,production_expert"
 $env:AGENT_LLM_MAX_TOOL_CALLS="3"
 $env:AGENT_LLM_MAX_TOOL_RETRIES="1"
 ```
 
 `AGENT_PLANNING_MODE=llm` is an experimental local/UAT path. It is rejected at
 startup in `AGENT_ENV=production`, requires `AGENT_MODEL_MODE=openai_compatible`,
-and does not change the deterministic default.
+and does not change the deterministic default. `AGENT_MODEL_BASE_URL` and
+`AGENT_MODEL_NAME` use the project defaults shown above when omitted; the API
+key remains mandatory and has no source-code default.
+
+In `llm` mode every business expert follows the same bounded sequence: main
+model semantic routing, expert action decision, Runtime-authorized tool call,
+safe fact adaptation, and expert result analysis. Deterministic intent handlers
+must not preempt this sequence; they are reserved for explicit deterministic
+mode or controlled fallback behavior.
 
 `REQUEST_TIMEOUT_MS` only limits one Java Gateway tool request. The whole SSE
 turn is limited independently by `AGENT_RUN_TIMEOUT_MS` (default: 90 seconds in
@@ -335,3 +343,43 @@ Implemented scope:
   prohibited. Active runs are registered by `messageId` so cancellation can
   stop later model chunks, suppress tool-result state writes, and classify
   model/tool timeout or cancellation separately.
+
+## Pallet Journey Acceptance (2026-07-23)
+
+The pallet expert follows the same LLM execution contract as inventory, assay,
+and production: main-model understanding, expert decision, validated read-only
+tool call, safe fact adaptation, and expert result analysis. Deterministic code
+may validate or reject a plan, but it does not replace the expert's normal tool
+choice.
+
+The accepted journey is current pallet status, recent movement, then complete
+history. `CURRENT_PALLET` is registered even when a user starts with a direct
+history query. A complete-history request must use `query_pallet_flow_records`;
+an attempted lifecycle-summary substitution is rejected once and returned to
+the expert for correction. Runtime normalizes complete history to a controlled
+date range because the upstream tool otherwise applies a recent default, while
+the safe result and UI expose only `完整历史`.
+
+User-facing output translates `cycle` / `cycleNo` to `第 N 次流转`. Invalid
+format/check-digit errors and valid-but-missing pallet codes are separate
+terminal outcomes, neither is retried with the same call signature, and neither
+leaks backend codes or audit wording. Browser acceptance covered 14 complete
+history records, the six controlled progress stages, invalid input, no data,
+current inventory location, and the no-current-inventory business state.
+
+## Current Inventory Quality Screening (2026-07-23)
+
+The assay expert now exposes three separate L1 read-only intents:
+`query_unqualified_inventory`, `query_inventory_by_quality_standard`, and
+`query_inventory_by_assay_metrics`. All three use the shared current-inventory
+batch fact instead of `inventory.assay_id`: pallet inventory joins the latest
+assay by product and pallet production date, while non-pallet inventory has a
+compatibility fallback to entry date.
+
+The meanings are intentionally different. “Unqualified” requires an explicit
+latest saved failure; no assay, no standard, and multiple-standard candidates
+are not failures. Standard matching re-evaluates all constrained raw metrics
+against one controlled standard code/version. Metric filtering accepts one
+allowlisted metric, one closed comparison operator, and one number. Each result
+can continue to a controlled assay-report detail without exposing the internal
+report reference to the model answer or UI.

@@ -10,6 +10,18 @@ import java.util.List;
 
 @Mapper
 public interface QualityStandardMapper extends BaseMapper<QualityStandard> {
+    @Select("""
+            <script>
+            SELECT * FROM quality_standards
+            WHERE standard_code = #{standardCode}
+            <if test='version != null'>AND version = #{version}</if>
+            ORDER BY version DESC, id DESC
+            LIMIT 1
+            </script>
+            """)
+    QualityStandard selectByCodeAndVersion(@Param("standardCode") String standardCode,
+                                           @Param("version") Integer version);
+
     @Select("SELECT * FROM quality_standards WHERE product_type = #{productType} ORDER BY status DESC, version DESC, id ASC")
     List<QualityStandard> selectByProductType(@Param("productType") String productType);
 

@@ -1,5 +1,6 @@
 package com.Laibin.SugarInventory.mcp.tool;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import com.Laibin.SugarInventory.mcp.client.WarehouseApiException;
@@ -19,6 +20,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryOverviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryQualityRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryQualityResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.InventoryDistributionFilter;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
@@ -39,6 +42,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolveReq
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolutionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialPickTraceRequest;
@@ -73,6 +78,7 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayGroupsCatalogResponse
 import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardDetailResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductStandardRelationsResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductQualityConfigurationResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.EmployeeRosterResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.RoleCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.RolePermissionSummaryResponse;
@@ -241,6 +247,18 @@ public class WarehouseTools {
         }
     }
 
+    public InventoryQualityResponse queryInventoryQuality(String toolName, InventoryQualityRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName(toolName, () -> readService.queryInventoryQuality(request));
+        } catch (WarehouseApiException e) {
+            return InventoryQualityResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("{} failed; mode={}, errorType={}, message={}", toolName,
+                    request == null ? null : request.mode(), e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return InventoryQualityResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
     public ProductsWithoutRecentAssayResponse queryProductsWithoutRecentAssay(ProductsWithoutRecentAssayRequest request) {
         try {
             return WarehouseToolCallContext.withToolName("query_products_without_recent_assay",
@@ -352,6 +370,26 @@ public class WarehouseTools {
             log.warn("query_production_order_progress failed; errorType={}, message={}",
                     e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
             return ProductionOrderProgressResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionBoilingBatchListResponse queryBoilingBatches(String productQuery, LocalDate startDate,
+                                                                   LocalDate endDate, String status, Integer limit) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_boiling_batches",
+                    () -> readService.queryBoilingBatches(
+                            new ProductionBoilingBatchListRequest(
+                                    productQuery,
+                                    startDate == null ? null : startDate.toString(),
+                                    endDate == null ? null : endDate.toString(),
+                                    status,
+                                    limit)));
+        } catch (WarehouseApiException e) {
+            return ProductionBoilingBatchListResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("query_boiling_batches failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return ProductionBoilingBatchListResponse.error(ErrorMapper.unexpected());
         }
     }
 
@@ -538,6 +576,17 @@ public class WarehouseTools {
     public ProductStandardRelationsResponse queryProductStandardRelations(String productName) {
         try { return WarehouseToolCallContext.withToolName("query_product_standard_relations", () -> readService.queryProductStandardRelations(productName)); }
         catch (WarehouseApiException e) { return ProductStandardRelationsResponse.error(ErrorMapper.upstream(e)); } catch (RuntimeException e) { return ProductStandardRelationsResponse.error(ErrorMapper.unexpected()); }
+    }
+    public ProductQualityConfigurationResponse queryProductQualityConfiguration(Integer productId) {
+        try {
+            return WarehouseToolCallContext.withToolName(
+                    "query_product_quality_configuration",
+                    () -> readService.queryProductQualityConfiguration(productId));
+        } catch (WarehouseApiException e) {
+            return ProductQualityConfigurationResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            return ProductQualityConfigurationResponse.error(ErrorMapper.unexpected());
+        }
     }
     public EmployeeRosterResponse queryEmployeeRoster(String employeeId, String name, String department, String position, String status, String roleCode, Integer page, Integer size) {
         try { return WarehouseToolCallContext.withToolName("query_employee_roster", () -> readService.queryEmployeeRoster(employeeId, name, department, position, status, roleCode, page, size)); }

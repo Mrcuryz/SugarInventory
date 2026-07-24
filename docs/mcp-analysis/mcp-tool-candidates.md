@@ -21,6 +21,7 @@
 | `get_warehouse_status` | 查询 | L1 | 是 | 查询库位容量、库存明细和最近操作 |
 | `get_pallet_status` | 查询 | L1 | 是 | 扫码后了解托盘当前产品、位置、任务和流转 |
 | `get_assay_status` | 查询 | L1 | 是 | 查询产品日期化验和判定结果 |
+| `query_unqualified_inventory` | 查询 | L1 | 是 | 查询当前库存中最新化验明确不合格的批次 |
 | `query_inventory_by_quality_standard` | 查询 | L1 | 是 | 查询当前库存中符合指定化验标准的批次 |
 | `query_inventory_by_assay_metrics` | 查询 | L1 | 是 | 按最新化验原始指标数值条件筛选当前库存批次 |
 | `preview_auto_inbound_report` | 预览 | L2 | 是 | 把报数文本解析成待确认入库任务和风险 |
@@ -122,23 +123,32 @@
 
 ### `query_inventory_by_quality_standard`
 
-- 描述：按当前库存批次查询最新化验，并筛选在化验生成时已保存为命中指定标准的库存。
-- 输入：`productScope?`, `warehouseScope?`, `productionDateRange?`, `standardRef`, `groupBy?`, `page?`, `size?`。
-- 输出：`dataScope=CURRENT_INVENTORY_BATCH_LATEST_ASSAY`、库存数量、批次生产日期、日期来源、最新化验版本、命中标准快照、数据质量警告。
+- 描述：按当前库存批次查询最新化验，并由后端按指定标准的全部指标逐项确定性匹配。
+- 输入：`productScope`, `warehouseScope`, `standardCode`, `standardVersion?`, `limit?`。
+- 输出：查询说明、库存批次数、件数、重量、生产日期、库位、标准标签和受控化验详情引用。
 - 风险：L1。
 - 权限：建议 `inventory:view` + `quality:view`。
-- 限制：标准名称先解析为受控引用；多版本歧义时要求用户选择；不按当前标准重算历史化验。
-- 底层缺口：需新增统一当前库存批次化验读模型和聚合接口，不能继续直接连接 `inventory.assay_id`。
+- 限制：标准代码来自用户明确输入或标准目录；匹配结果不覆盖原化验记录，也不证明产品当前绑定该标准。
+- 底层实现：共享统一当前库存批次化验读模型，不连接 `inventory.assay_id`。
 
 ### `query_inventory_by_assay_metrics`
 
 - 描述：按当前库存批次最新化验的原始数值筛选库存。
-- 输入：`productScope?`, `warehouseScope?`, `productionDateRange?`, `conditions[1..3]`, `groupBy?`, `page?`, `size?`；条件字段和运算符使用固定枚举。
-- 输出：`dataScope=CURRENT_INVENTORY_BATCH_LATEST_ASSAY`、库存数量、批次生产日期、最新化验版本、命中指标值、缺失指标数和数据质量警告。
+- 输入：`productScope`, `warehouseScope`, `metricCondition{metricCode,operator,value|minValue+maxValue}`, `limit?`；字段和运算符使用固定枚举。
+- 输出：查询说明、库存批次数、件数、重量、生产日期、库位和命中指标值。
 - 风险：L1。
 - 权限：建议 `inventory:view` + `quality:view`。
-- 限制：第一版仅支持最多 3 条 `AND` 条件；不接受 SQL、列名、公式或模型自定义单位换算；不根据指标筛选结果自动宣称产品合格。
-- 底层缺口：与标准命中查询共享统一当前库存批次化验读模型。
+- 限制：第一版每次只支持 1 个指标条件；不接受 SQL、列名、公式或模型自定义单位换算；不根据指标筛选结果自动宣称产品合格。
+- 底层实现：与标准命中查询共享统一当前库存批次化验读模型。
+
+### `query_unqualified_inventory`
+
+- 描述：查询当前仍在库、且产品与生产日期对应的最新版本化验明确判定为不合格的库存。
+- 输入：`productScope`, `warehouseScope`, `limit?`。
+- 输出：查询说明、库存批次数、件数、重量、生产日期、库位、未达标指标和受控化验详情引用。
+- 风险：L1。
+- 权限：`inventory:view` + `assay:view`。
+- 限制：无化验、无适用标准和标准多候选不计为不合格；不执行任何写入。
 
 ### `preview_auto_inbound_report`
 

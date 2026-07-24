@@ -146,6 +146,42 @@ TOOL_CAPABILITY_REGISTRY: dict[str, ToolCapability] = {
         safe_result_summary=["scopeLabel", "totalStockText", "warehouseCount", "groupCount"],
         unsupported_alternatives=["可先查询单产品库存或单库位容量"],
     ),
+    "query_unqualified_inventory": ToolCapability(
+        name="query_unqualified_inventory",
+        business_name="当前不合格库存查询",
+        can_answer=["当前仍在库且批次最新化验明确不合格的产品、生产日期、库位、数量和失败指标"],
+        cannot_answer=["不能把无化验或无标准库存算作不合格", "不能使用历史化验异常替代当前库存事实"],
+        use_when=["用户问库存中有哪些不合格产品、不合格库存在哪里或哪些指标失败"],
+        do_not_use_when=["用户只问历史化验异常", "用户问缺化验或无标准库存"],
+        required_slots=["product_scope", "warehouse_scope"],
+        optional_slots=["limit"],
+        default_behavior="基于产品+生产日期关联最新版本化验；全局问题可使用 ALL 产品和 ALL 库位。",
+        safe_result_summary=["queryLabel", "totalGroups", "totalEquivalentPieces", "records"],
+    ),
+    "query_inventory_by_quality_standard": ToolCapability(
+        name="query_inventory_by_quality_standard",
+        business_name="按化验标准筛选当前库存",
+        can_answer=["当前库存批次最新化验是否逐项满足指定标准，并展示产品、日期、库位和数量"],
+        cannot_answer=["不能让模型猜 standardCode", "不能把缺少指标值的批次判为符合标准"],
+        use_when=["用户问哪些库存符合或满足某个化验标准"],
+        do_not_use_when=["用户只问标准定义", "用户问某个原始指标条件"],
+        required_slots=["product_scope", "warehouse_scope", "standard_code"],
+        optional_slots=["standard_version", "limit"],
+        default_behavior="standardCode 来自质量标准目录；未指定版本时由后端选择该编码最新版本。",
+        safe_result_summary=["queryLabel", "totalGroups", "records"],
+    ),
+    "query_inventory_by_assay_metrics": ToolCapability(
+        name="query_inventory_by_assay_metrics",
+        business_name="按原始化验指标筛选当前库存",
+        can_answer=["当前库存批次最新化验的一个受控原始指标满足数值条件的产品、日期、库位和数量"],
+        cannot_answer=["不能接受任意字段、任意表达式或 SQL", "不能把无该指标值的库存计入结果"],
+        use_when=["用户问库存中某指标大于、小于、等于或介于某数值的产品"],
+        do_not_use_when=["用户问符合完整标准", "用户只问历史化验记录"],
+        required_slots=["product_scope", "warehouse_scope", "metric_condition"],
+        optional_slots=["limit"],
+        default_behavior="只允许 7 个化验指标和 GT/GTE/LT/LTE/EQ/BETWEEN。",
+        safe_result_summary=["queryLabel", "totalGroups", "records"],
+    ),
     "get_warehouse_status": ToolCapability(
         name="get_warehouse_status",
         business_name="库位状态查询",
@@ -495,6 +531,14 @@ class IntentRouter:
             return IntentRoute(intent_type="data_query", intent_subtype="screen_mesh_catalog",
                                business_domain="master_data", business_objects=objects, support_status="supported",
                                next_action="call_tool", planned_tools=["query_screen_mesh_catalog"])
+        if (
+            "化验组" in text
+            and any(word in text for word in ["化验标准", "质量标准", "标准"])
+            and any(word in text for word in ["适用", "所属", "关联", "配置", "查询", "查看"])
+        ):
+            return IntentRoute(intent_type="data_query", intent_subtype="product_quality_configuration",
+                               business_domain="quality", business_objects=objects, support_status="supported",
+                               next_action="call_tool", planned_tools=["resolve_products"])
         if any(word in text for word in ["化验组目录", "化验分组", "化验组配置"]):
             return IntentRoute(intent_type="data_query", intent_subtype="assay_groups", business_domain="quality",
                                business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_assay_groups"])
@@ -684,11 +728,45 @@ class IntentRouter:
                 intent_subtype="assay_report_detail",
                 business_domain="assay",
                 business_objects=objects,
-                support_status="supported" if state.last_assay_records else "ambiguous",
-                next_action="call_tool" if state.last_assay_records else "ask_clarification",
-                planned_tools=["get_assay_report_detail"] if state.last_assay_records else ["query_assay_records"],
+                support_status="supported" if (state.last_assay_records or state.last_inventory_quality) else "ambiguous",
+                next_action="call_tool" if (state.last_assay_records or state.last_inventory_quality) else "ask_clarification",
+                planned_tools=["get_assay_report_detail"] if (state.last_assay_records or state.last_inventory_quality) else ["query_assay_records"],
                 clarification_prompt="请先查询或选择一条化验记录，再查看报告详情。",
                 suggestions=["例如：黄冰糖最近一次化验记录", "今天有哪些化验记录"],
+            )
+        if self._asks_unqualified_inventory(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="unqualified_inventory",
+                business_domain="quality",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_unqualified_inventory"]
+                if objects.product in {None, "全部产品"} or state.selected_product is not None
+                else ["resolve_products", "query_unqualified_inventory"],
+            )
+        if self._asks_inventory_by_quality_standard(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="inventory_by_quality_standard",
+                business_domain="quality",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_quality_standard_catalog", "query_inventory_by_quality_standard"],
+            )
+        if self._asks_inventory_by_assay_metric(text):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="inventory_by_assay_metric",
+                business_domain="quality",
+                business_objects=objects,
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_inventory_by_assay_metrics"]
+                if objects.product in {None, "全部产品"} or state.selected_product is not None
+                else ["resolve_products", "query_inventory_by_assay_metrics"],
             )
         if self._asks_assay_abnormalities(text):
             return IntentRoute(
@@ -773,6 +851,16 @@ class IntentRouter:
         return None
 
     def _planned_read_tools(self, text: str, state: WarehouseAgentState) -> list[str]:
+        if self._asks_unqualified_inventory(text):
+            if state.selected_product is not None or self._explicit_all_product_request(text):
+                return ["query_unqualified_inventory"]
+            return ["resolve_products", "query_unqualified_inventory"]
+        if self._asks_inventory_by_quality_standard(text):
+            return ["query_quality_standard_catalog", "query_inventory_by_quality_standard"]
+        if self._asks_inventory_by_assay_metric(text):
+            if state.selected_product is not None or self._explicit_all_product_request(text):
+                return ["query_inventory_by_assay_metrics"]
+            return ["resolve_products", "query_inventory_by_assay_metrics"]
         if "化验" in text:
             if self._asks_assay_standard_coverage(text):
                 if state.selected_product is not None or self._assay_standard_coverage_all_scope_allowed(text):
@@ -1210,6 +1298,11 @@ class IntentRouter:
         return has_assay_context and has_detail_word
 
     def _asks_assay_abnormalities(self, text: str) -> bool:
+        # 当前库存质量属于库存批次事实；带日期/分组的库存查询继续由
+        # get_inventory_distribution 处理，其余走专用 inventory quality 工具。
+        # 不得把“库存不合格”误路由为历史化验异常记录查询。
+        if "库存" in text or "在库" in text:
+            return False
         if "无化验" in text or "未化验" in text or "缺化验" in text:
             return False
         if self._asks_assay_standard_coverage(text):
@@ -1223,6 +1316,31 @@ class IntentRouter:
         if not has_assay:
             return False
         return any(word in text for word in ["异常", "不合格", "未通过", "无标准", "没有标准", "未匹配标准", "越界", "哪些产品", "统计", "汇总"])
+
+    def _asks_unqualified_inventory(self, text: str) -> bool:
+        has_inventory = any(word in text for word in ["库存", "在库", "库里", "库中"])
+        explicit_failed = any(word in text for word in ["不合格", "未通过", "判定失败"])
+        asks_grouped_distribution = self._asks_distribution(text)
+        has_date_scope = bool(re.search(
+            r"(?:最近|近)\s*\d+\s*天|今天|昨天|本周|上周|本月|上月|\d{4}[-年/]\d{1,2}",
+            text,
+        ))
+        # 专用工具回答“当前有哪些明确不合格库存”。用户另带日期或聚合维度时，
+        # 必须继续走支持这些条件的库存分布工具，不能静默丢掉约束。
+        return has_inventory and explicit_failed and not asks_grouped_distribution and not has_date_scope
+
+    def _asks_inventory_by_quality_standard(self, text: str) -> bool:
+        has_inventory = any(word in text for word in ["库存", "在库", "库里", "库中"])
+        has_standard = any(word in text for word in ["质量标准", "化验标准", "标准"])
+        has_match = any(word in text for word in ["符合", "满足", "达到", "达标"])
+        return has_inventory and has_standard and has_match
+
+    def _asks_inventory_by_assay_metric(self, text: str) -> bool:
+        has_inventory = any(word in text for word in ["库存", "在库", "库里", "库中"])
+        metrics = ["色值", "还原糖", "干燥失重", "电导灰分", "蔗糖", "不溶于水杂质", "pH", "ph"]
+        has_metric = any(metric in text for metric in metrics)
+        has_condition = any(word in text for word in ["大于", "高于", "不少于", "不低于", "小于", "低于", "不超过", "等于", "介于", "之间", ">", "<", "≥", "≤"])
+        return has_inventory and has_metric and has_condition
 
     def _asks_products_without_recent_assay(self, text: str) -> bool:
         if any(phrase in text for phrase in ["有没有化验", "是否有化验", "有化验吗"]):

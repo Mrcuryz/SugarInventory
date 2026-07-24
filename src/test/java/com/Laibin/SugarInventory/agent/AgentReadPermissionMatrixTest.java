@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.controller.AssayController;
 import com.Laibin.SugarInventory.controller.InventoryAgentReadController;
 import com.Laibin.SugarInventory.controller.LogisticsAgentReadController;
 import com.Laibin.SugarInventory.controller.PalletCodeController;
+import com.Laibin.SugarInventory.controller.QualityCatalogAgentReadController;
 import com.Laibin.SugarInventory.controller.WarehouseAgentReadController;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,6 +27,8 @@ class AgentReadPermissionMatrixTest {
         assertPermission(LogisticsAgentReadController.class, "queryStockDocuments", "hasAuthority('document:view')");
         assertPermission(LogisticsAgentReadController.class, "queryAutoInboundBatches", "hasAuthority('task:view')");
         assertPermission(LogisticsAgentReadController.class, "getAutoInboundBatchDetail", "hasAuthority('task:view')");
+        assertPermission(QualityCatalogAgentReadController.class, "productQualityConfiguration",
+                "hasAuthority('quality_standard:view') and hasAuthority('assay:view')");
     }
 
     @Test

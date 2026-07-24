@@ -15,6 +15,7 @@ import { useAuthStore } from '@/stores/auth'
 import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
 import PalletTaskBatchDialog from '@/components/agent/PalletTaskBatchDialog.vue'
 import { cleanOptionLabel } from '@/components/agent/agentDisplay'
+import { appendProcessStep } from '@/components/agent/agentProcessTrace.mjs'
 import { applyTaskBatchCompletion } from '@/components/agent/taskCardPresentation.mjs'
 
 const visible = ref(false)
@@ -113,6 +114,7 @@ const send = async (options = {}) => {
     cards: [],
     needsUserSelection: false,
     toolCalls: [],
+    processSteps: [],
     eventIds: new Set(),
     lastSequence: 0,
     interruptId: null,
@@ -168,7 +170,7 @@ const send = async (options = {}) => {
       assistantMessage.finishReason = 'cancelled'
     } else {
       assistantMessage.progress = ''
-      assistantMessage.content = '请求失败，未将错误解释为空数据。'
+      assistantMessage.content = 'AI 助手暂时不可用，请稍后重试。本次未执行任何业务操作。'
       assistantMessage.finishReason = 'error'
     }
   } finally {
@@ -324,10 +326,15 @@ const applyStreamEvent = (message, event) => {
   switch (event.type) {
     case 'message_start':
       message.progress = '正在处理……'
+      message.processSteps = appendProcessStep(message.processSteps, {
+        stage: 'understanding',
+        text: '正在理解你的问题。'
+      })
       break
     case 'progress':
     case 'heartbeat':
       message.progress = payload.text || payload.message || message.progress
+      message.processSteps = appendProcessStep(message.processSteps, payload)
       break
     case 'clarification':
       message.content = payload.prompt || message.content
@@ -348,9 +355,11 @@ const applyStreamEvent = (message, event) => {
     case 'error':
       message.content = payload.message || '请求失败，未将错误解释为空数据。'
       message.progress = ''
+      message.processSteps = appendProcessStep(message.processSteps, payload, 'error')
       break
     case 'fallback':
       message.progress = payload.message || '已切换到基础查询模式。'
+      message.processSteps = appendProcessStep(message.processSteps, payload, 'fallback')
       break
     case 'tool_start':
     case 'tool_end':
@@ -434,6 +443,10 @@ const chooseOption = async (option, sourceMessage) => {
     sourceMessage.optionSubmitting = true
     sourceMessage.needsUserSelection = false
     sourceMessage.progress = '正在继续查询……'
+    sourceMessage.processSteps = appendProcessStep(sourceMessage.processSteps, {
+      stage: 'continuing',
+      text: '正在根据你的选择继续查询。'
+    })
     sourceMessage.selectedOption = {
       displayLabel: selectedOption.displayLabel,
       optionType: selectedOption.optionType
@@ -586,7 +599,7 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
     title="AI 助手"
     aria-label="AI 助手"
     direction="rtl"
-    size="min(480px, 100vw)"
+    size="min(680px, 100vw)"
     :before-close="handleBeforeClose"
     class="agent-assistant-drawer"
   >
@@ -686,6 +699,7 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
   --assistant-surface: #f5f7fb;
   --assistant-soft-blue: #eef5ff;
   --assistant-blue: #165dff;
+  overflow: hidden;
 }
 
 :deep(.agent-assistant-drawer .el-drawer__header) {
@@ -710,6 +724,7 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
 
 :deep(.agent-assistant-drawer .el-drawer__body) {
   padding: 0;
+  overflow-x: hidden;
   background: var(--assistant-surface);
 }
 
@@ -811,9 +826,14 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
 .message-list {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.64) 0%, rgba(245, 247, 251, 0.96) 36%),
     var(--assistant-surface);
+}
+
+.message-list :deep(.el-scrollbar__wrap) {
+  overflow-x: hidden;
 }
 
 .message-list :deep(.el-scrollbar__view) {
@@ -825,6 +845,7 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  min-width: 0;
   margin-bottom: 14px;
 
   &.user {
@@ -870,6 +891,10 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
   max-width: calc(100% - 42px);
   display: flex;
   flex-direction: column;
+}
+
+.message-row.assistant .message-stack {
+  width: calc(100% - 42px);
 }
 
 .message-row.user .message-stack {

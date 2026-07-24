@@ -65,6 +65,7 @@ class WarehouseAgentState:
     selected_product: SelectedEntity | None = None
     selected_warehouse: SelectedEntity | None = None
     selected_production_order: SelectedEntity | None = None
+    selected_boiling_batch: SelectedEntity | None = None
     selected_pallet: SelectedEntity | None = None
     active_goal_type: str | None = None
     fact_envelopes: list[dict[str, Any]] = field(default_factory=list)
@@ -74,6 +75,7 @@ class WarehouseAgentState:
     last_warehouse_result: dict[str, Any] | None = None
     last_assay_result: dict[str, Any] | None = None
     last_assay_records: dict[str, Any] | None = None
+    last_inventory_quality: dict[str, Any] | None = None
     last_assay_report_detail: dict[str, Any] | None = None
     last_assay_abnormalities: dict[str, Any] | None = None
     last_products_without_recent_assay: dict[str, Any] | None = None
@@ -86,6 +88,9 @@ class WarehouseAgentState:
     last_pallet_result: dict[str, Any] | None = None
     last_pallet_tasks: dict[str, Any] | None = None
     last_pallet_task_filters: dict[str, Any] | None = None
+    last_production_order_progress: dict[str, Any] | None = None
+    last_production_material_trace: dict[str, Any] | None = None
+    last_boiling_batch_trace: dict[str, Any] | None = None
     last_auto_inbound_batches: dict[str, Any] | None = None
     last_orchestration: dict[str, Any] | None = None
     pending_clarification: PendingClarification | None = None

@@ -12,11 +12,13 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.MatchType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.OptionType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletFlowRecordsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveWarehousesRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolutionStatus;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseRecentOperationsRequest;
 import com.Laibin.SugarInventory.mcp.service.WarehouseReadService;
 import com.Laibin.SugarInventory.mcp.tool.InventoryDistributionToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.WarehouseTools;
@@ -504,6 +506,89 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void warehouseRecentOperationsConvertsBeijingOffsetToBackendLocalDateTime() throws Exception {
+        backend.enqueue(json(result("""
+                {"dataScope":"RECORDED_WAREHOUSE_PALLET_FLOW_EVENTS","count":0,"records":[]}
+                """)));
+
+        tools.queryWarehouseRecentOperations(new WarehouseRecentOperationsRequest(
+                2,
+                "2026-07-18T00:00:00+08:00",
+                "2026-07-24T23:59:59+08:00",
+                List.of(),
+                20
+        ));
+
+        RecordedRequest request = backend.takeRequest(1, TimeUnit.SECONDS);
+        JsonNode body = new ObjectMapper().readTree(request.getBody().readUtf8());
+        assertThat(body.path("from").asText()).isEqualTo("2026-07-18T00:00:00");
+        assertThat(body.path("to").asText()).isEqualTo("2026-07-24T23:59:59");
+    }
+
+    @Test
+    void queriesResolvedProductQualityConfigurationAsOneReadOnlyFact() throws Exception {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"CURRENT_PRODUCT_QUALITY_CONFIGURATION",
+                  "productName":"黄冰糖（袋）",
+                  "productType":"黄冰糖",
+                  "productStatus":"成品",
+                  "packagingMethod":"袋",
+                  "weightPerPiece":25.0,
+                  "piecesPerPallet":40,
+                  "standardCount":1,
+                  "standards":[{"standardCode":"YBT","standardName":"黄冰糖 v1","standardVersion":1,"isDefault":true,"enabled":true}],
+                  "assayGroupCount":1,
+                  "assayGroups":[{"groupName":"黄冰糖批量化验组","remark":"生产日批量录入"}],
+                  "limitations":[]
+                }
+                """)));
+
+        var response = tools.queryProductQualityConfiguration(84);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.dataScope()).isEqualTo("CURRENT_PRODUCT_QUALITY_CONFIGURATION");
+        assertThat(response.productName()).isEqualTo("黄冰糖（袋）");
+        assertThat(response.standardCount()).isEqualTo(1);
+        assertThat(response.assayGroupCount()).isEqualTo(1);
+        assertThat(response.standards()).singleElement().satisfies(item ->
+                assertThat(item.path("standardName").asText()).isEqualTo("黄冰糖 v1"));
+        assertThat(response.assayGroups()).singleElement().satisfies(item ->
+                assertThat(item.path("groupName").asText()).isEqualTo("黄冰糖批量化验组"));
+
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).isEqualTo("/api/quality/agent-read/product-quality-configuration/query");
+        assertThat(request.getBody().readUtf8()).contains("\"productId\":84");
+    }
+
+    @Test
+    void rejectsProductQualityConfigurationWithoutResolvedProduct() {
+        var response = tools.queryProductQualityConfiguration(null);
+
+        assertThat(response.error()).isNotNull();
+        assertThat(response.error().code()).isEqualTo("INTERNAL_ERROR");
+        assertThat(backend.getRequestCount()).isZero();
+    }
+
+    @Test
+    void treatsMissingCurrentInventoryAsOptionalPalletFact() {
+        backend.enqueue(json(result("""
+                {"id":7,"code":"P1","status":"FREE"}
+                """)));
+        backend.enqueue(json("""
+                {"code":1017,"msg":"产品未入库"}
+                """));
+
+        var response = tools.getPalletStatus(new PalletStatusRequest("P1", true, false, false, null, 20));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.partial()).isTrue();
+        assertThat(response.warnings()).anyMatch(warning -> warning.contains("inventory"));
+        assertThat(response.inventory()).isNull();
+    }
+
+    @Test
     void mapsPalletStatus401() {
         backend.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
 
@@ -627,6 +712,30 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void auditToolsNormalizeRfc3339TimestampsToBeijingLocalDateTime() throws Exception {
+        backend.enqueue(json(result("""
+                {"dataScope":"AGENT_TOOL_AUDIT","total":0,"page":1,"size":20,"records":[],"limitations":[]}
+                """)));
+
+        tools.queryAgentToolAudit(
+                null,
+                null,
+                null,
+                "2026-07-24T00:00:00Z",
+                "2026-07-24T18:30:00+08:00",
+                1,
+                20
+        );
+
+        RecordedRequest request = backend.takeRequest(1, TimeUnit.SECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).isEqualTo("/api/audit/agent-read/agent-tool-audit/query");
+        JsonNode body = new ObjectMapper().readTree(request.getBody().readUtf8());
+        assertThat(body.path("startTime").asText()).isEqualTo("2026-07-24T08:00:00");
+        assertThat(body.path("endTime").asText()).isEqualTo("2026-07-24T18:30:00");
+    }
+
+    @Test
     void sendsStaticTokenAndToolNameHeaders() throws InterruptedException {
         backend.enqueue(json(result("""
                 [{"id":1,"productName":"白冰糖","status":"成品"}]
@@ -640,6 +749,75 @@ class WarehouseToolsTest {
         assertThat(request.getHeader("Authorization")).isEqualTo("Bearer test-token");
         assertThat(request.getHeader("X-Agent-Tool-Name")).isEqualTo("resolve_products");
         assertThat(request.getHeader("X-Agent-Session-Id")).isNull();
+    }
+
+    @Test
+    void productionOrderProgressKeepsBoilingSourcesAndOutputs() {
+        backend.enqueue(json(result("""
+                {
+                  "orderNo":"PO202606300001",
+                  "status":"PREPRINTED",
+                  "materialRecordCount":0,
+                  "outputRecordCount":0,
+                  "boilingSources":[{
+                    "batchNo":"20260630-01",
+                    "usageUnit":"BUCKET",
+                    "usageQuantity":30,
+                    "weightKg":327,
+                    "status":"RESERVED"
+                  }],
+                  "outputs":[]
+                }
+                """)));
+
+        var response = tools.queryProductionOrderProgress("order_ref");
+
+        assertThat(response.error()).isNull();
+        assertThat(response.boilingSources()).singleElement().satisfies(source -> {
+            assertThat(source.path("batchNo").asText()).isEqualTo("20260630-01");
+            assertThat(source.path("weightKg").decimalValue()).isEqualByComparingTo("327");
+            assertThat(source.path("status").asText()).isEqualTo("RESERVED");
+        });
+        assertThat(response.outputs()).isEmpty();
+    }
+
+    @Test
+    void boilingBatchListForwardsOptionalProductAndBusinessDateRange() throws Exception {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"BOILING_BATCH_LIST",
+                  "scopeLabel":"白冰糖",
+                  "dateRangeLabel":"2026-06-21 至 2026-07-20",
+                  "total":1,
+                  "candidates":[{
+                    "entityRef":"aer_batch_9",
+                    "entityType":"BOILING_BATCH",
+                    "displayCode":"20260718-01",
+                    "status":"AVAILABLE",
+                    "businessDate":"2026-07-18",
+                    "summary":"白冰糖、白糖、甲班、1000 kg"
+                  }],
+                  "limitations":[]
+                }
+                """)));
+
+        var response = tools.queryBoilingBatches(
+                " 白冰糖 ", LocalDate.of(2026, 6, 21), LocalDate.of(2026, 7, 20), null, 10);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.total()).isEqualTo(1);
+        assertThat(response.candidates()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.displayCode()).isEqualTo("20260718-01");
+            assertThat(candidate.entityRef()).isEqualTo("aer_batch_9");
+        });
+        RecordedRequest request = backend.takeRequest(1, TimeUnit.SECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).isEqualTo("/api/production/agent-read/boiling-batches/query");
+        JsonNode body = new ObjectMapper().readTree(request.getBody().readUtf8());
+        assertThat(body.path("productQuery").asText()).isEqualTo("白冰糖");
+        assertThat(body.path("startDate").asText()).isEqualTo("2026-06-21");
+        assertThat(body.path("endDate").asText()).isEqualTo("2026-07-20");
+        assertThat(body.path("limit").asInt()).isEqualTo(10);
     }
 
     @Test
@@ -798,6 +976,31 @@ class WarehouseToolsTest {
         assertThat(recorded.getPath()).isEqualTo("/api/inventory/distribution");
         String body = recorded.getBody().readUtf8();
         assertThat(body).contains("\"warehouseScope\":{\"type\":\"SINGLE_WAREHOUSE\",\"warehouseId\":8}");
+    }
+
+    @Test
+    void palletFlowRecordsTreatsEmptyEventTypesAsNoFilter() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "scopeLabel":"Pallet BT000YGI",
+                  "dateRangeLabel":"All history",
+                  "total":0,
+                  "summaryText":"No registered flow records.",
+                  "records":[],
+                  "notes":[]
+                }
+                """)));
+
+        var response = tools.queryPalletFlowRecords(new PalletFlowRecordsRequest(
+                "BT000YGI", new ProductScope("ALL", null, null, null), null,
+                null, List.of(), 1, 20));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.total()).isZero();
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/pallet-codes/flow-records/query");
+        assertThat(recorded.getBody().readUtf8()).contains("\"eventTypes\":[]");
     }
 
     @Test

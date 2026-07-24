@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import re
 import threading
@@ -11,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.agents import MAIN_AGENT, AgentHandoffRouter
+from app.business_time import BusinessClock
 from app.config import Settings
 from app.context import ContextBuilder
 from app.cancellation import AgentRunRegistry, current_cancellation_token
@@ -69,10 +71,14 @@ EXPECTED_EXPERT_TOOLS = {
             "query_assay_abnormalities",
             "query_products_without_recent_assay",
             "query_assay_standard_coverage",
+            "query_unqualified_inventory",
+            "query_inventory_by_quality_standard",
+            "query_inventory_by_assay_metrics",
             "query_assay_groups",
             "query_quality_standard_catalog",
             "get_quality_standard_detail",
             "query_product_standard_relations",
+            "query_product_quality_configuration",
         }
     ),
     "pallet_expert": frozenset(
@@ -91,6 +97,7 @@ EXPECTED_EXPERT_TOOLS = {
     "production_expert": frozenset(
         {
             "resolve_production_entities",
+            "query_boiling_batches",
             "query_production_order_progress",
             "query_boiling_batch_trace",
             "query_material_pick_trace",
@@ -413,6 +420,8 @@ def test_openai_compatible_main_agent_returns_strict_llm_route_decision() -> Non
         request_text = json.dumps(model_server.last_body, ensure_ascii=False)
         assert "toolName" not in request_text
         assert "warehouseId" not in request_text
+        assert "当前库存按明确不合格、指定化验标准或原始化验指标数值条件筛选" in request_text
+        assert "不是跨域配方" in request_text
     finally:
         model_server.stop()
 
@@ -468,7 +477,13 @@ def test_openai_compatible_expert_returns_one_strict_tool_action() -> None:
         assert decision is not None
         assert decision.action == "CALL_TOOL"
         assert decision.arguments == {"productRef": "CURRENT_PRODUCT"}
-        assert "productId" not in json.dumps(model_server.last_body, ensure_ascii=False)
+        request_text = json.dumps(model_server.last_body, ensure_ascii=False)
+        assert "productId" not in request_text
+        assert "紧邻‘标准’的名称和版本属于标准身份" in request_text
+        assert "原始指标数值条件应直接调用对应受控筛选工具" in request_text
+        assert "warehouseScope.type=ALL" in request_text
+        assert "面向用户的 answer 中绝不能出现 obs_*" in request_text
+        assert "不得仅为逐条穷举剩余记录继续翻页" in request_text
     finally:
         model_server.stop()
 
@@ -1132,7 +1147,7 @@ def test_expert_agent_tool_scopes_cover_only_current_readonly_allowlist() -> Non
     assert len(business_profiles) == 9
     assert all(tools for tools in business_profiles.values())
     assert expert_tools == ALLOWED_TOOLS
-    assert len(expert_tools) == 47
+    assert len(expert_tools) == 52
     assert router.profile(MAIN_AGENT).allowed_tools == frozenset()
     assert not any(tool.startswith(("execute_", "preview_")) for tool in expert_tools)
     assert "query_assay_records" not in router.profile("inventory_expert").allowed_tools
@@ -1156,6 +1171,10 @@ def test_tool_allowlists_match_java_gateway_and_warehouse_mcp_registration() -> 
     mcp_root = repository / "warehouse-mcp/src/main/java/com/Laibin/SugarInventory/mcp"
     configuration = (mcp_root / "config/ToolConfiguration.java").read_text(encoding="utf-8")
     mcp_tools = set(re.findall(r'methodTool\(warehouseTools,\s*"([a-z][a-z0-9_]*)"', configuration))
+    mcp_tools.update(re.findall(
+        r'new InventoryQualityToolCallback\(warehouseTools,\s*objectMapper,\s*"([a-z][a-z0-9_]*)"',
+        configuration,
+    ))
     for callback in (mcp_root / "tool").glob("*ToolCallback.java"):
         mcp_tools.update(re.findall(r'\.name\("([a-z][a-z0-9_]*)"\)', callback.read_text(encoding="utf-8")))
 
@@ -1177,7 +1196,7 @@ def test_runtime_tool_profiles_match_capability_registry_and_all_tools_are_l1() 
         )
     )
     assert registered_l1_tools == ALLOWED_TOOLS
-    assert len(registered_l1_tools) == 47
+    assert len(registered_l1_tools) == 52
 
     for expert_name, expected_tools in EXPECTED_EXPERT_TOOLS.items():
         profile = re.search(
@@ -1295,7 +1314,7 @@ def test_capability_endpoint_returns_registry_hashes_and_counts() -> None:
     body = response.json()
     assert body["runtimeVersion"] == "0.2.0"
     assert body["protocolVersion"] == "1.0"
-    assert body["toolCount"] == 47
+    assert body["toolCount"] == 52
     assert body["recipeCount"] == 1
     assert len(body["toolRegistryHash"]) == 64
     assert len(body["recipeRegistryHash"]) == 64
@@ -3876,6 +3895,22 @@ def test_production_order_progress_uses_controlled_resolver_chain() -> None:
             "boundQrCount": 8,
             "inboundQrCount": 6,
             "reservedLabelCount": 10,
+            "orderRef": "aer_must-not-reach-presentation",
+            "outputs": [{
+                "productName": "黄冰糖（袋）",
+                "status": "COMPLETED",
+                "boardCount": 2,
+                "pieceCount": 10,
+                "requiredQrCount": 2,
+                "boundQrCount": 2,
+                "inboundQrCount": 1,
+                "internalOutputId": 99,
+                "inboundDestinations": [{
+                    "warehouseName": "2号库位",
+                    "inboundCodeCount": 1,
+                    "palletCodes": ["BT001"]
+                }],
+            }],
             "limitations": ["不代表质量放行结论。"],
         },
     })
@@ -3888,7 +3923,13 @@ def test_production_order_progress_uses_controlled_resolver_chain() -> None:
 
     assert response.status_code == 200
     assert "PO-20260713-001" in response.json()["answer"]
-    assert "不代表产出率、损耗率或质量放行结论" in response.json()["answer"]
+    body = response.json()
+    assert "不代表产出率、损耗率或质量放行结论" in body["answer"]
+    assert body["cards"][0]["cardType"] == "production_order_progress"
+    assert body["cards"][0]["fields"][1]["inboundDestinations"][0]["warehouseName"] == "2号库位"
+    serialized = json.dumps(body, ensure_ascii=False)
+    assert "aer_must-not-reach-presentation" not in serialized
+    assert "internalOutputId" not in serialized
     assert [call["toolName"] for call in tool_client.calls] == [
         "resolve_production_entities",
         "query_production_order_progress",
@@ -3956,13 +3997,86 @@ def test_boiling_batch_trace_uses_controlled_ref_and_safe_formatter() -> None:
 
     assert response.status_code == 200
     assert "BT-20260713-001" in response.json()["answer"]
-    assert "缺失的上下游关系不会由 Agent 推断" in response.json()["answer"]
+    assert "使用记录和关联生产订单见下方卡片" in response.json()["answer"]
+    assert "缺失的上下游关系不会由 Agent 推断" not in response.json()["answer"]
     assert [call["toolName"] for call in tool_client.calls] == [
         "resolve_production_entities",
         "query_boiling_batch_trace",
     ]
     assert all(call["expertAgent"] == "production_expert" for call in tool_client.calls)
     assert tool_client.calls[1]["arguments"] == {"batchRef": "aer_controlled-batch-ref"}
+
+
+def test_recent_boiling_batch_range_queries_all_products_without_forced_product_clarification() -> None:
+    tool_client = MockToolClient({
+        "query_boiling_batches": {
+            "dataScope": "BOILING_BATCH_LIST",
+            "scopeLabel": "全部产品",
+            "dateRangeLabel": "2026-06-21 至 2026-07-20",
+            "total": 2,
+            "candidates": [
+                {"entityRef": "aer_batch_1", "entityType": "BOILING_BATCH", "displayCode": "20260718-01",
+                 "summary": "白冰糖、白糖、甲班、1000 kg"},
+                {"entityRef": "aer_batch_2", "entityType": "BOILING_BATCH", "displayCode": "20260712-02",
+                 "summary": "黄冰糖、黄糖、乙班、800 kg"},
+            ],
+        },
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    clock = BusinessClock(lambda: datetime(2026, 7, 20, 4, 0, tzinfo=timezone.utc))
+    app.state.runtime.business_clock = clock
+    app.state.runtime.argument_builder.business_clock = clock
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查最近一个月的煮糖批次"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["needsUserSelection"] is True
+    assert body["cards"][0]["cardType"] == "candidate_selection"
+    assert [option["displayLabel"] for option in body["cards"][0]["options"]] == ["20260718-01", "20260712-02"]
+    assert tool_client.calls[0]["toolName"] == "query_boiling_batches"
+    assert tool_client.calls[0]["arguments"] == {
+        "startDate": "2026-06-21",
+        "endDate": "2026-07-20",
+        "limit": 10,
+    }
+    assert tool_client.calls[0]["expertAgent"] == "production_expert"
+
+
+def test_recent_boiling_batch_range_uses_optional_product_filter() -> None:
+    tool_client = MockToolClient({
+        "query_boiling_batches": {
+            "scopeLabel": "白冰糖",
+            "total": 1,
+            "candidates": [{
+                "entityRef": "aer_batch_white",
+                "entityType": "BOILING_BATCH",
+                "displayCode": "20260718-01",
+                "summary": "白冰糖、白糖、甲班、1000 kg",
+            }],
+        },
+    })
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+    clock = BusinessClock(lambda: datetime(2026, 7, 20, 4, 0, tzinfo=timezone.utc))
+    app.state.runtime.business_clock = clock
+    app.state.runtime.argument_builder.business_clock = clock
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("查询最近一个月白冰糖的煮糖批次"),
+    )
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["arguments"] == {
+        "productQuery": "白冰糖",
+        "startDate": "2026-06-21",
+        "endDate": "2026-07-20",
+        "limit": 10,
+    }
+    assert "白冰糖" in response.json()["answer"]
 
 
 def test_material_pick_trace_uses_order_ref_and_does_not_claim_variance() -> None:
@@ -4462,3 +4576,234 @@ def test_production_order_ambiguity_uses_hitl_and_followup_reuses_controlled_ref
     assert tool_client.calls[1]["arguments"] == {"orderRef": "aer_order_one"}
     assert tool_client.calls[2]["arguments"] == {"orderRef": "aer_order_one"}
     assert "已完成" in resumed.json()["answer"] and "COMPLETED" not in resumed.json()["answer"]
+
+
+def test_boiling_batch_can_follow_to_order_materials_and_actual_inbound_destination() -> None:
+    def resolve_entity(arguments: dict[str, Any]) -> dict[str, Any]:
+        if arguments.get("entityType") == "BOILING_BATCH":
+            return {
+                "resolutionStatus": "EXACT",
+                "needsUserSelection": False,
+                "entityType": "BOILING_BATCH",
+                "candidates": [{
+                    "entityRef": "aer_batch_ref",
+                    "entityType": "BOILING_BATCH",
+                    "displayCode": "BT-20260720-001",
+                }],
+            }
+        return {
+            "resolutionStatus": "EXACT",
+            "needsUserSelection": False,
+            "entityType": "PRODUCTION_ORDER",
+            "candidates": [{
+                "entityRef": "aer_order_ref",
+                "entityType": "PRODUCTION_ORDER",
+                "displayCode": "PO-20260720-001",
+            }],
+        }
+
+    tool_client = MockToolClient({
+        "resolve_production_entities": resolve_entity,
+        "query_boiling_batch_trace": {
+            "batchNo": "BT-20260720-001",
+            "status": "CONSUMED",
+            "productName": "黄冰糖糖膏",
+            "totalWeightKg": 1000,
+            "consumedWeightKg": 1000,
+            "usages": [{
+                "orderNo": "PO-20260720-001",
+                "orderType": "FINISHED_PRODUCT",
+                "orderStatus": "COMPLETED",
+                "weightKg": 1000,
+                "status": "CONSUMED",
+            }],
+            "timeline": [{
+                "occurredAt": "2026-07-20T08:30:00",
+                "actionType": "USED_BY",
+                "documentNo": "PO-20260720-001",
+            }],
+        },
+        "query_material_pick_trace": {
+            "orderNo": "PO-20260720-001",
+            "orderStatus": "COMPLETED",
+            "materialRecordCount": 1,
+            "records": [{
+                "productName": "黄冰糖糖膏",
+                "palletCode": "BT-M001",
+                "warehouseName": "半成品库",
+                "totalWeight": 1000,
+                "status": "CONSUMED",
+            }],
+        },
+        "query_production_order_progress": {
+            "orderRef": "aer_must-stay-internal",
+            "orderNo": "PO-20260720-001",
+            "orderType": "FINISHED_PRODUCT",
+            "status": "COMPLETED",
+            "materialRecordCount": 1,
+            "outputRecordCount": 1,
+            "requiredQrCount": 2,
+            "boundQrCount": 2,
+            "inboundQrCount": 2,
+            "outputs": [{
+                "productName": "黄冰糖（袋）",
+                "boardCount": 2,
+                "pieceCount": 40,
+                "status": "COMPLETED",
+                "requiredQrCount": 2,
+                "boundQrCount": 2,
+                "inboundQrCount": 2,
+                "inboundDestinations": [{
+                    "warehouseName": "2号库位",
+                    "inboundCodeCount": 2,
+                    "palletCodes": ["BT-F001", "BT-F002"],
+                }],
+            }],
+        },
+    })
+    checkpointer = InMemoryCheckpointer()
+    client = TestClient(create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer))
+
+    batch = client.post("/internal/agent/chat", json=chat_payload("查询煮糖批次 BT-20260720-001 的流转"))
+    order = client.post("/internal/agent/chat", json=chat_payload("查看关联生产订单"))
+    full_trace = client.post("/internal/agent/chat", json=chat_payload("这个订单的原料消耗和产出入库去向"))
+    order_again = client.post("/internal/agent/chat", json=chat_payload("这个订单的产出情况"))
+
+    assert batch.status_code == order.status_code == full_trace.status_code == order_again.status_code == 200
+    assert batch.json()["cards"][0]["cardType"] == "boiling_batch_trace"
+    assert order.json()["cards"][0]["cardType"] == "production_order_progress"
+    assert order.json()["reviewTrace"]["stateReuse"]["source"] == "BOILING_BATCH_TRACE_CONTEXT"
+    assert [card["cardType"] for card in full_trace.json()["cards"]] == [
+        "production_material_trace", "production_order_progress"
+    ]
+    assert full_trace.json()["reviewTrace"]["goalCompletion"]["status"] == "COMPLETE"
+    assert full_trace.json()["cards"][1]["fields"][1]["inboundDestinations"][0]["warehouseName"] == "2号库位"
+    assert order_again.json()["cards"][0]["cardType"] == "production_order_progress"
+    serialized = json.dumps(full_trace.json(), ensure_ascii=False)
+    assert "aer_must-stay-internal" not in serialized
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_production_entities",
+        "query_boiling_batch_trace",
+        "resolve_production_entities",
+        "query_production_order_progress",
+        "query_material_pick_trace",
+        "query_production_order_progress",
+        "query_production_order_progress",
+    ]
+    assert all(call["expertAgent"] == "production_expert" for call in tool_client.calls)
+
+
+def test_two_linked_production_orders_return_two_cards_and_localized_stages() -> None:
+    def resolve_entity(arguments: dict[str, Any]) -> dict[str, Any]:
+        if arguments.get("entityType") == "BOILING_BATCH":
+            return {
+                "resolutionStatus": "EXACT",
+                "needsUserSelection": False,
+                "entityType": "BOILING_BATCH",
+                "candidates": [{
+                    "entityRef": "aer_batch_two_orders",
+                    "entityType": "BOILING_BATCH",
+                    "displayCode": "20260630-01",
+                }],
+            }
+        order_no = str(arguments.get("query"))
+        return {
+            "resolutionStatus": "EXACT",
+            "needsUserSelection": False,
+            "entityType": "PRODUCTION_ORDER",
+            "candidates": [{
+                "entityRef": f"aer_{order_no}",
+                "entityType": "PRODUCTION_ORDER",
+                "displayCode": order_no,
+            }],
+        }
+
+    def order_progress(arguments: dict[str, Any]) -> dict[str, Any]:
+        order_no = str(arguments.get("orderRef")).removeprefix("aer_")
+        return {
+            "orderNo": order_no,
+            "orderType": "SEMI",
+            "status": "PREPRINTED" if order_no.endswith("1") else "COMPLETED",
+            "materialRecordCount": 0,
+            "outputRecordCount": 0,
+            "boilingSources": [{
+                "batchNo": "20260630-01",
+                "usageUnit": "KG",
+                "usageQuantity": 327 if order_no.endswith("1") else 1656.8,
+                "weightKg": 327 if order_no.endswith("1") else 1656.8,
+                "status": "RESERVED" if order_no.endswith("1") else "CONSUMED",
+            }],
+            "outputs": [],
+        }
+
+    tool_client = MockToolClient({
+        "resolve_production_entities": resolve_entity,
+        "query_boiling_batch_trace": {
+            "batchNo": "20260630-01",
+            "status": "USED_UP",
+            "productName": "白冰糖",
+            "totalWeightKg": 1983.8,
+            "consumedWeightKg": 1656.8,
+            "usages": [
+                {"orderNo": "PO202606300002", "orderStatus": "COMPLETED", "weightKg": 1656.8, "status": "CONSUMED"},
+                {"orderNo": "PO202606300001", "orderStatus": "PREPRINTED", "weightKg": 327, "status": "RESERVED"},
+            ],
+        },
+        "query_production_order_progress": order_progress,
+    })
+    client = TestClient(create_app(Settings(tool_mode="mock"), tool_client=tool_client,
+                                   checkpointer=InMemoryCheckpointer()))
+
+    batch = client.post("/internal/agent/chat", json=chat_payload("查询煮糖批次 20260630-01"))
+    orders = client.post("/internal/agent/chat", json=chat_payload("这两个关联生产订单的具体情况"))
+
+    assert batch.status_code == orders.status_code == 200
+    assert [card["cardType"] for card in orders.json()["cards"]] == [
+        "production_order_progress", "production_order_progress"
+    ]
+    assert orders.json()["cards"][1]["fields"][1]["kind"] == "production_boiling_source"
+    assert orders.json()["cards"][1]["fields"][1]["value"] == "327 kg"
+    serialized = json.dumps({"batch": batch.json(), "orders": orders.json()}, ensure_ascii=False)
+    assert "PREPRINTED" not in serialized
+    assert "USED_UP" not in serialized
+    assert "RESERVED" not in serialized
+    assert "CONSUMED" not in serialized
+    assert "已预打印" in serialized
+    assert "已用完" in serialized
+    assert "已预留" in serialized
+    assert [call["toolName"] for call in tool_client.calls] == [
+        "resolve_production_entities",
+        "query_boiling_batch_trace",
+        "resolve_production_entities",
+        "query_production_order_progress",
+        "resolve_production_entities",
+        "query_production_order_progress",
+    ]
+
+
+def test_multiple_linked_orders_offer_structured_selection_when_user_does_not_request_all() -> None:
+    def resolve_entity(arguments: dict[str, Any]) -> dict[str, Any]:
+        if arguments.get("entityType") == "BOILING_BATCH":
+            return {"resolutionStatus": "EXACT", "needsUserSelection": False, "entityType": "BOILING_BATCH",
+                    "candidates": [{"entityRef": "aer_batch", "entityType": "BOILING_BATCH", "displayCode": "B-01"}]}
+        order_no = str(arguments.get("query"))
+        return {"resolutionStatus": "EXACT", "needsUserSelection": False, "entityType": "PRODUCTION_ORDER",
+                "candidates": [{"entityRef": f"aer_{order_no}", "entityType": "PRODUCTION_ORDER",
+                                "displayCode": order_no}]}
+
+    tool_client = MockToolClient({
+        "resolve_production_entities": resolve_entity,
+        "query_boiling_batch_trace": {"batchNo": "B-01", "status": "AVAILABLE", "productName": "白冰糖",
+                                      "usages": [{"orderNo": "PO-01"}, {"orderNo": "PO-02"}]},
+    })
+    checkpointer = InMemoryCheckpointer()
+    client = TestClient(create_app(Settings(tool_mode="mock"), tool_client=tool_client,
+                                   checkpointer=checkpointer))
+
+    client.post("/internal/agent/chat", json=chat_payload("查询煮糖批次 B-01"))
+    response = client.post("/internal/agent/chat", json=chat_payload("查看关联生产订单的具体情况"))
+
+    assert response.status_code == 200
+    assert response.json()["needsUserSelection"] is True
+    assert response.json()["cards"][0]["cardType"] == "candidate_selection"
+    assert [option["displayLabel"] for option in response.json()["cards"][0]["options"]] == ["PO-01", "PO-02"]

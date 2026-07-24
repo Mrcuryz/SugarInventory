@@ -4,6 +4,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.goal_contracts import CoreGoalTypeV1, REGISTERED_CORE_FACT_TYPES, REGISTERED_CORE_GOAL_TYPES
+
 
 EntityTypeV1 = Literal[
     "PRODUCT",
@@ -26,22 +28,23 @@ class GoalEntityMentionV1(BaseModel):
     referenceKind: Literal["EXPLICIT", "PRONOUN", "CONTEXT_REUSE"]
 
 
+GOAL_DRAFT_GOAL_TYPES: tuple[str, ...] = (
+    *REGISTERED_CORE_GOAL_TYPES,
+    "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY",
+    "OUT_OF_SLICE",
+    "UNSUPPORTED",
+    "UNCLEAR",
+)
+GoalDraftGoalTypeV1 = Literal[*GOAL_DRAFT_GOAL_TYPES]
+
+
 class GoalDraftV1(BaseModel):
     """Constrained semantic proposal; never an executable plan."""
 
     model_config = ConfigDict(extra="forbid")
 
     schemaVersion: Literal["1.0"] = "1.0"
-    goalType: Literal[
-        "CURRENT_PRODUCT_INVENTORY",
-        "PRODUCT_INVENTORY_DISTRIBUTION",
-        "WAREHOUSE_INVENTORY_DISTRIBUTION",
-        "WAREHOUSE_INVENTORY_WITH_LATEST_ASSAY",
-        "CURRENT_PENDING_TASKS",
-        "OUT_OF_SLICE",
-        "UNSUPPORTED",
-        "UNCLEAR",
-    ]
+    goalType: GoalDraftGoalTypeV1
     requestedOutcome: str = Field(min_length=1, max_length=300)
     entityMentions: list[GoalEntityMentionV1] = Field(default_factory=list, max_length=6)
     contextReuse: list[EntityTypeV1] = Field(default_factory=list, max_length=6)
@@ -59,15 +62,12 @@ class GoalDraftV1(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
-FactTypeV1 = Literal[
-    "CURRENT_PRODUCT_INVENTORY",
-    "PRODUCT_INVENTORY_DISTRIBUTION",
-    "WAREHOUSE_INVENTORY_DISTRIBUTION",
+RESULT_REASONING_FACT_TYPES: tuple[str, ...] = (
+    *REGISTERED_CORE_FACT_TYPES,
     "PRODUCT_LATEST_ASSAY",
-    "WAREHOUSE_STATUS",
-    "CURRENT_PENDING_TASKS",
     "ENTITY_RESOLUTION",
-]
+)
+FactTypeV1 = Literal[*RESULT_REASONING_FACT_TYPES]
 
 
 class ResultReasoningDraftV1(BaseModel):
@@ -130,6 +130,7 @@ class MainAgentDecisionV1(BaseModel):
         "UNSUPPORTED",
     ]
     expertAgent: LlmExpertAgentV1 | None = None
+    goalType: CoreGoalTypeV1 | None = None
     recipeId: Literal["warehouse_inventory_latest_assay"] | None = None
     answer: str | None = Field(default=None, max_length=1500)
     clarificationPrompt: str | None = Field(default=None, max_length=500)
@@ -151,7 +152,7 @@ class MainAgentDecisionV1(BaseModel):
         if not isinstance(value, dict):
             return value
         normalized = dict(value)
-        for field_name in ("expertAgent", "recipeId", "answer", "clarificationPrompt"):
+        for field_name in ("expertAgent", "goalType", "recipeId", "answer", "clarificationPrompt"):
             field_value = normalized.get(field_name)
             if isinstance(field_value, str) and not field_value.strip():
                 normalized[field_name] = None
@@ -163,6 +164,8 @@ class MainAgentDecisionV1(BaseModel):
             raise ValueError("DELEGATE requires expertAgent")
         if self.action != "DELEGATE" and self.expertAgent is not None:
             raise ValueError("expertAgent is only allowed for DELEGATE")
+        if self.action != "DELEGATE" and self.goalType is not None:
+            raise ValueError("goalType is only allowed for DELEGATE")
         if self.action == "RUN_REGISTERED_RECIPE" and self.recipeId is None:
             raise ValueError("RUN_REGISTERED_RECIPE requires recipeId")
         if self.action != "RUN_REGISTERED_RECIPE" and self.recipeId is not None:
@@ -513,6 +516,147 @@ class SafePalletTaskResult(BaseModel):
     size: int
     filterLabels: list[str] = Field(default_factory=list)
     records: list[SafePalletTaskRecord] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class SafePalletLifecycleEvent(BaseModel):
+    """One display-safe pallet event; raw event enums and internal IDs are excluded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    time: str | None = None
+    eventLabel: str
+    productLabel: str | None = None
+    fromWarehouseLabel: str | None = None
+    toWarehouseLabel: str | None = None
+    operatorLabel: str | None = None
+    cycleNo: int | None = None
+
+
+class SafePalletStatus(BaseModel):
+    """Display-safe current pallet state and its bounded recent lifecycle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    codeLabel: str
+    currentStatusLabel: str
+    productLabel: str | None = None
+    warehouseLabel: str | None = None
+    quantityText: str | None = None
+    productionDate: str | None = None
+    assaySummary: str | None = None
+    timeline: list[SafePalletLifecycleEvent] = Field(default_factory=list)
+    riskLabels: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class SafePalletFlowRecords(BaseModel):
+    """Display-safe pallet flow history; pagination refs and raw event enums are excluded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scopeLabel: str
+    dateRangeLabel: str | None = None
+    total: int = 0
+    summaryText: str
+    records: list[SafePalletLifecycleEvent] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class SafeProductionInboundDestination(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    warehouseName: str
+    inboundCodeCount: int = 0
+    palletCodes: list[str] = Field(default_factory=list)
+
+
+class SafeProductionBoilingSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batchNo: str
+    quantityText: str
+    statusLabel: str
+
+
+class SafeProductionOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    productLabel: str
+    quantityText: str
+    statusLabel: str
+    requiredQrCount: int = 0
+    boundQrCount: int = 0
+    inboundQrCount: int = 0
+    inboundDestinations: list[SafeProductionInboundDestination] = Field(default_factory=list)
+
+
+class SafeProductionOrderProgress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    orderNo: str
+    orderTypeLabel: str
+    statusLabel: str
+    productionDate: str | None = None
+    teamName: str | None = None
+    plannedMaterialText: str | None = None
+    plannedOutputText: str | None = None
+    materialRecordCount: int = 0
+    outputRecordCount: int = 0
+    reservedLabelCount: int = 0
+    requiredQrCount: int = 0
+    boundQrCount: int = 0
+    inboundQrCount: int = 0
+    boilingSources: list[SafeProductionBoilingSource] = Field(default_factory=list)
+    outputs: list[SafeProductionOutput] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class SafeProductionMaterialRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    productLabel: str
+    palletCode: str
+    sourceLocation: str
+    quantityText: str
+    productionDate: str | None = None
+    statusLabel: str
+    pickedSummary: str | None = None
+
+
+class SafeProductionMaterialTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    orderNo: str
+    statusLabel: str
+    materialRecordCount: int = 0
+    records: list[SafeProductionMaterialRecord] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class SafeBoilingBatchUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    orderNo: str
+    orderTypeLabel: str
+    orderStatusLabel: str
+    quantityText: str
+    statusLabel: str
+
+
+class SafeBoilingBatchTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batchNo: str
+    boilingDate: str | None = None
+    productLabel: str
+    statusLabel: str
+    totalWeightText: str | None = None
+    reservedWeightText: str | None = None
+    consumedWeightText: str | None = None
+    remainingWeightText: str | None = None
+    usages: list[SafeBoilingBatchUsage] = Field(default_factory=list)
+    traceSummary: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
 
 

@@ -26,7 +26,11 @@ const props = defineProps({
 const emit = defineEmits(['choose-option', 'feedback', 'card-action'])
 
 const feedbackExpanded = ref(false)
+const processExpanded = ref(false)
 const cards = computed(() => visibleCards(props.item))
+const processSteps = computed(() => Array.isArray(props.item.processSteps) ? props.item.processSteps : [])
+const processRunning = computed(() => Boolean(props.item.progress && !props.item.finishReason))
+const showProcessDetails = computed(() => processRunning.value || processExpanded.value)
 const shadowComparison = computed(() => {
   if (!props.shadowCompareMode || props.item.role !== 'assistant') return null
   const trace = props.item.intentTrace
@@ -76,6 +80,27 @@ const sendFeedback = (feedbackType) => {
     <div v-if="item.progress" class="message-progress">
       <span class="progress-pulse" />
       <span>{{ item.progress }}</span>
+    </div>
+    <div v-if="item.role === 'assistant' && processSteps.length" class="process-trace">
+      <button
+        type="button"
+        class="process-trace-toggle"
+        :aria-expanded="showProcessDetails"
+        @click="processExpanded = !processExpanded"
+      >
+        <span>{{ processRunning ? '处理过程' : '本次处理' }} · {{ processSteps.length }}步</span>
+        <span>{{ showProcessDetails ? '收起' : '展开' }}</span>
+      </button>
+      <ol v-if="showProcessDetails" class="process-trace-list">
+        <li
+          v-for="(step, index) in processSteps"
+          :key="step.stage"
+          :class="{ active: processRunning && index === processSteps.length - 1 }"
+        >
+          <span class="process-step-dot" aria-hidden="true" />
+          <span>{{ step.label }}</span>
+        </li>
+      </ol>
     </div>
     <div v-if="item.content" class="message-text">{{ item.content }}</div>
 
@@ -194,6 +219,7 @@ const sendFeedback = (feedbackType) => {
 <style scoped lang="scss">
 .message-bubble {
   position: relative;
+  box-sizing: border-box;
   width: fit-content;
   max-width: 100%;
   padding: 12px 14px;
@@ -258,6 +284,63 @@ const sendFeedback = (feedbackType) => {
   border-radius: 50%;
   background: var(--app-primary);
   box-shadow: 0 0 0 4px rgba(22, 93, 255, 0.1);
+}
+
+.process-trace {
+  margin-bottom: 10px;
+  border: 1px solid #e4eaf4;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.process-trace-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: #52627a;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.process-trace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 2px 10px 9px 12px;
+  list-style: none;
+  color: #667085;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.process-trace-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.process-step-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #98a2b3;
+}
+
+.process-trace-list li.active {
+  color: #2459c4;
+  font-weight: 600;
+}
+
+.process-trace-list li.active .process-step-dot {
+  background: var(--app-primary);
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.1);
 }
 
 .business-card-list,

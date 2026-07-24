@@ -10,7 +10,7 @@
 
 ### 1. 产品名称解析
 
-现状：
+现状（2026-07-23）：
 
 - 已有 `/api/products/product`、`/api/products/semi-products`、`/api/products/finished-products`。
 - 这些接口偏页面下拉/模糊查询，返回展示名称时会拼接重量和包装方式。
@@ -285,29 +285,31 @@
 
 - 业务已确认 `assay.sample_date` 是生产日期，`product_id + sample_date` 是批次键。
 - 化验更新创建新版本，但不会同步更新所有库存、托盘和任务中的旧 `assay_id`。
-- 部分页面按产品和日期查询最新版本，库存分布、标准筛选和部分 Agent 查询仍直接关联旧 `assay_id`。
+- Agent 库存分布与三类库存质量筛选已迁移到共享最新化验读模型，不再关联旧 `assay_id`。
+- 原系统部分库存页面查询仍直接关联旧 `assay_id`，尚未统一迁移。
 - 当前“缺化验在库产品”查询只判断产品在日期范围内是否存在任意化验，不能证明每个在库批次是否有化验。
 
 缺口：
 
-- 缺少统一的 `inventory_current_assay_fact_v1` 只读事实模型。
+- Agent 链路已实现 `inventory_current_assay_fact_v1` 固定 SQL 读模型；原系统页面尚未全部复用。
 - 缺少稳定的库存批次日期解析及 `batchDateSource`、日期冲突警告。
-- 缺少基于最新批次化验的标准命中查询和原始指标条件查询。
+- 已实现基于最新批次化验的不合格、指定标准和单个原始指标条件查询。
 - `qualified_standards` 以名称为主，版本级命中证据不足。
 - 当前复合流程以“库存产品 + 产品最近化验”拼接，不能冒充库存批次质量结论。
 
-建议接口：
+已实现接口：
 
-- `POST /api/agent/inventory-quality/by-standard`
-- `POST /api/agent/inventory-quality/by-metrics`
-- 两者共享固定 Mapper/视图，不接受任意 SQL、任意字段或任意表达式。
+- `POST /api/inventory/agent-read/quality/query`
+- MCP 工具：`query_unqualified_inventory`、`query_inventory_by_quality_standard`、`query_inventory_by_assay_metrics`。
+- 三者共享固定 Mapper，不接受任意 SQL、任意字段或任意表达式。
 - 当前质量查询一律按产品和生产日期取最新化验；显式 `assay_id` 只用于历史报告下钻。
 
 支撑工具：
 
+- `query_unqualified_inventory`
 - `query_inventory_by_quality_standard`
 - `query_inventory_by_assay_metrics`
-- 现有不合格库存、缺化验库存和托盘当前质量查询也应迁移到同一事实模型。
+- 缺化验库存、托盘当前质量和原系统库存质量页面仍应逐步迁移到同一事实模型。
 
 详细口径、实施目标和验收用例见 `docs/agent/inventory-assay-batch-semantics.md`。
 

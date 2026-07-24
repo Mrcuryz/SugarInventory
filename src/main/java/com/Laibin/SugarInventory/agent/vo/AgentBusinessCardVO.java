@@ -12,5 +12,5 @@ public class AgentBusinessCardVO {
     private String title;
     private String prompt;
     private List<AgentChoiceOptionVO> options = new ArrayList<>();
-    private List<Map<String, String>> fields = new ArrayList<>();
+    private List<Map<String, Object>> fields = new ArrayList<>();
 }
