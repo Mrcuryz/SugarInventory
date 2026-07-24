@@ -4425,7 +4425,33 @@ def test_agent_answer_reviews_return_safe_summary_only() -> None:
     response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询 Agent 回答审查"))
     assert response.status_code == 200
     assert tool_client.calls[0]["toolName"] == "query_agent_answer_reviews"
-    assert "用户原问题" in response.json()["answer"]
+    answer = response.json()["answer"]
+    assert "用户原问题" in answer
+    assert "需要人工复核" in answer
+    assert "需求理解或路由阶段" in answer
+    assert "待复核" in answer
+    assert "\n1. " in answer
+    assert "\n   - 回答情况：" in answer
+    for internal_value in ("NEEDS_REVIEW", "LOW", "ROUTER", "OPEN"):
+        assert internal_value not in answer
+
+
+def test_agent_answer_reviews_hide_unknown_internal_enum_values() -> None:
+    tool_client = MockToolClient({"query_agent_answer_reviews": {"dataScope": "AGENT_ANSWER_REVIEW_SAFE_SUMMARY", "total": 1,
+        "records": [{"answerStatus": "NEW_INTERNAL_STATUS", "confidenceLevel": "VERY_LOW",
+                     "failureDomain": "NEW_PIPELINE_STAGE", "reviewStatus": "WAITING_V2"}]}})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询 Agent 回答审查"))
+
+    assert response.status_code == 200
+    answer = response.json()["answer"]
+    assert "回答情况未标明" in answer
+    assert "暂无法判断" in answer
+    assert "未发现明确问题" in answer
+    assert "复核进度未标明" in answer
+    for internal_value in ("NEW_INTERNAL_STATUS", "VERY_LOW", "NEW_PIPELINE_STAGE", "WAITING_V2"):
+        assert internal_value not in answer
 
 
 def test_inventory_ledger_is_current_snapshot_not_history_or_qualification() -> None:

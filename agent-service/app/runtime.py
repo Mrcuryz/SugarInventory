@@ -8377,12 +8377,72 @@ class WarehouseAgentRuntime:
         return "".join(lines)
 
     def _format_agent_answer_reviews_answer(self, result: dict[str, Any]) -> str:
-        source = result if isinstance(result, dict) else {}; records = source.get("records") if isinstance(source.get("records"), list) else []
-        lines = [f"Agent 回答 Review 安全摘要共匹配 {self._first_scalar([source], 'total') or 0} 条："]
-        for item in records[:20]:
-            if isinstance(item, dict): lines.append(f"{self._safe_text(item.get('createdAt')) or '时间未标明'}，回答状态 {self._safe_text(item.get('answerStatus')) or '未标明'}，置信度 {self._safe_text(item.get('confidenceLevel')) or '未标明'}，失败域 {self._safe_text(item.get('failureDomain')) or '无'}，Review 状态 {self._safe_text(item.get('reviewStatus')) or '未标明'}。")
-        lines.append("不展示用户原问题、助手原回答、工具名称、决策快照、证据正文或内部身份；Review 状态不是业务事实或自动处罚依据。")
+        source = result if isinstance(result, dict) else {}
+        records = source.get("records") if isinstance(source.get("records"), list) else []
+        total = self._first_scalar([source], "total") or 0
+        visible_records = [item for item in records[:20] if isinstance(item, dict)]
+        lines = [f"Agent 回答复核摘要共匹配 {total} 条，当前展示 {len(visible_records)} 条。"]
+        if not visible_records:
+            lines.append("\n当前没有符合筛选条件的复核记录。")
+        for index, item in enumerate(visible_records, start=1):
+            created_at = self._safe_text(item.get("createdAt")) or "时间未标明"
+            answer_status = self._agent_review_enum_label("answer_status", item.get("answerStatus"))
+            confidence = self._agent_review_enum_label("confidence", item.get("confidenceLevel"))
+            failure_domain = self._agent_review_enum_label("failure_domain", item.get("failureDomain"))
+            review_status = self._agent_review_enum_label("review_status", item.get("reviewStatus"))
+            lines.append(
+                f"\n{index}. {created_at}\n"
+                f"   - 回答情况：{answer_status}\n"
+                f"   - 置信程度：{confidence}\n"
+                f"   - 问题环节：{failure_domain}\n"
+                f"   - 复核进度：{review_status}"
+            )
+        lines.append(
+            "\n\n这里只展示复核状态摘要，不包含用户原问题、助手原回答或内部处理信息。"
+            "复核状态用于质量改进，不代表业务事实或处罚依据。"
+        )
         return "".join(lines)
+
+    def _agent_review_enum_label(self, category: str, value: Any) -> str:
+        raw = (self._safe_text(value) or "").upper()
+        labels = {
+            "answer_status": {
+                "COMPLETED": "已完成",
+                "NEEDS_REVIEW": "需要人工复核",
+                "LOW_CONFIDENCE": "置信度较低",
+                "FAILED": "处理失败",
+            },
+            "confidence": {
+                "HIGH": "高",
+                "MEDIUM": "中",
+                "LOW": "低",
+                "UNKNOWN": "暂无法判断",
+            },
+            "failure_domain": {
+                "PLANNER": "需求理解或决策阶段",
+                "ROUTER": "需求理解或路由阶段",
+                "DATA": "数据环节",
+                "CONTEXT": "上下文衔接",
+                "TOOL": "业务工具调用",
+                "SAFE_ADAPTER": "结果转换",
+                "UI": "页面展示",
+                "USER_INPUT": "用户输入信息",
+                "UNKNOWN": "暂未分类",
+            },
+            "review_status": {
+                "OPEN": "待复核",
+                "TRIAGED": "已分类",
+                "FIXED": "已修复",
+                "WONT_FIX": "暂不处理",
+            },
+        }
+        fallback = {
+            "answer_status": "回答情况未标明",
+            "confidence": "暂无法判断",
+            "failure_domain": "未发现明确问题",
+            "review_status": "复核进度未标明",
+        }
+        return labels.get(category, {}).get(raw, fallback.get(category, "未标明"))
 
     def _format_inventory_ledger_answer(self, result: dict[str, Any]) -> str:
         source = result if isinstance(result, dict) else {}; records = source.get("records") if isinstance(source.get("records"), list) else []
