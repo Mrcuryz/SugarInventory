@@ -1,0 +1,2987 @@
+{
+  "schemaVersion": "1.0",
+  "runs": [
+    {
+      "caseId": "W01",
+      "repeat": 1,
+      "input": "查询黄冰糖（袋）当前库存总览",
+      "expectedGoalType": "CURRENT_PRODUCT_INVENTORY",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_PRODUCT_INVENTORY",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2906,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2906,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W01",
+      "repeat": 2,
+      "input": "查询黄冰糖（袋）当前库存总览",
+      "expectedGoalType": "CURRENT_PRODUCT_INVENTORY",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_PRODUCT_INVENTORY",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2547,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2547,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W01",
+      "repeat": 3,
+      "input": "查询黄冰糖（袋）当前库存总览",
+      "expectedGoalType": "CURRENT_PRODUCT_INVENTORY",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_PRODUCT_INVENTORY",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 3156,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3156,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W02",
+      "repeat": 1,
+      "input": "查询黄冰糖（袋）当前库存分别放在哪些库位",
+      "expectedGoalType": "PRODUCT_INVENTORY_DISTRIBUTION",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_INVENTORY_DISTRIBUTION",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2875,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2875,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W02",
+      "repeat": 2,
+      "input": "查询黄冰糖（袋）当前库存分别放在哪些库位",
+      "expectedGoalType": "PRODUCT_INVENTORY_DISTRIBUTION",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_INVENTORY_DISTRIBUTION",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2469,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2469,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W02",
+      "repeat": 3,
+      "input": "查询黄冰糖（袋）当前库存分别放在哪些库位",
+      "expectedGoalType": "PRODUCT_INVENTORY_DISTRIBUTION",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_INVENTORY_DISTRIBUTION",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W03",
+      "repeat": 1,
+      "input": "查询1号库位当前有哪些库存",
+      "expectedGoalType": "WAREHOUSE_INVENTORY_DISTRIBUTION",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_INVENTORY_DISTRIBUTION",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 3891,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3891,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W03",
+      "repeat": 2,
+      "input": "查询1号库位当前有哪些库存",
+      "expectedGoalType": "WAREHOUSE_INVENTORY_DISTRIBUTION",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_INVENTORY_DISTRIBUTION",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 3406,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3406,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W03",
+      "repeat": 3,
+      "input": "查询1号库位当前有哪些库存",
+      "expectedGoalType": "WAREHOUSE_INVENTORY_DISTRIBUTION",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_INVENTORY_DISTRIBUTION",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 4312,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 4312,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W04",
+      "repeat": 1,
+      "input": "查询黄冰糖（袋）最近30天的库存台账",
+      "expectedGoalType": "CURRENT_INVENTORY_LEDGER",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_LEDGER",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 5344,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 5344,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W04",
+      "repeat": 2,
+      "input": "查询黄冰糖（袋）最近30天的库存台账",
+      "expectedGoalType": "CURRENT_INVENTORY_LEDGER",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_LEDGER",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 3016,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3016,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W04",
+      "repeat": 3,
+      "input": "查询黄冰糖（袋）最近30天的库存台账",
+      "expectedGoalType": "CURRENT_INVENTORY_LEDGER",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_LEDGER",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 3250,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3250,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W05",
+      "repeat": 1,
+      "input": "查询当前备料池还有哪些可用余量",
+      "expectedGoalType": "PREPARE_POOL_BALANCE",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PREPARE_POOL_BALANCE",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2110,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2110,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W05",
+      "repeat": 2,
+      "input": "查询当前备料池还有哪些可用余量",
+      "expectedGoalType": "PREPARE_POOL_BALANCE",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PREPARE_POOL_BALANCE",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2328,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2313,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W05",
+      "repeat": 3,
+      "input": "查询当前备料池还有哪些可用余量",
+      "expectedGoalType": "PREPARE_POOL_BALANCE",
+      "expectedExpertAgent": "inventory_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PREPARE_POOL_BALANCE",
+      "actualExpertAgent": "inventory_expert",
+      "passed": true,
+      "latencyMs": 2813,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2813,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W06",
+      "repeat": 1,
+      "input": "查询2号库位当前状态",
+      "expectedGoalType": "WAREHOUSE_STATUS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_STATUS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2156,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2156,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W06",
+      "repeat": 2,
+      "input": "查询2号库位当前状态",
+      "expectedGoalType": "WAREHOUSE_STATUS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_STATUS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W06",
+      "repeat": 3,
+      "input": "查询2号库位当前状态",
+      "expectedGoalType": "WAREHOUSE_STATUS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_STATUS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2828,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2828,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W07",
+      "repeat": 1,
+      "input": "查询当前还有可用容量的库位",
+      "expectedGoalType": "WAREHOUSE_CAPACITY_DISTRIBUTION",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_CAPACITY_DISTRIBUTION",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2516,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2516,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W07",
+      "repeat": 2,
+      "input": "查询当前还有可用容量的库位",
+      "expectedGoalType": "WAREHOUSE_CAPACITY_DISTRIBUTION",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_CAPACITY_DISTRIBUTION",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 3375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W07",
+      "repeat": 3,
+      "input": "查询当前还有可用容量的库位",
+      "expectedGoalType": "WAREHOUSE_CAPACITY_DISTRIBUTION",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_CAPACITY_DISTRIBUTION",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 3766,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3766,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W08",
+      "repeat": 1,
+      "input": "查询2号库位最近7天的操作",
+      "expectedGoalType": "WAREHOUSE_RECENT_OPERATIONS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_RECENT_OPERATIONS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2875,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2875,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W08",
+      "repeat": 2,
+      "input": "查询2号库位最近7天的操作",
+      "expectedGoalType": "WAREHOUSE_RECENT_OPERATIONS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_RECENT_OPERATIONS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 3172,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3172,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W08",
+      "repeat": 3,
+      "input": "查询2号库位最近7天的操作",
+      "expectedGoalType": "WAREHOUSE_RECENT_OPERATIONS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_RECENT_OPERATIONS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 3766,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3750,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W09",
+      "repeat": 1,
+      "input": "查询当前哪些库位混放了多个产品",
+      "expectedGoalType": "WAREHOUSE_MIXED_STORAGE_FACTS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_MIXED_STORAGE_FACTS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2656,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2656,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W09",
+      "repeat": 2,
+      "input": "查询当前哪些库位混放了多个产品",
+      "expectedGoalType": "WAREHOUSE_MIXED_STORAGE_FACTS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_MIXED_STORAGE_FACTS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2609,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2609,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "W09",
+      "repeat": 3,
+      "input": "查询当前哪些库位混放了多个产品",
+      "expectedGoalType": "WAREHOUSE_MIXED_STORAGE_FACTS",
+      "expectedExpertAgent": "warehouse_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "WAREHOUSE_MIXED_STORAGE_FACTS",
+      "actualExpertAgent": "warehouse_expert",
+      "passed": true,
+      "latencyMs": 2406,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2390,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L01",
+      "repeat": 1,
+      "input": "查询当前待处理任务",
+      "expectedGoalType": "CURRENT_PENDING_TASKS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_PENDING_TASKS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 2375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L01",
+      "repeat": 2,
+      "input": "查询当前待处理任务",
+      "expectedGoalType": "CURRENT_PENDING_TASKS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_PENDING_TASKS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 2328,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2328,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L01",
+      "repeat": 3,
+      "input": "查询当前待处理任务",
+      "expectedGoalType": "CURRENT_PENDING_TASKS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_PENDING_TASKS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 2328,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2328,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L02",
+      "repeat": 1,
+      "input": "查询最近7天的入库单",
+      "expectedGoalType": "STOCK_DOCUMENTS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "STOCK_DOCUMENTS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 3375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3359,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L02",
+      "repeat": 2,
+      "input": "查询最近7天的入库单",
+      "expectedGoalType": "STOCK_DOCUMENTS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "STOCK_DOCUMENTS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 2594,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2594,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L02",
+      "repeat": 3,
+      "input": "查询最近7天的入库单",
+      "expectedGoalType": "STOCK_DOCUMENTS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "STOCK_DOCUMENTS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 3094,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3078,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L03",
+      "repeat": 1,
+      "input": "查询最近一次自动报数入库批次",
+      "expectedGoalType": "AUTO_INBOUND_BATCH_STATUS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AUTO_INBOUND_BATCH_STATUS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 2969,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2969,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L03",
+      "repeat": 2,
+      "input": "查询最近一次自动报数入库批次",
+      "expectedGoalType": "AUTO_INBOUND_BATCH_STATUS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AUTO_INBOUND_BATCH_STATUS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 2375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "L03",
+      "repeat": 3,
+      "input": "查询最近一次自动报数入库批次",
+      "expectedGoalType": "AUTO_INBOUND_BATCH_STATUS",
+      "expectedExpertAgent": "logistics_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AUTO_INBOUND_BATCH_STATUS",
+      "actualExpertAgent": "logistics_expert",
+      "passed": true,
+      "latencyMs": 3672,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3672,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P01",
+      "repeat": 1,
+      "input": "查询托盘BT0015OY当前状态",
+      "expectedGoalType": "PALLET_CURRENT_STATUS",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_CURRENT_STATUS",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2766,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2766,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P01",
+      "repeat": 2,
+      "input": "查询托盘BT0015OY当前状态",
+      "expectedGoalType": "PALLET_CURRENT_STATUS",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_CURRENT_STATUS",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2265,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2265,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P01",
+      "repeat": 3,
+      "input": "查询托盘BT0015OY当前状态",
+      "expectedGoalType": "PALLET_CURRENT_STATUS",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_CURRENT_STATUS",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2234,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2234,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P02",
+      "repeat": 1,
+      "input": "查询托盘BT0015OY的完整流转历史",
+      "expectedGoalType": "PALLET_FLOW_HISTORY",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_FLOW_HISTORY",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P02",
+      "repeat": 2,
+      "input": "查询托盘BT0015OY的完整流转历史",
+      "expectedGoalType": "PALLET_FLOW_HISTORY",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_FLOW_HISTORY",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2562,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2562,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P02",
+      "repeat": 3,
+      "input": "查询托盘BT0015OY的完整流转历史",
+      "expectedGoalType": "PALLET_FLOW_HISTORY",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_FLOW_HISTORY",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2188,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2188,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P03",
+      "repeat": 1,
+      "input": "查询当前有哪些托盘异常",
+      "expectedGoalType": "PALLET_ANOMALY_SUMMARY",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_ANOMALY_SUMMARY",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2437,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2437,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P03",
+      "repeat": 2,
+      "input": "查询当前有哪些托盘异常",
+      "expectedGoalType": "PALLET_ANOMALY_SUMMARY",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_ANOMALY_SUMMARY",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2547,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2547,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P03",
+      "repeat": 3,
+      "input": "查询当前有哪些托盘异常",
+      "expectedGoalType": "PALLET_ANOMALY_SUMMARY",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PALLET_ANOMALY_SUMMARY",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2421,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2421,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P04",
+      "repeat": 1,
+      "input": "查询哪些二维码已经打印但还没有入库",
+      "expectedGoalType": "PRINTED_NOT_INBOUND_QR_CODES",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRINTED_NOT_INBOUND_QR_CODES",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2313,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2313,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P04",
+      "repeat": 2,
+      "input": "查询哪些二维码已经打印但还没有入库",
+      "expectedGoalType": "PRINTED_NOT_INBOUND_QR_CODES",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRINTED_NOT_INBOUND_QR_CODES",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2578,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2578,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P04",
+      "repeat": 3,
+      "input": "查询哪些二维码已经打印但还没有入库",
+      "expectedGoalType": "PRINTED_NOT_INBOUND_QR_CODES",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRINTED_NOT_INBOUND_QR_CODES",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2437,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2437,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P05",
+      "repeat": 1,
+      "input": "查询二维码批次20260724的入库完成情况",
+      "expectedGoalType": "QR_BATCH_INBOUND_COMPLETION",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "QR_BATCH_INBOUND_COMPLETION",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 3094,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3094,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P05",
+      "repeat": 2,
+      "input": "查询二维码批次20260724的入库完成情况",
+      "expectedGoalType": "QR_BATCH_INBOUND_COMPLETION",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "QR_BATCH_INBOUND_COMPLETION",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2546,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2546,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P05",
+      "repeat": 3,
+      "input": "查询二维码批次20260724的入库完成情况",
+      "expectedGoalType": "QR_BATCH_INBOUND_COMPLETION",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "QR_BATCH_INBOUND_COMPLETION",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2250,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2250,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P06",
+      "repeat": 1,
+      "input": "查询黄冰糖（袋）的空闲固定二维码",
+      "expectedGoalType": "FIXED_PRODUCT_QR_POOL",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "FIXED_PRODUCT_QR_POOL",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 3078,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3078,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P06",
+      "repeat": 2,
+      "input": "查询黄冰糖（袋）的空闲固定二维码",
+      "expectedGoalType": "FIXED_PRODUCT_QR_POOL",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "FIXED_PRODUCT_QR_POOL",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 2625,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2625,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "P06",
+      "repeat": 3,
+      "input": "查询黄冰糖（袋）的空闲固定二维码",
+      "expectedGoalType": "FIXED_PRODUCT_QR_POOL",
+      "expectedExpertAgent": "pallet_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "FIXED_PRODUCT_QR_POOL",
+      "actualExpertAgent": "pallet_expert",
+      "passed": true,
+      "latencyMs": 3547,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3547,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q01",
+      "repeat": 1,
+      "input": "查询黄冰糖（袋）今天的化验情况",
+      "expectedGoalType": "PRODUCT_ASSAY_REPORT",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_ASSAY_REPORT",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 3563,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3563,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q01",
+      "repeat": 2,
+      "input": "查询黄冰糖（袋）今天的化验情况",
+      "expectedGoalType": "PRODUCT_ASSAY_REPORT",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_ASSAY_REPORT",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 5531,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 5516,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q01",
+      "repeat": 3,
+      "input": "查询黄冰糖（袋）今天的化验情况",
+      "expectedGoalType": "PRODUCT_ASSAY_REPORT",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_ASSAY_REPORT",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 4484,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 4484,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q02",
+      "repeat": 1,
+      "input": "查询黄冰糖（袋）最近180天的历史化验",
+      "expectedGoalType": "PRODUCT_ASSAY_HISTORY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_ASSAY_HISTORY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2922,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2922,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q02",
+      "repeat": 2,
+      "input": "查询黄冰糖（袋）最近180天的历史化验",
+      "expectedGoalType": "PRODUCT_ASSAY_HISTORY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_ASSAY_HISTORY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 3906,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3906,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q02",
+      "repeat": 3,
+      "input": "查询黄冰糖（袋）最近180天的历史化验",
+      "expectedGoalType": "PRODUCT_ASSAY_HISTORY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_ASSAY_HISTORY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2422,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2422,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q03",
+      "repeat": 1,
+      "input": "查询当前库存中有哪些不合格产品",
+      "expectedGoalType": "CURRENT_UNQUALIFIED_INVENTORY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_UNQUALIFIED_INVENTORY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2187,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2172,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q03",
+      "repeat": 2,
+      "input": "查询当前库存中有哪些不合格产品",
+      "expectedGoalType": "CURRENT_UNQUALIFIED_INVENTORY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_UNQUALIFIED_INVENTORY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2375,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q03",
+      "repeat": 3,
+      "input": "查询当前库存中有哪些不合格产品",
+      "expectedGoalType": "CURRENT_UNQUALIFIED_INVENTORY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_UNQUALIFIED_INVENTORY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 3031,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3031,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q04",
+      "repeat": 1,
+      "input": "查询当前库存中哪些产品符合黄冰糖v1标准",
+      "expectedGoalType": "CURRENT_INVENTORY_MATCHING_STANDARD",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_MATCHING_STANDARD",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2687,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2687,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q04",
+      "repeat": 2,
+      "input": "查询当前库存中哪些产品符合黄冰糖v1标准",
+      "expectedGoalType": "CURRENT_INVENTORY_MATCHING_STANDARD",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_MATCHING_STANDARD",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2812,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2812,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q04",
+      "repeat": 3,
+      "input": "查询当前库存中哪些产品符合黄冰糖v1标准",
+      "expectedGoalType": "CURRENT_INVENTORY_MATCHING_STANDARD",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_MATCHING_STANDARD",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 3110,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3110,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q05",
+      "repeat": 1,
+      "input": "查询当前库存中哪些产品的蔗糖分不低于99.7",
+      "expectedGoalType": "CURRENT_INVENTORY_MATCHING_METRIC",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_MATCHING_METRIC",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2828,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2828,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q05",
+      "repeat": 2,
+      "input": "查询当前库存中哪些产品的蔗糖分不低于99.7",
+      "expectedGoalType": "CURRENT_INVENTORY_MATCHING_METRIC",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_MATCHING_METRIC",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2484,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2484,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q05",
+      "repeat": 3,
+      "input": "查询当前库存中哪些产品的蔗糖分不低于99.7",
+      "expectedGoalType": "CURRENT_INVENTORY_MATCHING_METRIC",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_MATCHING_METRIC",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2813,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2813,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q06",
+      "repeat": 1,
+      "input": "查询最近30天哪些当前库存缺少化验数据",
+      "expectedGoalType": "CURRENT_INVENTORY_ASSAY_GAPS",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_ASSAY_GAPS",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 3562,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3547,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q06",
+      "repeat": 2,
+      "input": "查询最近30天哪些当前库存缺少化验数据",
+      "expectedGoalType": "CURRENT_INVENTORY_ASSAY_GAPS",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_ASSAY_GAPS",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 4125,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 4109,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q06",
+      "repeat": 3,
+      "input": "查询最近30天哪些当前库存缺少化验数据",
+      "expectedGoalType": "CURRENT_INVENTORY_ASSAY_GAPS",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_ASSAY_GAPS",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 3547,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3547,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q07",
+      "repeat": 1,
+      "input": "查询最近30天有哪些化验异常",
+      "expectedGoalType": "ASSAY_ABNORMALITY_SUMMARY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ASSAY_ABNORMALITY_SUMMARY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2437,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2437,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q07",
+      "repeat": 2,
+      "input": "查询最近30天有哪些化验异常",
+      "expectedGoalType": "ASSAY_ABNORMALITY_SUMMARY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ASSAY_ABNORMALITY_SUMMARY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2516,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2516,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q07",
+      "repeat": 3,
+      "input": "查询最近30天有哪些化验异常",
+      "expectedGoalType": "ASSAY_ABNORMALITY_SUMMARY",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ASSAY_ABNORMALITY_SUMMARY",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2218,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2218,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q08",
+      "repeat": 1,
+      "input": "查询哪些当前库存没有适用的化验标准",
+      "expectedGoalType": "CURRENT_INVENTORY_STANDARD_GAPS",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_STANDARD_GAPS",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2235,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2235,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q08",
+      "repeat": 2,
+      "input": "查询哪些当前库存没有适用的化验标准",
+      "expectedGoalType": "CURRENT_INVENTORY_STANDARD_GAPS",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_STANDARD_GAPS",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2500,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2500,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q08",
+      "repeat": 3,
+      "input": "查询哪些当前库存没有适用的化验标准",
+      "expectedGoalType": "CURRENT_INVENTORY_STANDARD_GAPS",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "CURRENT_INVENTORY_STANDARD_GAPS",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 3719,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3719,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q09",
+      "repeat": 1,
+      "input": "查询黄冰糖（袋）适用的化验标准和化验组",
+      "expectedGoalType": "PRODUCT_QUALITY_CONFIGURATION",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_QUALITY_CONFIGURATION",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2781,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2781,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q09",
+      "repeat": 2,
+      "input": "查询黄冰糖（袋）适用的化验标准和化验组",
+      "expectedGoalType": "PRODUCT_QUALITY_CONFIGURATION",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_QUALITY_CONFIGURATION",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2703,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2703,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q09",
+      "repeat": 3,
+      "input": "查询黄冰糖（袋）适用的化验标准和化验组",
+      "expectedGoalType": "PRODUCT_QUALITY_CONFIGURATION",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_QUALITY_CONFIGURATION",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2516,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2516,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q10",
+      "repeat": 1,
+      "input": "查询系统当前有哪些化验组",
+      "expectedGoalType": "ASSAY_REFERENCE_DATA",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ASSAY_REFERENCE_DATA",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2031,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2031,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q10",
+      "repeat": 2,
+      "input": "查询系统当前有哪些化验组",
+      "expectedGoalType": "ASSAY_REFERENCE_DATA",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ASSAY_REFERENCE_DATA",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2328,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2328,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "Q10",
+      "repeat": 3,
+      "input": "查询系统当前有哪些化验组",
+      "expectedGoalType": "ASSAY_REFERENCE_DATA",
+      "expectedExpertAgent": "assay_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ASSAY_REFERENCE_DATA",
+      "actualExpertAgent": "assay_expert",
+      "passed": true,
+      "latencyMs": 2391,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2375,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R01",
+      "repeat": 1,
+      "input": "查询最近30天全部产品的煮糖批次",
+      "expectedGoalType": "BOILING_BATCH_LIST",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BOILING_BATCH_LIST",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2859,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2844,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R01",
+      "repeat": 2,
+      "input": "查询最近30天全部产品的煮糖批次",
+      "expectedGoalType": "BOILING_BATCH_LIST",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BOILING_BATCH_LIST",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2797,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2797,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R01",
+      "repeat": 3,
+      "input": "查询最近30天全部产品的煮糖批次",
+      "expectedGoalType": "BOILING_BATCH_LIST",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BOILING_BATCH_LIST",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2890,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2875,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R02",
+      "repeat": 1,
+      "input": "查询煮糖批次20260630-01的流转情况",
+      "expectedGoalType": "BOILING_BATCH_TRACE",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BOILING_BATCH_TRACE",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2157,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2157,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R02",
+      "repeat": 2,
+      "input": "查询煮糖批次20260630-01的流转情况",
+      "expectedGoalType": "BOILING_BATCH_TRACE",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BOILING_BATCH_TRACE",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2610,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2610,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R02",
+      "repeat": 3,
+      "input": "查询煮糖批次20260630-01的流转情况",
+      "expectedGoalType": "BOILING_BATCH_TRACE",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BOILING_BATCH_TRACE",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2344,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2344,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R03",
+      "repeat": 1,
+      "input": "查询生产订单PO202606300001的生产进度",
+      "expectedGoalType": "PRODUCTION_ORDER_PROGRESS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_ORDER_PROGRESS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2344,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2344,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R03",
+      "repeat": 2,
+      "input": "查询生产订单PO202606300001的生产进度",
+      "expectedGoalType": "PRODUCTION_ORDER_PROGRESS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_ORDER_PROGRESS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2656,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2656,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R03",
+      "repeat": 3,
+      "input": "查询生产订单PO202606300001的生产进度",
+      "expectedGoalType": "PRODUCTION_ORDER_PROGRESS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_ORDER_PROGRESS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2391,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2391,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R04",
+      "repeat": 1,
+      "input": "查询生产订单PO202606300002实际消耗了哪些原料",
+      "expectedGoalType": "PRODUCTION_MATERIAL_TRACE",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_MATERIAL_TRACE",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2406,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2391,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R04",
+      "repeat": 2,
+      "input": "查询生产订单PO202606300002实际消耗了哪些原料",
+      "expectedGoalType": "PRODUCTION_MATERIAL_TRACE",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_MATERIAL_TRACE",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2453,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2453,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R04",
+      "repeat": 3,
+      "input": "查询生产订单PO202606300002实际消耗了哪些原料",
+      "expectedGoalType": "PRODUCTION_MATERIAL_TRACE",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_MATERIAL_TRACE",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2453,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2453,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R05",
+      "repeat": 1,
+      "input": "查询生产订单PO202606300002的产出实际入库到哪里",
+      "expectedGoalType": "PRODUCTION_OUTPUT_DESTINATIONS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_OUTPUT_DESTINATIONS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2766,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2766,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R05",
+      "repeat": 2,
+      "input": "查询生产订单PO202606300002的产出实际入库到哪里",
+      "expectedGoalType": "PRODUCTION_OUTPUT_DESTINATIONS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_OUTPUT_DESTINATIONS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 3297,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3297,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R05",
+      "repeat": 3,
+      "input": "查询生产订单PO202606300002的产出实际入库到哪里",
+      "expectedGoalType": "PRODUCTION_OUTPUT_DESTINATIONS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_OUTPUT_DESTINATIONS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2640,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2640,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R06",
+      "repeat": 1,
+      "input": "查询生产订单PO202606300001的标签完成情况",
+      "expectedGoalType": "PRODUCTION_LABEL_COMPLETION",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_LABEL_COMPLETION",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2329,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2329,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R06",
+      "repeat": 2,
+      "input": "查询生产订单PO202606300001的标签完成情况",
+      "expectedGoalType": "PRODUCTION_LABEL_COMPLETION",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_LABEL_COMPLETION",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2000,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2000,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R06",
+      "repeat": 3,
+      "input": "查询生产订单PO202606300001的标签完成情况",
+      "expectedGoalType": "PRODUCTION_LABEL_COMPLETION",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCTION_LABEL_COMPLETION",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2765,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2765,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R07",
+      "repeat": 1,
+      "input": "查询当前有哪些在制物料",
+      "expectedGoalType": "IN_PROCESS_MATERIALS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "IN_PROCESS_MATERIALS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2454,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2454,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R07",
+      "repeat": 2,
+      "input": "查询当前有哪些在制物料",
+      "expectedGoalType": "IN_PROCESS_MATERIALS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "IN_PROCESS_MATERIALS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2563,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2563,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R07",
+      "repeat": 3,
+      "input": "查询当前有哪些在制物料",
+      "expectedGoalType": "IN_PROCESS_MATERIALS",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "IN_PROCESS_MATERIALS",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2672,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2672,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R08",
+      "repeat": 1,
+      "input": "查询生产订单PO202606300002当前可选择哪些领料候选",
+      "expectedGoalType": "MATERIAL_CANDIDATES",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "MATERIAL_CANDIDATES",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2485,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2485,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R08",
+      "repeat": 2,
+      "input": "查询生产订单PO202606300002当前可选择哪些领料候选",
+      "expectedGoalType": "MATERIAL_CANDIDATES",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "MATERIAL_CANDIDATES",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2421,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2421,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "R08",
+      "repeat": 3,
+      "input": "查询生产订单PO202606300002当前可选择哪些领料候选",
+      "expectedGoalType": "MATERIAL_CANDIDATES",
+      "expectedExpertAgent": "production_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "MATERIAL_CANDIDATES",
+      "actualExpertAgent": "production_expert",
+      "passed": true,
+      "latencyMs": 2656,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2656,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "M01",
+      "repeat": 1,
+      "input": "查询当前产品目录",
+      "expectedGoalType": "PRODUCT_MASTER_DATA",
+      "expectedExpertAgent": "master_data_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_MASTER_DATA",
+      "actualExpertAgent": "master_data_expert",
+      "passed": true,
+      "latencyMs": 2078,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2078,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "M01",
+      "repeat": 2,
+      "input": "查询当前产品目录",
+      "expectedGoalType": "PRODUCT_MASTER_DATA",
+      "expectedExpertAgent": "master_data_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_MASTER_DATA",
+      "actualExpertAgent": "master_data_expert",
+      "passed": true,
+      "latencyMs": 2344,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2344,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "M01",
+      "repeat": 3,
+      "input": "查询当前产品目录",
+      "expectedGoalType": "PRODUCT_MASTER_DATA",
+      "expectedExpertAgent": "master_data_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "PRODUCT_MASTER_DATA",
+      "actualExpertAgent": "master_data_expert",
+      "passed": true,
+      "latencyMs": 2547,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2547,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "M02",
+      "repeat": 1,
+      "input": "查询当前筛网目录",
+      "expectedGoalType": "SCREEN_MESH_CATALOG",
+      "expectedExpertAgent": "master_data_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "SCREEN_MESH_CATALOG",
+      "actualExpertAgent": "master_data_expert",
+      "passed": true,
+      "latencyMs": 2484,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2484,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "M02",
+      "repeat": 2,
+      "input": "查询当前筛网目录",
+      "expectedGoalType": "SCREEN_MESH_CATALOG",
+      "expectedExpertAgent": "master_data_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "SCREEN_MESH_CATALOG",
+      "actualExpertAgent": "master_data_expert",
+      "passed": true,
+      "latencyMs": 3484,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3484,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "M02",
+      "repeat": 3,
+      "input": "查询当前筛网目录",
+      "expectedGoalType": "SCREEN_MESH_CATALOG",
+      "expectedExpertAgent": "master_data_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "SCREEN_MESH_CATALOG",
+      "actualExpertAgent": "master_data_expert",
+      "passed": true,
+      "latencyMs": 2328,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2328,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "A01",
+      "repeat": 1,
+      "input": "查询当前仓管员名单",
+      "expectedGoalType": "EMPLOYEE_ROSTER",
+      "expectedExpertAgent": "administration_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "EMPLOYEE_ROSTER",
+      "actualExpertAgent": "administration_expert",
+      "passed": true,
+      "latencyMs": 2422,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2422,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "A01",
+      "repeat": 2,
+      "input": "查询当前仓管员名单",
+      "expectedGoalType": "EMPLOYEE_ROSTER",
+      "expectedExpertAgent": "administration_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "EMPLOYEE_ROSTER",
+      "actualExpertAgent": "administration_expert",
+      "passed": true,
+      "latencyMs": 2203,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2203,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "A01",
+      "repeat": 3,
+      "input": "查询当前仓管员名单",
+      "expectedGoalType": "EMPLOYEE_ROSTER",
+      "expectedExpertAgent": "administration_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "EMPLOYEE_ROSTER",
+      "actualExpertAgent": "administration_expert",
+      "passed": true,
+      "latencyMs": 2234,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2234,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "A02",
+      "repeat": 1,
+      "input": "查询管理员角色当前有哪些权限",
+      "expectedGoalType": "ROLE_PERMISSION_CATALOG",
+      "expectedExpertAgent": "administration_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ROLE_PERMISSION_CATALOG",
+      "actualExpertAgent": "administration_expert",
+      "passed": true,
+      "latencyMs": 2391,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2391,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "A02",
+      "repeat": 2,
+      "input": "查询管理员角色当前有哪些权限",
+      "expectedGoalType": "ROLE_PERMISSION_CATALOG",
+      "expectedExpertAgent": "administration_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ROLE_PERMISSION_CATALOG",
+      "actualExpertAgent": "administration_expert",
+      "passed": true,
+      "latencyMs": 2422,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2407,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "A02",
+      "repeat": 3,
+      "input": "查询管理员角色当前有哪些权限",
+      "expectedGoalType": "ROLE_PERMISSION_CATALOG",
+      "expectedExpertAgent": "administration_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "ROLE_PERMISSION_CATALOG",
+      "actualExpertAgent": "administration_expert",
+      "passed": true,
+      "latencyMs": 2218,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2218,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G01",
+      "repeat": 1,
+      "input": "查询今天的业务操作日志",
+      "expectedGoalType": "BUSINESS_OPERATION_LOGS",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BUSINESS_OPERATION_LOGS",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 2641,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2641,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G01",
+      "repeat": 2,
+      "input": "查询今天的业务操作日志",
+      "expectedGoalType": "BUSINESS_OPERATION_LOGS",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BUSINESS_OPERATION_LOGS",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 2578,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2563,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G01",
+      "repeat": 3,
+      "input": "查询今天的业务操作日志",
+      "expectedGoalType": "BUSINESS_OPERATION_LOGS",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "BUSINESS_OPERATION_LOGS",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 2500,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2500,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G02",
+      "repeat": 1,
+      "input": "查询今天的Agent工具调用审计",
+      "expectedGoalType": "AGENT_TOOL_AUDIT",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AGENT_TOOL_AUDIT",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 3172,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 3172,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G02",
+      "repeat": 2,
+      "input": "查询今天的Agent工具调用审计",
+      "expectedGoalType": "AGENT_TOOL_AUDIT",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AGENT_TOOL_AUDIT",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 4344,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 4344,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G02",
+      "repeat": 3,
+      "input": "查询今天的Agent工具调用审计",
+      "expectedGoalType": "AGENT_TOOL_AUDIT",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AGENT_TOOL_AUDIT",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 2922,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2922,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G03",
+      "repeat": 1,
+      "input": "查询待复核的Agent回答",
+      "expectedGoalType": "AGENT_ANSWER_REVIEWS",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AGENT_ANSWER_REVIEWS",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 2547,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2547,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G03",
+      "repeat": 2,
+      "input": "查询待复核的Agent回答",
+      "expectedGoalType": "AGENT_ANSWER_REVIEWS",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AGENT_ANSWER_REVIEWS",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 2141,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2125,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    },
+    {
+      "caseId": "G03",
+      "repeat": 3,
+      "input": "查询待复核的Agent回答",
+      "expectedGoalType": "AGENT_ANSWER_REVIEWS",
+      "expectedExpertAgent": "audit_expert",
+      "actualAction": "DELEGATE",
+      "actualGoalType": "AGENT_ANSWER_REVIEWS",
+      "actualExpertAgent": "audit_expert",
+      "passed": true,
+      "latencyMs": 2344,
+      "errorCode": null,
+      "diagnostics": [
+        {
+          "phase": "MAIN_ROUTE",
+          "attempt": 1,
+          "latencyMs": 2344,
+          "outcome": "VALID",
+          "httpStatus": 200,
+          "validationPaths": []
+        }
+      ]
+    }
+  ],
+  "corpusVersion": "1.0",
+  "businessDate": "2026-07-27",
+  "modelMode": "openai_compatible",
+  "modelName": "deepseek-v4-flash",
+  "repeats": 3,
+  "summary": {
+    "expectedRuns": 129,
+    "completedRuns": 129,
+    "passedRuns": 129,
+    "failedRuns": 0,
+    "passRate": 1.0,
+    "latencyP50Ms": 2562,
+    "latencyP95Ms": 3906,
+    "latencyMaxMs": 5531
+  }
+}

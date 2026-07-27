@@ -9,6 +9,7 @@ import com.Laibin.SugarInventory.agent.vo.AgentMessageReviewDetailVO;
 import com.Laibin.SugarInventory.agent.vo.AgentMessageReviewListVO;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.agent.service.impl.AgentMessageReviewServiceImpl;
+import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.po.AgentMessageReview;
 import com.Laibin.SugarInventory.domain.po.AgentMessageReviewEvidence;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -387,6 +389,50 @@ class AgentMessageReviewServiceImplTest {
         assertThat(row.getPlannedTools()).containsExactly("resolve_warehouses", "get_inventory_distribution");
         assertThat(row.getActualToolNames()).containsExactly("resolve_warehouses");
         assertThat(row.toString()).doesNotContain("warehouseId", "secret", "Authorization", "stackTrace");
+    }
+
+    @Test
+    void pageReviewsRequiresDedicatedReadPermissionOutsideAdminRole() {
+        User user = new User();
+        user.setId(2);
+        user.setRoleCode("STAFF");
+        LoginUser staffWithoutPermission = new LoginUser(
+                user,
+                List.of(new SimpleGrantedAuthority("ROLE_STAFF"))
+        );
+
+        assertThatThrownBy(() -> service.pageReviews(
+                staffWithoutPermission,
+                new AgentMessageReviewQueryDTO()
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(403);
+    }
+
+    @Test
+    void pageReviewsAllowsDedicatedReadPermissionWithoutUpdatePermission() {
+        User user = new User();
+        user.setId(3);
+        user.setRoleCode("STAFF");
+        LoginUser staffWithViewPermission = new LoginUser(
+                user,
+                List.of(new SimpleGrantedAuthority("agent:review:view"))
+        );
+        when(reviewMapper.selectPage(any(), any())).thenAnswer(invocation -> {
+            Page<AgentMessageReview> page = invocation.getArgument(0);
+            page.setRecords(List.of());
+            page.setTotal(0);
+            return page;
+        });
+
+        PageResult<AgentMessageReviewListVO> result = service.pageReviews(
+                staffWithViewPermission,
+                new AgentMessageReviewQueryDTO()
+        );
+
+        assertThat(result.getTotal()).isZero();
+        assertThat(result.getRecords()).isEmpty();
     }
 
     @Test

@@ -304,11 +304,11 @@ async function assertRuntimeCapabilities(request: APIRequestContext) {
   })
   expect(response.ok(), `Python runtime capabilities endpoint returned ${response.status()}`).toBe(true)
   const body = await response.json()
-  expect(body.toolCount).toBe(47)
+  expect(body.toolCount).toBe(52)
   expect(body.recipeCount).toBe(1)
   expect(body.toolRegistryHash).toMatch(/^[a-f0-9]{64}$/)
   expect(body.recipeRegistryHash).toMatch(/^[a-f0-9]{64}$/)
-  expect(body.agentProfileRegistryHash).toBe('412aa3229fc7be546be9f0ad1e9953491375523d0a4ef73145698b576d99c653')
+  expect(body.agentProfileRegistryHash).toBe('d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062')
 
   const counts = Object.fromEntries(
     (body.agentProfiles || []).map((profile: { name: string, allowedToolCount: number }) => [
@@ -318,7 +318,7 @@ async function assertRuntimeCapabilities(request: APIRequestContext) {
   )
   expect(counts).toEqual({
     administration_expert: 3,
-    assay_expert: 12,
+    assay_expert: 16,
     audit_expert: 3,
     inventory_expert: 6,
     logistics_expert: 4,

@@ -85,6 +85,63 @@ from app.policies import FastCompletionPolicy, NextActionPolicy, SafeFallbackPol
 from app.progress import report_business_progress, report_tool_progress
 
 
+AUDIT_CAPABILITY_LABELS: dict[str, str] = {
+    "resolve_products": "产品名称识别",
+    "resolve_warehouses": "库位名称识别",
+    "get_inventory_overview": "产品库存总览查询",
+    "get_inventory_distribution": "库存分布查询",
+    "query_unqualified_inventory": "不合格库存查询",
+    "query_inventory_by_quality_standard": "按质量标准筛选库存",
+    "query_inventory_by_assay_metrics": "按化验指标筛选库存",
+    "query_inventory_ledger": "库存台账查询",
+    "query_prepare_pool_balance": "生产备料池余额查询",
+    "get_warehouse_status": "库位状态查询",
+    "query_warehouse_capacity_distribution": "库位容量分布查询",
+    "query_warehouse_recent_operations": "近期库位操作查询",
+    "query_warehouse_mixed_storage_facts": "库位混放情况查询",
+    "get_assay_status": "产品化验状态查询",
+    "query_assay_records": "化验记录查询",
+    "get_assay_report_detail": "化验报告详情查询",
+    "query_assay_abnormalities": "化验异常查询",
+    "query_products_without_recent_assay": "缺少近期化验的库存查询",
+    "query_assay_standard_coverage": "质量标准覆盖情况查询",
+    "query_assay_groups": "化验分组目录查询",
+    "query_quality_standard_catalog": "质量标准目录查询",
+    "get_quality_standard_detail": "质量标准详情查询",
+    "query_product_standard_relations": "产品与质量标准关系查询",
+    "query_product_quality_configuration": "产品质量配置查询",
+    "get_pallet_status": "托盘状态查询",
+    "query_qr_code_lifecycle": "二维码生命周期查询",
+    "query_printed_not_inbound_codes": "已打印未入库二维码查询",
+    "query_pallet_anomalies": "托盘异常查询",
+    "query_pallet_flow_records": "托盘流转记录查询",
+    "query_qr_batch_inbound_completion": "二维码批次入库完成情况查询",
+    "query_fixed_product_qr_pool": "固定产品二维码池查询",
+    "resolve_production_entities": "生产对象识别",
+    "query_boiling_batches": "煮糖批次查询",
+    "query_production_order_progress": "生产订单进度查询",
+    "query_boiling_batch_trace": "煮糖批次流转查询",
+    "query_material_pick_trace": "生产领料记录查询",
+    "query_production_label_completion": "生产标签完成情况查询",
+    "query_in_process_materials": "在制物料查询",
+    "query_material_candidates": "生产原料候选查询",
+    "query_pallet_tasks": "托盘任务查询",
+    "query_stock_documents": "库存单据查询",
+    "query_auto_inbound_batches": "自动报数入库批次查询",
+    "get_auto_inbound_batch_detail": "自动报数入库批次详情查询",
+    "query_product_catalog": "产品目录查询",
+    "get_product_detail": "产品详情查询",
+    "query_screen_mesh_catalog": "筛网目录查询",
+    "query_employee_roster": "员工名册查询",
+    "query_roles": "角色目录查询",
+    "get_role_permission_summary": "角色权限摘要查询",
+    "search_operation_logs": "业务操作日志查询",
+    "query_agent_tool_audit": "Agent 工具调用审计查询",
+    "query_agent_answer_reviews": "Agent 回答复核查询",
+    "agent_runtime": "Agent 问答处理",
+}
+
+
 class OrchestrationBudgetExceeded(RuntimeError):
     pass
 
@@ -1229,6 +1286,40 @@ class WarehouseAgentRuntime:
                 continue
 
             call_signature = self._llm_call_signature(decision.toolName, arguments)
+            previous_success = self._latest_successful_observation(
+                observations,
+                call_signature,
+            )
+            if previous_success is not None:
+                planning_rejections += 1
+                if planning_rejections > 1:
+                    return self._finish_llm_response(
+                        self._llm_boundary_rejection(
+                            request.agentSessionId,
+                            trace,
+                            "模型重复提出了已经成功完成的相同只读查询。",
+                        ),
+                        trace,
+                        request,
+                    )
+                observations.append(
+                    {
+                        "observationId": f"obs_{len(observations) + 1}",
+                        "status": "PLAN_REJECTED",
+                        "message": (
+                            "相同条件的只读查询已经成功完成，请直接分析并引用 "
+                            f"{previous_success.get('observationId')}，不得重复调用工具。"
+                        ),
+                    }
+                )
+                loop_trace["events"].append(
+                    {
+                        "action": "PLAN_REJECTED",
+                        "toolName": decision.toolName,
+                        "status": "DUPLICATE_SUCCESSFUL_CALL",
+                    }
+                )
+                continue
             previous_terminal = self._latest_terminal_empty_result(observations, call_signature)
             if previous_terminal is not None:
                 status = str(previous_terminal.get("status") or "")
@@ -2083,6 +2174,19 @@ class WarehouseAgentRuntime:
                 return observation
         return None
 
+    def _latest_successful_observation(
+        self,
+        observations: list[dict[str, Any]],
+        call_signature: str,
+    ) -> dict[str, Any] | None:
+        for observation in reversed(observations):
+            if (
+                observation.get("status") in {"AVAILABLE", "SUCCESS"}
+                and observation.get("callSignature") == call_signature
+            ):
+                return observation
+        return None
+
     def _invalid_input_answer(self, tool_name: str) -> str:
         if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
             return "托盘码不符合系统规则，请核对完整托盘码后重试。"
@@ -2622,6 +2726,8 @@ class WarehouseAgentRuntime:
             self._remember_pallet(state, arguments.get("code"))
             state.last_pallet_flow_records = dict(safe_data)
             cards = [self._pallet_flow_card(adapted_flow)]
+        elif tool_name == "query_agent_tool_audit":
+            safe_data = self._adapt_agent_tool_audit(result)
         else:
             safe_value = self._llm_safe_tool_data(result)
             safe_data = safe_value if isinstance(safe_value, dict) else {"value": safe_value}
@@ -8368,12 +8474,44 @@ class WarehouseAgentRuntime:
         lines.append("仅展示字段名称摘要，不包含修改前后值、请求正文、凭据或原始异常；未登记事件不能据此判定为从未发生。")
         return "".join(lines)
 
+    def _adapt_agent_tool_audit(self, result: dict[str, Any]) -> dict[str, Any]:
+        source = result if isinstance(result, dict) else {}
+        records = source.get("records") if isinstance(source.get("records"), list) else []
+        safe_records: list[dict[str, Any]] = []
+        for item in records[:50]:
+            if not isinstance(item, dict):
+                continue
+            capability = self._safe_text(item.get("capability"))
+            safe_records.append(
+                {
+                    "capabilityLabel": AUDIT_CAPABILITY_LABELS.get(
+                        capability or "",
+                        "其他只读业务查询",
+                    ),
+                    "resultLabel": self._enum_label("tool_result", item.get("resultCode")),
+                    "errorLabel": self._enum_label("tool_error", item.get("errorCode")),
+                    "durationMs": self._first_scalar([item], "durationMs") or 0,
+                    "occurredAt": self._safe_text(item.get("occurredAt")) or "时间未标明",
+                }
+            )
+        return {
+            "dataScope": "已登记的 Agent 工具调用审计",
+            "total": self._first_scalar([source], "total") or 0,
+            "records": safe_records,
+        }
+
     def _format_agent_tool_audit_answer(self, result: dict[str, Any]) -> str:
-        source = result if isinstance(result, dict) else {}; records = source.get("records") if isinstance(source.get("records"), list) else []
-        lines = [f"Agent 工具调用审计共匹配 {self._first_scalar([source], 'total') or 0} 条："]
+        source = self._adapt_agent_tool_audit(result)
+        records = source["records"]
+        lines = [f"Agent 工具调用审计共匹配 {source['total']} 条："]
         for item in records[:20]:
-            if isinstance(item, dict): lines.append(f"{self._safe_text(item.get('occurredAt')) or '时间未标明'}，能力 {self._safe_text(item.get('capability')) or '未标明'}，结果 {self._safe_text(item.get('resultCode')) or '未标明'}，错误类别 {self._safe_text(item.get('errorCode')) or '无'}，耗时 {self._first_scalar([item], 'durationMs') or 0} ms。")
-        lines.append("不展示会话、用户、消息、调用内部 ID、参数、Prompt、模型上下文、密钥或原始堆栈。")
+            lines.append(
+                "\n"
+                f"• {item['occurredAt']}，{item['capabilityLabel']}，"
+                f"结果：{item['resultLabel']}，异常：{item['errorLabel']}，"
+                f"耗时：{item['durationMs']} ms。"
+            )
+        lines.append("\n\n为保护业务与账号安全，审计摘要不展示调用参数或模型上下文。")
         return "".join(lines)
 
     def _format_agent_answer_reviews_answer(self, result: dict[str, Any]) -> str:
@@ -8496,7 +8634,28 @@ class WarehouseAgentRuntime:
                 "CREATE": "新增", "INSERT": "新增", "UPDATE": "修改", "DELETE": "删除",
                 "IMPORT": "导入", "EXPORT": "导出", "LOGIN": "登录", "LOGOUT": "退出登录",
             },
+            "tool_result": {
+                "SUCCESS": "成功", "PARTIAL_SUCCESS": "部分成功", "FAILED": "失败",
+                "FAILURE": "失败", "ERROR": "失败", "DENIED": "已拒绝",
+                "TIMEOUT": "超时", "CANCELLED": "已取消", "CANCELED": "已取消",
+                "COMPLETED": "已完成",
+            },
+            "tool_error": {
+                "": "无", "NONE": "无", "NO_ERROR": "无",
+                "UPSTREAM_PERMISSION_DENIED": "权限不足",
+                "AGENT_SCOPE_DENIED": "超出当前 Agent 授权范围",
+                "UPSTREAM_UNAUTHORIZED": "登录或会话认证失败",
+                "SERVICE_AUTHENTICATION_FAILED": "服务认证失败",
+                "UPSTREAM_BAD_REQUEST": "查询条件不符合要求",
+                "UPSTREAM_NOT_FOUND": "未查询到对应数据",
+                "UPSTREAM_TIMEOUT": "上游查询超时",
+                "TOOL_TIMEOUT": "查询超时",
+            },
         }
+        if category == "tool_result":
+            return labels[category].get((raw or "").upper(), "状态未标明")
+        if category == "tool_error":
+            return labels[category].get((raw or "").upper(), "其他已记录异常")
         return labels.get(category, {}).get(raw or "", raw or "未知")
 
     def _latest_user_message(self, state: WarehouseAgentState) -> str:

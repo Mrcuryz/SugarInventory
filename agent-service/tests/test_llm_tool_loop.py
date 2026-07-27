@@ -333,6 +333,9 @@ def test_model_visible_schema_explains_global_scope_and_flat_argument_tools() ->
     logistics = builder.llm_visible_tool_schemas(
         AgentHandoffRouter().handoff_for_agent("logistics_expert")
     )
+    audit = builder.llm_visible_tool_schemas(
+        AgentHandoffRouter().handoff_for_agent("audit_expert")
+    )
 
     assert "扁平字段" in inventory["query_inventory_ledger"]["description"]
     assert "不要求生产订单或煮糖批次" in inventory["query_prepare_pool_balance"]["description"]
@@ -341,6 +344,39 @@ def test_model_visible_schema_explains_global_scope_and_flat_argument_tools() ->
     assert "productScope=ALL" in assay["query_products_without_recent_assay"]["description"]
     assert "PRODUCT_WITHOUT_STANDARD" in assay["query_assay_standard_coverage"]["description"]
     assert "权威无数据结果" in logistics["query_auto_inbound_batches"]["description"]
+    assert "reviewStatus=OPEN" in audit["query_agent_answer_reviews"]["description"]
+
+
+def test_agent_answer_review_filters_normalize_pending_alias_and_reject_unknown_enum() -> None:
+    builder = ToolArgumentBuilder()
+    state = InMemoryCheckpointer().get("agt_agent_review_filters")
+
+    schema = builder.llm_visible_tool_schemas(
+        AgentHandoffRouter().handoff_for_agent("audit_expert")
+    )["query_agent_answer_reviews"]
+    assert schema["properties"]["reviewStatus"]["enum"] == [
+        "OPEN",
+        "TRIAGED",
+        "FIXED",
+        "WONT_FIX",
+    ]
+    assert "待复核" in schema["properties"]["reviewStatus"]["description"]
+
+    validated = builder.validate_llm_arguments(
+        tool_name="query_agent_answer_reviews",
+        arguments={"reviewStatus": "PENDING", "page": 1, "size": 20},
+        state=state,
+        user_message="查询待复核的 Agent 回答",
+    )
+    assert validated["reviewStatus"] == "OPEN"
+
+    with pytest.raises(ValueError, match="unsupported reviewStatus"):
+        builder.validate_llm_arguments(
+            tool_name="query_agent_answer_reviews",
+            arguments={"reviewStatus": "WAITING_V2", "page": 1, "size": 20},
+            state=state,
+            user_message="查询待复核的 Agent 回答",
+        )
 
 
 def test_active_goal_is_exposed_to_expert_as_controlled_contract() -> None:
@@ -1499,6 +1535,111 @@ def test_llm_does_not_repeat_the_same_invalid_pallet_tool_call() -> None:
     assert response.needsUserSelection is True
     assert response.answer == "托盘码不符合系统规则，请核对完整托盘码后重试。"
     assert len(tools.calls) == 1
+
+
+def test_llm_does_not_repeat_the_same_successful_audit_query() -> None:
+    arguments = {
+        "reviewStatus": "OPEN",
+        "answerStatus": "LOW_CONFIDENCE",
+        "failureDomain": "PLANNER",
+        "page": 1,
+        "size": 10,
+    }
+    model = ScriptedLlmModel(
+        [main_delegate("audit_expert", "AGENT_ANSWER_REVIEWS")],
+        [
+            call("query_agent_answer_reviews", arguments),
+            call("query_agent_answer_reviews", arguments),
+            final("已查到 72 条需求理解或决策阶段失败且待复核的回答记录。", "obs_1"),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "query_agent_answer_reviews": {
+                "dataScope": "AGENT_ANSWER_REVIEW_SAFE_SUMMARY",
+                "total": 72,
+                "page": 1,
+                "size": 10,
+                "records": [
+                    {
+                        "answerStatus": "LOW_CONFIDENCE",
+                        "confidenceLevel": "LOW",
+                        "failureDomain": "PLANNER",
+                        "reviewStatus": "OPEN",
+                    }
+                ],
+            }
+        }
+    )
+    runtime, _ = runtime_for(
+        model,
+        tools,
+        allowed_experts=("audit_expert",),
+    )
+
+    response = runtime.chat(
+        chat_request("只看需求理解或决策阶段失败的待复核回答")
+    )
+
+    assert response.error is None
+    assert len(tools.calls) == 1
+    assert tools.calls[0]["arguments"] == arguments
+    assert any(
+        observation.get("status") == "PLAN_REJECTED"
+        and "不得重复调用工具" in str(observation.get("message"))
+        for observation in model.expert_requests[-1].observations
+    )
+    assert "72 条" in response.answer
+
+
+def test_llm_agent_tool_audit_observation_uses_only_user_facing_labels() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("audit_expert", "AGENT_TOOL_AUDIT")],
+        [
+            call("query_agent_tool_audit", {"page": 1, "size": 20}),
+            final("今天查到 1 条工具调用审计：角色目录查询成功。", "obs_1"),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "query_agent_tool_audit": {
+                "dataScope": "RECORDED_AGENT_TOOL_AUDIT",
+                "total": 1,
+                "records": [
+                    {
+                        "capability": "query_roles",
+                        "resultCode": "SUCCESS",
+                        "errorCode": None,
+                        "durationMs": 8,
+                        "occurredAt": "2026-07-21T10:00:00",
+                    }
+                ],
+            }
+        }
+    )
+    runtime, _ = runtime_for(
+        model,
+        tools,
+        allowed_experts=("audit_expert",),
+    )
+
+    response = runtime.chat(chat_request("查询今天的 Agent 工具调用审计"))
+
+    assert response.error is None
+    assert response.answer == "今天查到 1 条工具调用审计：角色目录查询成功。"
+    observation = model.expert_requests[1].observations[0]["data"]
+    assert observation["dataScope"] == "已登记的 Agent 工具调用审计"
+    assert observation["records"] == [
+        {
+            "capabilityLabel": "角色目录查询",
+            "resultLabel": "成功",
+            "errorLabel": "无",
+            "durationMs": 8,
+            "occurredAt": "2026-07-21T10:00:00",
+        }
+    ]
+    assert "query_roles" not in str(observation)
+    assert "SUCCESS" not in str(observation)
 
 
 def test_pallet_answer_sanitizes_internal_cycle_fields() -> None:

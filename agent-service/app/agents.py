@@ -240,6 +240,9 @@ def _profiles() -> dict[str, ExpertAgentProfile]:
             allowed_tools=frozenset({"search_operation_logs", "query_agent_tool_audit", "query_agent_answer_reviews"}),
             instructions=(
                 "只查询经过字段级过滤的业务操作日志、Agent 工具调用审计和回答 Review 摘要。",
+                "查询回答复核时，复核进度“待复核”必须使用 reviewStatus=OPEN；不得使用 PENDING。answerStatus 是回答处理情况，不得与 reviewStatus 混用。",
+                "用户说“需求理解或决策阶段”时对应 failureDomain=PLANNER；这是一个受控问题环节名称，不得拆成两个阶段，也不得对相同条件重复查询。",
+                "分析回答复核结果时，必须把状态、置信度和问题环节等内部枚举转换成用户可读中文，不得原样输出枚举。",
                 "不得输出用户原问题/回答、oldData、字段值、参数、Prompt、模型上下文、内部 ID、密钥或原始堆栈。",
                 "不得修改 Review 状态、权限或任何业务数据。",
             ),

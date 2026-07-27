@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -83,6 +84,23 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
         for tool in item[key]
     }
     assert classified_tools == set(ALLOWED_TOOLS)
+
+
+def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:
+    corpus_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "agent"
+        / "evaluation"
+        / "readonly-goal-stability-corpus-v1.json"
+    )
+    corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+    cases = corpus["cases"]
+
+    assert len(cases) == len(GOAL_CONTRACTS) == 43
+    assert len({case["id"] for case in cases}) == 43
+    assert {case["goalType"] for case in cases} == set(GOAL_CONTRACTS)
+    assert all(str(case["input"]).strip() for case in cases)
 
 
 def test_goal_contract_types_are_the_single_source_for_model_semantic_schemas() -> None:

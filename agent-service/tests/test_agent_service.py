@@ -17,6 +17,7 @@ from app.config import Settings
 from app.context import ContextBuilder
 from app.cancellation import AgentRunRegistry, current_cancellation_token
 from app.execution import AgentExecutionContext, bind_execution_context
+from app.goal_contracts import GOAL_CONTRACTS
 from app.graph.state import InMemoryCheckpointer, SelectedEntity
 from app.main import create_app
 from app.model import (
@@ -34,7 +35,7 @@ from app.model import (
 )
 from app.orchestration import CompoundExecutionPlan, OrchestrationStep
 from app.progress import registered_progress_tools
-from app.runtime import WarehouseAgentRuntime
+from app.runtime import AUDIT_CAPABILITY_LABELS, WarehouseAgentRuntime
 from app.schemas import AgentError, ChatRequest, ChatResponse, GoalDraftV1, ResultReasoningDraftV1
 from app.streaming import sse_for_request, sse_for_response
 from app.tool_arguments import ToolArgumentBuilder
@@ -124,6 +125,11 @@ EXPECTED_EXPERT_TOOLS = {
         {"search_operation_logs", "query_agent_tool_audit", "query_agent_answer_reviews"}
     ),
 }
+
+
+def test_every_allowed_tool_has_a_user_facing_audit_capability_label() -> None:
+    assert ALLOWED_TOOLS <= set(AUDIT_CAPABILITY_LABELS)
+    assert all(label.strip() for label in AUDIT_CAPABILITY_LABELS.values())
 
 
 def chat_payload(message: str, agent_session_id: str = "agt_test") -> dict[str, Any]:
@@ -422,6 +428,15 @@ def test_openai_compatible_main_agent_returns_strict_llm_route_decision() -> Non
         assert "warehouseId" not in request_text
         assert "当前库存按明确不合格、指定化验标准或原始化验指标数值条件筛选" in request_text
         assert "不是跨域配方" in request_text
+        model_request = json.loads(model_server.last_body["messages"][1]["content"])
+        assert {
+            item["goalType"]
+            for item in model_request["registeredGoals"]
+        } == {
+            goal_type
+            for goal_type, contract in GOAL_CONTRACTS.items()
+            if contract.ownerExpert == "inventory_expert"
+        }
     finally:
         model_server.stop()
 
@@ -4415,7 +4430,12 @@ def test_agent_tool_audit_does_not_expose_arguments_or_context() -> None:
     response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询 Agent 工具审计"))
     assert response.status_code == 200
     assert tool_client.calls[0]["expertAgent"] == "audit_expert"
-    assert "参数、Prompt、模型上下文" in response.json()["answer"]
+    answer = response.json()["answer"]
+    assert "角色目录查询" in answer
+    assert "结果：成功" in answer
+    assert "调用参数或模型上下文" in answer
+    assert "query_roles" not in answer
+    assert "SUCCESS" not in answer
 
 
 def test_agent_answer_reviews_return_safe_summary_only() -> None:

@@ -721,6 +721,11 @@ class OpenAICompatibleModelClient(BasicModelClient):
         self._timeout = settings.model_timeout_ms / 1000
 
     def route_main_agent(self, request: MainAgentRouteRequest) -> MainAgentDecisionV1 | None:
+        available_expert_names = {
+            str(item.get("expertAgent") or "").strip()
+            for item in request.availableExperts
+            if isinstance(item, dict) and item.get("expertAgent")
+        }
         return self._structured_decision(
             phase="MAIN_ROUTE",
             schema=MainAgentDecisionV1.model_json_schema(),
@@ -768,7 +773,7 @@ class OpenAICompatibleModelClient(BasicModelClient):
                         "requiredEntityTypes": list(contract.requiredEntityTypes),
                     }
                     for goal_type, contract in GOAL_CONTRACTS.items()
-                    if contract.ownerExpert in request.availableExperts
+                    if contract.ownerExpert in available_expert_names
                 ],
                 "registeredRecipes": request.registeredRecipes,
             },

@@ -564,8 +564,35 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                               "properties": {"module": {"type": "string", "minLength": 1, "maxLength": 100}, "operationType": {"type": "string", "minLength": 1, "maxLength": 20}, "operator": {"type": "string", "minLength": 1, "maxLength": 100}, "startTime": {"type": "string", "format": "date-time"}, "endTime": {"type": "string", "format": "date-time"}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
     "query_agent_tool_audit": {"type": "object", "additionalProperties": False,
                                "properties": {"capability": {"type": "string", "minLength": 1, "maxLength": 100}, "resultCode": {"type": "string", "minLength": 1, "maxLength": 40}, "errorCode": {"type": "string", "minLength": 1, "maxLength": 80}, "startTime": {"type": "string", "format": "date-time"}, "endTime": {"type": "string", "format": "date-time"}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
-    "query_agent_answer_reviews": {"type": "object", "additionalProperties": False,
-                                   "properties": {"reviewStatus": {"type": "string", "minLength": 1, "maxLength": 40}, "answerStatus": {"type": "string", "minLength": 1, "maxLength": 40}, "failureDomain": {"type": "string", "minLength": 1, "maxLength": 80}, "failureCategory": {"type": "string", "minLength": 1, "maxLength": 120}, "suggestedFixType": {"type": "string", "minLength": 1, "maxLength": 80}, "testCaseStatus": {"type": "string", "minLength": 1, "maxLength": 40}, "priorityOnly": {"type": "boolean"}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
+    "query_agent_answer_reviews": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "reviewStatus": {
+                "type": "string",
+                "enum": ["OPEN", "TRIAGED", "FIXED", "WONT_FIX"],
+                "description": "复核进度。用户说“待复核”时必须使用 OPEN，不得使用 PENDING。",
+            },
+            "answerStatus": {
+                "type": "string",
+                "enum": ["COMPLETED", "LOW_CONFIDENCE", "NEEDS_REVIEW", "FAILED", "CANCELLED"],
+                "description": "回答处理情况；与 reviewStatus 的复核进度不是同一字段。",
+            },
+            "failureDomain": {
+                "type": "string",
+                "enum": ["PLANNER", "ROUTER", "DATA", "CONTEXT", "TOOL", "SAFE_ADAPTER", "UI", "USER_INPUT", "UNKNOWN"],
+            },
+            "failureCategory": {"type": "string", "minLength": 1, "maxLength": 120},
+            "suggestedFixType": {"type": "string", "minLength": 1, "maxLength": 80},
+            "testCaseStatus": {
+                "type": "string",
+                "enum": ["NONE", "NEEDED", "CREATED", "PASSING"],
+            },
+            "priorityOnly": {"type": "boolean"},
+            "page": {"type": "integer", "minimum": 1},
+            "size": {"type": "integer", "minimum": 1, "maximum": 50},
+        },
+    },
     "query_inventory_ledger": {"type": "object", "additionalProperties": False,
                                "properties": {"productName": {"type": "string", "minLength": 1, "maxLength": 100}, "warehouseName": {"type": "string", "minLength": 1, "maxLength": 100}, "screenMeshName": {"type": "string", "minLength": 1, "maxLength": 100}, "productStatus": {"type": "string", "minLength": 1, "maxLength": 50}, "entryDateStart": {"type": "string", "format": "date"}, "entryDateEnd": {"type": "string", "format": "date"}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
     "query_prepare_pool_balance": {"type": "object", "additionalProperties": False,
@@ -628,6 +655,9 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_stock_documents": "查询指定类型和日期范围的入库单、出库单或半成品单据；相对日期以 BUSINESS_TIME 为准。",
     "query_auto_inbound_batches": "查询最近登记的自动报数入库批次；无须先提供产品或批次。返回空 records 或 count=0 时就是权威无数据结果，应引用该次观察直接回答。",
     "get_auto_inbound_batch_detail": "使用上一查询返回的受控批次引用查询自动报数入库批次详情；不得猜测内部引用。",
+    "search_operation_logs": "查询经过字段级脱敏的业务操作日志摘要；不返回变更前后值、请求正文或凭据。",
+    "query_agent_tool_audit": "查询经过字段级脱敏的 Agent 工具调用审计；不返回参数、Prompt、模型上下文或内部 ID。",
+    "query_agent_answer_reviews": "查询 Agent 回答复核安全摘要。复核进度“待复核”使用 reviewStatus=OPEN；answerStatus 是另一维度。最终回答必须把所有枚举转换成用户可读中文。",
 }
 
 
@@ -739,6 +769,8 @@ class ToolArgumentBuilder:
         )
         if tool_name == "query_boiling_batches":
             materialized = self._normalize_boiling_batch_scope(materialized, user_message)
+        if tool_name == "query_agent_answer_reviews":
+            materialized = self._normalize_agent_answer_review_filters(materialized)
         if tool_name == "query_pallet_flow_records":
             materialized = self._pallet_flow_records_arguments(
                 materialized,
@@ -823,6 +855,34 @@ class ToolArgumentBuilder:
                 ),
             )
         return self._validate(tool_name, materialized)
+
+    @staticmethod
+    def _normalize_agent_answer_review_filters(
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Normalize common model aliases at the controlled audit-tool boundary."""
+
+        result = dict(arguments)
+        aliases = {
+            "reviewStatus": {
+                "PENDING": "OPEN",
+                "NEEDS_REVIEW": "OPEN",
+            },
+            "answerStatus": {
+                "PENDING": "NEEDS_REVIEW",
+            },
+        }
+        for field, field_aliases in aliases.items():
+            raw = result.get(field)
+            if raw is None:
+                continue
+            normalized = str(raw).strip().upper()
+            result[field] = field_aliases.get(normalized, normalized)
+        for field in ("failureDomain", "testCaseStatus"):
+            raw = result.get(field)
+            if raw is not None:
+                result[field] = str(raw).strip().upper()
+        return result
 
     @staticmethod
     def _normalize_boiling_batch_scope(
@@ -2476,6 +2536,16 @@ class ToolArgumentBuilder:
                       "reviewStatus": 40, "answerStatus": 40, "failureDomain": 80, "failureCategory": 120, "suggestedFixType": 80, "testCaseStatus": 40}
             for key, limit in limits.items():
                 if arguments.get(key) is not None: result[key] = self._required_text(arguments.get(key), limit)
+            if tool_name == "query_agent_answer_reviews":
+                allowed_values = {
+                    "reviewStatus": {"OPEN", "TRIAGED", "FIXED", "WONT_FIX"},
+                    "answerStatus": {"COMPLETED", "LOW_CONFIDENCE", "NEEDS_REVIEW", "FAILED", "CANCELLED"},
+                    "failureDomain": {"PLANNER", "ROUTER", "DATA", "CONTEXT", "TOOL", "SAFE_ADAPTER", "UI", "USER_INPUT", "UNKNOWN"},
+                    "testCaseStatus": {"NONE", "NEEDED", "CREATED", "PASSING"},
+                }
+                for key, allowed in allowed_values.items():
+                    if result.get(key) is not None and result[key] not in allowed:
+                        raise ValueError(f"unsupported {key}")
             for key in ("startTime", "endTime"):
                 if arguments.get(key) is not None: result[key] = self._required_text(arguments.get(key), 40)
             if arguments.get("priorityOnly") is not None: result["priorityOnly"] = bool(arguments.get("priorityOnly"))

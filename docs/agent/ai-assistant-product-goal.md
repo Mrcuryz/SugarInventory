@@ -712,17 +712,19 @@ Agent 的业务事实应优先通过结构化卡片展示；自然语言负责�
 
 确定性 Router、关键词规则和状态机只允许用于显式的 deterministic 模式、受控降级、安全校验或候选卡片组装；在 LLM 模式下不得先于主模型截获普通业务请求，也不得替代专家做工具选择。为了用户可理解和审计，界面可以展示“理解需求、选择专家、调用业务工具、分析结果”等受控执行阶段，但不得展示模型原始思维链、Prompt、内部 ID、令牌或原始工具参数。
 
-截至 2026-07-24，52 个 L1 只读工具已按 43 个用户业务目标进入上述统一范式。`allowedTools` 表达一个目标内可使用的最小工具集，`evidenceTools` 只包含能够生成完成事实的主查询工具；产品/库位/生产实体解析、目录发现和详情下钻不能单独证明目标完成。同一工具在不同目标中可以是主证据或支撑能力，Runtime 必须以当前 GoalContract 为准，不能因一次支撑调用切换目标。
+截至 2026-07-27，52 个 L1 只读工具已按 43 个用户业务目标进入上述统一范式。`allowedTools` 表达一个目标内可使用的最小工具集，`evidenceTools` 只包含能够生成完成事实的主查询工具；产品/库位/生产实体解析、目录发现和详情下钻不能单独证明目标完成。同一工具在不同目标中可以是主证据或支撑能力，Runtime 必须以当前 GoalContract 为准，不能因一次支撑调用切换目标。
 
 “全量进入合同”仅表示代码层的目标类型、专家归属、FactEnvelope 和 CompletionEvaluator 已贯通。它不等于所有自然语言表达均已通过现场验收，也不等于模型只负责最后润色：模型负责目标理解、专家决策和基于安全事实的结果分析；Runtime 独立负责授权、参数、事实有效性和完成裁决。
+
+2026-07-27 第一阶段在本地/UAT 范围封板：43 个目标各完成 3 次主模型稳定性重放（129/129），Python/Java/MCP 与前端构建通过，25 项页面补充验收及 ADMIN/QC/STAFF 独立角色关键旅程通过。该结论冻结当前只读基线，但不替代正式生产发布验收；端到端问答仍常见约 10～23 秒，下一阶段必须继续记录完整链路 P50/P95、模型轮次和工具次数。
 
 ## 13. Agent v1、v2 与后续规划能力的调整路线
 
 本节为设计路线，不修改当前 52 个只读工具、Python/Java/MCP 白名单或当前唯一受控复合配方。
 
-1. 先完成 Agent v1 日常查询覆盖，使 inventory、warehouse、logistics、pallet、production、quality、master_data、administration、audit 专家均有真实只读能力和固定数据测试。
-2. 再建设 inventory、stock movement、production、material、output、assay、pallet lifecycle、warehouse capacity 等事实/快照数据，以及版本化指标 Registry、数据质量和 Rule Engine。
-3. 在数据语义稳定后建设 v2-A：登记报表、受控跨域分析、化验文件暂存预览，以及入库/出库/调拨 dry-run。
+1. Agent v1 日常只读查询覆盖已完成并封板；inventory、warehouse、logistics、pallet、production、quality、master_data、administration、audit 专家均具有真实只读能力和固定数据测试。
+2. 下一步建设 inventory、stock movement、production、material、output、assay、pallet lifecycle、warehouse capacity 等事实/快照数据，以及版本化指标 Registry、数据质量和 Rule Engine。
+3. 在数据语义稳定后建设 v2-A：先做登记报表和受控跨域分析，再评估化验文件暂存预览以及入库/出库/调拨 dry-run。
 4. 完成 executionToken、幂等、实体/规则版本重检、审批、事务、HITL 和完整审计后，才允许逐项进入 v2-B execute。
 5. 工作群先开放群安全查询、登记报表、提醒和 Web 跳转确认，不在群聊内执行 L3/L4。
 6. 历史数据、指标、规则和模型评测稳定后，再建设只生成 advisory scenarios 的 planning_expert、预测、优化和仿真。
@@ -735,3 +737,4 @@ Agent 的业务事实应优先通过结构化卡片展示；自然语言负责�
 - `docs/agent/cross-expert-recipe-roadmap-registry.yaml`
 - `docs/agent/data-semantic-roadmap-registry.yaml`
 - `docs/agent/business-rule-roadmap-registry.yaml`
+- `docs/agent/high-value-analytics-report-plan.md`

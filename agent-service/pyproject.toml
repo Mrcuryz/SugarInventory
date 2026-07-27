@@ -19,6 +19,7 @@ langgraph = [
 test = [
   "pytest>=8.0",
   "httpx2>=0.28",
+  "PyYAML>=6.0,<7.0",
 ]
 
 [tool.pytest.ini_options]
