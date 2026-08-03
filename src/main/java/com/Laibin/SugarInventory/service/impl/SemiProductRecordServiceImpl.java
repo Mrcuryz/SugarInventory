@@ -7,6 +7,8 @@ import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.vo.InVO;
+import com.Laibin.SugarInventory.inventoryhistory.domain.StockMovementEventCommand;
+import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementEventService;
 import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
 import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.LoggableService;
@@ -47,6 +49,8 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     private AssayMapper assayMapper;
     @Autowired
     private InventoryMapper inventoryMapper;
+    @Autowired
+    private StockMovementEventService stockMovementEventService;
 
     @Transactional
     public InVO addSemiProductRecord(AddSemiProductRecordDTO dto, String operator) {
@@ -83,6 +87,7 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         semiProductRecord.setCreatedAt(LocalDateTime.now());
         semiProductRecord.setUnit(dto.getUnit());
         recordMapper.insert(semiProductRecord);
+        recordSemiInboundEvent(semiProductRecord, product, warehouse, dto, actualQuantity);
         return inVO;
     }
 
@@ -392,7 +397,35 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         record.setCreatedAt(LocalDateTime.now());
         record.setUnit(dto.getUnit());
         recordMapper.insert(record);
+        recordSemiInboundEvent(record, product, warehouse, dto, actualQuantity);
         return vo;
+    }
+
+    private void recordSemiInboundEvent(SemiProductRecord record, Product product, Warehouse warehouse,
+                                        BaseInStockDTO dto, int actualQuantity) {
+        if (actualQuantity <= 0) {
+            return;
+        }
+        boolean loosePieces = "1".equals(dto.getUnit());
+        int totalPieces = loosePieces
+                ? actualQuantity
+                : actualQuantity * product.getPiecesPerPallet();
+        stockMovementEventService.record(StockMovementEventCommand.builder()
+                .eventType("INBOUND")
+                .sourceType("SEMI_PRODUCT_RECORD")
+                .sourceRecordId(record.getId().longValue())
+                .occurredAt(record.getCreatedAt())
+                .productId(product.getId())
+                .productStatus(product.getStatus())
+                .productionDate(dto.getEntryDate())
+                .toWarehouseId(warehouse.getId())
+                .palletCodeId(dto.getPalletCodeId())
+                .boardQuantity(loosePieces ? 0 : actualQuantity)
+                .loosePieceQuantity(loosePieces ? actualQuantity : 0)
+                .totalPieces(totalPieces)
+                .totalWeightKg(record.getTotalWeight())
+                .actionKind("INBOUND")
+                .build());
     }
 
     private Integer stackModeInStockPiece(AddSemiProductRecordDTO dto, Warehouse warehouse, Assay assay, Product product) {

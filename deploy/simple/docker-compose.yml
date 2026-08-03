@@ -21,7 +21,7 @@ services:
     environment:
       AGENT_ENV: production
       AGENT_TOOL_MODE: java_gateway
-      AGENT_MODEL_MODE: basic
+      AGENT_PYTHON_MODEL_MODE: basic
       JAVA_TOOL_GATEWAY_BASE_URL: http://backend:8080
       AGENT_STATE_BACKEND: redis
       AGENT_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -29,6 +29,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    volumes:
+      - ./artifacts/rag:/app/rag:ro
+      - ./artifacts/rag-model:/app/rag-model:ro
 
   backend:
     image: eclipse-temurin:21-jre

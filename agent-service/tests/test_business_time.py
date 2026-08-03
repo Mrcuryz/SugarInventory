@@ -32,6 +32,9 @@ def fixed_clock() -> BusinessClock:
         ("查询黄冰糖（袋）7月17日的化验情况", "2026-07-17", "2026-07-17"),
         ("查询黄冰糖（袋）2026年7月16号的化验情况", "2026-07-16", "2026-07-16"),
         ("查询黄冰糖（袋）2026/07/15的化验情况", "2026-07-15", "2026-07-15"),
+        ("查询2026年7月14日至7月20日的库存趋势", "2026-07-14", "2026-07-20"),
+        ("查询7月14日到20日的库存趋势", "2026-07-14", "2026-07-20"),
+        ("查询2026-07-14至2026-07-20的库存趋势", "2026-07-14", "2026-07-20"),
     ],
 )
 def test_resolves_relative_dates_in_beijing_time(
@@ -44,6 +47,17 @@ def test_resolves_relative_dates_in_beijing_time(
     assert resolved is not None
     assert resolved.start.isoformat() == expected_start
     assert resolved.end.isoformat() == expected_end
+
+
+def test_explicit_date_range_is_not_collapsed_to_its_first_day() -> None:
+    resolved = fixed_clock().resolve("查询2026年7月14日至7月20日黄冰糖（袋）的库存变化趋势")
+
+    assert resolved is not None
+    assert resolved.to_tool_date_range() == {
+        "type": "RANGE",
+        "from": "2026-07-14",
+        "to": "2026-07-20",
+    }
 
 
 def test_business_time_context_is_explicit_and_server_trusted() -> None:

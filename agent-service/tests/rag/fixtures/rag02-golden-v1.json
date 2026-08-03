@@ -1,0 +1,25 @@
+{
+  "corpusVersion": "laibin-rag-2026-07-29-v1",
+  "inventorySha256": "cefd802a6bbee06ee211c45b1638c57a7c5f03458a5db843ee0ec3649abfd574",
+  "reviewProfileSha256": "44da044e3669d1f8585be70f61708029421fb5a3e765c30c88aaafd8179e05ee",
+  "documentManifestSha256": "4fcf6769da4d725e778fc0cc2193dd25b2822f1c11a4931415847b4d45fd7b2f",
+  "chunkManifestSha256": "fff89ef6e272dff99ff1bf94fe5688186ae1847b517f83d7ab90537758337893",
+  "lexicalIndexSha256": "22a74909d0e5eb7afbc75f3dc3815e4352bc02efd55f1665a47cab389a47c13d",
+  "vectorIndexSha256": "80f5562500bf0a12cac4d88e5886e7c3601a8ae544f8c74df45f657db673ec32",
+  "indexManifestSha256": "2a36b5a8d15f129453d5041562b1b56bc19dfab49a795b82e4da7a105b94fd83",
+  "evaluationSetSha256": "658dca252ecc1dff0ef7a24a61c08e62d0b6a5d960b286ff69c6fb0c0c1bc16d",
+  "modelArtifactSha256": "6b919dcf92ce43b2640c4d27a806d14a632f0659c1cc283abd51058ffed842bc",
+  "documentCount": 10,
+  "chunkCount": 196,
+  "evaluationCaseCount": 83,
+  "chunkTypeCounts": {
+    "CERTIFICATION_SECTION": 3,
+    "COMPANY_SECTION": 9,
+    "CONTROL_POINT": 26,
+    "FLOW_OVERVIEW": 9,
+    "MATERIAL_BRANCH": 23,
+    "PROCESS_STEP": 108,
+    "PRODUCT_SECTION": 16,
+    "SALES_SECTION": 2
+  }
+}

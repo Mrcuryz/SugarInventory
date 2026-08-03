@@ -1,0 +1,15 @@
+{
+  "corpusVersion": "laibin-rag-2026-07-29-v1",
+  "inventorySha256": "cefd802a6bbee06ee211c45b1638c57a7c5f03458a5db843ee0ec3649abfd574",
+  "reviewProfileSha256": "44da044e3669d1f8585be70f61708029421fb5a3e765c30c88aaafd8179e05ee",
+  "documentManifestSha256": "4fcf6769da4d725e778fc0cc2193dd25b2822f1c11a4931415847b4d45fd7b2f",
+  "documentCount": 10,
+  "pageCount": 30,
+  "sourceBlankPageCount": 5,
+  "processStepCount": 108,
+  "parameterCount": 32,
+  "controlPointCount": 14,
+  "equipmentValueCount": 8,
+  "blockingIssueCount": 0,
+  "warningIssueCount": 8
+}

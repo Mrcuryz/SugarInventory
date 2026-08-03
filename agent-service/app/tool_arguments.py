@@ -13,7 +13,12 @@ from app.cancellation import RunCancelledError
 from app.context import ContextBuilder
 from app.goal_contracts import registered_goal_for_plan
 from app.graph.state import WarehouseAgentState
-from app.knowledge import IntentRoute, IntentRouter
+from app.knowledge import (
+    explicit_knowledge_product_queries,
+    IntentRoute,
+    IntentRouter,
+    knowledge_domains_for_subtype,
+)
 from app.model import (
     BasicModelClient,
     GoalDraftRequest,
@@ -26,6 +31,7 @@ from app.model import (
 )
 from app.orchestration import CompoundIntentPlanner, new_orchestration_state
 from app.tools.client import ALLOWED_TOOLS
+from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS, KNOWLEDGE_TOOL_NAME
 
 
 PRODUCT_SCOPE_SCHEMA: dict[str, Any] = {
@@ -55,6 +61,31 @@ DATE_RANGE_SCHEMA: dict[str, Any] = {
 
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
+    KNOWLEDGE_TOOL_NAME: {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["query", "knowledgeDomains"],
+        "properties": {
+            "query": {"type": "string", "minLength": 1, "maxLength": 500},
+            "knowledgeDomains": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 5,
+                "uniqueItems": True,
+                "items": {
+                    "type": "string",
+                    "enum": ["PROCESS", "COMPANY", "PRODUCT_MARKETING", "CERTIFICATION", "SALES"],
+                },
+            },
+            "productQueries": {
+                "type": "array",
+                "maxItems": 5,
+                "uniqueItems": True,
+                "items": {"type": "string", "minLength": 1, "maxLength": 100},
+            },
+            "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
+        },
+    },
     "resolve_products": {
         "type": "object",
         "additionalProperties": False,
@@ -415,6 +446,51 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["orderRef"],
         "properties": {"orderRef": {"type": "string", "minLength": 1, "maxLength": 500}},
     },
+    "run_registered_report": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["reportDefinitionId", "reportVersion", "startDate", "endDate"],
+        "properties": {
+            "reportDefinitionId": {
+                "type": "string",
+                "enum": [
+                    "daily_production_overview_v1",
+                    "quality_assay_result_trend_v1",
+                    "quality_metric_trend_v1",
+                    "production_input_output_flow_v1",
+                    "pallet_task_cycle_time_v1",
+                    "inventory_level_trend_v1",
+                    "today_operations_overview_v1",
+                ],
+            },
+            "reportVersion": {"type": "integer", "const": 1},
+            "startDate": {"type": "string", "format": "date"},
+            "endDate": {"type": "string", "format": "date"},
+            "productQuery": {"type": "string", "minLength": 1, "maxLength": 100},
+            "metricKey": {
+                "type": "string",
+                "enum": [
+                    "color_value",
+                    "reducing_sugar",
+                    "dry_weight_loss",
+                    "conductivity_ash",
+                    "sucrose",
+                    "insoluble_impurity",
+                    "ph",
+                ],
+            },
+            "taskType": {
+                "type": "string",
+                "enum": ["ALL", "INBOUND", "SEMI_IN", "FINISH_IN", "OUT", "TRANSFER"],
+            },
+            "comparisonMode": {
+                "type": "string",
+                "enum": ["PREVIOUS_PERIOD", "CUSTOM"],
+            },
+            "comparisonStartDate": {"type": "string", "format": "date"},
+            "comparisonEndDate": {"type": "string", "format": "date"},
+        },
+    },
     "query_boiling_batches": {
         "type": "object",
         "additionalProperties": False,
@@ -595,8 +671,6 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "query_inventory_ledger": {"type": "object", "additionalProperties": False,
                                "properties": {"productName": {"type": "string", "minLength": 1, "maxLength": 100}, "warehouseName": {"type": "string", "minLength": 1, "maxLength": 100}, "screenMeshName": {"type": "string", "minLength": 1, "maxLength": 100}, "productStatus": {"type": "string", "minLength": 1, "maxLength": 50}, "entryDateStart": {"type": "string", "format": "date"}, "entryDateEnd": {"type": "string", "format": "date"}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
-    "query_prepare_pool_balance": {"type": "object", "additionalProperties": False,
-                                    "properties": {"productName": {"type": "string", "minLength": 1, "maxLength": 100}, "productType": {"type": "string", "minLength": 1, "maxLength": 50}, "screenMeshName": {"type": "string", "minLength": 1, "maxLength": 100}, "productionDateStart": {"type": "string", "format": "date"}, "productionDateEnd": {"type": "string", "format": "date"}, "positiveOnly": {"type": "boolean", "const": True}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
     "query_fixed_product_qr_pool": {"type": "object", "additionalProperties": False,
                                     "properties": {"productName": {"type": "string", "minLength": 1, "maxLength": 100}, "codes": {"type": "array", "maxItems": 20, "uniqueItems": True, "items": {"type": "string", "minLength": 1, "maxLength": 100}}, "status": {"type": "string", "minLength": 1, "maxLength": 30}, "freeOnly": {"type": "boolean"}, "page": {"type": "integer", "minimum": 1}, "size": {"type": "integer", "minimum": 1, "maximum": 50}}},
     "get_warehouse_status": {
@@ -620,6 +694,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 
 
 LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
+    KNOWLEDGE_TOOL_NAME: (
+        "查询已发布且通过校验的现行静态知识材料。PROCESS 只用于工艺，"
+        "COMPANY/PRODUCT_MARKETING/CERTIFICATION/SALES 只用于企业资料；"
+        "不得用于实时库存、库位、托盘、化验结果、订单或批次状态。"
+    ),
     "resolve_products": "把用户明确说出的产品名称解析为受控候选；产品未确认时先调用，多候选必须由用户选择。",
     "resolve_warehouses": "把用户明确说出的库位名称解析为受控候选；库位未确认时先调用，多候选必须由用户选择。",
     "get_inventory_overview": "查询一个已确认具体产品的当前库存总量、折合件数、重量和已有位置摘要。",
@@ -628,7 +707,6 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_inventory_by_quality_standard": "按指定受控标准逐项匹配当前库存批次最新化验；standardCode 应来自标准目录，不得猜内部 ID。",
     "query_inventory_by_assay_metrics": "按一个受控原始化验指标和封闭数值条件筛选当前库存；不支持任意字段或表达式。",
     "query_inventory_ledger": "分页查询当前库存台账明细；参数是扁平字段。已确认具体产品时，把 canonicalName 放入 productName；不要生成 productRef、productScope 或 dateRange。不用于历史库存趋势。",
-    "query_prepare_pool_balance": "分页查询生产备料池当前正余额。用户未指定筛选条件时直接查询全部当前正余额，不要求生产订单或煮糖批次；只在用户明确提出时按产品、产品类型、筛网或生产日期筛选。不代表实际消耗、损耗或未来计划。",
     "get_warehouse_status": "查询一个已确认库位的当前容量、占用和状态；不还原历史容量。",
     "query_warehouse_capacity_distribution": "分页查询多个库位当前容量分布；不是历史容量趋势。",
     "query_warehouse_recent_operations": "查询已登记的近期库位操作。用户指定具体库位时先解析并使用 CURRENT_WAREHOUSE；用户未指定或明确查询全部库位时省略 warehouseRef，直接查询当前可见全局范围。日志缺失不代表没有发生。",
@@ -658,6 +736,7 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "search_operation_logs": "查询经过字段级脱敏的业务操作日志摘要；不返回变更前后值、请求正文或凭据。",
     "query_agent_tool_audit": "查询经过字段级脱敏的 Agent 工具调用审计；不返回参数、Prompt、模型上下文或内部 ID。",
     "query_agent_answer_reviews": "查询 Agent 回答复核安全摘要。复核进度“待复核”使用 reviewStatus=OPEN；answerStatus 是另一维度。最终回答必须把所有枚举转换成用户可读中文。",
+    "run_registered_report": "运行已登记报表。今日整体运营使用 today_operations_overview_v1，开始和结束日期必须都是 BUSINESS_TIME 中的北京时间今天，首版不传 productQuery、metricKey、taskType 或 comparisonMode；生产产量使用 daily_production_overview_v1（最长 31 天）；库存水平变化使用 inventory_level_trend_v1（最长 31 天），正常环境只读取已通过守恒对账的日终快照，本地历史回放会明确标记为模拟，模型不得把模拟说成正式趋势；生产领料与稳定登记产出使用 production_input_output_flow_v1（最长 366 天），两条每日序列不得直接相除；化验整体判定趋势使用 quality_assay_result_trend_v1；单项化验指标变化使用 quality_metric_trend_v1，并必须传入 metricKey；系统已登记托盘任务耗时使用 pallet_task_cycle_time_v1，可选 taskType，完成耗时、进行中等待和取消数量必须分开。版本均固定为 1。除今日运营概览外，需要环比时传 comparisonMode=PREVIOUS_PERIOD；用户明确指定不重叠对比期时传 CUSTOM 及两个对比日期。两期始终复用同一报表定义、版本和筛选条件。相对日期必须按 BUSINESS_TIME 转成明确日期。未指定产品时省略 productQuery。模型不得自行计算权威指标、产耗比、收率、损耗率、SLA 逾期、员工绩效或因果结论。",
 }
 
 
@@ -750,11 +829,41 @@ class ToolArgumentBuilder:
     ) -> dict[str, Any]:
         """Materialize controlled state refs, then apply the existing strict validator."""
 
-        if tool_name not in ALLOWED_TOOLS:
+        if tool_name not in ALLOWED_TOOLS and tool_name not in INTERNAL_KNOWLEDGE_TOOLS:
             raise ValueError("tool is not allowed")
+        if tool_name == KNOWLEDGE_TOOL_NAME:
+            if state.active_goal_type == "PROCESS_KNOWLEDGE_QUERY":
+                fixed_domains = ["PROCESS"]
+            elif state.active_goal_type == "ENTERPRISE_KNOWLEDGE_QUERY":
+                fixed_domains = list(knowledge_domains_for_subtype("knowledge_enterprise"))
+            else:
+                raise ValueError("knowledge tool requires an active knowledge GoalContract")
+            return self._validate(
+                KNOWLEDGE_TOOL_NAME,
+                {
+                    "query": user_message,
+                    "knowledgeDomains": fixed_domains,
+                    "productQueries": list(
+                        explicit_knowledge_product_queries(user_message)
+                    ),
+                    "limit": arguments.get("limit", 5),
+                },
+            )
         self._reject_model_generated_ids(arguments)
         self._reject_display_label_execution(tool_name, arguments, state, user_message)
         materialized = self._materialize_state_refs(arguments, state)
+        registered_report_periods = None
+        if tool_name == "run_registered_report" and materialized.get("comparisonMode"):
+            registered_report_periods = {
+                key: materialized.get(key)
+                for key in (
+                    "startDate",
+                    "endDate",
+                    "comparisonStartDate",
+                    "comparisonEndDate",
+                )
+                if materialized.get(key) is not None
+            }
         if tool_name == "query_pallet_tasks":
             materialized = self._pallet_task_followup_arguments(
                 materialized,
@@ -767,6 +876,11 @@ class ToolArgumentBuilder:
             user_message,
             TOOL_SCHEMAS.get(tool_name),
         )
+        if registered_report_periods is not None:
+            # 跨期请求同时包含本期和对比期。通用单日期范围解析器无法可靠判断
+            # 两组日期分别属于哪个期间，因此保留专家模型已结构化的四个日期，
+            # 再由下方严格校验检查格式、范围和重叠关系。
+            materialized.update(registered_report_periods)
         if tool_name == "query_boiling_batches":
             materialized = self._normalize_boiling_batch_scope(materialized, user_message)
         if tool_name == "query_agent_answer_reviews":
@@ -964,6 +1078,8 @@ class ToolArgumentBuilder:
         return {key: self._llm_visible_schema(item) for key, item in value.items()}
 
     def _llm_ref_key(self, key: str) -> str | None:
+        if key == "reportDefinitionId":
+            return key
         if key == "productId":
             return "productRef"
         if key == "warehouseId":
@@ -981,7 +1097,14 @@ class ToolArgumentBuilder:
             return
         for key, item in value.items():
             key_text = str(key)
-            if key_text == "id" or key_text.endswith("Id") or key_text.endswith("_id"):
+            if (
+                key_text != "reportDefinitionId"
+                and (
+                    key_text == "id"
+                    or key_text.endswith("Id")
+                    or key_text.endswith("_id")
+                )
+            ):
                 raise ValueError("model-generated database IDs are forbidden")
             self._reject_model_generated_ids(item)
 
@@ -1269,7 +1392,10 @@ class ToolArgumentBuilder:
                 suggestions=decision.suggestions,
                 confidenceNote=decision.confidenceNote,
             ), handoff, snapshot)
-        if not decision.toolName or decision.toolName not in ALLOWED_TOOLS:
+        if not decision.toolName or (
+            decision.toolName not in ALLOWED_TOOLS
+            and decision.toolName not in INTERNAL_KNOWLEDGE_TOOLS
+        ):
             raise ValueError("planned tool is not allowed")
         self._agent_router.authorize_tool(handoff.target_agent, decision.toolName)
         arguments = decision.arguments
@@ -1425,6 +1551,28 @@ class ToolArgumentBuilder:
             return None
 
         objects = route.business_objects
+        if route.intent_subtype in {"knowledge_process", "knowledge_enterprise"}:
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName=KNOWLEDGE_TOOL_NAME,
+                arguments=self._validate(
+                    KNOWLEDGE_TOOL_NAME,
+                    {
+                        "query": user_message,
+                        "knowledgeDomains": list(
+                            knowledge_domains_for_subtype(route.intent_subtype)
+                        ),
+                        "productQueries": list(
+                            explicit_knowledge_product_queries(user_message)
+                        ),
+                        "limit": 5,
+                    },
+                ),
+                intent=route.intent_subtype,
+                responseMode=route.intent_subtype,
+                confidenceNote="deterministic static-knowledge route selected",
+                routeSnapshot=snapshot,
+            )
         if route.intent_subtype == "production_order_progress":
             order_query = self._production_order_query(user_message)
             if order_query is None and state.selected_production_order is not None:
@@ -1680,8 +1828,6 @@ class ToolArgumentBuilder:
             return ModelPlanDecision(action="call_tool", toolName="query_agent_answer_reviews", arguments=self._validate("query_agent_answer_reviews", {"page": 1, "size": 20}), intent="agent_answer_reviews", responseMode="agent_answer_reviews", routeSnapshot=snapshot)
         if route.intent_subtype == "inventory_ledger":
             return ModelPlanDecision(action="call_tool", toolName="query_inventory_ledger", arguments=self._validate("query_inventory_ledger", {"page": 1, "size": 20}), intent="inventory_ledger", responseMode="inventory_ledger", routeSnapshot=snapshot)
-        if route.intent_subtype == "prepare_pool_balance":
-            return ModelPlanDecision(action="call_tool", toolName="query_prepare_pool_balance", arguments=self._validate("query_prepare_pool_balance", {"positiveOnly": True, "page": 1, "size": 20}), intent="prepare_pool_balance", responseMode="prepare_pool_balance", routeSnapshot=snapshot)
         if route.intent_subtype == "fixed_product_qr_pool":
             args: dict[str, Any] = {"page": 1, "size": 20}
             if "空闲" in (user_message or "") or "可打印" in (user_message or ""): args["freeOnly"] = True
@@ -2264,6 +2410,34 @@ class ToolArgumentBuilder:
         return self._validate("query_qr_batch_inbound_completion", self._qr_batch_inbound_arguments(arguments, user_message))
 
     def _validate(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if tool_name == KNOWLEDGE_TOOL_NAME:
+            query = str(arguments.get("query") or "").strip()
+            if not 1 <= len(query) <= 500:
+                raise ValueError("query must be 1..500 characters")
+            raw_domains = arguments.get("knowledgeDomains")
+            if not isinstance(raw_domains, (list, tuple)) or not 1 <= len(raw_domains) <= 5:
+                raise ValueError("knowledgeDomains must contain 1..5 entries")
+            domains = [str(value).strip().upper() for value in raw_domains]
+            allowed_domains = {"PROCESS", "COMPANY", "PRODUCT_MARKETING", "CERTIFICATION", "SALES"}
+            if len(domains) != len(set(domains)) or any(value not in allowed_domains for value in domains):
+                raise ValueError("knowledgeDomains contains unsupported or duplicate values")
+            raw_products = arguments.get("productQueries") or []
+            if not isinstance(raw_products, (list, tuple)) or len(raw_products) > 5:
+                raise ValueError("productQueries must contain at most 5 entries")
+            products = [str(value).strip() for value in raw_products]
+            if any(not value or len(value) > 100 for value in products):
+                raise ValueError("productQueries entries must be 1..100 characters")
+            if len({value.casefold() for value in products}) != len(products):
+                raise ValueError("productQueries must not contain duplicates")
+            limit = int(arguments.get("limit", 5))
+            if not 1 <= limit <= 10:
+                raise ValueError("limit must be 1..10")
+            return {
+                "query": query,
+                "knowledgeDomains": domains,
+                "productQueries": products,
+                "limit": limit,
+            }
         if tool_name in {"resolve_products", "resolve_warehouses"}:
             query = str(arguments.get("query") or "").strip()
             if not 1 <= len(query) <= 100:
@@ -2329,6 +2503,175 @@ class ToolArgumentBuilder:
             if not order_ref.startswith("aer_"):
                 raise ValueError("orderRef must be a controlled Agent entity ref")
             return {"orderRef": order_ref}
+        if tool_name == "run_registered_report":
+            definition_id = self._required_text(
+                arguments.get("reportDefinitionId"), 80
+            )
+            if definition_id not in {
+                "daily_production_overview_v1",
+                "quality_assay_result_trend_v1",
+                "quality_metric_trend_v1",
+                "production_input_output_flow_v1",
+                "pallet_task_cycle_time_v1",
+                "inventory_level_trend_v1",
+                "today_operations_overview_v1",
+            }:
+                raise ValueError("unsupported reportDefinitionId")
+            try:
+                report_version = int(arguments.get("reportVersion"))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("reportVersion must be 1") from exc
+            if report_version != 1:
+                raise ValueError("unsupported reportVersion")
+            start = self._optional_date(arguments.get("startDate"))
+            end = self._optional_date(arguments.get("endDate"))
+            if start is None or end is None:
+                raise ValueError("startDate and endDate are required")
+            if start > end:
+                raise ValueError("startDate must not be after endDate")
+            if definition_id == "today_operations_overview_v1":
+                today = self.business_clock.today().isoformat()
+                if start != end or start != today:
+                    raise ValueError(
+                        "today operations overview requires Beijing today for both dates"
+                    )
+                if any(
+                    arguments.get(key) is not None
+                    for key in (
+                        "productQuery",
+                        "metricKey",
+                        "taskType",
+                        "comparisonMode",
+                        "comparisonStartDate",
+                        "comparisonEndDate",
+                    )
+                ):
+                    raise ValueError(
+                        "today operations overview does not support filters or comparison"
+                    )
+                return {
+                    "reportDefinitionId": definition_id,
+                    "reportVersion": report_version,
+                    "startDate": start,
+                    "endDate": end,
+                }
+            max_range_days = (
+                31
+                if definition_id in {
+                    "daily_production_overview_v1",
+                    "inventory_level_trend_v1",
+                }
+                else 366
+            )
+            if (date.fromisoformat(end) - date.fromisoformat(start)).days >= max_range_days:
+                if definition_id in {
+                    "quality_assay_result_trend_v1",
+                    "quality_metric_trend_v1",
+                }:
+                    raise ValueError(
+                        "quality trend range must not exceed 366 days"
+                    )
+                if definition_id == "production_input_output_flow_v1":
+                    raise ValueError(
+                        "production input-output trend range must not exceed 366 days"
+                    )
+                if definition_id == "pallet_task_cycle_time_v1":
+                    raise ValueError(
+                        "pallet task cycle range must not exceed 366 days"
+                    )
+                if definition_id == "inventory_level_trend_v1":
+                    raise ValueError(
+                        "inventory trend range must not exceed 31 days"
+                    )
+                raise ValueError("registered report range must not exceed 31 days")
+            result = {
+                "reportDefinitionId": definition_id,
+                "reportVersion": report_version,
+                "startDate": start,
+                "endDate": end,
+            }
+            if arguments.get("productQuery") is not None:
+                result["productQuery"] = self._required_text(
+                    arguments.get("productQuery"), 100
+                )
+            if definition_id == "quality_metric_trend_v1":
+                if arguments.get("metricKey") is None:
+                    raise ValueError("quality metricKey is required")
+                metric_key = self._required_text(arguments.get("metricKey"), 40)
+                if metric_key not in {
+                    "color_value",
+                    "reducing_sugar",
+                    "dry_weight_loss",
+                    "conductivity_ash",
+                    "sucrose",
+                    "insoluble_impurity",
+                    "ph",
+                }:
+                    raise ValueError("unsupported quality metricKey")
+                result["metricKey"] = metric_key
+            elif arguments.get("metricKey") is not None:
+                raise ValueError(
+                    "metricKey is only supported by quality_metric_trend_v1"
+                )
+            if definition_id == "pallet_task_cycle_time_v1":
+                task_type = arguments.get("taskType")
+                if task_type is not None:
+                    task_type = self._required_text(task_type, 20).upper()
+                    if task_type not in {
+                        "ALL", "INBOUND", "SEMI_IN", "FINISH_IN", "OUT", "TRANSFER"
+                    }:
+                        raise ValueError("unsupported pallet taskType")
+                    result["taskType"] = task_type
+            elif arguments.get("taskType") is not None:
+                raise ValueError(
+                    "taskType is only supported by pallet_task_cycle_time_v1"
+                )
+            comparison_mode = arguments.get("comparisonMode")
+            comparison_start = self._optional_date(
+                arguments.get("comparisonStartDate")
+            )
+            comparison_end = self._optional_date(arguments.get("comparisonEndDate"))
+            if comparison_mode is None:
+                if comparison_start is not None or comparison_end is not None:
+                    raise ValueError(
+                        "comparison dates require comparisonMode=CUSTOM"
+                    )
+            else:
+                comparison_mode = self._required_text(comparison_mode, 30).upper()
+                if comparison_mode == "PREVIOUS_PERIOD":
+                    if comparison_start is not None or comparison_end is not None:
+                        raise ValueError(
+                            "PREVIOUS_PERIOD does not accept custom comparison dates"
+                        )
+                    result["comparisonMode"] = comparison_mode
+                elif comparison_mode == "CUSTOM":
+                    if comparison_start is None or comparison_end is None:
+                        raise ValueError(
+                            "CUSTOM comparison requires comparisonStartDate and comparisonEndDate"
+                        )
+                    if comparison_start > comparison_end:
+                        raise ValueError(
+                            "comparisonStartDate must not be after comparisonEndDate"
+                        )
+                    comparison_days = (
+                        date.fromisoformat(comparison_end)
+                        - date.fromisoformat(comparison_start)
+                    ).days + 1
+                    if comparison_days > max_range_days:
+                        raise ValueError(
+                            f"comparison range must not exceed {max_range_days} days"
+                        )
+                    overlaps = not (
+                        comparison_end < start or comparison_start > end
+                    )
+                    if overlaps:
+                        raise ValueError("current and comparison ranges must not overlap")
+                    result["comparisonMode"] = comparison_mode
+                    result["comparisonStartDate"] = comparison_start
+                    result["comparisonEndDate"] = comparison_end
+                else:
+                    raise ValueError("unsupported comparisonMode")
+            return result
         if tool_name == "query_boiling_batches":
             result: dict[str, Any] = {}
             if arguments.get("productQuery") is not None:
@@ -2552,16 +2895,13 @@ class ToolArgumentBuilder:
             page, size = int(arguments.get("page", 1)), int(arguments.get("size", 20))
             if page < 1 or not 1 <= size <= 50: raise ValueError("invalid pagination")
             result.update({"page": page, "size": size}); return result
-        if tool_name in {"query_inventory_ledger", "query_prepare_pool_balance"}:
+        if tool_name == "query_inventory_ledger":
             result: dict[str, Any] = {}
             limits = {"productName": 100, "warehouseName": 100, "screenMeshName": 100, "productStatus": 50, "productType": 50}
             for key, limit in limits.items():
                 if arguments.get(key) is not None: result[key] = self._required_text(arguments.get(key), limit)
             for key in ("entryDateStart", "entryDateEnd", "productionDateStart", "productionDateEnd"):
                 if arguments.get(key) is not None: result[key] = self._required_text(arguments.get(key), 10)
-            if tool_name == "query_prepare_pool_balance":
-                if arguments.get("positiveOnly", True) is not True: raise ValueError("only positiveOnly=true is supported")
-                result["positiveOnly"] = True
             page, size = int(arguments.get("page", 1)), int(arguments.get("size", 20))
             if page < 1 or not 1 <= size <= 50: raise ValueError("invalid pagination")
             result.update({"page": page, "size": size}); return result

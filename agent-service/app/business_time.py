@@ -91,6 +91,10 @@ class BusinessClock:
         if any(marker in text for marker in ("今天", "今日", "当天")):
             return BusinessDateRange("今天", today, today)
 
+        explicit_range = self._resolve_explicit_date_range(text, today)
+        if explicit_range is not None:
+            return explicit_range
+
         explicit_date = self._resolve_explicit_date(text, today)
         if explicit_date is not None:
             return explicit_date
@@ -133,6 +137,44 @@ class BusinessClock:
             return BusinessDateRange("去年", date(today.year - 1, 1, 1), date(today.year - 1, 12, 31))
         if any(marker in text for marker in ("今年", "本年", "本年度")):
             return BusinessDateRange("今年", date(today.year, 1, 1), today)
+        return None
+
+    @staticmethod
+    def _resolve_explicit_date_range(text: str, today: date) -> BusinessDateRange | None:
+        chinese_pattern = re.compile(
+            r"(?<!\d)(?:(?P<start_year>20\d{2})年)?"
+            r"(?P<start_month>0?[1-9]|1[0-2])月"
+            r"(?P<start_day>0?[1-9]|[12]\d|3[01])(?:日|号)?"
+            r"(?:至|到|~|～|—)"
+            r"(?:(?P<end_year>20\d{2})年)?"
+            r"(?:(?P<end_month>0?[1-9]|1[0-2])月)?"
+            r"(?P<end_day>0?[1-9]|[12]\d|3[01])(?:日|号)"
+        )
+        iso_pattern = re.compile(
+            r"(?<!\d)(?P<start_year>20\d{2})[-/.]"
+            r"(?P<start_month>0?[1-9]|1[0-2])[-/.]"
+            r"(?P<start_day>0?[1-9]|[12]\d|3[01])"
+            r"(?:至|到|~|～|—)"
+            r"(?P<end_year>20\d{2})[-/.]"
+            r"(?P<end_month>0?[1-9]|1[0-2])[-/.]"
+            r"(?P<end_day>0?[1-9]|[12]\d|3[01])(?!\d)"
+        )
+        for pattern in (chinese_pattern, iso_pattern):
+            match = pattern.search(text)
+            if match is None:
+                continue
+            try:
+                start_year = int(match.group("start_year") or today.year)
+                end_year = int(match.group("end_year") or start_year)
+                start_month = int(match.group("start_month"))
+                end_month = int(match.group("end_month") or start_month)
+                start = date(start_year, start_month, int(match.group("start_day")))
+                end = date(end_year, end_month, int(match.group("end_day")))
+            except ValueError:
+                return None
+            if end < start:
+                raise ValueError("explicit date range end must not be earlier than start")
+            return BusinessDateRange(match.group(0), start, end)
         return None
 
     @staticmethod

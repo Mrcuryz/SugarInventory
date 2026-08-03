@@ -1,0 +1,83 @@
+{"caseId":"eval-001","category":"EXACT_PRODUCT","query":"单晶黄冰糖工艺流程","expectedDocumentIds":["doc-0d4a393a3d28763ef123214f"],"forbiddenDocumentIds":["doc-877829a90cbe296b567d7e98"],"requiredRank":1}
+{"caseId":"eval-002","category":"EXACT_PRODUCT","query":"单晶体冰糖及风味单晶体冰糖工艺流程","expectedDocumentIds":["doc-877829a90cbe296b567d7e98"],"forbiddenDocumentIds":["doc-0d4a393a3d28763ef123214f"],"requiredRank":1}
+{"caseId":"eval-003","category":"EXACT_PRODUCT","query":"多晶体白冰糖自然结晶流程","expectedDocumentIds":["doc-765c02b39c75bdf3e9245d75"],"requiredRank":1}
+{"caseId":"eval-004","category":"EXACT_PRODUCT","query":"白砂糖分装工艺","expectedDocumentIds":["doc-161898e85c006f9f13db2f01"],"forbiddenDocumentIds":["doc-3d9da54f57f5a26443e9e812","doc-e1c994b0d05e38566549d116"],"requiredRank":1}
+{"caseId":"eval-005","category":"EXACT_PRODUCT","query":"红糖分装工艺","expectedDocumentIds":["doc-3d9da54f57f5a26443e9e812"],"forbiddenDocumentIds":["doc-161898e85c006f9f13db2f01","doc-e1c994b0d05e38566549d116"],"requiredRank":1}
+{"caseId":"eval-006","category":"EXACT_PRODUCT","query":"赤砂糖分装工艺","expectedDocumentIds":["doc-e1c994b0d05e38566549d116"],"forbiddenDocumentIds":["doc-161898e85c006f9f13db2f01","doc-3d9da54f57f5a26443e9e812"],"requiredRank":1}
+{"caseId":"eval-007","category":"EXACT_PRODUCT","query":"黑糖及风味糖制品工艺","expectedDocumentIds":["doc-4103f8b1b885c872e8e54903"],"forbiddenDocumentIds":["doc-ecc1946b2ead2eb095fc23f6"],"requiredRank":1}
+{"caseId":"eval-008","category":"EXACT_PRODUCT","query":"冰红糖黄糖冰片糖黑糖工艺流程","expectedDocumentIds":["doc-ecc1946b2ead2eb095fc23f6"],"forbiddenDocumentIds":["doc-4103f8b1b885c872e8e54903"],"requiredRank":1}
+{"caseId":"eval-009","category":"EXACT_PRODUCT","query":"糖分装工艺过筛吸磁","expectedDocumentIds":["doc-f6e833b99120d3fccb96f3c0"],"requiredRank":1}
+{"caseId":"eval-010","category":"EXACT_PRODUCT","query":"宣传册玫瑰花黑糖介绍","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/012/01"],"requiredRank":1}
+{"caseId":"eval-011","category":"EXACT_PRODUCT","query":"宣传册梨汁冰糖介绍","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/012/02"],"requiredRank":1}
+{"caseId":"eval-012","category":"EXACT_PRODUCT","query":"宣传册姜汁红糖介绍","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/012/03"],"requiredRank":1}
+{"caseId":"eval-013","category":"EXACT_PRODUCT","query":"宣传册阿胶黑糖介绍","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/012/04"],"requiredRank":1}
+{"caseId":"eval-014","category":"EXACT_PRODUCT","query":"宣传册黑糖桂花介绍","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/013/02"],"requiredRank":1}
+{"caseId":"eval-015","category":"EXACT_PRODUCT","query":"宣传册冰片糖产品介绍","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/010/01"],"requiredRank":1}
+{"caseId":"eval-016","category":"EXACT_PRODUCT","query":"宣传册冰红糖产品介绍","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/011/01"],"requiredRank":1}
+{"caseId":"eval-017","category":"CONTROL_POINT","query":"单晶黄冰糖搅拌染色 CPP1","expectedChunkIds":["doc-0d4a393a3d28763ef123214f/control/9"],"requiredRank":1}
+{"caseId":"eval-018","category":"CONTROL_POINT","query":"单晶黄冰糖金属探测 CCP2","expectedChunkIds":["doc-0d4a393a3d28763ef123214f/control/10"],"requiredRank":1}
+{"caseId":"eval-019","category":"CONTROL_POINT","query":"白砂糖原料验收 CCP1","expectedChunkIds":["doc-161898e85c006f9f13db2f01/control/1"],"requiredRank":1}
+{"caseId":"eval-020","category":"CONTROL_POINT","query":"白砂糖称量装袋 CCP2","expectedChunkIds":["doc-161898e85c006f9f13db2f01/control/4"],"requiredRank":1}
+{"caseId":"eval-021","category":"CONTROL_POINT","query":"白砂糖金属控制 CCP3 CCP1","expectedChunkIds":["doc-161898e85c006f9f13db2f01/control/6"],"requiredRank":1}
+{"caseId":"eval-022","category":"CONTROL_POINT","query":"红糖原料验收 CCP1","expectedChunkIds":["doc-3d9da54f57f5a26443e9e812/control/1"],"requiredRank":1}
+{"caseId":"eval-023","category":"CONTROL_POINT","query":"红糖金属控制 CCP2","expectedChunkIds":["doc-3d9da54f57f5a26443e9e812/control/8"],"requiredRank":1}
+{"caseId":"eval-024","category":"CONTROL_POINT","query":"黑糖风味配方调味料 CCP1","expectedChunkIds":["doc-4103f8b1b885c872e8e54903/control/4.1"],"requiredRank":1}
+{"caseId":"eval-025","category":"CONTROL_POINT","query":"黑糖及风味糖金属控制 CCP2","expectedChunkIds":["doc-4103f8b1b885c872e8e54903/control/8"],"requiredRank":1}
+{"caseId":"eval-026","category":"CONTROL_POINT","query":"多晶体冰糖金属探测 CCP1","expectedChunkIds":["doc-765c02b39c75bdf3e9245d75/control/9"],"requiredRank":1}
+{"caseId":"eval-027","category":"CONTROL_POINT","query":"单晶体冰糖金属探测 CCP1","expectedChunkIds":["doc-877829a90cbe296b567d7e98/control/7"],"requiredRank":1}
+{"caseId":"eval-028","category":"CONTROL_POINT","query":"赤砂糖原料验收 CCP1","expectedChunkIds":["doc-e1c994b0d05e38566549d116/control/1"],"requiredRank":1}
+{"caseId":"eval-029","category":"CONTROL_POINT","query":"赤砂糖金属控制 CCP2","expectedChunkIds":["doc-e1c994b0d05e38566549d116/control/8"],"requiredRank":1}
+{"caseId":"eval-030","category":"CONTROL_POINT","query":"白砂糖 SA-990 金属探测器","expectedChunkIds":["doc-161898e85c006f9f13db2f01/control/6"],"requiredRank":1}
+{"caseId":"eval-031","category":"CONTROL_POINT","query":"红糖分装 KD-990 金属探测器","expectedChunkIds":["doc-3d9da54f57f5a26443e9e812/control/8"],"forbiddenDocumentIds":["doc-e1c994b0d05e38566549d116"],"requiredRank":1}
+{"caseId":"eval-032","category":"CONTROL_POINT","query":"赤砂糖分装 KD-990 金属探测器","expectedChunkIds":["doc-e1c994b0d05e38566549d116/control/8"],"forbiddenDocumentIds":["doc-3d9da54f57f5a26443e9e812"],"requiredRank":1}
+{"caseId":"eval-033","category":"NUMERIC","query":"单晶黄冰糖溶解过滤糖度范围","expectedChunkIds":["doc-0d4a393a3d28763ef123214f/control/2"],"requiredEvidenceTerms":["40-55°Bx","65-70°Bx"],"requiredRank":3}
+{"caseId":"eval-034","category":"NUMERIC","query":"单晶黄冰糖结晶真空度温度汽压","expectedChunkIds":["doc-0d4a393a3d28763ef123214f/control/3"],"requiredEvidenceTerms":["0.06～0.09Mpa","60-90℃","0.4-0.8Mpa"],"requiredRank":3}
+{"caseId":"eval-035","category":"NUMERIC","query":"单晶黄冰糖脱水温度和转速","expectedChunkIds":["doc-0d4a393a3d28763ef123214f/control/5"],"requiredEvidenceTerms":["60～90℃","900转/分"],"requiredRank":3}
+{"caseId":"eval-036","category":"NUMERIC","query":"单晶黄冰糖过筛筛网目数","expectedChunkIds":["doc-0d4a393a3d28763ef123214f/control/6"],"requiredEvidenceTerms":["6到8目"],"requiredRank":3}
+{"caseId":"eval-037","category":"NUMERIC","query":"白砂糖称量装袋质量偏差","expectedChunkIds":["doc-161898e85c006f9f13db2f01/control/4"],"requiredEvidenceTerms":["12g"],"requiredRank":3}
+{"caseId":"eval-038","category":"NUMERIC","query":"白砂糖金属检测铁类非铁类阈值","expectedChunkIds":["doc-161898e85c006f9f13db2f01/control/6"],"requiredEvidenceTerms":["Φ1.5mm","Φ2.0mm","Φ2.5mm"],"requiredRank":3}
+{"caseId":"eval-039","category":"NUMERIC","query":"红糖分装金属检测阈值","expectedChunkIds":["doc-3d9da54f57f5a26443e9e812/control/8"],"requiredEvidenceTerms":["Φ1.5mm","Φ2.0mm","Φ2.5mm"],"requiredRank":3}
+{"caseId":"eval-040","category":"NUMERIC","query":"赤砂糖分装金属检测阈值","expectedChunkIds":["doc-e1c994b0d05e38566549d116/control/8"],"requiredEvidenceTerms":["Φ2.5mm","Φ3.0mm","Φ3.5mm"],"requiredRank":3}
+{"caseId":"eval-041","category":"NUMERIC","query":"多晶体冰糖煮糖浓缩温度","expectedChunkIds":["doc-765c02b39c75bdf3e9245d75/control/3"],"requiredEvidenceTerms":["112-120℃"],"requiredRank":3}
+{"caseId":"eval-042","category":"NUMERIC","query":"多晶体冰糖自然结晶时间","expectedChunkIds":["doc-765c02b39c75bdf3e9245d75/control/4"],"requiredEvidenceTerms":["7天"],"requiredRank":3}
+{"caseId":"eval-043","category":"NUMERIC","query":"多晶体冰糖分蜜时间","expectedChunkIds":["doc-765c02b39c75bdf3e9245d75/control/5"],"requiredEvidenceTerms":["24小时"],"requiredRank":3}
+{"caseId":"eval-044","category":"NUMERIC","query":"多晶体冰糖一次烘干温度","expectedChunkIds":["doc-765c02b39c75bdf3e9245d75/control/6"],"requiredEvidenceTerms":["60-75℃"],"requiredRank":3}
+{"caseId":"eval-045","category":"NUMERIC","query":"单晶体冰糖脱水温度转速","expectedChunkIds":["doc-877829a90cbe296b567d7e98/control/5"],"requiredEvidenceTerms":["60～80℃","2900转/分"],"requiredRank":3}
+{"caseId":"eval-046","category":"NUMERIC","query":"单晶体冰糖结晶真空度压力温度","expectedChunkIds":["doc-877829a90cbe296b567d7e98/control/3"],"requiredEvidenceTerms":["0.06～0.09Mpa","60-90℃","0.4-0.8Mpa"],"requiredRank":3}
+{"caseId":"eval-047","category":"NUMERIC","query":"冰片糖煮糖浓缩压力温度和质量","expectedChunkIds":["doc-ecc1946b2ead2eb095fc23f6/control/3"],"requiredEvidenceTerms":["126～140°C","200G"],"requiredRank":3}
+{"caseId":"eval-048","category":"NUMERIC","query":"冰红糖包装材料紫外线灭菌时间","expectedChunkIds":["doc-ecc1946b2ead2eb095fc23f6/control/6"],"requiredEvidenceTerms":["30-60分钟"],"requiredRank":3}
+{"caseId":"eval-049","category":"PROCESS_FLOW","query":"单晶黄冰糖完整流程顺序","expectedChunkIds":["doc-0d4a393a3d28763ef123214f/flow"],"requiredRank":5}
+{"caseId":"eval-050","category":"PROCESS_FLOW","query":"白砂糖分装完整流程顺序","expectedChunkIds":["doc-161898e85c006f9f13db2f01/flow"],"requiredRank":5}
+{"caseId":"eval-051","category":"PROCESS_FLOW","query":"红糖分装完整流程顺序","expectedChunkIds":["doc-3d9da54f57f5a26443e9e812/flow"],"requiredRank":5}
+{"caseId":"eval-052","category":"PROCESS_FLOW","query":"黑糖及风味糖制品完整流程顺序","expectedChunkIds":["doc-4103f8b1b885c872e8e54903/flow"],"requiredRank":5}
+{"caseId":"eval-053","category":"PROCESS_FLOW","query":"多晶体冰糖及风味冰糖完整流程顺序","expectedChunkIds":["doc-765c02b39c75bdf3e9245d75/flow"],"requiredRank":5}
+{"caseId":"eval-054","category":"PROCESS_FLOW","query":"单晶体冰糖及风味单晶体冰糖完整流程顺序","expectedChunkIds":["doc-877829a90cbe296b567d7e98/flow"],"requiredRank":5}
+{"caseId":"eval-055","category":"PROCESS_FLOW","query":"赤砂糖分装完整流程顺序","expectedChunkIds":["doc-e1c994b0d05e38566549d116/flow"],"requiredRank":5}
+{"caseId":"eval-056","category":"PROCESS_FLOW","query":"冰红糖黄糖冰片糖黑糖完整流程顺序","expectedChunkIds":["doc-ecc1946b2ead2eb095fc23f6/flow"],"requiredRank":5}
+{"caseId":"eval-057","category":"PROCESS_FLOW","query":"糖分装过筛吸磁完整流程","expectedChunkIds":["doc-f6e833b99120d3fccb96f3c0/flow"],"requiredRank":5}
+{"caseId":"eval-058","category":"PROCESS_FLOW","query":"单晶黄冰糖原料验收后溶解过滤再结晶","expectedDocumentIds":["doc-0d4a393a3d28763ef123214f"],"requiredRank":5}
+{"caseId":"eval-059","category":"PROCESS_FLOW","query":"白砂糖拆包后倒进工作台称量装袋","expectedDocumentIds":["doc-161898e85c006f9f13db2f01"],"requiredRank":5}
+{"caseId":"eval-060","category":"PROCESS_FLOW","query":"红糖原料外表面吸尘后拆包","expectedDocumentIds":["doc-3d9da54f57f5a26443e9e812"],"requiredRank":5}
+{"caseId":"eval-061","category":"PROCESS_FLOW","query":"糖分装流程中过筛和吸磁的顺序","expectedDocumentIds":["doc-f6e833b99120d3fccb96f3c0"],"requiredRank":5}
+{"caseId":"eval-062","category":"PROCESS_FLOW","query":"多晶体冰糖煮糖浓缩后自然结晶再分蜜","expectedDocumentIds":["doc-765c02b39c75bdf3e9245d75"],"requiredRank":5}
+{"caseId":"eval-063","category":"COMPANY_FACT","query":"来冰食品公司地址在哪里","expectedDocumentIds":["doc-94170623c8ba7c517d863337"],"requiredRank":5}
+{"caseId":"eval-064","category":"COMPANY_FACT","query":"来冰食品销售电话和办公室电话","expectedDocumentIds":["doc-94170623c8ba7c517d863337"],"requiredRank":5}
+{"caseId":"eval-065","category":"COMPANY_FACT","query":"来冰食品工厂占地面积和总投资","expectedDocumentIds":["doc-94170623c8ba7c517d863337"],"requiredRank":5}
+{"caseId":"eval-066","category":"COMPANY_FACT","query":"宣传册列出的 ISO9001 ISO22000 HACCP FSSC22000 认证","expectedDocumentIds":["doc-94170623c8ba7c517d863337"],"requiredRank":5}
+{"caseId":"eval-067","category":"COMPANY_FACT","query":"来冰食品一期工程什么时候投产","expectedDocumentIds":["doc-94170623c8ba7c517d863337"],"requiredRank":5}
+{"caseId":"eval-068","category":"COMPANY_FACT","query":"来冰食品销售网络","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/014/01"],"requiredRank":5}
+{"caseId":"eval-069","category":"COMPANY_FACT","query":"诚心做人专心做事用心做糖","expectedDocumentIds":["doc-94170623c8ba7c517d863337"],"requiredRank":5}
+{"caseId":"eval-070","category":"COMPANY_FACT","query":"宣传册企业设施与生产线","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/004/01"],"requiredRank":5}
+{"caseId":"eval-071","category":"COMPANY_FACT","query":"宣传册包装线与成品仓库","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/005/01"],"requiredRank":5}
+{"caseId":"eval-072","category":"COMPANY_FACT","query":"宣传册质量要求","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/016/01"],"requiredRank":5}
+{"caseId":"eval-073","category":"COMPANY_FACT","query":"宣传册企业荣誉","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/006/01"],"requiredRank":5}
+{"caseId":"eval-074","category":"COMPANY_FACT","query":"宣传册目录内容","expectedChunkIds":["doc-94170623c8ba7c517d863337/page/002/01"],"requiredRank":5}
+{"caseId":"eval-075","category":"ACCESS_BOUNDARY","query":"白砂糖分装工艺","role":"USER","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-076","category":"ACCESS_BOUNDARY","query":"单晶黄冰糖结晶参数","role":"AUDITOR","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-077","category":"ACCESS_BOUNDARY","query":"公司销售网络","role":"GUEST","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-078","category":"ACCESS_BOUNDARY","query":"红糖 CCP2","role":"WAREHOUSE_OPERATOR","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-079","category":"ACCESS_BOUNDARY","query":"赤砂糖金属检测阈值","role":"QUALITY_INSPECTOR","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-080","category":"ACCESS_BOUNDARY","query":"企业联系电话","role":"ANONYMOUS","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-081","category":"ACCESS_BOUNDARY","query":"多晶冰糖自然结晶时间","role":"VIEWER","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-082","category":"ACCESS_BOUNDARY","query":"冰红糖包装灭菌时间","role":"EMPLOYEE","expectedStatus":"FORBIDDEN"}
+{"caseId":"eval-083","category":"ACCESS_BOUNDARY","query":"白砂糖分装工艺","role":"SUPER_ADMIN","expectedStatus":"SUCCEEDED","expectedDocumentIds":["doc-161898e85c006f9f13db2f01"],"requiredRank":5}

@@ -14,21 +14,21 @@
 
 ## 当前状态
 
-- 最后更新：2026-07-27
-- 总体阶段：Agent v1 第一阶段只读查询已封板
-- 当前实施切片：`V1-READONLY-PHASE1-CLOSED`
-- 当前工作状态：LOCAL_UAT_GO / PRODUCTION_RELEASE_PENDING（52 个只读工具已归入 43 个目标合同；129/129 主模型稳定性重放、全量工程回归、25 项页面验收及 ADMIN/QC/STAFF 独立角色补验通过）
-- 当前负责线程：本 Codex 只读查询封板线程（2026-07-27）
-- 当前文件范围：第一阶段合同与回归基线冻结；下一阶段仅进入登记式报表/分析目标设计
+- 最后更新：2026-08-03
+- 总体阶段：Agent v1 第一阶段只读查询已封板；v2-A 已登记七个报表定义，今日运营概览完成工程验收，其余六个定义保持既有跨期比较、ReportRun 同快照导出和跨会话重开能力
+- 当前实施切片：`V2A-REPORT-07-TODAY-OPERATIONS-OVERVIEW`
+- 当前工作状态：LIVE_LLM_BROWSER_PASSED（后端、MCP、Agent、卡片、历史重开和 XLSX 已通过自动化验收；本地真实 HTTP 与 Chrome 外部模型自然语言问答均通过）
+- 当前负责线程：本 Codex 登记报表与数据成熟度实施线程（2026-08-03）
+- 当前文件范围：第一阶段合同与回归基线冻结；仅新增受控登记报表和数据质量底座，不进入 L3 写操作
 
 ## 已确认基线
 
 - 已完成主 Agent、Router、专家 Agent 和首个受控多专家配方的基础架构。
 - 主 Agent 不持有业务工具；专家只能访问本专家白名单工具。
 - 当前仅登记一个复合配方：`warehouse_inventory_latest_assay`。
-- 当前共有 52 个已实现的只读 MCP 工具；原有工具的业务行为未改变。
+- 第一阶段冻结基线共有 52 个已实现的只读 MCP 工具；当前在不改变原有工具业务行为的前提下，新增 1 个登记报表运行工具。
 - Agent v1 专家规划基线：inventory、warehouse、logistics、pallet、production、quality、master_data、administration、audit。
-- v2-A 分析/preview 与 v2-B execute 仅保留设计和占位，不在本阶段实现。
+- v2-A 已按登记制实现七个只读报表定义；今日运营概览明确不支持跨期比较，其余六个定义保留统一跨期比较。七类均进入历史快照和 XLSX 交付；v2-B execute 仍只保留设计和占位。
 
 ## 专家覆盖进度
 
@@ -43,6 +43,7 @@
 | `master_data_expert` | COMPLETED | 4 个 L1 工具（含共享 `resolve_products`） |
 | `administration_expert` | COMPLETED | 3 个 L1 工具 |
 | `audit_expert` | COMPLETED | 3 个 L1 工具 |
+| `analytics_expert` | SEVEN_REPORT_DEFINITIONS | 1 个受控 L1 登记报表工具运行 7 个版本化报表定义；今日运营概览完成工程验收，原六个定义验收结论不变，库存水平趋势生产门禁仍未通过 |
 
 ## 当前工作项
 
@@ -253,6 +254,8 @@
 
 ## 2026-07-14：V1-INV-01 库存台账与备料余额完成
 
+> 2026-08-01 复核更正：备料池属于已停用旧流程，`query_prepare_pool_balance` 已从当前 Agent/MCP 工具面和 GoalContract 下线。本节仅保留当时开发记录，不代表当前能力。
+
 - 新增 `query_inventory_ledger`、`query_prepare_pool_balance`，正式注册只读 MCP 工具增至 46 个；inventory_expert 当前 v1 规划集完成。
 - 库存台账直接查询当前 inventory 行及业务名称、位置、板件数、入库日期和托盘已登记生产日期，明确不是完整历史流水且不证明批次合格。
 - 备料池工具仅支持 `positiveOnly=true`，只返回 remainingPieces > 0 的现存余额；零余额完整历史仍不支持，且余额不代表订单预留、质量合格或可直接领用。
@@ -400,7 +403,7 @@
 
 - Runtime GoalContract 从 17 个扩展为 42 个，机器注册表 `current_goals` 覆盖全部 51 个 L1 工具，`planned_goals` 归零。合同按用户业务结果划分，不按工具一对一复制。
 - `GoalContractV1` 新增声明式 `factValidation` 和 `evidenceTools`：所需字段、列表字段、权威空结果和少数合法多形态结果由合同描述；Resolver、目录发现等支撑工具只推进实体/筛选上下文，不能生成完成证据。
-- P1 覆盖库存台账/备料池、库位状态/容量/操作/混放、化验异常/标准覆盖、托盘异常/未入库码/批次完成度、生产标签/在制品、库存单据和自动报数批次。P2 覆盖化验基础资料、固定产品二维码池、生产领料候选、产品/筛网主数据、员工/角色权限和三类审计治理目标。
+- P1 当时覆盖库存台账/备料池、库位状态/容量/操作/混放、化验异常/标准覆盖、托盘异常/未入库码/批次完成度、生产标签/在制品、库存单据和自动报数批次；其中备料池能力已于 2026-08-01 下线。P2 覆盖化验基础资料、固定产品二维码池、生产领料候选、产品/筛网主数据、员工/角色权限和三类审计治理目标。
 - 纠正原计划中 `MATERIAL_CANDIDATES` 的支撑实体：该目标依赖受控生产订单解析 `resolve_production_entities`，不是产品解析。
 - 同一工具可在不同目标承担不同角色。例如 `query_quality_standard_catalog` 在指定标准库存筛选中只是支撑工具，在化验基础资料目标中才是完成证据；Runtime 优先遵守当前 GoalContract，不允许支撑调用切换活动目标。
 - 主模型目标类型、专家归属、模型 Schema、Runtime 合同和机器注册表保持共同来源/一致性测试；LLM 集成测试验证“主模型绑定库位容量目标 → 库位专家选工具 → Runtime 生成事实 → CompletionEvaluator COMPLETE”。
@@ -455,7 +458,130 @@
 2. 先选择 3～5 个高价值报表/分析目标，定义指标口径、时间范围、数据快照、证据链和版本号。
 3. 继续复用 GoalContract、EntityContext、FactEnvelope 和 CompletionEvaluator；暂不进入 L3 写操作。
 
+## 2026-07-27：v2-A 首个登记报表纵向样板
+
+- 选择 `daily_production_overview_v1@1` 作为首个样板，新增 `DAILY_PRODUCTION_ANALYSIS` GoalContract 和最小权限 `analytics_expert`。当前运行时总量为 44 个目标合同、53 个 L1 工具、10 个业务专家。
+- 统计口径严格限定为按 `production_date` 登记且状态非 `CANCELED` 的实际产出记录，提供产出记录数、关联生产订单数、登记重量、整板数、散件数和折算件数；二维码需求、绑定和入库数量作为后续流程进度单独展示，不计入产量。
+- Java/SQL 负责确定性聚合，MCP 只允许运行已登记且固定版本的报表，最长查询 31 天；模型负责理解时间和产品范围、选择报表、分析受控结果，不得生成任意查询。
+- 新增会话级 `ReportContext`、报表 FactEnvelope、CompletionEvaluator 和可展开生产日报卡片；空数据、缺重量、缺件数换算和产品名缺失均保留数据质量提示。
+- 明确未实现计划达成率、班次/产线对比、实时车间产量、良率、损耗、产能利用率和预测，避免把“登记产出”包装成尚无数据支撑的经营结论。
+- 初始工程验证：Python Agent 全量 `304 passed`；Java 根项目与 warehouse-mcp 全量测试通过；前端 35 项单元测试和生产构建通过。后续真实浏览器验收结果见下节。
+- 报表定义和后续顺序见 `report-definition-registry.yaml` 与 `high-value-analytics-report-plan.md`。
+
+## 2026-07-29：生产登记产出日报真实浏览器验收通过
+
+- 使用本地真实数据库和陈思聪测试账号完成今天、最近 30 天、产品筛选、指定单日、无匹配产品、超过 31 天、卡片展开/收起和跨领域边界共 8 条浏览器用例。
+- 验收中修复只读 POST 白名单遗漏、时间微秒、零产出板件文案、长文本重复、超范围通用错误以及产品名称/板件语义混淆。
+- 最终回归：Java 根项目全量通过；Python `313 passed`；前端 Agent 组件 `23 passed`；前端生产构建通过。
+- 首个纵向样板结论为 `PASS`。真实模型样本约 10～27 秒，样本量不足以声明 P50/P95 性能达标，仍需后续统计。
+- 完整输入、输出和缺陷记录见 `daily-production-report-uat-2026-07-29.md`。下一切片进入 `quality_assay_result_trend_v1`；`quality_metric_trend_v1` 随后单独实施。
+
+## 2026-07-29：化验判定趋势真实浏览器验收通过
+
+- 新增 `QUALITY_ASSAY_TREND_ANALYSIS` GoalContract；当前运行时为 45 个目标合同、53 个 L1 工具和 10 个业务专家。没有为每个报表新增工具，仍由受控 `run_registered_report` 按报表 ID 和版本运行。
+- `quality_assay_result_trend_v1@1` 按 `assay.sample_date` 统计已登记记录；合格率固定为 `PASS / (PASS + FAIL)`，无标准、标准多候选和缺少受控判定不进入分母。
+- 历史标准按每条记录实际采用的名称和版本展示；报表不使用当前标准重算历史，也不从已有化验记录推断哪些生产批次缺少化验。
+- 真实浏览器覆盖 30 天、180 天、单日无标准、有效产品空数据、无效产品澄清、超过 366 天、全部产品、卡片折叠/展开和化验详情专家边界共 9 条用例。
+- 验收中修复 Mapper 未扫描导致整包启动失败、MCP 可执行包版本陈旧导致卡片数字归零，以及稀疏/空数据卡片罗列全部零值日期三个问题。
+- 最终回归：Java 根项目全量通过；Python `327 passed, 1 skipped`；前端 Agent 组件 `25 passed`；前端生产构建通过。
+- 真实模型样本约 18～37 秒，功能验收通过但性能仍未达成可量化结论；后续继续统计主模型、专家模型、工具和整轮 P50/P95。
+- 完整输入、输出和缺陷记录见 `quality-assay-trend-uat-2026-07-29.md`。下一切片进入 `quality_metric_trend_v1`。
+
+## 2026-07-29：化验单指标趋势真实浏览器验收通过
+
+- 新增 `QUALITY_METRIC_TREND_ANALYSIS` GoalContract；当前运行时为 46 个目标合同、53 个只读/登记报表工具、10 个业务专家和 3 个版本化报表定义。三个报表继续共用唯一受控 `run_registered_report`。
+- `quality_metric_trend_v1@1` 支持七项登记化验指标；原始统计包含所有有实测值的样本，达标率只比较记录当时历史标准中范围和单位均可比较的样本。
+- 真实浏览器覆盖 pH、带单位的干燥失重、30 天日序列、缺少指标澄清、超过 366 天、化验详情回归和卡片折叠/展开共 7 条用例。
+- 验收中修复无量纲 pH 被通用显示函数错误追加“候选项”，以及单指标趋势卡片遗漏公共展开/收起按钮两个体验缺陷。
+- 最终回归：Python 定向 `96 passed`；前端 Agent 组件 `27 passed`；前端生产构建通过；Java 根项目和 warehouse-mcp 全量回归通过。
+- 完整记录见 `quality-metric-trend-uat-2026-07-29.md`。下一步先实现最小 `ReportRun` 持久化和导出复用协议，同时审计库存快照与事件去重的数据成熟度；不直接承诺库存历史趋势。
+
+### 2026-07-29：最小 ReportRun 持久化与同快照 XLSX 导出
+
+- 三个登记报表运行后均持久化不可变快照；历史读取和导出按当前用户、报表权限、30 天有效期和 SHA-256 重新校验。
+- XLSX 只从已保存快照生成，不重新运行报表；每次导出生成独立审计引用并记录导出文件 SHA-256。
+- 生产日报、化验判定趋势和单指标趋势均完成真实浏览器“查询 → 卡片 → 导出”闭环；历史读取接口也按原 `reportRunId` 返回原事实。
+- 本切片只写报表技术快照和导出审计，不修改库存、生产或化验业务数据，不改变 L3 写操作边界。
+- 回归通过：Java 根项目全量测试、Python 非 RAG 应用回归 `315 passed`、登记报表定向回归 `96 passed`、前端 Agent 测试 `27 passed`、前端生产构建。
+- 完整记录见 `report-run-persistence-export-uat-2026-07-29.md`。下一步进入库存快照、库存事件唯一键和跨来源重复计数审计；审计通过前不登记库存变化趋势。
+
+### 2026-07-29：库存趋势数据成熟度与去重审计
+
+- 当前 `inventory` 仍是当前快照，不是历史日快照；`entry_date` 不能解释为库存随时间变化。
+- 本地固定数据按代码规则折算件数后，两类产品均满足“历史入库 - 历史出库 = 当前库存”，差异为 0，证明产品总库存净变化具备正向基础。
+- 但旧调拨通过出库加重新入库记录，新托盘调拨只原地更新库存并写 `TRANSFER`；两种语义没有统一业务动作 ID。托盘流转旧轮次还会在 180 天后清理，不能作为长期数量账。
+- 结论：库存水平趋势和完整库存流量趋势暂不登记；产品总库存净变化为有条件可行。先补不可变统一库存事件、日终快照和每日守恒对账。
+- 完整证据、数据统计和最小方案见 `inventory-trend-data-readiness-audit-2026-07-29.md`。
+
+### 2026-07-29：统一库存事件与日终快照数据底座
+
+- 新增不可变 `stock_movement_event`、版本化 `inventory_snapshot_run` 和聚合 `inventory_daily_snapshot`。
+- 成品入库、半成品入库、普通/堆垛出库、生产领料、旧调拨、新托盘调拨和托盘直接出库均在原业务事务内记账。
+- 旧调拨转换为共享 `business_action_id` 的调出/调入两条腿；新托盘调拨用包含来源和目标仓库的单事件表达。两者全局净变化均为 0。
+- 本地迁移生成 11 行上线基线；当前库存与基线均为 25 条库存、890 件、23,750 kg，逐维度差异为 0。
+- Java 根项目全量测试和新增事件/快照定向测试通过。
+- 本轮未新增 Agent/MCP 工具，未开放库存历史趋势。下一切片为每日守恒对账和数据质量发布门禁。
+- 完整记录见 `inventory-trend-data-foundation-implementation-2026-07-29.md`。
+
+### 2026-07-30：库存每日守恒对账与趋势发布门禁
+
+- 新增每日对账运行、产品全局/产品仓库对账结果、数据质量问题和趋势发布门禁四类持久化数据。
+- 固定执行“期初 + 入库 - 出库 + 调入 - 调出 = 期末”，数量与重量分别校验；差异和事件异常只记录并阻断，不静默修改业务数据。
+- 北京时间每日 00:00 在日终快照后执行，应用启动时补偿最近已关闭日期；相同业务日期和相同终态快照版本保持幂等。
+- 旧调拨两条腿除共享业务动作外，进一步共享同一业务时间，避免跨零点产生虚假日差异。
+- 本地重复迁移后仍为 1 次对账运行、1 条质量问题和 1 个发布门禁；2026-07-29 因缺少 2026-07-28 日终期初快照正确标记为 `INSUFFICIENT_DATA`。
+- 门禁默认要求连续 7 个自然日最新修订均为 `PASSED`。当前为 `BLOCKED`、0/7；未登记库存趋势报表、GoalContract 或 MCP 工具。
+- 定向测试和 Java 根项目全量测试通过。完整记录见 `inventory-daily-reconciliation-implementation-2026-07-30.md`。
+- 下一切片为 `V2A-DATA-04-PRODUCTION-INPUT-OUTPUT-READINESS`；库存对账在后台继续积累，不用虚假回填缩短自然观察窗口。
+
+### 2026-07-31：生产投入—产出数据成熟度审计
+
+- 完成生产订单、实际领料、煮糖批次使用、登记产出、产出二维码、实际入库去向和跨日归属审计。
+- 纠正“非取消即产出”的宽松口径：生产日报现在只统计 `BOUND`、`PART_INBOUND`、`INSTOCK`，排除仍可编辑/删除的 `DRAFT` 和已取消记录。
+- 本地 11 条有效产出的二维码数、入库数和折算件数均守恒；8 个已完成成品订单中仅 3 个存在实际领料，缺口必须作为数据质量事实展示，不能由 Agent 补零。
+- 19 个已入库产出码中有 6 个跨生产日期入库，2 个已无当前库存；旧去向虽仍有托盘流转证据，但该表旧轮次 180 天后清理，新库存事件又尚缺稳定产出码轮次关联。
+- 当前允许进入下一实现切片的是“生产领料—登记产出”的独立序列和订单归属并列视图；领料不冒充消耗，不计算同日比率、良率或损耗。
+- 详细记录见 `production-input-output-data-readiness-audit-2026-07-31.md`。下一步复用 `run_registered_report`、`ReportRun` 和同快照 XLSX，实现 `production_input_output_flow_v1@1` 与 `PRODUCTION_INPUT_OUTPUT_TREND`，不新增专用 MCP 工具或业务写操作。
+
+### 2026-07-31：生产领料—登记产出趋势实现与验收
+
+- 新增 `PRODUCTION_INPUT_OUTPUT_TREND` GoalContract，当前运行时为 47 个目标合同、53 个只读/登记报表工具、10 个业务专家和 4 个版本化报表定义；继续复用唯一 `run_registered_report`。
+- `production_input_output_flow_v1@1` 分开统计按 `picked_at` 发生的实际领料和按 `production_date` 发生的稳定登记产出；订单归属视图单独展示覆盖缺口、半成品最终确认使用和跨日入库。
+- 产品筛选以稳定登记产出的产品事实为准；没有稳定产出的订单保持未归属，不读取计划 JSON 猜测产品。
+- 真实浏览器覆盖 180 天全产品、180 天指定产品、超过 366 天、请求产耗比/收率、卡片折叠和 XLSX 导出；所有用例通过。
+- 验收中发现 180 天完整报表约 6 万字符导致工具返回后的专家决策超时。Runtime 现只压缩提交给模型的观察，保留核心指标、数据质量和最多 6 条活动样本；业务卡片、`ReportRun` 和导出仍保留完整事实。
+- 最终回归：Python `364 passed, 3 skipped`，工具循环定向 `73 passed`；Java 根项目和 warehouse-mcp 全量通过；前端全部现有测试 `43 passed`；前端生产构建通过。
+- 完整记录见 `production-input-output-flow-uat-2026-07-31.md`。下一步在库存门禁自然积累期间，进入流程效率数据成熟度审计；审计未通过前不登记 `PROCESS_EFFICIENCY_TREND`。
+
+### 2026-07-31：流程效率数据成熟度审计
+
+- 审计托盘任务、生产订单阶段和标签到入库三条候选流程；本阶段只读数据库和代码，没有新增工具、合同或报表定义。
+- 托盘任务 48 条：38 条已确认、6 条进行中、4 条已取消；38 条完成样本全部有创建/确认时间，未发现负耗时或重复业务轮次，`pallet_task_cycle_time_v1` 为 `CONDITIONAL_GO`。
+- 托盘任务存在极明显长尾，首版必须同时展示中位数、P90、最大值和最久等待；取消任务没有取消时间，进行中任务没有 SLA 时只能说“已等待”。
+- 生产订单没有不可变中间状态历史，不能发布阶段耗时；23 个有效产出码只有 6 个同时具备可信打印起点和入库时间，标签到入库趋势也保持阻断。
+- 同步复核库存门禁发现 2026-07-30 缺期末快照，当前仍为 `BLOCKED`、0/7；现有启动补偿只补对账、不重建错过的日终快照，不能再把“自然积累”当作已验证事实，也没有执行虚假回填。
+- 完整记录见 `process-efficiency-data-readiness-audit-2026-07-31.md`。下一实现切片只登记 `pallet_task_cycle_time_v1@1`，继续复用 `run_registered_report`、`analytics_expert`、`ReportRun` 和同快照 XLSX。
+
+### 2026-07-31：托盘任务处理耗时趋势实现与验收
+
+- 新增 `PROCESS_EFFICIENCY_TREND` GoalContract，当前运行时为 48 个目标合同、53 个只读/登记报表工具、10 个业务专家和 5 个版本化报表定义；继续复用唯一 `run_registered_report`。
+- `pallet_task_cycle_time_v1@1` 按任务创建日期形成队列，完成耗时、进行中等待和取消数量严格分开；展示平均数、中位数、P90、最大值、任务类型分布、实际有任务日期和最长等待任务。
+- 支持全部入库、半成品入库、成品入库、出库、调拨和产品名称筛选；单次最长 366 天。未登记 SLA 时只描述“已等待”，不输出逾期、员工绩效、责任归因或现场完整流程效率。
+- 真实浏览器覆盖 90 天全部任务、成品入库筛选、黄冰糖（袋）产品筛选和受控 6 步处理过程；真实 HTTP 快照和 XLSX 导出通过。全范围为 33 条（完成 27、进行中 6、取消 0），产品范围为 23 条（完成 17、进行中 6、取消 0）。
+- 验收中修复双构造器导致 Spring Bean 无法创建，以及统一报表入口遗漏 `task:view` 两个真实缺陷；Java/Python 双运行时的 `AGENT_MODEL_MODE` 同名冲突登记为部署编排注意项。
+- 最终回归：Java 根项目和 warehouse-mcp 全量通过；Agent 主运行时 `318 passed`；前端 `45 passed` 且生产构建通过。Agent 全仓另有 2 个独立 RAG/OCR 依赖兼容失败，与本报表无关但未隐藏。
+- 完整记录见 `pallet-task-cycle-time-uat-2026-07-31.md`。五份首批高价值登记报表样板已完成；库存趋势继续等待连续 7 天门禁，生产订单阶段和标签到入库继续阻断。
+
 ## 变更日志
+
+- 2026-08-03：完成 `V2A-REPORT-07-TODAY-OPERATIONS-OVERVIEW` 工程实现与真实模型浏览器验收。新增第 51 个 GoalContract 和第 7 个登记报表定义，但继续复用唯一 `run_registered_report`，Java/MCP 工具总数保持 52。概览只允许北京时间今天，组合今日稳定产出、今日化验、确认领用与稳定产出两条独立序列、当前库存、今日创建托盘任务和当前待处理任务；不计算库存日变化、计划达成率、良率、收率、损耗率、SLA 或预测。后端、MCP、Agent、五区块 Web 卡片、历史重开和五页 XLSX 已通过自动化验收；本地真实 HTTP 已验证登录、运行、归档回读、XLSX 和历史/筛选拒绝。Chrome 输入“今天整体运营情况如何？”后约 21.8 秒返回，6 个受控阶段和五区块卡片完整，事实与 HTTP 烟雾一致，未暴露内部工具名、枚举、数据库 ID 或模型原始思维链。记录见 `today-operations-overview-implementation-2026-08-03.md`。
+- 2026-08-03：完成性能实验的分阶段模型配置接线。新增主路由、专家首次决策和专家结果分析三个可选模型名，默认全部复用现有 `AGENT_MODEL_NAME`；Runtime 明确区分 `INITIAL` 与 `RESULT_ANALYSIS`，不改变“模型理解 → 专家决策 → 工具调用 → 结果分析”执行图。当前没有切换候选模型，四领域性能门禁仍未通过。Python 全量回归 `453 passed, 5 skipped`。
+
+- 2026-08-03：完成 Agent 四领域固定语料性能验收。新增 20 条固定问法、每条重复 4 次，共 80 个冷会话；管理员调试响应只暴露整轮、主路由、专家首次决策、结果分析和工具调用的耗时/次数，不返回 Prompt、工具参数、内部 ID 或回答正文。基线整体 P50 16.547 秒、P95 39.016 秒，工具 P95 0.267 秒；稳定前缀对照未形成跨领域稳定改善，性能门禁继续保持未通过。Python 全量 `451 passed, 5 skipped`，Java 网关定向测试通过。记录见 `agent-four-domain-performance-acceptance-2026-08-03.md`。
+
+- 2026-08-01：完成 `V2A-REPORT-07-HISTORY-REOPEN`。AI 助手新增本人历史报表分页入口，按当前所有者、权限、有效期和快照哈希筛选；跨会话重开复用五类现有业务卡片和同快照 XLSX，不重新运行报表、不调用模型，也不新增 MCP 工具或 GoalContract。真实浏览器验收已覆盖列表、分页、类型筛选、打开不可变快照、原生成时间提示、原卡片恢复和导出入口。库存日快照再次复核后仍确认进程内零点任务无法覆盖整夜停机，当前事件维度也不足以无损重建全部快照字段，因此库存趋势继续阻断。Java 根项目、warehouse-mcp、Python `373 passed, 4 skipped`、前端 `35 passed` 和生产构建均通过。实施记录见 `registered-report-history-reopen-implementation-2026-08-01.md`。
+- 2026-08-01：完成 `V2A-DATA-06-INVENTORY-HISTORY-RELIABLE-SCHEDULING`。新增可由 Windows/systemd 独立启动的 Capture/Verify 一次性任务、MySQL 日期锁、零点可信窗口、零点后事件污染拒绝、任务运行证据和 `log:view` 运维状态接口。真实 Verify 冒烟保持 2026-07-31 日终快照仅 1 份，并因对账数据不足返回退出码 3；门禁仍为 `BLOCKED`、0/7，未登记库存趋势报表、GoalContract 或 MCP 工具。Java 定向与根项目全量测试通过。实施记录见 `inventory-history-reliable-scheduling-implementation-2026-08-01.md`。
+- 2026-08-01：完成 `V2A-REPORT-08-INVENTORY-LEVEL-TREND-LOCAL-UAT`。新增 `INVENTORY_LEVEL_TREND_ANALYSIS` 与 `inventory_level_trend_v1@1`，继续复用 `analytics_expert`、唯一 `run_registered_report`、ReportRun 和 XLSX。生产模式只读取可信日终快照；本地/UAT 显式开关后以当前库存为锚点反向回放登记流水，所有交付面标注模拟且不推进门禁。真实 HTTP 验收黄冰糖（袋）2026-07-14 至 2026-07-20 为 550→790 件、13,750→19,750 kg，7 个日点，历史重开与 XLSX 导出通过。实施记录见 `inventory-level-trend-simulation-uat-2026-08-01.md`。
 
 - 2026-07-14：修复真实浏览器验收 M01/M02/M06 与 S01/S02/S03。补齐“查询所有成品产品”、中文角色名、产品详情复合展示名和自然流转表达；产品详情先经共享 `resolve_products` 建立受控产品上下文，`master_data_expert` 因此增加该共享解析工具但唯一工具并集仍为 47；“有没有化验”不再误判为缺化验。库位容量和近期流转优先沿用 `selected_warehouse`，不再退化为全局查询。新增 `selected_production_order` 持久化状态，生产订单多候选改用统一 HITL 候选卡片与受控 `orderRef` 恢复，后续“这个订单领过哪些物料”可继续原订单；生产状态转换为中文。Python 全量测试 `151 passed`，Java Gateway/握手定向测试通过，新的 `agentProfileRegistryHash` 为 `0f7da43814511eff9eeb2ba6bea4c250d47bd071a5a28859f2fe77cdc7637c87`。
 - 2026-07-14：修复真实浏览器验收 I06、Q02、Q04、Q06、P02、P03。产品名称提取会去除“的/相关”等结构尾词，Q02“黄冰糖最近30天的化验记录”可进入产品多候选 HITL；全局“哪些化验记录没有标准”按 `NO_STANDARD` 化验异常查询处理，不再错误要求产品；“哪些二维码打印了但还没有入库”识别为只读查询而非入库写操作；通用托盘流转查询不再误提取产品。Java 修复缺化验产品 SQL 的 `warehouseNamesFROM` 拼接错误，以及化验异常 MyBatis XML 动态 SQL 中未转义的 `<=`，后者已用本地真实数据库验证返回 200。Python 全量测试 `146 passed`，相关 Java 定向测试通过。
@@ -483,3 +609,11 @@
 - 2026-07-14：完成 `query_stock_documents` 全链路并登记为第 26 个工具；每次只查询一种明确单据来源，不伪造统一历史流水。
 - 2026-07-14：启动 `V1-LOG-03` 智能报数批次列表与详情的安全审计。
 - 2026-07-14：进入 `V1-FINAL-ACCEPTANCE`；确定性验收锁定 47 个 L1 工具、9 个非空业务专家和主 Agent 空工具集，并补充 47 ToolCallback 调用测试与 9 专家浏览器 canary。Python 139 项、根项目 Java 188 项、warehouse-mcp 50 项和前端构建已通过；真实部署 16 条 Playwright E2E 因当前终端未配置本地验收账号、数据库密码和服务密钥而尚未执行，不能声明最终上线通过。
+## 2026-07-31：五类登记报表统一跨期比较
+
+- 保持 48 个 GoalContract、53 个只读/登记报表工具、10 个专家和 5 个报表定义不变；没有新增 MCP 工具或绕过 `analytics_expert`。
+- `run_registered_report` 新增可选 `PREVIOUS_PERIOD` / `CUSTOM` 对比参数；Java 中央比较器复用同一报表定义、版本和筛选条件生成两期事实。
+- 五类报表只比较 registry 登记指标；不同天数时可累加指标提供日均值，正负变化不自动解释成改善或恶化。
+- 比较结果进入同一个 `ReportRun` 快照、统一业务卡片和 XLSX `跨期比较` 工作表。
+- 修复同一句话包含两组日期时通用日期归一化器错误覆盖本期范围的问题；跨期结构化日期在 Runtime 中继续接受格式、跨度和非重叠校验。
+- 自动化验收见 `docs/agent/registered-report-cross-period-comparison-uat-2026-07-31.md`。

@@ -6,7 +6,6 @@
     {"id": "W02", "goalType": "PRODUCT_INVENTORY_DISTRIBUTION", "input": "查询黄冰糖（袋）当前库存分别放在哪些库位"},
     {"id": "W03", "goalType": "WAREHOUSE_INVENTORY_DISTRIBUTION", "input": "查询1号库位当前有哪些库存"},
     {"id": "W04", "goalType": "CURRENT_INVENTORY_LEDGER", "input": "查询黄冰糖（袋）最近30天的库存台账"},
-    {"id": "W05", "goalType": "PREPARE_POOL_BALANCE", "input": "查询当前备料池还有哪些可用余量"},
     {"id": "W06", "goalType": "WAREHOUSE_STATUS", "input": "查询2号库位当前状态"},
     {"id": "W07", "goalType": "WAREHOUSE_CAPACITY_DISTRIBUTION", "input": "查询当前还有可用容量的库位"},
     {"id": "W08", "goalType": "WAREHOUSE_RECENT_OPERATIONS", "input": "查询2号库位最近7天的操作"},
@@ -44,6 +43,15 @@
     {"id": "A02", "goalType": "ROLE_PERMISSION_CATALOG", "input": "查询管理员角色当前有哪些权限"},
     {"id": "G01", "goalType": "BUSINESS_OPERATION_LOGS", "input": "查询今天的业务操作日志"},
     {"id": "G02", "goalType": "AGENT_TOOL_AUDIT", "input": "查询今天的Agent工具调用审计"},
-    {"id": "G03", "goalType": "AGENT_ANSWER_REVIEWS", "input": "查询待复核的Agent回答"}
+    {"id": "G03", "goalType": "AGENT_ANSWER_REVIEWS", "input": "查询待复核的Agent回答"},
+    {"id": "H01", "goalType": "DAILY_PRODUCTION_ANALYSIS", "input": "今天产量如何"},
+    {"id": "H02", "goalType": "QUALITY_ASSAY_TREND_ANALYSIS", "input": "最近30天黄冰糖化验质量趋势如何"},
+    {"id": "H03", "goalType": "QUALITY_METRIC_TREND_ANALYSIS", "input": "最近180天黄冰糖（袋）的pH变化趋势如何"},
+    {"id": "H04", "goalType": "PRODUCTION_INPUT_OUTPUT_TREND", "input": "最近180天生产领料和登记产出分别怎么变化"},
+    {"id": "H05", "goalType": "PROCESS_EFFICIENCY_TREND", "input": "最近90天托盘任务处理耗时如何，哪些任务还在等待"},
+    {"id": "H06", "goalType": "INVENTORY_LEVEL_TREND_ANALYSIS", "input": "2026年7月14日至20日黄冰糖（袋）的库存变化趋势如何"},
+    {"id": "H07", "goalType": "TODAY_OPERATIONS_OVERVIEW", "input": "今天整体运营情况如何"},
+    {"id": "K01", "goalType": "PROCESS_KNOWLEDGE_QUERY", "input": "单晶黄冰糖的完整工艺流程是什么"},
+    {"id": "K02", "goalType": "ENTERPRISE_KNOWLEDGE_QUERY", "input": "公司有哪些认证和销售网络"}
   ]
 }

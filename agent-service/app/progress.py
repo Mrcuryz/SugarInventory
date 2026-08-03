@@ -19,10 +19,12 @@ _BUSINESS_PROGRESS_TEXT = {
     "assay_query": "正在查询化验与质量数据。",
     "pallet_query": "正在查询托盘与二维码流转。",
     "production_query": "正在查询生产与领料数据。",
+    "analytics_query": "正在运行已登记报表并汇总指标。",
     "logistics_query": "正在查询任务与单据数据。",
     "master_data_query": "正在查询产品与主数据配置。",
     "administration_query": "正在查询员工与权限摘要。",
     "audit_query": "正在查询审计摘要。",
+    "knowledge_query": "正在检索现行知识材料。",
     "business_query": "正在查询业务数据。",
     "analyzing": "正在分析已返回的业务数据。",
 }
@@ -33,7 +35,6 @@ _TOOL_PROGRESS_STAGE = {
     "get_inventory_overview": "inventory_overview",
     "get_inventory_distribution": "inventory_distribution",
     "query_inventory_ledger": "inventory_query",
-    "query_prepare_pool_balance": "inventory_query",
     "get_warehouse_status": "warehouse_query",
     "query_warehouse_capacity_distribution": "warehouse_query",
     "query_warehouse_recent_operations": "warehouse_query",
@@ -62,6 +63,7 @@ _TOOL_PROGRESS_STAGE = {
     "resolve_production_entities": "production_query",
     "query_boiling_batches": "production_query",
     "query_production_order_progress": "production_query",
+    "run_registered_report": "analytics_query",
     "query_boiling_batch_trace": "production_query",
     "query_material_pick_trace": "production_query",
     "query_production_label_completion": "production_query",
@@ -80,6 +82,7 @@ _TOOL_PROGRESS_STAGE = {
     "search_operation_logs": "audit_query",
     "query_agent_tool_audit": "audit_query",
     "query_agent_answer_reviews": "audit_query",
+    "search_approved_knowledge": "knowledge_query",
 }
 
 _CURRENT_REPORTER: ContextVar[ProgressReporter | None] = ContextVar(

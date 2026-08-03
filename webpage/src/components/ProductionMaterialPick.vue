@@ -318,7 +318,7 @@ const removePending = row => {
 const confirmPick = async () => {
   if (!form.value.orderId || !pendingRows.value.length) return
   const confirmed = await ElMessageBox.confirm(
-    '确认后，所选半成品将从仓库库存中移出并关联到生产订单，原二维码会释放为可复用状态。第一版不支持简单撤销，如需撤销需走人工退料或重新入库流程。是否继续？',
+    '确认后，所选半成品将从仓库库存中移出并关联到生产订单，原二维码会释放为可复用状态。当前系统不支持撤销本次领料，请确认信息无误后再继续。',
     isSupplementPick.value ? '确认补充领用' : '确认生产订单领用',
     {
       type: 'warning',

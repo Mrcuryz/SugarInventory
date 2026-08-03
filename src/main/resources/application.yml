@@ -2,7 +2,7 @@ spring:
   aop:
     proxy-target-class: true
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/laibin?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/laibin?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -61,8 +61,16 @@ logging:
     db-config:
       logic-delete-field: deleted
       id-type: auto
+inventory:
+  history:
+    daily-snapshot-cron: ${INVENTORY_HISTORY_DAILY_SNAPSHOT_CRON:0 0 0 * * ?}
+    max-capture-delay-minutes: ${INVENTORY_HISTORY_MAX_CAPTURE_DELAY_MINUTES:10}
+analytics:
+  inventory-trend:
+    simulation-enabled: ${INVENTORY_TREND_SIMULATION_ENABLED:false}
 agent:
   mcp:
+    runtime-verification-enabled: ${AGENT_MCP_RUNTIME_VERIFICATION_ENABLED:true}
     warmup-enabled: ${AGENT_MCP_WARMUP_ENABLED:true}
     warmup-core-pool-size: ${AGENT_MCP_WARMUP_CORE_POOL_SIZE:1}
     warmup-max-pool-size: ${AGENT_MCP_WARMUP_MAX_POOL_SIZE:2}
@@ -76,6 +84,8 @@ agent:
   runtime:
     mode: ${AGENT_RUNTIME_MODE:python}
     python-base-url: ${AGENT_PYTHON_BASE_URL:http://localhost:8091}
-    python-timeout-ms: ${AGENT_PYTHON_TIMEOUT_MS:30000}
+    # Python LLM turns have a 90s run budget; keep the Java transport above it
+    # so the controlled timeout/final event can reach the browser.
+    python-timeout-ms: ${AGENT_PYTHON_TIMEOUT_MS:100000}
     python-service-key: ${AGENT_PYTHON_SERVICE_KEY:}
     fallback-enabled: ${AGENT_RUNTIME_FALLBACK_ENABLED:false}

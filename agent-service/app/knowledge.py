@@ -7,6 +7,141 @@ from typing import Any, Literal
 from app.graph.state import WarehouseAgentState
 
 
+PROCESS_KNOWLEDGE_DOMAINS = ("PROCESS",)
+ENTERPRISE_KNOWLEDGE_DOMAINS = (
+    "COMPANY",
+    "PRODUCT_MARKETING",
+    "CERTIFICATION",
+    "SALES",
+)
+
+
+def classify_knowledge_query(text: str) -> str | None:
+    """Return one bounded static-knowledge subtype without claiming real-time facts."""
+
+    normalized = "".join((text or "").split())
+    if not normalized:
+        return None
+    if "批次" in normalized and any(word in normalized for word in ("合格", "化验", "质检")):
+        return None
+    if "生产订单" in normalized and any(
+        word in normalized for word in ("领料", "消耗", "产出", "进度", "状态", "入库去向")
+    ):
+        return None
+    if "煮糖批次" in normalized and any(
+        word in normalized for word in ("流转", "关联订单", "用量", "状态")
+    ):
+        return None
+    enterprise_markers = (
+        "公司介绍",
+        "企业介绍",
+        "公司简介",
+        "企业简介",
+        "宣传册",
+        "产品介绍",
+        "产品宣传",
+        "企业荣誉",
+        "公司荣誉",
+        "资质认证",
+        "企业认证",
+        "公司认证",
+        "认证证书",
+        "有哪些认证",
+        "荣誉认证",
+        "销售网络",
+        "销售区域",
+        "经销网络",
+    )
+    if any(marker in normalized for marker in enterprise_markers):
+        return "knowledge_enterprise"
+    if any(subject in normalized for subject in ("公司", "企业")) and any(
+        marker in normalized for marker in ("成立", "创立", "始建")
+    ):
+        return "knowledge_enterprise"
+    if "自然结晶" in normalized or (
+        "结晶" in normalized
+        and any(marker in normalized for marker in ("多久", "多长时间", "时间", "温度", "参数", "要求"))
+    ):
+        return "knowledge_process"
+    process_markers = (
+        "工艺流程",
+        "生产工艺",
+        "加工流程",
+        "分装流程",
+        "完整流程",
+        "流程顺序",
+        "工艺步骤",
+        "生产步骤",
+        "控制点",
+        "关键控制",
+        "CCP",
+        "CPP",
+        "原辅料",
+        "原料",
+        "材料",
+        "原料要求",
+        "使用什么设备",
+        "所需设备",
+        "流程",
+        "规则",
+        "术语",
+    )
+    if any(marker in normalized for marker in process_markers):
+        return "knowledge_process"
+    return None
+
+
+def is_static_realtime_mixed_query(text: str) -> bool:
+    if classify_knowledge_query(text) is None:
+        return False
+    normalized = "".join((text or "").split())
+    realtime_markers = (
+        "当前库存",
+        "现在库存",
+        "库存数量",
+        "库存还有",
+        "库存多少",
+        "库位状态",
+        "库位容量",
+        "托盘状态",
+        "托盘在哪",
+        "化验结果",
+        "化验了吗",
+        "是否合格",
+        "订单进度",
+        "订单状态",
+        "批次状态",
+        "待处理任务",
+        "入库单据",
+        "出库单据",
+    )
+    return any(marker in normalized for marker in realtime_markers)
+
+
+def knowledge_domains_for_subtype(subtype: str | None) -> tuple[str, ...]:
+    if subtype == "knowledge_process":
+        return PROCESS_KNOWLEDGE_DOMAINS
+    if subtype == "knowledge_enterprise":
+        return ENTERPRISE_KNOWLEDGE_DOMAINS
+    return ()
+
+
+def explicit_knowledge_product_queries(text: str) -> tuple[str, ...]:
+    """Extract one explicit product label without inventing or resolving an ID."""
+
+    normalized = "".join((text or "").split())
+    match = re.match(
+        r"^(.{1,50}?)(?:的)?(?:完整)?(?:工艺流程|生产工艺|自然结晶|企业认证|公司认证)",
+        normalized,
+    )
+    if match is None:
+        return ()
+    candidate = match.group(1).strip("，。？！?；;、的")
+    if not candidate or candidate in {"公司", "企业", "产品", "这个", "该产品"}:
+        return ()
+    return (candidate[:100],)
+
+
 IntentType = Literal[
     "smalltalk",
     "capability",
@@ -408,6 +543,29 @@ class IntentRouter:
                 next_action="explain_unsupported",
                 answer="这个问题不属于当前智能仓储助手能力范围。我可以继续帮你查库存、库位、托盘或化验状态。",
             )
+        knowledge_subtype = classify_knowledge_query(normalized)
+        if knowledge_subtype is not None and is_static_realtime_mixed_query(normalized):
+            return IntentRoute(
+                intent_type="ambiguous",
+                intent_subtype="knowledge_realtime_mixed",
+                business_domain="multi_domain",
+                support_status="ambiguous",
+                next_action="ask_clarification",
+                clarification_prompt=(
+                    "这个问题同时包含现行资料知识和实时业务数据。当前没有登记这类组合配方，"
+                    "请拆成两个问题，例如先问工艺流程，再单独查询当前库存。"
+                ),
+            )
+        if knowledge_subtype is not None:
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype=knowledge_subtype,
+                business_domain="knowledge",
+                business_objects=self._business_objects(normalized),
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["search_approved_knowledge"],
+            )
         if self._is_business_faq(normalized):
             return IntentRoute(
                 intent_type="business_faq",
@@ -501,8 +659,8 @@ class IntentRouter:
             return IntentRoute(intent_type="data_query", intent_subtype="fixed_product_qr_pool", business_domain="pallet",
                                business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_fixed_product_qr_pool"])
         if any(phrase in text for phrase in ["备料池余额", "半成品备料余额", "历史备料余额"]):
-            return IntentRoute(intent_type="data_query", intent_subtype="prepare_pool_balance", business_domain="inventory",
-                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_prepare_pool_balance"])
+            return IntentRoute(intent_type="data_query", intent_subtype="in_process_materials", business_domain="production",
+                               business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_in_process_materials"])
         if any(phrase in text for phrase in ["库存台账", "库存明细台账", "当前库存行"]):
             return IntentRoute(intent_type="data_query", intent_subtype="inventory_ledger", business_domain="inventory",
                                business_objects=objects, support_status="supported", next_action="call_tool", planned_tools=["query_inventory_ledger"])

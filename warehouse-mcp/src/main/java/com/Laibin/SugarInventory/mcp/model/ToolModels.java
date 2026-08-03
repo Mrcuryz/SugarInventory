@@ -1024,6 +1024,80 @@ public final class ToolModels {
         }
     }
 
+    public record RegisteredReportRunRequest(
+            String reportDefinitionId,
+            Integer reportVersion,
+            String startDate,
+            String endDate,
+            String productQuery,
+            String metricKey,
+            String taskType,
+            String comparisonMode,
+            String comparisonStartDate,
+            String comparisonEndDate
+    ) {
+    }
+
+    public record RegisteredReportRunResponse(
+            String dataScope,
+            String reportRunId,
+            String reportDefinitionId,
+            Integer reportVersion,
+            String reportName,
+            String metricDefinitionVersion,
+            String startDate,
+            String endDate,
+            String dateRangeLabel,
+            String dataAsOf,
+            String latestRecordAt,
+            JsonNode filtersApplied,
+            JsonNode metrics,
+            List<JsonNode> dailySeries,
+            List<JsonNode> productBreakdowns,
+            JsonNode qualityMetrics,
+            String seriesGranularity,
+            List<JsonNode> qualitySeries,
+            List<JsonNode> qualityProductBreakdowns,
+            List<JsonNode> standardBreakdowns,
+            JsonNode metricTrendSummary,
+            List<JsonNode> metricSeries,
+            List<JsonNode> metricProductBreakdowns,
+            List<JsonNode> metricStandardBreakdowns,
+            JsonNode productionFlowMetrics,
+            List<JsonNode> productionFlowDailySeries,
+            List<JsonNode> productionFlowOrderBreakdowns,
+            JsonNode palletTaskCycleMetrics,
+            List<JsonNode> palletTaskCycleDailySeries,
+            List<JsonNode> palletTaskCycleTypeBreakdowns,
+            List<JsonNode> palletTaskPendingItems,
+            JsonNode inventoryTrendMetrics,
+            List<JsonNode> inventoryTrendDailySeries,
+            List<JsonNode> inventoryTrendProductBreakdowns,
+            JsonNode operationsOverview,
+            JsonNode comparison,
+            JsonNode dataQuality,
+            List<String> limitations,
+            ToolError error
+    ) {
+        public static RegisteredReportRunResponse error(ToolError error) {
+            return new RegisteredReportRunResponse(
+                    null, null, null, null, null, null, null, null, null, null,
+                    null, null, null,
+                    List.of(), List.of(),
+                    null, null,
+                    List.of(), List.of(), List.of(),
+                    null,
+                    List.of(), List.of(), List.of(),
+                    null,
+                    List.of(), List.of(),
+                    null,
+                    List.of(), List.of(), List.of(),
+                    null, List.of(), List.of(), null,
+                    null, null,
+                    List.of(), error);
+        }
+    }
+
     public record ProductionBoilingBatchListRequest(
             String productQuery,
             String startDate,

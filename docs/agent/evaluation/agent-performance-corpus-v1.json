@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Agent 四领域冷会话性能语料 v1",
+  "measurementMode": "每个样本创建独立 Agent 会话，会话预热不计入消息耗时；只测单轮只读问答",
+  "domains": [
+    {
+      "domain": "inventory",
+      "label": "库存与库位",
+      "cases": [
+        {"caseId": "PERF-I01", "message": "查询3号库位现在有什么库存"},
+        {"caseId": "PERF-I02", "message": "查询1号库位的库存情况"},
+        {"caseId": "PERF-I03", "message": "查询黄冰糖（袋）25kg/件40件/板当前库存总览"},
+        {"caseId": "PERF-I04", "message": "黄冰糖（袋）25kg/件40件/板主要分布在哪些库位"},
+        {"caseId": "PERF-I05", "message": "查询20号库位当前状态和剩余容量"}
+      ]
+    },
+    {
+      "domain": "assay",
+      "label": "化验与质量",
+      "cases": [
+        {"caseId": "PERF-A01", "message": "查询黄冰糖（袋）25kg/件40件/板在2026-07-17的具体化验数据"},
+        {"caseId": "PERF-A02", "message": "查询最近180天黄冰糖（袋）25kg/件40件/板的历史化验"},
+        {"caseId": "PERF-A03", "message": "查询黄冰糖（袋）25kg/件40件/板在2026-07-14的化验情况"},
+        {"caseId": "PERF-A04", "message": "查询当前库存中有哪些不合格产品"},
+        {"caseId": "PERF-A05", "message": "查询当前库存中有哪些产品缺少近期化验数据"}
+      ]
+    },
+    {
+      "domain": "production",
+      "label": "生产追溯",
+      "cases": [
+        {"caseId": "PERF-P01", "message": "查询2026-06-30的煮糖批次"},
+        {"caseId": "PERF-P02", "message": "查询煮糖批次20260630-01的流转情况"},
+        {"caseId": "PERF-P03", "message": "查询生产订单PO202606300001的具体情况"},
+        {"caseId": "PERF-P04", "message": "查询生产订单PO202606300002的原料消耗及产出"},
+        {"caseId": "PERF-P05", "message": "查询生产订单PO202606300002的产出入库去向"}
+      ]
+    },
+    {
+      "domain": "report",
+      "label": "登记报表",
+      "cases": [
+        {"caseId": "PERF-R01", "message": "查询2026-06-30的产量"},
+        {"caseId": "PERF-R02", "message": "最近180天黄冰糖（袋）的化验质量趋势如何"},
+        {"caseId": "PERF-R03", "message": "最近180天黄冰糖（袋）的pH趋势如何"},
+        {"caseId": "PERF-R04", "message": "最近180天生产领料和登记产出分别怎么变化"},
+        {"caseId": "PERF-R05", "message": "最近90天托盘任务处理耗时如何，哪些还在等待"}
+      ]
+    }
+  ]
+}

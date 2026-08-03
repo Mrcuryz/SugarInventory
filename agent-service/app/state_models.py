@@ -91,6 +91,8 @@ class WarehouseAgentState:
     last_production_order_progress: dict[str, Any] | None = None
     last_production_material_trace: dict[str, Any] | None = None
     last_boiling_batch_trace: dict[str, Any] | None = None
+    last_report_context: dict[str, Any] | None = None
+    last_knowledge_result: dict[str, Any] | None = None
     last_auto_inbound_batches: dict[str, Any] | None = None
     last_orchestration: dict[str, Any] | None = None
     pending_clarification: PendingClarification | None = None

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import PageTabs from '@/components/PageTabs.vue'
 import AgentAssistant from '@/components/AgentAssistant.vue'
+import { isAgentAdminRole } from '@/components/agent/agentAccess.mjs'
 import { useTabsStore } from '@/stores/tabs'
 import { filterMenuByPermissions, menuList } from '@/utils/navigation'
 import { useAuthStore } from '@/stores/auth'
@@ -33,6 +34,7 @@ const breadcrumbs = computed(() => route.matched
 const activeMenu = computed(() => route.path)
 const visibleMenus = computed(() => filterMenuByPermissions(menuList, authStore.permissionCodes, authStore.roleCode))
 const displayName = computed(() => authStore.name || authStore.employeeId || '当前账号')
+const canUseAgent = computed(() => isAgentAdminRole(authStore.roleCode))
 
 watch(
   () => route.fullPath,
@@ -60,6 +62,7 @@ const refreshCurrentPage = async () => {
 }
 
 const openAgentAssistant = () => {
+  if (!canUseAgent.value) return
   agentAssistantRef.value?.open()
 }
 
@@ -151,6 +154,7 @@ const handleLogout = async () => {
 
           <div class="header-right">
             <el-button
+              v-if="canUseAgent"
               type="primary"
               plain
               class="agent-button"
@@ -195,7 +199,7 @@ const handleLogout = async () => {
       <footer class="icp-footer">
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂 ICP 备 2025058642 号-2</a>
       </footer>
-      <AgentAssistant ref="agentAssistantRef" />
+      <AgentAssistant v-if="canUseAgent" ref="agentAssistantRef" />
     </div>
   </div>
 </template>

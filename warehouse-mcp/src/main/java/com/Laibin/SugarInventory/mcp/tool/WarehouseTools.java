@@ -42,6 +42,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolveReq
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolutionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RegisteredReportRunRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RegisteredReportRunResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceRequest;
@@ -370,6 +372,64 @@ public class WarehouseTools {
             log.warn("query_production_order_progress failed; errorType={}, message={}",
                     e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
             return ProductionOrderProgressResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public RegisteredReportRunResponse runRegisteredReport(
+            String reportDefinitionId,
+            Integer reportVersion,
+            LocalDate startDate,
+            LocalDate endDate,
+            String productQuery,
+            String metricKey,
+            String taskType) {
+        return runRegisteredReport(
+                reportDefinitionId,
+                reportVersion,
+                startDate,
+                endDate,
+                productQuery,
+                metricKey,
+                taskType,
+                null,
+                null,
+                null);
+    }
+
+    public RegisteredReportRunResponse runRegisteredReport(
+            String reportDefinitionId,
+            Integer reportVersion,
+            LocalDate startDate,
+            LocalDate endDate,
+            String productQuery,
+            String metricKey,
+            String taskType,
+            String comparisonMode,
+            LocalDate comparisonStartDate,
+            LocalDate comparisonEndDate) {
+        try {
+            return WarehouseToolCallContext.withToolName(
+                    "run_registered_report",
+                    () -> readService.runRegisteredReport(new RegisteredReportRunRequest(
+                            reportDefinitionId,
+                            reportVersion,
+                            startDate == null ? null : startDate.toString(),
+                            endDate == null ? null : endDate.toString(),
+                            productQuery,
+                            metricKey,
+                            taskType,
+                            comparisonMode,
+                            comparisonStartDate == null ? null : comparisonStartDate.toString(),
+                            comparisonEndDate == null ? null : comparisonEndDate.toString())));
+        } catch (WarehouseApiException e) {
+            return RegisteredReportRunResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("run_registered_report failed; definition={}, version={}, errorType={}, message={}",
+                    reportDefinitionId,
+                    reportVersion,
+                    e.getClass().getSimpleName(),
+                    safeLogValue(e.getMessage()));
+            return RegisteredReportRunResponse.error(ErrorMapper.unexpected());
         }
     }
 

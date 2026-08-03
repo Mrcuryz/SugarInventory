@@ -8,6 +8,9 @@ import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.vo.InStockVO;
 import com.Laibin.SugarInventory.domain.vo.InVO;
+import com.Laibin.SugarInventory.inventoryhistory.domain.StockMovementEventCommand;
+import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementActionContext;
+import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementEventService;
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.*;
@@ -68,6 +71,10 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     private PalletCodeMapper palletCodeMapper;
     @Autowired
     private SemiPreparePoolMapper semiPreparePoolMapper;
+    @Autowired
+    private StockMovementEventService stockMovementEventService;
+    @Autowired
+    private StockMovementActionContext stockMovementActionContext;
 
     @Autowired
     private AssayStandardJudgeService assayStandardJudgeService;
@@ -78,6 +85,8 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     @Transactional
     @Override
     public InVO stockIn(InStockRequestDTO dto, Integer operatorId) {
+        try (StockMovementActionContext.Scope ignored =
+                     stockMovementActionContext.open("FINISH_INBOUND", null)) {
         Product product = productMapper.selectById(dto.getProductId());
         if (product == null) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
@@ -232,6 +241,29 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
         inStock.setQuantity(actualQuantity);
         inStock.setTotalWeight(calculateInStockTotalWeight(product, actualQuantity, dto.getUnit()));
         inStockMapper.updateById(inStock);
+        if (actualQuantity > 0) {
+            boolean loosePieces = "1".equals(dto.getUnit());
+            int totalPieces = loosePieces
+                    ? actualQuantity
+                    : actualQuantity * product.getPiecesPerPallet();
+            stockMovementEventService.record(StockMovementEventCommand.builder()
+                    .eventType("INBOUND")
+                    .sourceType("IN_STOCK")
+                    .sourceRecordId(inStock.getId().longValue())
+                    .occurredAt(inStock.getCreatedAt())
+                    .productId(product.getId())
+                    .productStatus(product.getStatus())
+                    .productionDate(dto.getEntryDate())
+                    .toWarehouseId(warehouse.getId())
+                    .palletCodeId(dto.getPalletCodeId())
+                    .boardQuantity(loosePieces ? 0 : actualQuantity)
+                    .loosePieceQuantity(loosePieces ? actualQuantity : 0)
+                    .totalPieces(totalPieces)
+                    .totalWeightKg(inStock.getTotalWeight())
+                    .operatorId(operatorId)
+                    .actionKind("INBOUND")
+                    .build());
+        }
 //        // **5. 闂佽瀛╅鏍窗閹烘纾婚柟鐐灱閺€鑺ャ亜閺冨倵鎷￠柛搴＄箻閺岋絾骞婇柛鏃€鍨甸?*
 //        while (remainingQuantity > 0) {
 //            int usedRows = (currentSide.equals("闂?)) ?
@@ -317,6 +349,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
 //            inVO.setMessage("闂傚倷鑳堕…鍫㈡崲閸儱纾块弶鍫氭櫈婵娊姊洪鈧粔瀵哥不閿濆鐓欓梺顓ㄧ畱婢ь喗銇勯銈呪枅闁?);
 //        }
         return inVO;
+        }
     }
 
     /**

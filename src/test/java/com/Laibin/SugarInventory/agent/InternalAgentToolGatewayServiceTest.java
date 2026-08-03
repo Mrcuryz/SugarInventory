@@ -205,7 +205,7 @@ class InternalAgentToolGatewayServiceTest {
     }
 
     @Test
-    void whitelistContainsExactlyFiftyTwoReadOnlyToolsAndNeverDispatchesWriteToolNames() {
+    void whitelistContainsExactlyFiftyThreeReadOnlyToolsAndNeverDispatchesWriteToolNames() {
         Set<String> expected = Set.of(
                 "resolve_products",
                 "resolve_warehouses",
@@ -254,8 +254,8 @@ class InternalAgentToolGatewayServiceTest {
                 "query_agent_tool_audit",
                 "query_agent_answer_reviews",
                 "query_inventory_ledger",
-                "query_prepare_pool_balance",
                 "query_fixed_product_qr_pool",
+                "run_registered_report",
                 "get_warehouse_status",
                 "get_pallet_status",
                 "get_assay_status");

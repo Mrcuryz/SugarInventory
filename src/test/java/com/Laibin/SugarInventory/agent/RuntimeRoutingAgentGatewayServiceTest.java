@@ -108,6 +108,241 @@ class RuntimeRoutingAgentGatewayServiceTest {
     }
 
     @Test
+    void adminDebugResponseKeepsOnlyFlatPerformanceScalars() throws Exception {
+        User admin = new User();
+        admin.setId(2);
+        admin.setName("测试管理员");
+        admin.setRoleCode("ADMIN");
+        LoginUser adminUser = new LoginUser(
+                admin,
+                List.of(new SimpleGrantedAuthority("inventory:view")));
+        sessionVO.setRoleCode("ADMIN");
+        when(sessionService.requireOwnedActiveSession(adminUser, "agt_001")).thenReturn(session);
+        when(sessionService.toSessionVO(session, adminUser)).thenReturn(sessionVO);
+
+        PythonAgentChatResponseDTO source = answer("查询完成。");
+        source.setDebug(new ObjectMapper().readTree("""
+                {
+                  "performanceSchemaVersion": "1.0",
+                  "totalDurationMs": 1234,
+                  "mainRouteMs": 456,
+                  "toolCallCount": 1,
+                  "llmToolLoop": {
+                    "internalPrompt": "不得返回",
+                    "toolArguments": {"productId": 84}
+                  }
+                }
+                """));
+        when(pythonClient.chat(any())).thenReturn(source);
+        AgentMessageRequestDTO debugRequest = request("查黄冰糖库存");
+        debugRequest.setPageContext(Map.of("debug", true));
+
+        AgentMessageResponseVO response = gateway.handleMessage(adminUser, "agt_001", debugRequest);
+
+        ArgumentCaptor<PythonAgentChatRequestDTO> captor = ArgumentCaptor.forClass(PythonAgentChatRequestDTO.class);
+        verify(pythonClient).chat(captor.capture());
+        assertThat(captor.getValue().getClient().isDebug()).isTrue();
+        assertThat(response.getDebug()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "performanceSchemaVersion", "1.0",
+                "totalDurationMs", "1234",
+                "mainRouteMs", "456",
+                "toolCallCount", "1"
+        ));
+        assertThat(response.getDebug()).doesNotContainKeys("llmToolLoop", "internalPrompt", "toolArguments");
+    }
+
+    @Test
+    void authenticatedIdentityOverridesSpoofedPageContextIdentity() {
+        when(pythonClient.chat(any())).thenReturn(answer("现行流程查询完成。"));
+        AgentMessageRequestDTO spoofed = request("查询现行流程");
+        spoofed.setPageContext(Map.of(
+                "path", "/assistant",
+                "roleCode", "ADMIN",
+                "userId", 999,
+                "permissionCodes", List.of("admin:all")
+        ));
+
+        gateway.handleMessage(loginUser, "agt_001", spoofed);
+
+        ArgumentCaptor<PythonAgentChatRequestDTO> captor = ArgumentCaptor.forClass(PythonAgentChatRequestDTO.class);
+        verify(pythonClient).chat(captor.capture());
+        PythonAgentChatRequestDTO forwarded = captor.getValue();
+        assertThat(forwarded.getUser().getUserId()).isEqualTo(2);
+        assertThat(forwarded.getUser().getRoleCode()).isEqualTo("USER");
+        assertThat(forwarded.getUser().getPermissionCodes()).containsExactly("inventory:view");
+        assertThat(forwarded.getPageContext()).containsOnlyKeys("path").containsEntry("path", "/assistant");
+    }
+
+    @Test
+    void knowledgeResponseUsesExplicitCardWhitelistAndSafeAuditSummary() throws Exception {
+        PythonAgentChatResponseDTO source = answer("现行生产流程包括收料、化糖、煮制和入库。引用现行资料。 ");
+        PythonAgentChatResponseDTO.BusinessCard card = new PythonAgentChatResponseDTO.BusinessCard();
+        card.setCardType("knowledge_evidence");
+        card.setTitle("现行生产流程");
+        card.setPrompt("不得下发到浏览器");
+        card.setFields(List.of(
+                Map.of(
+                        "label", "内容",
+                        "value", "生产流程依次为收料、化糖、煮制和入库。",
+                        "evidenceId", "ev_secret",
+                        "score", 0.99
+                ),
+                Map.of(
+                        "label", "来源",
+                        "value", "《现行生产流程》 第 2 页",
+                        "path", "D:\\private\\source.pdf"
+                ),
+                Map.of("label", "内部路径", "value", "D:\\private\\source.pdf")
+        ));
+        source.setCards(List.of(card));
+        source.setReviewTrace(new ObjectMapper().readTree("""
+                {
+                  "agent_handoff": {
+                    "target_agent": "knowledge_expert",
+                    "business_domain": "knowledge",
+                    "mode": "delegate"
+                  },
+                  "knowledgeAudit": {
+                    "targetAgent": "knowledge_expert",
+                    "goalType": "PROCESS_KNOWLEDGE_QUERY",
+                    "status": "SUCCEEDED",
+                    "corpusVersion": "laibin-rag-2026-07-29-v1",
+                    "knowledgeDomains": ["PROCESS"],
+                    "evidenceCount": 1,
+                    "degraded": false
+                  }
+                }
+                """));
+        when(pythonClient.chat(any())).thenReturn(source);
+
+        AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request("糖厂的现行生产流程是什么？"));
+
+        assertThat(response.getCards()).hasSize(1);
+        assertThat(response.getCards().getFirst().getCardType()).isEqualTo("knowledge_evidence");
+        assertThat(response.getCards().getFirst().getPrompt()).isNull();
+        assertThat(response.getCards().getFirst().getOptions()).isEmpty();
+        assertThat(response.getCards().getFirst().getFields()).containsExactly(
+                Map.of("label", "内容", "value", "生产流程依次为收料、化糖、煮制和入库。"),
+                Map.of("label", "来源", "value", "《现行生产流程》 第 2 页")
+        );
+
+        ArgumentCaptor<AgentToolAuditDTO> captor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
+        verify(sessionService, org.mockito.Mockito.times(3))
+                .recordToolAudit(eq("agt_001"), eq(2), captor.capture());
+        AgentToolAuditDTO knowledgeAudit = captor.getAllValues().stream()
+                .filter(audit -> "knowledge_search".equals(audit.getToolName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(knowledgeAudit.getArgumentsSummary()).contains(
+                "targetAgent=knowledge_expert",
+                "goalType=PROCESS_KNOWLEDGE_QUERY",
+                "knowledgeDomains=PROCESS");
+        assertThat(knowledgeAudit.getResponseSummary()).contains(
+                "status=SUCCEEDED",
+                "corpusVersion=laibin-rag-2026-07-29-v1",
+                "evidenceCount=1",
+                "degraded=false");
+        assertThat(knowledgeAudit.getResultCode()).isEqualTo("SUCCESS");
+        assertThat(knowledgeAudit.getArgumentsSummary() + knowledgeAudit.getRequestSummary()
+                + knowledgeAudit.getResponseSummary()).doesNotContain(
+                "糖厂的现行生产流程是什么", "生产流程依次", "ev_secret", "private", "score");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void streamedKnowledgeCardUsesTheSameExplicitWhitelist() throws Exception {
+        Object safePayload = ReflectionTestUtils.invokeMethod(
+                gateway,
+                "safeStreamPayload",
+                "card",
+                new ObjectMapper().readTree("""
+                        {
+                          "cardType": "knowledge_evidence",
+                          "title": "现行生产流程",
+                          "prompt": "internal prompt",
+                          "fields": [
+                            {"label":"内容","value":"收料后进入化糖。","evidenceId":"ev_secret","score":0.99},
+                            {"label":"来源","value":"《现行生产流程》 第 2 页","path":"D:/private/source.pdf"},
+                            {"label":"内部路径","value":"D:/private/source.pdf"}
+                          ],
+                          "options": [{"optionId":"opt_secret"}]
+                        }
+                        """)
+        );
+
+        assertThat(safePayload).isInstanceOf(Map.class);
+        Map<String, Object> card = (Map<String, Object>) safePayload;
+        assertThat(card).containsOnlyKeys("cardType", "title", "fields");
+        assertThat((List<Map<String, Object>>) card.get("fields")).containsExactly(
+                Map.of("label", "内容", "value", "收料后进入化糖。"),
+                Map.of("label", "来源", "value", "《现行生产流程》 第 2 页")
+        );
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void knowledgeTextDropsPathsAndInternalEvidenceIdentifiersInsideAllowedValues() throws Exception {
+        Object safePayload = ReflectionTestUtils.invokeMethod(
+                gateway,
+                "safeStreamPayload",
+                "card",
+                new ObjectMapper().readTree("""
+                        {
+                          "cardType": "knowledge_evidence",
+                          "title": "D:/private/source.pdf",
+                          "fields": [
+                            {"label":"内容","value":"收料后进入化糖。"},
+                            {"label":"来源","value":"D:/private/source.pdf evidenceId=ev_secret"}
+                          ]
+                        }
+                        """)
+        );
+
+        Map<String, Object> card = (Map<String, Object>) safePayload;
+        assertThat(card.get("title")).isEqualTo("现行资料");
+        assertThat((List<Map<String, Object>>) card.get("fields")).containsExactly(
+                Map.of("label", "内容", "value", "收料后进入化糖。")
+        );
+    }
+
+    @Test
+    void ragUnavailableUsesKnowledgeSpecificMessageAndErrorAudit() throws Exception {
+        PythonAgentChatResponseDTO source = answer("内部错误");
+        PythonAgentChatResponseDTO.AgentError error = new PythonAgentChatResponseDTO.AgentError();
+        error.setCode("RAG_UNAVAILABLE");
+        error.setMessage("internal details");
+        error.setRetryable(true);
+        source.setError(error);
+        source.setReviewTrace(new ObjectMapper().readTree("""
+                {"knowledgeAudit": {
+                  "targetAgent": "knowledge_expert",
+                  "goalType": "ENTERPRISE_KNOWLEDGE_QUERY",
+                  "status": "UNAVAILABLE",
+                  "knowledgeDomains": [],
+                  "evidenceCount": 0,
+                  "degraded": false
+                }}
+                """));
+        when(pythonClient.chat(any())).thenReturn(source);
+
+        AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request("公司资质有哪些？"));
+
+        assertThat(response.getAnswer()).isEqualTo(
+                "知识库当前不可用，请稍后重试。实时库存、库位、托盘和化验查询不受影响。");
+        ArgumentCaptor<AgentToolAuditDTO> captor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
+        verify(sessionService, org.mockito.Mockito.times(3))
+                .recordToolAudit(eq("agt_001"), eq(2), captor.capture());
+        AgentToolAuditDTO knowledgeAudit = captor.getAllValues().stream()
+                .filter(audit -> "knowledge_search".equals(audit.getToolName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(knowledgeAudit.getResultCode()).isEqualTo("ERROR");
+        assertThat(knowledgeAudit.getErrorCode()).isEqualTo("RAG_UNAVAILABLE");
+        assertThat(knowledgeAudit.getResponseSummary()).contains(
+                "status=UNAVAILABLE", "corpusVersion=unknown", "evidenceCount=0");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void textDeltaSanitizationPreservesParagraphAndListBreaks() throws Exception {
         String text = "查询摘要。\n\n1. 第一项\n2. 第二项\n";
@@ -336,6 +571,52 @@ class RuntimeRoutingAgentGatewayServiceTest {
                 .orElseThrow();
         assertThat(handoffAudit.getArgumentsSummary()).contains(
                 "targetAgent=inventory_expert", "businessDomain=inventory", "handoffMode=delegate");
+    }
+
+    @Test
+    void internalKnowledgeAuditEventPersistsVersionWithoutEvidenceContent() throws Exception {
+        doAnswer(invocation -> {
+            PythonAgentChatRequestDTO forwarded = invocation.getArgument(0);
+            @SuppressWarnings("unchecked")
+            Consumer<PythonAgentStreamEventDTO> consumer = invocation.getArgument(1);
+            consumer.accept(streamEvent(forwarded.getMessageId(), "audit", 1, """
+                    {"intentRouter":{
+                      "agent_handoff":{"target_agent":"knowledge_expert","business_domain":"knowledge","mode":"delegate"},
+                      "knowledgeAudit":{
+                        "targetAgent":"knowledge_expert",
+                        "goalType":"PROCESS_KNOWLEDGE_QUERY",
+                        "status":"SUCCEEDED",
+                        "corpusVersion":"laibin-rag-2026-07-29-v1",
+                        "knowledgeDomains":["PROCESS"],
+                        "evidenceCount":2,
+                        "degraded":false
+                      },
+                      "expertLoop":{"events":[{"toolName":"knowledge_search"}]},
+                      "query":"现行生产流程是什么？",
+                      "evidence":[{"evidenceId":"ev_secret","path":"D:/private/source.pdf","score":0.99}]
+                    }}
+                    """));
+            consumer.accept(streamEvent(forwarded.getMessageId(), "message_end", 2,
+                    "{\"finishReason\":\"completed\"}"));
+            return null;
+        }).when(pythonClient).stream(any(), any());
+
+        gateway.streamMessage(loginUser, "agt_001", request("现行生产流程是什么？"));
+
+        ArgumentCaptor<AgentToolAuditDTO> captor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
+        verify(sessionService, timeout(3000).times(3))
+                .recordToolAudit(eq("agt_001"), eq(2), captor.capture());
+        AgentToolAuditDTO knowledgeAudit = captor.getAllValues().stream()
+                .filter(audit -> "knowledge_search".equals(audit.getToolName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(knowledgeAudit.getResponseSummary()).contains(
+                "status=SUCCEEDED",
+                "corpusVersion=laibin-rag-2026-07-29-v1",
+                "evidenceCount=2");
+        assertThat(knowledgeAudit.getArgumentsSummary() + knowledgeAudit.getRequestSummary()
+                + knowledgeAudit.getResponseSummary()).doesNotContain(
+                "现行生产流程是什么", "evidenceId", "path", "score");
     }
 
     @Test

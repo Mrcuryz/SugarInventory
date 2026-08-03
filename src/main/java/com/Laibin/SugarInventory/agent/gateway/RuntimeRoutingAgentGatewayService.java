@@ -53,8 +53,20 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             "tool_start", "tool_end", "debug", "audit", "heartbeat", "cancelled", "timeout", "fallback");
     private static final Set<String> DEBUG_STREAM_EVENT_TYPES = Set.of("tool_start", "tool_end", "debug");
     private static final Set<String> INTERNAL_STREAM_EVENT_TYPES = Set.of("audit");
+    private static final String KNOWLEDGE_CARD_TYPE = "knowledge_evidence";
+    private static final Set<String> KNOWLEDGE_FIELD_LABELS = Set.of("内容", "来源");
+    private static final Set<String> KNOWLEDGE_GOAL_TYPES = Set.of(
+            "PROCESS_KNOWLEDGE_QUERY", "ENTERPRISE_KNOWLEDGE_QUERY");
+    private static final Set<String> KNOWLEDGE_STATUSES = Set.of(
+            "SUCCEEDED", "DEGRADED", "NO_DATA", "UNAVAILABLE", "FORBIDDEN", "INVALID_QUERY", "ERROR");
+    private static final Set<String> KNOWLEDGE_DOMAINS = Set.of(
+            "PROCESS", "COMPANY", "PRODUCT_MARKETING", "CERTIFICATION", "SALES");
     private static final Pattern INTERNAL_TEXT = Pattern.compile(
             "(?i)(authorization|bearer\\s+|delegationToken|refreshToken|productId|warehouseId|toolName|stackTrace|jdbc:|\\bSUCCESS\\b|\\btoken\\b)");
+    private static final Pattern UNSAFE_KNOWLEDGE_TEXT = Pattern.compile(
+            "(?i)([a-z]:[\\\\/]|\\\\\\\\[^\\s]+[\\\\/]|file://|(?:^|\\s)/(?:[a-z0-9._-]+/)+|"
+                    + "\\b(?:document|chunk|evidence|embedding|score|prompt)(?:[_-]?id)?\\s*[:=]|"
+                    + "\\b(?:doc|chunk|ev)_[a-z0-9_-]+\\b)");
     private static final Pattern LABEL_ID = Pattern.compile("\\s*[(（]#\\d+[)）]\\s*");
 
     private final AgentSessionService agentSessionService;
@@ -109,6 +121,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         String errorCode = null;
         String path = "python";
         AgentMessageResponseVO result;
+        JsonNode pythonReviewTrace = null;
 
         String invalidResumeStatus = invalidResumeStatus(sessionVO, request);
         if (invalidResumeStatus != null) {
@@ -127,6 +140,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             pythonRequest.setMessageId(messageId);
             PythonAgentChatResponseDTO pythonResponse = pythonAgentClient.chat(pythonRequest);
             pythonContextSessions.add(agentSessionId);
+            pythonReviewTrace = pythonResponse.getReviewTrace();
             result = mapPythonResponse(pythonResponse, sessionVO, loginUser);
             if (pythonResponse.getError() != null) {
                 resultCode = "ERROR";
@@ -150,8 +164,13 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             result = unavailableResponse(sessionVO);
         }
 
+        long durationMs = elapsedMillis(startedAt);
         recordRuntimeAudit(agentSessionId, sessionVO.getUserId(), messageId, requestId, traceId, request,
-                path, resultCode, errorCode, fallbackUsed, result, elapsedMillis(startedAt));
+                path, resultCode, errorCode, fallbackUsed, result, durationMs);
+        if ("python".equals(path) && pythonReviewTrace != null) {
+            recordPythonTraceAudits(
+                    sessionVO, messageId, pythonReviewTrace, "/internal/agent/chat", resultCode, errorCode, durationMs);
+        }
         return result;
     }
 
@@ -291,6 +310,13 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             recordRuntimeAudit(session.getAgentSessionId(), session.getUserId(), activeStream.messageId(), requestId, traceId, request,
                     "python_stream", resultCode, errorCode, fallbackUsed, auditResponse, elapsedMillis(startedAt));
             recordAgentHandoffAudit(session, activeStream, resultCode, errorCode, elapsedMillis(startedAt));
+            recordKnowledgeSearchAudit(
+                    session,
+                    activeStream.messageId(),
+                    activeStream.knowledgeAuditSnapshot(),
+                    "/internal/agent/chat/stream",
+                    errorCode,
+                    elapsedMillis(startedAt));
             activeStreams.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()), activeStream);
             cancelledMessageKeys.remove(streamKey(session.getAgentSessionId(), activeStream.messageId()));
         }
@@ -421,6 +447,10 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         List<AgentBusinessCardVO> cards = new ArrayList<>();
         List<AgentChoiceOptionVO> flattenedOptions = new ArrayList<>();
         for (PythonAgentChatResponseDTO.BusinessCard sourceCard : safeList(source.getCards())) {
+            if (KNOWLEDGE_CARD_TYPE.equals(sourceCard.getCardType())) {
+                cards.add(mapKnowledgeCard(sourceCard));
+                continue;
+            }
             AgentBusinessCardVO card = new AgentBusinessCardVO();
             card.setCardType(safeText(sourceCard.getCardType(), "business_result"));
             card.setTitle(safeText(sourceCard.getTitle(), "查询结果"));
@@ -447,6 +477,36 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             target.setDebug(safeDebug(source.getDebug()));
         }
         return target;
+    }
+
+    private AgentBusinessCardVO mapKnowledgeCard(PythonAgentChatResponseDTO.BusinessCard source) {
+        AgentBusinessCardVO card = new AgentBusinessCardVO();
+        card.setCardType(KNOWLEDGE_CARD_TYPE);
+        card.setTitle(safeKnowledgeText(source.getTitle(), "现行资料", 500));
+        card.setPrompt(null);
+        card.setOptions(List.of());
+        card.setFields(safeKnowledgeFields(source.getFields()));
+        return card;
+    }
+
+    private List<Map<String, Object>> safeKnowledgeFields(List<Map<String, Object>> fields) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        Set<String> seenLabels = new java.util.LinkedHashSet<>();
+        for (Map<String, Object> field : safeList(fields)) {
+            if (result.size() >= KNOWLEDGE_FIELD_LABELS.size()) {
+                break;
+            }
+            String label = field.get("label") instanceof String text ? text : null;
+            if (!KNOWLEDGE_FIELD_LABELS.contains(label) || !seenLabels.add(label)) {
+                continue;
+            }
+            String rawValue = field.get("value") instanceof String text ? text : null;
+            String value = safeKnowledgeText(rawValue, null, "内容".equals(label) ? 800 : 500);
+            if (value != null) {
+                result.add(Map.of("label", label, "value", value));
+            }
+        }
+        return result;
     }
 
     private AgentChoiceOptionVO mapOption(PythonAgentChatResponseDTO.UserOption source) {
@@ -611,7 +671,8 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         if (!STREAM_EVENT_TYPES.contains(type)) {
             throw new InvalidStreamEventException();
         }
-        if (!activeStream.messageId().equals(source.getMessageId()) || containsUnsafeValue(source.getPayload())) {
+        if (!activeStream.messageId().equals(source.getMessageId())
+                || (!INTERNAL_STREAM_EVENT_TYPES.contains(type) && containsUnsafeValue(source.getPayload()))) {
             throw new InvalidStreamEventException();
         }
         validateInterruptStreamEvent(activeStream, source);
@@ -785,6 +846,12 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     }
 
     private Object safeStreamPayload(String type, JsonNode node) {
+        if ("card".equals(type)
+                && node != null
+                && node.isObject()
+                && KNOWLEDGE_CARD_TYPE.equals(node.path("cardType").asText(null))) {
+            return safeKnowledgeCardPayload(node);
+        }
         if (!"text_delta".equals(type)) {
             return safeJsonValue(node);
         }
@@ -793,6 +860,33 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
         String text = safeStreamText(node.path("text").asText());
         return text == null ? Map.of() : Map.of("text", text);
+    }
+
+    private Map<String, Object> safeKnowledgeCardPayload(JsonNode node) {
+        Map<String, Object> card = new LinkedHashMap<>();
+        card.put("cardType", KNOWLEDGE_CARD_TYPE);
+        card.put("title", safeKnowledgeText(node.path("title").asText(null), "现行资料", 500));
+        List<Map<String, Object>> fields = new ArrayList<>();
+        Set<String> seenLabels = new java.util.LinkedHashSet<>();
+        JsonNode sourceFields = node.path("fields");
+        if (sourceFields.isArray()) {
+            for (JsonNode field : sourceFields) {
+                if (fields.size() >= KNOWLEDGE_FIELD_LABELS.size()) {
+                    break;
+                }
+                String label = field.path("label").asText(null);
+                if (!KNOWLEDGE_FIELD_LABELS.contains(label) || !seenLabels.add(label)) {
+                    continue;
+                }
+                String value = safeKnowledgeText(
+                        field.path("value").asText(null), null, "内容".equals(label) ? 800 : 500);
+                if (value != null) {
+                    fields.add(Map.of("label", label, "value", value));
+                }
+            }
+        }
+        card.put("fields", fields);
+        return card;
     }
 
     private String safeStreamText(String value) {
@@ -932,12 +1026,45 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         if (summary == null) {
             return;
         }
+        recordAgentHandoffAudit(
+                session,
+                activeStream.messageId(),
+                summary,
+                "/internal/agent/chat/stream",
+                resultCode,
+                errorCode,
+                durationMs);
+    }
+
+    private void recordPythonTraceAudits(AgentSessionVO session,
+                                         String messageId,
+                                         JsonNode trace,
+                                         String upstreamPath,
+                                         String resultCode,
+                                         String errorCode,
+                                         long durationMs) {
+        String handoffSummary = handoffSummaryFromTrace(trace);
+        if (handoffSummary != null) {
+            recordAgentHandoffAudit(
+                    session, messageId, handoffSummary, upstreamPath, resultCode, errorCode, durationMs);
+        }
+        recordKnowledgeSearchAudit(
+                session, messageId, knowledgeAuditFromTrace(trace), upstreamPath, errorCode, durationMs);
+    }
+
+    private void recordAgentHandoffAudit(AgentSessionVO session,
+                                         String messageId,
+                                         String summary,
+                                         String upstreamPath,
+                                         String resultCode,
+                                         String errorCode,
+                                         long durationMs) {
         try {
             AgentToolAuditDTO audit = new AgentToolAuditDTO();
             audit.setToolName("agent_handoff");
-            audit.setToolCallId(activeStream.messageId());
-            audit.setMessageId(activeStream.messageId());
-            audit.setUpstreamPath("/internal/agent/chat/stream");
+            audit.setToolCallId(messageId);
+            audit.setMessageId(messageId);
+            audit.setUpstreamPath(upstreamPath);
             audit.setArgumentsSummary(summary);
             audit.setRequestSummary("sourceAgent=main_agent");
             audit.setResponseSummary("resultCode=" + resultCode);
@@ -950,6 +1077,122 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
     }
 
+    private void recordKnowledgeSearchAudit(AgentSessionVO session,
+                                            String messageId,
+                                            KnowledgeAuditSnapshot knowledge,
+                                            String upstreamPath,
+                                            String fallbackErrorCode,
+                                            long durationMs) {
+        if (knowledge == null) {
+            return;
+        }
+        boolean successful = Set.of("SUCCEEDED", "DEGRADED", "NO_DATA").contains(knowledge.status());
+        String errorCode = successful ? null : firstNonBlank(fallbackErrorCode, switch (knowledge.status()) {
+            case "UNAVAILABLE" -> "RAG_UNAVAILABLE";
+            case "FORBIDDEN" -> "UPSTREAM_PERMISSION_DENIED";
+            case "INVALID_QUERY" -> "UPSTREAM_BAD_REQUEST";
+            default -> "RAG_SEARCH_FAILED";
+        });
+        try {
+            AgentToolAuditDTO audit = new AgentToolAuditDTO();
+            audit.setToolName("knowledge_search");
+            audit.setToolCallId(messageId);
+            audit.setMessageId(messageId);
+            audit.setUpstreamPath(upstreamPath);
+            audit.setArgumentsSummary("targetAgent=knowledge_expert"
+                    + "; goalType=" + knowledge.goalType()
+                    + "; knowledgeDomains=" + knowledge.knowledgeDomains());
+            audit.setRequestSummary("source=approved_corpus");
+            audit.setResponseSummary("status=" + knowledge.status()
+                    + "; corpusVersion=" + firstNonBlank(knowledge.corpusVersion(), "unknown")
+                    + "; evidenceCount=" + knowledge.evidenceCount()
+                    + "; degraded=" + knowledge.degraded());
+            audit.setResultCode(successful ? "SUCCESS" : "ERROR");
+            audit.setErrorCode(safeCode(errorCode));
+            audit.setDurationMs(durationMs);
+            agentSessionService.recordToolAudit(session.getAgentSessionId(), session.getUserId(), audit);
+        } catch (RuntimeException e) {
+            log.warn("Knowledge search audit could not be recorded; errorCode=KNOWLEDGE_SEARCH_AUDIT_FAILED");
+        }
+    }
+
+    private String handoffSummaryFromTrace(JsonNode trace) {
+        if (trace == null || trace.isNull()) {
+            return null;
+        }
+        JsonNode handoff = trace.path("agent_handoff");
+        String targetAgent = safeAuditIdentifier(handoff.path("target_agent").asText(null));
+        String businessDomain = safeAuditIdentifier(handoff.path("business_domain").asText(null));
+        String mode = safeAuditIdentifier(handoff.path("mode").asText(null));
+
+        if (targetAgent == null) {
+            targetAgent = safeAuditIdentifier(trace.path("expertLoop").path("expertAgent").asText(null));
+            if (targetAgent != null) {
+                mode = "llm_delegate";
+            }
+        }
+        KnowledgeAuditSnapshot knowledge = knowledgeAuditFromTrace(trace);
+        if (targetAgent == null && knowledge != null) {
+            targetAgent = "knowledge_expert";
+            mode = "delegate";
+        }
+        if (targetAgent == null) {
+            return null;
+        }
+        if (businessDomain == null && "knowledge_expert".equals(targetAgent)) {
+            businessDomain = "knowledge";
+        }
+        return "targetAgent=" + targetAgent
+                + "; businessDomain=" + firstNonBlank(businessDomain, "unknown")
+                + "; handoffMode=" + firstNonBlank(mode, "unknown");
+    }
+
+    private KnowledgeAuditSnapshot knowledgeAuditFromTrace(JsonNode trace) {
+        if (trace == null || trace.isNull()) {
+            return null;
+        }
+        JsonNode node = trace.path("knowledgeAudit");
+        if (!node.isObject()
+                || !"knowledge_expert".equals(node.path("targetAgent").asText(null))) {
+            return null;
+        }
+        String goalType = node.path("goalType").asText(null);
+        String status = node.path("status").asText(null);
+        if (!KNOWLEDGE_GOAL_TYPES.contains(goalType) || !KNOWLEDGE_STATUSES.contains(status)) {
+            return null;
+        }
+        String corpusVersion = node.path("corpusVersion").asText(null);
+        if (corpusVersion != null
+                && !corpusVersion.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,99}")) {
+            corpusVersion = null;
+        }
+        java.util.LinkedHashSet<String> domains = new java.util.LinkedHashSet<>();
+        JsonNode domainNodes = node.path("knowledgeDomains");
+        if (domainNodes.isArray()) {
+            for (JsonNode domainNode : domainNodes) {
+                String domain = domainNode.asText(null);
+                if (KNOWLEDGE_DOMAINS.contains(domain)) {
+                    domains.add(domain);
+                }
+            }
+        }
+        int evidenceCount = node.path("evidenceCount").canConvertToInt()
+                ? Math.max(0, Math.min(10, node.path("evidenceCount").asInt()))
+                : 0;
+        boolean degraded = node.path("degraded").isBoolean() && node.path("degraded").asBoolean();
+        return new KnowledgeAuditSnapshot(
+                goalType,
+                status,
+                corpusVersion,
+                String.join(",", domains),
+                evidenceCount,
+                degraded);
+    }
+
+    private String safeAuditIdentifier(String value) {
+        return value != null && value.matches("[a-z][a-z0-9_]{0,79}") ? value : null;
+    }
+
     private String safeErrorMessage(String code) {
         if (code == null) {
             return UNAVAILABLE_MESSAGE;
@@ -958,6 +1201,8 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             case "UPSTREAM_UNAUTHORIZED" -> "当前登录会话无法完成该查询，请重新登录后重试。";
             case "UPSTREAM_PERMISSION_DENIED" -> "当前用户没有执行该只读查询的权限。";
             case "UPSTREAM_TIMEOUT" -> "查询仓储数据超时，请稍后重试。";
+            case "RAG_UNAVAILABLE" -> "知识库当前不可用，请稍后重试。实时库存、库位、托盘和化验查询不受影响。";
+            case "UPSTREAM_BAD_REQUEST" -> "知识查询条件不符合要求，请换一种更明确的问法。";
             default -> UNAVAILABLE_MESSAGE;
         };
     }
@@ -980,6 +1225,22 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
         String compact = value.replaceAll("(?m)^\\s*at\\s+.+$", "").trim();
         return compact.length() <= 2000 ? compact : compact.substring(0, 2000);
+    }
+
+    private String safeLimitedText(String value, String fallback, int maxLength) {
+        String safe = safeText(value, fallback);
+        if (safe == null || safe.length() <= maxLength) {
+            return safe;
+        }
+        return safe.substring(0, maxLength);
+    }
+
+    private String safeKnowledgeText(String value, String fallback, int maxLength) {
+        String safe = safeLimitedText(value, fallback, maxLength);
+        if (safe == null || UNSAFE_KNOWLEDGE_TEXT.matcher(safe).find()) {
+            return fallback;
+        }
+        return safe;
     }
 
     private boolean isSafeScalar(String value) {
@@ -1030,7 +1291,16 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     private static class InvalidStreamEventException extends RuntimeException {
     }
 
-    private static final class ActiveStream {
+    private record KnowledgeAuditSnapshot(
+            String goalType,
+            String status,
+            String corpusVersion,
+            String knowledgeDomains,
+            int evidenceCount,
+            boolean degraded) {
+    }
+
+    private final class ActiveStream {
         private final String agentSessionId;
         private final String messageId;
         private final SseEmitter emitter;
@@ -1040,6 +1310,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         private final Set<String> interruptIds = ConcurrentHashMap.newKeySet();
         private volatile String resultCode = "COMPLETED";
         private volatile String agentHandoffSummary;
+        private volatile KnowledgeAuditSnapshot knowledgeAuditSnapshot;
 
         private ActiveStream(String agentSessionId, String messageId, SseEmitter emitter) {
             this.agentSessionId = agentSessionId;
@@ -1086,24 +1357,23 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
             if (payload == null || payload.isNull()) {
                 return;
             }
-            JsonNode handoff = payload.path("intentRouter").path("agent_handoff");
-            String targetAgent = safeAuditIdentifier(handoff.path("target_agent").asText(null));
-            String businessDomain = safeAuditIdentifier(handoff.path("business_domain").asText(null));
-            String mode = safeAuditIdentifier(handoff.path("mode").asText(null));
-            if (targetAgent == null) {
-                return;
+            JsonNode trace = payload.path("intentRouter");
+            String summary = handoffSummaryFromTrace(trace);
+            if (summary != null) {
+                agentHandoffSummary = summary;
             }
-            agentHandoffSummary = "targetAgent=" + targetAgent
-                    + "; businessDomain=" + businessDomain
-                    + "; handoffMode=" + mode;
+            KnowledgeAuditSnapshot knowledge = knowledgeAuditFromTrace(trace);
+            if (knowledge != null) {
+                knowledgeAuditSnapshot = knowledge;
+            }
         }
 
         private String agentHandoffSummary() {
             return agentHandoffSummary;
         }
 
-        private static String safeAuditIdentifier(String value) {
-            return value != null && value.matches("[a-z][a-z0-9_]{0,79}") ? value : null;
+        private KnowledgeAuditSnapshot knowledgeAuditSnapshot() {
+            return knowledgeAuditSnapshot;
         }
 
         private void cancel() {

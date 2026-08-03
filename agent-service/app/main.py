@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import hmac
 import logging
 from pathlib import Path
@@ -17,6 +18,11 @@ from app.session_lock import RedisSessionLock
 from app.state_store import RedisStateStore, StateCheckpointer
 from app.model import build_model_client
 from app.observability import MetricsRegistry
+from app.rag.runtime.corpus_loader import RagRuntimeConfiguration
+from app.rag.runtime.knowledge_tool import (
+    ApprovedKnowledgeService,
+    build_approved_knowledge_service,
+)
 from app.runtime import WarehouseAgentRuntime
 from app.schemas import (
     CandidateSelectedMessage,
@@ -27,6 +33,7 @@ from app.schemas import (
     HealthResponse,
     ResumeEvent,
     ResumeRequest,
+    UserSummary,
 )
 from app.streaming import sse_for_request
 from app.tool_arguments import ToolArgumentBuilder
@@ -34,12 +41,20 @@ from app.tools.client import ALLOWED_TOOLS, AgentToolClient, JavaGatewayToolClie
 
 
 logger = logging.getLogger(__name__)
+ADMIN_ROLE_CODES = frozenset({"ADMIN", "SUPER_ADMIN"})
+
+
+def require_agent_admin(user: UserSummary | None) -> None:
+    role_code = (user.roleCode or "").strip().upper() if user is not None else ""
+    if user is None or user.userId is None or user.userId <= 0 or role_code not in ADMIN_ROLE_CODES:
+        raise HTTPException(status_code=403, detail="Agent access is restricted to administrators.")
 
 
 def create_app(
     settings: Settings | None = None,
     tool_client: AgentToolClient | None = None,
     checkpointer: StateCheckpointer | None = None,
+    knowledge_service: ApprovedKnowledgeService | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     if settings.deployment_environment == "production" and settings.planning_mode == "llm":
@@ -48,6 +63,19 @@ def create_app(
         raise RuntimeError("LLM planning mode requires an OpenAI-compatible model client.")
     tool_client = tool_client or _build_tool_client(settings)
     metrics = MetricsRegistry()
+    knowledge_service = knowledge_service or build_approved_knowledge_service(
+        RagRuntimeConfiguration(
+            enabled=settings.rag_enabled,
+            required=settings.rag_required,
+            root=settings.rag_root,
+            model_path=settings.rag_model_path,
+            model_name=settings.rag_model_name,
+            model_threads=settings.rag_model_threads,
+            query_timeout_ms=settings.rag_query_timeout_ms,
+            max_evidence=settings.rag_max_evidence,
+        ),
+        metrics,
+    )
     checkpointer = checkpointer or _build_checkpointer(settings, metrics)
     model_client = build_model_client(settings)
     runtime = WarehouseAgentRuntime(
@@ -63,20 +91,33 @@ def create_app(
         llm_allowed_experts=settings.llm_allowed_experts,
         llm_max_tool_calls=settings.llm_max_tool_calls,
         llm_max_tool_retries=settings.llm_max_tool_retries,
+        knowledge_service=knowledge_service,
     )
     run_registry = AgentRunRegistry()
 
-    app = FastAPI(title="Warehouse Agent Service", version=settings.version)
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        yield
+        knowledge_service.close()
+
+    app = FastAPI(
+        title="Warehouse Agent Service",
+        version=settings.version,
+        lifespan=lifespan,
+    )
     app.state.settings = settings
     app.state.runtime = runtime
     app.state.run_registry = run_registry
     app.state.metrics = metrics
+    app.state.knowledge_service = knowledge_service
     startup_capabilities = capability_snapshot(AgentHandoffRouter(), ALLOWED_TOOLS)
     logger.info(
-        "Agent runtime ready runtimeVersion=%s protocolVersion=%s planningMode=%s codeSource=%s toolRegistryHash=%s recipeRegistryHash=%s agentProfileRegistryHash=%s",
+        "Agent runtime ready runtimeVersion=%s protocolVersion=%s planningMode=%s ragState=%s ragCorpusVersion=%s codeSource=%s toolRegistryHash=%s recipeRegistryHash=%s agentProfileRegistryHash=%s",
         settings.version,
         settings.protocol_version,
         settings.planning_mode,
+        knowledge_service.readiness.state.value,
+        knowledge_service.readiness.corpusVersion or "NONE",
         Path(__file__).resolve(),
         startup_capabilities["toolRegistryHash"],
         startup_capabilities["recipeRegistryHash"],
@@ -119,6 +160,7 @@ def create_app(
                 "toolGateway": gateway_state,
                 "stateStore": state_store,
                 "planningMode": settings.planning_mode.upper(),
+                "rag": knowledge_service.readiness.state.value,
             },
         )
 
@@ -133,6 +175,7 @@ def create_app(
             "protocolVersion": settings.protocol_version,
             "planningMode": settings.planning_mode,
             "llmAllowedExperts": list(settings.llm_allowed_experts) if settings.planning_mode == "llm" else [],
+            "rag": knowledge_service.capability_snapshot(),
             **snapshot,
         }
 
@@ -149,6 +192,7 @@ def create_app(
         dependencies=[Depends(authorize_java)],
     )
     def chat(request: ChatRequest) -> ChatResponse:
+        require_agent_admin(request.user)
         if isinstance(request.message, CandidateSelectedMessage):
             return runtime.resume(
                 ResumeRequest(
@@ -173,6 +217,7 @@ def create_app(
         dependencies=[Depends(authorize_java)],
     )
     def chat_stream(request: ChatRequest) -> StreamingResponse:
+        require_agent_admin(request.user)
         return StreamingResponse(
             sse_for_request(
                 request,
@@ -181,6 +226,7 @@ def create_app(
                 run_registry,
                 None if settings.planning_mode == "llm" else runtime.stream_answer_deltas,
                 settings.run_timeout_ms,
+                metrics,
             ),
             media_type="text/event-stream",
         )
@@ -204,6 +250,7 @@ def create_app(
         dependencies=[Depends(authorize_java)],
     )
     def resume(request: ResumeRequest) -> ChatResponse:
+        require_agent_admin(request.user)
         return runtime.resume(request)
 
     @app.delete(

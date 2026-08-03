@@ -33,8 +33,10 @@ from app.model import (
     OpenAICompatibleModelClient,
     take_model_decision_diagnostics,
 )
+from app.observability import MetricsRegistry
 from app.orchestration import CompoundExecutionPlan, OrchestrationStep
 from app.progress import registered_progress_tools
+from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS
 from app.runtime import AUDIT_CAPABILITY_LABELS, WarehouseAgentRuntime
 from app.schemas import AgentError, ChatRequest, ChatResponse, GoalDraftV1, ResultReasoningDraftV1
 from app.streaming import sse_for_request, sse_for_response
@@ -50,7 +52,6 @@ EXPECTED_EXPERT_TOOLS = {
             "get_inventory_overview",
             "get_inventory_distribution",
             "query_inventory_ledger",
-            "query_prepare_pool_balance",
         }
     ),
     "warehouse_expert": frozenset(
@@ -107,6 +108,7 @@ EXPECTED_EXPERT_TOOLS = {
             "query_material_candidates",
         }
     ),
+    "analytics_expert": frozenset({"run_registered_report"}),
     "logistics_expert": frozenset(
         {
             "query_pallet_tasks",
@@ -124,6 +126,13 @@ EXPECTED_EXPERT_TOOLS = {
     "audit_expert": frozenset(
         {"search_operation_logs", "query_agent_tool_audit", "query_agent_answer_reviews"}
     ),
+    "knowledge_expert": INTERNAL_KNOWLEDGE_TOOLS,
+}
+
+EXPECTED_GATEWAY_EXPERT_TOOLS = {
+    name: tools
+    for name, tools in EXPECTED_EXPERT_TOOLS.items()
+    if tools & ALLOWED_TOOLS
 }
 
 
@@ -135,6 +144,7 @@ def test_every_allowed_tool_has_a_user_facing_audit_capability_label() -> None:
 def chat_payload(message: str, agent_session_id: str = "agt_test") -> dict[str, Any]:
     return {
         "agentSessionId": agent_session_id,
+        "user": {"userId": 7, "name": "测试管理员", "roleCode": "ADMIN"},
         "message": {"type": "user_message", "content": message},
         "client": {"traceId": "trace_001", "requestId": "req_001"},
     }
@@ -154,6 +164,7 @@ def resume_payload(checkpointer: InMemoryCheckpointer, client_request_id: str = 
     assert pending is not None
     return {
         "agentSessionId": "agt_test",
+        "user": {"userId": 7, "name": "测试管理员", "roleCode": "ADMIN"},
         "resumeToken": pending.resume_token,
         "event": {
             "type": "candidate_selected",
@@ -171,6 +182,14 @@ def test_default_gateway_timeout_is_15_seconds(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("REQUEST_TIMEOUT_MS", raising=False)
 
     assert Settings.from_env().request_timeout_ms == 15000
+
+
+def test_default_model_timeout_allows_slow_structured_decisions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AGENT_MODEL_TIMEOUT_MS", raising=False)
+
+    assert Settings.from_env().model_timeout_ms == 45000
 
 
 def test_goal_draft_shadow_flag_is_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -406,6 +425,7 @@ def test_openai_compatible_main_agent_returns_strict_llm_route_decision() -> Non
                 model_mode="openai_compatible",
                 model_base_url=model_server.base_url,
                 model_name="test-model",
+                main_route_model_name="main-route-test-model",
                 model_timeout_ms=2000,
             )
         )
@@ -423,12 +443,21 @@ def test_openai_compatible_main_agent_returns_strict_llm_route_decision() -> Non
         assert decision is not None
         assert decision.action == "DELEGATE"
         assert decision.expertAgent == "inventory_expert"
+        assert model_server.last_body["model"] == "main-route-test-model"
         request_text = json.dumps(model_server.last_body, ensure_ascii=False)
         assert "toolName" not in request_text
         assert "warehouseId" not in request_text
         assert "当前库存按明确不合格、指定化验标准或原始化验指标数值条件筛选" in request_text
         assert "不是跨域配方" in request_text
+        assert "‘备料池’或‘备料池余额’是已经停用流程的旧称" in request_text
+        assert "必须理解为 IN_PROCESS_MATERIALS，委派 production_expert" in request_text
         model_request = json.loads(model_server.last_body["messages"][1]["content"])
+        assert list(model_request)[:4] == [
+            "schema",
+            "availableExperts",
+            "registeredGoals",
+            "registeredRecipes",
+        ]
         assert {
             item["goalType"]
             for item in model_request["registeredGoals"]
@@ -437,6 +466,14 @@ def test_openai_compatible_main_agent_returns_strict_llm_route_decision() -> Non
             for goal_type, contract in GOAL_CONTRACTS.items()
             if contract.ownerExpert == "inventory_expert"
         }
+        assert all(
+            "requiredEntityTypes" not in item
+            for item in model_request["registeredGoals"]
+        )
+        assert all(
+            "scope" not in item
+            for item in model_request["availableExperts"]
+        )
     finally:
         model_server.stop()
 
@@ -465,6 +502,7 @@ def test_openai_compatible_expert_returns_one_strict_tool_action() -> None:
                 model_mode="openai_compatible",
                 model_base_url=model_server.base_url,
                 model_name="test-model",
+                expert_initial_model_name="expert-initial-test-model",
                 model_timeout_ms=2000,
             )
         )
@@ -492,6 +530,7 @@ def test_openai_compatible_expert_returns_one_strict_tool_action() -> None:
         assert decision is not None
         assert decision.action == "CALL_TOOL"
         assert decision.arguments == {"productRef": "CURRENT_PRODUCT"}
+        assert model_server.last_body["model"] == "expert-initial-test-model"
         request_text = json.dumps(model_server.last_body, ensure_ascii=False)
         assert "productId" not in request_text
         assert "紧邻‘标准’的名称和版本属于标准身份" in request_text
@@ -499,6 +538,15 @@ def test_openai_compatible_expert_returns_one_strict_tool_action() -> None:
         assert "warehouseScope.type=ALL" in request_text
         assert "面向用户的 answer 中绝不能出现 obs_*" in request_text
         assert "不得仅为逐条穷举剩余记录继续翻页" in request_text
+        model_request = json.loads(model_server.last_body["messages"][1]["content"])
+        assert list(model_request)[:5] == [
+            "schema",
+            "expertAgent",
+            "expertInstructions",
+            "availableTools",
+            "maxToolCalls",
+        ]
+        assert list(model_request)[-2:] == ["observations", "toolCallCount"]
     finally:
         model_server.stop()
 
@@ -530,6 +578,7 @@ def test_openai_compatible_expert_repairs_one_invalid_schema_response_without_lo
                 model_mode="openai_compatible",
                 model_base_url=model_server.base_url,
                 model_name="test-model",
+                expert_result_model_name="expert-result-test-model",
                 model_timeout_ms=2000,
             )
         )
@@ -545,12 +594,14 @@ def test_openai_compatible_expert_repairs_one_invalid_schema_response_without_lo
                 observations=[{"observationId": "obs_1", "status": "AVAILABLE"}],
                 toolCallCount=1,
                 maxToolCalls=3,
+                decisionStage="RESULT_ANALYSIS",
             )
         )
         diagnostics = take_model_decision_diagnostics()
 
         assert decision is not None
         assert decision.action == "CALL_TOOL"
+        assert model_server.last_body["model"] == "expert-result-test-model"
         assert model_server.non_stream_request_count == 2
         assert [item["outcome"] for item in diagnostics] == ["SCHEMA_INVALID", "VALID"]
         assert "reasoning" in diagnostics[0]["validationPaths"]
@@ -1159,10 +1210,10 @@ def test_expert_agent_tool_scopes_cover_only_current_readonly_allowlist() -> Non
     )
 
     assert business_profiles == EXPECTED_EXPERT_TOOLS
-    assert len(business_profiles) == 9
+    assert len(business_profiles) == 11
     assert all(tools for tools in business_profiles.values())
-    assert expert_tools == ALLOWED_TOOLS
-    assert len(expert_tools) == 52
+    assert expert_tools == ALLOWED_TOOLS | set(INTERNAL_KNOWLEDGE_TOOLS)
+    assert len(expert_tools) == 53
     assert router.profile(MAIN_AGENT).allowed_tools == frozenset()
     assert not any(tool.startswith(("execute_", "preview_")) for tool in expert_tools)
     assert "query_assay_records" not in router.profile("inventory_expert").allowed_tools
@@ -1338,10 +1389,10 @@ def test_capability_endpoint_returns_registry_hashes_and_counts() -> None:
     profile_counts = {profile["name"]: profile["allowedToolCount"] for profile in body["agentProfiles"]}
     assert profile_counts == {
         MAIN_AGENT: 0,
-        **{name: len(tools) for name, tools in EXPECTED_EXPERT_TOOLS.items()},
+        **{name: len(tools) for name, tools in EXPECTED_GATEWAY_EXPERT_TOOLS.items()},
     }
     profile_tools = {profile["name"]: frozenset(profile["allowedTools"]) for profile in body["agentProfiles"]}
-    assert profile_tools == {MAIN_AGENT: frozenset(), **EXPECTED_EXPERT_TOOLS}
+    assert profile_tools == {MAIN_AGENT: frozenset(), **EXPECTED_GATEWAY_EXPERT_TOOLS}
 
 
 @pytest.mark.parametrize(
@@ -2787,7 +2838,7 @@ def test_stream_clarification_ends_with_required_finish_reason() -> None:
 
 
 def test_business_progress_registry_covers_every_allowed_tool() -> None:
-    assert registered_progress_tools() == frozenset(ALLOWED_TOOLS)
+    assert registered_progress_tools() == frozenset(ALLOWED_TOOLS) | INTERNAL_KNOWLEDGE_TOOLS
 
 
 def test_stream_emits_real_tool_stage_before_blocked_tool_finishes() -> None:
@@ -2830,6 +2881,27 @@ def test_stream_emits_real_tool_stage_before_blocked_tool_finishes() -> None:
     remaining = parse_sse_events("".join(stream))
     assert remaining[-1]["type"] == "message_end"
     assert remaining[-1]["payload"]["finishReason"] == "completed"
+
+
+def test_stream_records_first_progress_emission_latency() -> None:
+    request = ChatRequest.model_validate(chat_payload("查询化验"))
+    metrics = MetricsRegistry()
+    stream = sse_for_request(
+        request,
+        lambda _: ChatResponse(agentSessionId=request.agentSessionId, answer="暂无记录"),
+        lambda _: ChatResponse(agentSessionId=request.agentSessionId, answer="暂无记录"),
+        metrics=metrics,
+    )
+
+    assert parse_sse_events(next(stream))[0]["type"] == "message_start"
+    assert parse_sse_events(next(stream))[0]["type"] == "progress"
+
+    histogram = metrics.snapshot()["histograms"][
+        'stream_first_progress_duration{operation="chat"}'
+    ]
+    assert histogram["count"] == 1
+    assert histogram["max"] >= 0
+    stream.close()
 
 
 def test_stream_logs_unhandled_runtime_exception_without_exposing_details_to_user(caplog: pytest.LogCaptureFixture) -> None:
@@ -3052,6 +3124,46 @@ def test_java_service_key_is_required_for_real_gateway_mode() -> None:
     assert "tool-key" not in text
 
 
+@pytest.mark.parametrize(
+    "user",
+    [
+        None,
+        {"userId": 7, "roleCode": "STAFF"},
+        {"userId": 7, "roleCode": "QC"},
+        {"userId": 7, "roleCode": "WAREHOUSE"},
+        {"userId": None, "roleCode": "ADMIN"},
+    ],
+)
+def test_internal_chat_rejects_missing_or_non_admin_user_context(user: dict[str, Any] | None) -> None:
+    app = create_app(
+        Settings(tool_mode="mock"),
+        tool_client=MockToolClient(),
+        checkpointer=InMemoryCheckpointer(),
+    )
+    payload = chat_payload("你是谁？")
+    payload["user"] = user
+
+    response = TestClient(app).post("/internal/agent/chat", json=payload)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Agent access is restricted to administrators."
+
+
+@pytest.mark.parametrize("role_code", ["ADMIN", "SUPER_ADMIN", " super_admin "])
+def test_internal_chat_accepts_admin_role_context(role_code: str) -> None:
+    app = create_app(
+        Settings(tool_mode="mock"),
+        tool_client=MockToolClient(),
+        checkpointer=InMemoryCheckpointer(),
+    )
+    payload = chat_payload("你是谁？")
+    payload["user"]["roleCode"] = role_code
+
+    response = TestClient(app).post("/internal/agent/chat", json=payload)
+
+    assert response.status_code == 200
+
+
 def test_candidate_selected_can_use_chat_endpoint_as_same_conversation_event() -> None:
     tool_client = MockToolClient(
         {
@@ -3083,6 +3195,7 @@ def test_candidate_selected_can_use_chat_endpoint_as_same_conversation_event() -
         "/internal/agent/chat",
         json={
             "agentSessionId": "agt_test",
+            "user": {"userId": 7, "name": "测试管理员", "roleCode": "ADMIN"},
             "message": {
                 "type": "candidate_selected",
                 "interruptId": pending.interrupt_id,
@@ -4112,7 +4225,7 @@ def test_material_pick_trace_uses_order_ref_and_does_not_claim_variance() -> Non
 
     assert response.status_code == 200
     assert "半成品糖" in response.json()["answer"]
-    assert "不计算计划差异、损耗或实际消耗率" in response.json()["answer"]
+    assert "不计算计划差异、收率或损耗率" in response.json()["answer"]
     assert [call["toolName"] for call in tool_client.calls] == ["resolve_production_entities", "query_material_pick_trace"]
     assert tool_client.calls[1]["arguments"] == {"orderRef": "aer_order"}
 
@@ -4486,15 +4599,15 @@ def test_inventory_ledger_is_current_snapshot_not_history_or_qualification() -> 
     assert "不证明当前库存批次质量合格" in response.json()["answer"]
 
 
-def test_prepare_pool_balance_is_positive_only_and_not_reservation_claim() -> None:
-    tool_client = MockToolClient({"query_prepare_pool_balance": {"dataScope": "CURRENT_POSITIVE_PREPARE_POOL_BALANCE", "total": 1,
-        "records": [{"productName": "半成品糖", "inPieces": 30, "consumedPieces": 10, "remainingPieces": 20}]}})
+def test_legacy_prepare_pool_wording_redirects_to_current_in_process_materials() -> None:
+    tool_client = MockToolClient({"query_in_process_materials": {"dataScope": "CURRENT_REGISTERED_IN_PROCESS_MATERIALS", "total": 1,
+        "records": [{"orderNo": "PO001", "productName": "半成品糖", "palletCode": "BT001", "materialStatus": "PICKED"}]}})
     app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
     response = TestClient(app).post("/internal/agent/chat", json=chat_payload("查询备料池余额"))
     assert response.status_code == 200
-    assert tool_client.calls[0]["toolName"] == "query_prepare_pool_balance"
-    assert tool_client.calls[0]["arguments"]["positiveOnly"] is True
-    assert "不等于已为订单保留" in response.json()["answer"]
+    assert tool_client.calls[0]["toolName"] == "query_in_process_materials"
+    assert tool_client.calls[0]["expertAgent"] == "production_expert"
+    assert "确认领用时已从仓库库存扣减" in response.json()["answer"]
 
 
 def test_fixed_product_qr_pool_is_read_only_and_printability_is_not_activation() -> None:

@@ -2544,7 +2544,7 @@ const confirmFinishMaterialPick = async () => {
     return
   }
   await ElMessageBox.confirm(
-      `确认领用选中的 ${ids.length} 个半成品二维码？领用后库存移出、二维码释放，如需撤销需走人工退料或重新入库流程。`,
+      `确认领用选中的 ${ids.length} 个半成品二维码？领用后库存移出、二维码释放，当前系统不支持撤销本次领料。`,
       '确认领用半成品',
       {
         confirmButtonText: '确认领用',

@@ -109,10 +109,12 @@ LlmExpertAgentV1 = Literal[
     "assay_expert",
     "pallet_expert",
     "production_expert",
+    "analytics_expert",
     "logistics_expert",
     "master_data_expert",
     "administration_expert",
     "audit_expert",
+    "knowledge_expert",
 ]
 
 

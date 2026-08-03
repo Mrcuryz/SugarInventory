@@ -87,6 +87,12 @@ public class ToolConfiguration {
                         "Read current production order plan, material, output, label, QR binding, and inbound progress using a controlled orderRef.",
                         productionOrderProgressSchema(),
                         WarehouseTools.class.getMethod("queryProductionOrderProgress", String.class)),
+                methodTool(warehouseTools, "run_registered_report",
+                        "Run one allowlisted, versioned production, quality, inventory-level, or registered pallet-task-cycle report using deterministic backend facts, with an optional same-definition previous-period or custom non-overlapping comparison. Inventory level uses trusted reconciled daily snapshots in normal environments; an explicitly enabled local simulation is labeled historical replay and never counts as production release evidence.",
+                        registeredReportRunSchema(),
+                        WarehouseTools.class.getMethod("runRegisteredReport", String.class, Integer.class,
+                                java.time.LocalDate.class, java.time.LocalDate.class, String.class, String.class,
+                                String.class, String.class, java.time.LocalDate.class, java.time.LocalDate.class)),
                 methodTool(warehouseTools, "query_boiling_batch_trace",
                         "Read a registered boiling batch trace using a controlled batchRef without inferring missing relationships.",
                         boilingBatchTraceSchema(),
@@ -100,7 +106,7 @@ public class ToolConfiguration {
                         productionLabelCompletionSchema(),
                         WarehouseTools.class.getMethod("queryProductionLabelCompletion", String.class)),
                 methodTool(warehouseTools, "query_in_process_materials",
-                        "Read registered in-process semi-finished material records using controlled filters and pagination.",
+                        "Read confirmed semi-finished material picks already deducted from inventory and still associated with unfinished production orders, using controlled filters and pagination.",
                         productionInProcessMaterialsSchema(),
                         WarehouseTools.class.getMethod("queryInProcessMaterials", String.class, String.class,
                                 String.class, String.class, Integer.class, Integer.class)),
@@ -147,8 +153,6 @@ public class ToolConfiguration {
                         agentAnswerReviewSchema(), WarehouseTools.class.getMethod("queryAgentAnswerReviews", String.class, String.class, String.class, String.class, String.class, String.class, Boolean.class, Integer.class, Integer.class)),
                 methodTool(warehouseTools, "query_inventory_ledger", "Query current inventory ledger rows; this is a current snapshot, not historical movement.",
                         inventoryLedgerSchema(), WarehouseTools.class.getMethod("queryInventoryLedger", String.class, String.class, String.class, String.class, String.class, String.class, Integer.class, Integer.class)),
-                methodTool(warehouseTools, "query_prepare_pool_balance", "Query current positive historical semi-finished prepare-pool balances without reserving or consuming them.",
-                        preparePoolBalanceSchema(), WarehouseTools.class.getMethod("queryPreparePoolBalance", String.class, String.class, String.class, String.class, String.class, Boolean.class, Integer.class, Integer.class)),
                 methodTool(warehouseTools, "query_fixed_product_qr_pool", "Query current fixed-product QR pool status without binding, printing, activating, invalidating, or restoring codes.",
                         fixedProductQrPoolSchema(), WarehouseTools.class.getMethod("queryFixedProductQrPool", String.class, List.class, String.class, Boolean.class, Integer.class, Integer.class)),
                 methodTool(warehouseTools, "get_warehouse_status",
@@ -290,6 +294,12 @@ public class ToolConfiguration {
     private static String productionOrderProgressSchema() {
         return """
                 {"type":"object","additionalProperties":false,"required":["orderRef"],"properties":{"orderRef":{"type":"string","minLength":1,"maxLength":500,"description":"Short-lived opaque orderRef returned by resolve_production_entities; never invent from an internal id."}}}
+                """;
+    }
+
+    private static String registeredReportRunSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["reportDefinitionId","reportVersion","startDate","endDate"],"properties":{"reportDefinitionId":{"type":"string","enum":["daily_production_overview_v1","quality_assay_result_trend_v1","quality_metric_trend_v1","production_input_output_flow_v1","pallet_task_cycle_time_v1","inventory_level_trend_v1","today_operations_overview_v1"]},"reportVersion":{"type":"integer","const":1},"startDate":{"type":"string","format":"date"},"endDate":{"type":"string","format":"date"},"productQuery":{"type":"string","minLength":1,"maxLength":100,"description":"Optional user-visible product-name fragment. For production_input_output_flow_v1 it scopes orders through stable registered output products; for inventory_level_trend_v1 it scopes product-level inventory balances. today_operations_overview_v1 does not accept productQuery."},"metricKey":{"type":"string","enum":["color_value","reducing_sugar","dry_weight_loss","conductivity_ash","sucrose","insoluble_impurity","ph"],"description":"Required only for quality_metric_trend_v1; identifies one supported assay metric."},"taskType":{"type":"string","enum":["ALL","INBOUND","SEMI_IN","FINISH_IN","OUT","TRANSFER"],"description":"Optional controlled task-type filter used only for pallet_task_cycle_time_v1. INBOUND covers semi-finished and finished inbound tasks."},"comparisonMode":{"type":"string","enum":["PREVIOUS_PERIOD","CUSTOM"],"description":"Optional deterministic cross-period comparison. today_operations_overview_v1 does not support comparison."},"comparisonStartDate":{"type":"string","format":"date"},"comparisonEndDate":{"type":"string","format":"date"}}}
                 """;
     }
 

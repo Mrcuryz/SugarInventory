@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify Laibin inventory daily close after capture window
+
+[Timer]
+OnCalendar=*-*-* 00:15:00 Asia/Shanghai
+Persistent=true
+AccuracySec=1s
+Unit=laibin-inventory-history-verify.service
+
+[Install]
+WantedBy=timers.target

@@ -8,7 +8,7 @@ import re
 import secrets
 from typing import Any
 
-from app.agents import AgentHandoffRouter
+from app.agents import MAIN_AGENT, AgentHandoffRouter
 
 
 MAX_ORCHESTRATION_STEPS = 4
@@ -184,6 +184,14 @@ def capability_snapshot(router: AgentHandoffRouter, allowed_tools: set[str]) -> 
             "maxProductFanOut": MAX_ASSAY_PRODUCT_FANOUT,
         }
     ]
+    # This capability handshake protects the Java-backed warehouse tool boundary.
+    # Process-local experts (for example knowledge_expert) do not call the Java
+    # Gateway and therefore must not change its canonical authorization hash.
+    gateway_profiles = [
+        profile
+        for profile in router.profiles.values()
+        if profile.name == MAIN_AGENT or bool(profile.allowed_tools & allowed_tools)
+    ]
     profiles = [
         {
             "name": profile.name,
@@ -191,7 +199,7 @@ def capability_snapshot(router: AgentHandoffRouter, allowed_tools: set[str]) -> 
             "allowedTools": sorted(profile.allowed_tools),
             "allowedToolCount": len(profile.allowed_tools),
         }
-        for profile in sorted(router.profiles.values(), key=lambda item: item.name)
+        for profile in sorted(gateway_profiles, key=lambda item: item.name)
     ]
     return {
         "toolRegistryHash": _registry_hash(tool_names),

@@ -30,7 +30,7 @@ class WarehouseMcpApplicationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void startsAndListsFiftyTwoTools() {
+    void startsAndListsFiftyThreeTools() {
         List<String> names = toolSchemas().keySet().stream().sorted().toList();
 
         assertThat(names).containsExactly(
@@ -64,7 +64,6 @@ class WarehouseMcpApplicationTest {
                 "query_pallet_anomalies",
                 "query_pallet_flow_records",
                 "query_pallet_tasks",
-                "query_prepare_pool_balance",
                 "query_printed_not_inbound_codes",
                 "query_product_catalog",
                 "query_product_quality_configuration",
@@ -85,6 +84,7 @@ class WarehouseMcpApplicationTest {
                 "resolve_production_entities",
                 "resolve_products",
                 "resolve_warehouses",
+                "run_registered_report",
                 "search_operation_logs"
         );
     }
@@ -143,8 +143,8 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("query_agent_tool_audit"));
         assertObjectClosed(schemas.get("query_agent_answer_reviews"));
         assertObjectClosed(schemas.get("query_inventory_ledger"));
-        assertObjectClosed(schemas.get("query_prepare_pool_balance"));
         assertObjectClosed(schemas.get("query_fixed_product_qr_pool"));
+        assertObjectClosed(schemas.get("run_registered_report"));
 
         assertRequired(schemas.get("resolve_products"), "query");
         assertRequired(schemas.get("resolve_warehouses"), "query");
@@ -177,6 +177,15 @@ class WarehouseMcpApplicationTest {
         assertRequired(schemas.get("get_role_permission_summary"), "roleCodeOrName");
         assertNoRequiredFields(schemas.get("get_warehouse_status"));
         assertNoRequiredFields(schemas.get("get_assay_status"));
+        assertRequired(schemas.get("run_registered_report"), "reportDefinitionId");
+        assertRequired(schemas.get("run_registered_report"), "reportVersion");
+        assertRequired(schemas.get("run_registered_report"), "startDate");
+        assertRequired(schemas.get("run_registered_report"), "endDate");
+        assertThat(schemas.get("run_registered_report")
+                .path("properties")
+                .path("reportDefinitionId")
+                .path("enum"))
+                .anyMatch(node -> "today_operations_overview_v1".equals(node.asText()));
 
         assertStringBounds(schemas.get("resolve_products"), "query", 1, 100);
         assertIntegerBounds(schemas.get("resolve_products"), "limit", 1, 100);
@@ -226,7 +235,7 @@ class WarehouseMcpApplicationTest {
     }
 
     @Test
-    void bindsAndInvokesAllFiftyTwoToolCallbacks() {
+    void bindsAndInvokesAllFiftyThreeToolCallbacks() {
         Map<String, ToolCallback> callbacks = providers.stream()
                 .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
                 .collect(Collectors.toMap(
@@ -293,8 +302,8 @@ class WarehouseMcpApplicationTest {
                 Map.entry("query_agent_tool_audit", "{}"),
                 Map.entry("query_agent_answer_reviews", "{}"),
                 Map.entry("query_inventory_ledger", "{}"),
-                Map.entry("query_prepare_pool_balance", "{\"positiveOnly\":true}"),
                 Map.entry("query_fixed_product_qr_pool", "{}"),
+                Map.entry("run_registered_report", "{\"reportDefinitionId\":\"daily_production_overview_v1\",\"reportVersion\":1,\"startDate\":\"2026-07-21\",\"endDate\":\"2026-07-21\"}"),
                 Map.entry("get_warehouse_status", "{}"),
                 Map.entry("get_pallet_status", "{\"code\":\"QR-ACCEPTANCE\"}"),
                 Map.entry("get_assay_status", "{}")

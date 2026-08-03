@@ -2,6 +2,10 @@
 
 生成时间：2026-06-13
 
+> 2026-08-01 校正：`docs/openapi.json` 目前已经存在，但尚未包含后来新增的
+> `/api/analytics/agent-read/**` 登记报表接口。本文件以下“OpenAPI 不存在/缺失”描述是
+> 2026-06-13 盘点时的历史状态；当前接口审查仍以 Controller、DTO、Service 和实际 SQL 为准。
+
 ## 资料来源与差异结论
 
 - 指定文件 `docs/openapi.json` 不存在；仓库内未发现其他 `openapi.json`、Swagger JSON 或 `/v3/api-docs` 静态导出文件。

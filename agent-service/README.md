@@ -36,23 +36,58 @@ $env:AGENT_INTERNAL_TOOL_SERVICE_KEY="<python-to-java-tool-key>"
 $env:AGENT_PYTHON_SERVICE_KEY="<java-to-python-service-key>"
 $env:REQUEST_TIMEOUT_MS="15000"
 $env:AGENT_RUN_TIMEOUT_MS="90000" # llm mode default; whole bounded Agent turn
-$env:AGENT_MODEL_MODE="openai_compatible" # or basic
+$env:AGENT_PYTHON_MODEL_MODE="openai_compatible" # or basic
 $env:AGENT_MODEL_BASE_URL="https://api.deepseek.com" # project default
 $env:AGENT_MODEL_NAME="deepseek-v4-flash" # project default
+$env:AGENT_MAIN_ROUTE_MODEL_NAME="" # optional; empty reuses AGENT_MODEL_NAME
+$env:AGENT_EXPERT_INITIAL_MODEL_NAME="" # optional; empty reuses AGENT_MODEL_NAME
+$env:AGENT_EXPERT_RESULT_MODEL_NAME="" # optional; empty reuses AGENT_MODEL_NAME
 $env:AGENT_MODEL_API_KEY="<model-service-key>"
-$env:AGENT_MODEL_TIMEOUT_MS="30000"
+$env:AGENT_MODEL_TIMEOUT_MS="45000"
 $env:AGENT_GOAL_DRAFT_SHADOW_ENABLED="false"
 $env:AGENT_PLANNING_MODE="deterministic" # deterministic or local/UAT-only llm
-$env:AGENT_LLM_ALLOWED_EXPERTS="inventory_expert,warehouse_expert,assay_expert,logistics_expert,production_expert"
+$env:AGENT_LLM_ALLOWED_EXPERTS="inventory_expert,warehouse_expert,assay_expert,logistics_expert,production_expert,analytics_expert,pallet_expert,knowledge_expert"
 $env:AGENT_LLM_MAX_TOOL_CALLS="3"
 $env:AGENT_LLM_MAX_TOOL_RETRIES="1"
+$env:AGENT_RAG_ENABLED="false"
+$env:AGENT_RAG_REQUIRED="false"
+$env:AGENT_RAG_ROOT="D:\approved-rag-runtime"
+$env:AGENT_RAG_MODEL_PATH="D:\approved-models\fast-bge-small-zh-v1.5"
+$env:AGENT_RAG_MODEL_NAME="BAAI/bge-small-zh-v1.5"
+$env:AGENT_RAG_MODEL_THREADS="2"
+$env:AGENT_RAG_QUERY_TIMEOUT_MS="5000"
+$env:AGENT_RAG_MAX_EVIDENCE="5"
 ```
 
 `AGENT_PLANNING_MODE=llm` is an experimental local/UAT path. It is rejected at
-startup in `AGENT_ENV=production`, requires `AGENT_MODEL_MODE=openai_compatible`,
+startup in `AGENT_ENV=production`, requires `AGENT_PYTHON_MODEL_MODE=openai_compatible`,
 and does not change the deterministic default. `AGENT_MODEL_BASE_URL` and
 `AGENT_MODEL_NAME` use the project defaults shown above when omitted; the API
 key remains mandatory and has no source-code default.
+The three stage-specific model names are optional and preserve the same Agent
+architecture. They only select which compatible model executes main routing,
+the expert's first action, and expert result analysis. Do not configure an
+override until it passes the same fixed four-domain corpus; omitting an override
+keeps every stage on `AGENT_MODEL_NAME`.
+
+RAG is disabled by default. When disabled, startup does not import NumPy,
+FastEmbed or ONNX Runtime and does not inspect a knowledge artifact. When
+enabled, the service reads only `<AGENT_RAG_ROOT>/current.json`, validates the
+selected immutable release and fixed retrieval evaluation, then loads the
+query-only embedding provider from `AGENT_RAG_MODEL_PATH`.
+`AGENT_RAG_REQUIRED=true` fails startup if any pointer, schema, checksum, role,
+model or evaluation gate is invalid. RAG-03B exposes the process-local
+`search_approved_knowledge` only to `knowledge_expert`; it is not a warehouse
+MCP tool and cannot be called by the main Agent or business experts.
+
+Install the read-only runtime dependencies with:
+
+```powershell
+python -m pip install -e ".[run,rag-runtime]"
+```
+
+OCR, Office rendering and document embedding remain in the separate `rag-build`
+extra and are never invoked by the Agent runtime.
 
 In `llm` mode every business expert follows the same bounded sequence: main
 model semantic routing, expert action decision, Runtime-authorized tool call,
@@ -60,11 +95,12 @@ safe fact adaptation, and expert result analysis. Deterministic intent handlers
 must not preempt this sequence; they are reserved for explicit deterministic
 mode or controlled fallback behavior.
 
-`REQUEST_TIMEOUT_MS` only limits one Java Gateway tool request. The whole SSE
+`REQUEST_TIMEOUT_MS` only limits one Java Gateway tool request. A single model
+decision uses `AGENT_MODEL_TIMEOUT_MS` (default: 45 seconds), while the whole SSE
 turn is limited independently by `AGENT_RUN_TIMEOUT_MS` (default: 90 seconds in
-`llm`, 20 seconds in `deterministic`). In `llm` mode the expert's validated
-final answer is sent directly to the client; Runtime does not invoke another
-model pass merely to stream or rewrite that answer.
+`llm`, 20 seconds in `deterministic`). In `llm` mode the expert's validated final
+answer is sent directly to the client; Runtime does not invoke another model pass
+merely to stream or rewrite that answer.
 
 ## Run
 
@@ -170,7 +206,7 @@ Java defaults to `legacy` mode. Local forwarding configuration:
 ```powershell
 $env:AGENT_RUNTIME_MODE="python"
 $env:AGENT_PYTHON_BASE_URL="http://localhost:8091"
-$env:AGENT_PYTHON_TIMEOUT_MS="30000"
+$env:AGENT_PYTHON_TIMEOUT_MS="100000"
 $env:AGENT_PYTHON_SERVICE_KEY="<java-to-python-service-key>"
 $env:AGENT_RUNTIME_FALLBACK_ENABLED="true"
 ```

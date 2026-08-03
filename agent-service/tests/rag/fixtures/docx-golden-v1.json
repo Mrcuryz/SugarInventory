@@ -1,0 +1,166 @@
+{
+  "corpusVersion": "laibin-rag-2026-07-29-v1",
+  "documents": {
+    "冰红糖、黄糖、冰片糖、黑糖工艺流程图26.7.docx": {
+      "selectedTextBoxCount": 13,
+      "fallbackDuplicateCount": 13,
+      "connectorCount": 12,
+      "requiredTexts": [
+        "3煮糖、浓缩",
+        "10、入库贮存"
+      ],
+      "requiredControlPoints": [],
+      "requiredParameters": [
+        "126～140°C",
+        "200G",
+        "30-60分钟"
+      ]
+    },
+    "单晶体冰糖流程图24.docx": {
+      "selectedTextBoxCount": 18,
+      "fallbackDuplicateCount": 0,
+      "connectorCount": 16,
+      "requiredTexts": [
+        "7、金属探测 （CCP1）",
+        "12、入库贮存"
+      ],
+      "requiredControlPoints": [
+        "CCP1"
+      ],
+      "requiredParameters": [
+        "40-55°Bx",
+        "0.06～0.09Mpa",
+        "2900转/分"
+      ],
+      "forbiddenQualityFlags": [
+        "TITLE_CONFLICT"
+      ]
+    },
+    "单晶黄冰糖工艺流程图24.12.docx": {
+      "selectedTextBoxCount": 21,
+      "fallbackDuplicateCount": 21,
+      "connectorCount": 19,
+      "requiredTexts": [
+        "9.搅拌染色（CPP1）",
+        "10、金属探测 （CCP2）"
+      ],
+      "requiredControlPoints": [
+        "CPP1",
+        "CCP2"
+      ],
+      "requiredParameters": [
+        "40-55°Bx",
+        "60～90℃",
+        "900转/分"
+      ],
+      "requiredQualityFlags": [
+        "TITLE_CONFLICT"
+      ]
+    },
+    "多晶冰糖工艺流程图25.8.docx": {
+      "selectedTextBoxCount": 19,
+      "fallbackDuplicateCount": 19,
+      "connectorCount": 17,
+      "requiredTexts": [
+        "4、自然结晶",
+        "9、金属探测 （CCP1）"
+      ],
+      "requiredControlPoints": [
+        "CCP1"
+      ],
+      "requiredParameters": [
+        "112-120℃",
+        "7天",
+        "24小时",
+        "60-75℃"
+      ]
+    },
+    "白砂糖分装流程图24.4.docx": {
+      "selectedTextBoxCount": 11,
+      "fallbackDuplicateCount": 11,
+      "connectorCount": 13,
+      "requiredTexts": [
+        "1、原料的验收CCP1",
+        "6、金属控制CCP3（CCP1）"
+      ],
+      "requiredControlPoints": [
+        "CCP1",
+        "CCP2",
+        "CCP3"
+      ],
+      "requiredParameters": [
+        "12g",
+        "1.5mm",
+        "2.0mm",
+        "2.5mm",
+        "2次"
+      ],
+      "requiredQualityFlags": [
+        "CONTROL_POINT_LABEL_CONFLICT"
+      ]
+    },
+    "糖分装工艺流程图.docx": {
+      "selectedTextBoxCount": 14,
+      "fallbackDuplicateCount": 14,
+      "connectorCount": 13,
+      "requiredTexts": [
+        "4、过筛",
+        "13、入库"
+      ],
+      "requiredControlPoints": [],
+      "requiredParameters": []
+    },
+    "红糖分装工艺流程图2.docx": {
+      "selectedTextBoxCount": 12,
+      "fallbackDuplicateCount": 12,
+      "connectorCount": 11,
+      "requiredTexts": [
+        "1、原料的验收(CCP1)",
+        "8、金属控制（CCP2）"
+      ],
+      "requiredControlPoints": [
+        "CCP1",
+        "CCP2"
+      ],
+      "requiredParameters": [
+        "1.5mm",
+        "2.0mm",
+        "2.5mm",
+        "2次"
+      ]
+    },
+    "赤砂糖分装工艺流程图2.docx": {
+      "selectedTextBoxCount": 12,
+      "fallbackDuplicateCount": 12,
+      "connectorCount": 11,
+      "requiredTexts": [
+        "1、原料的验收（CCP1）",
+        "8、金属控制（CCP2）"
+      ],
+      "requiredControlPoints": [
+        "CCP1",
+        "CCP2"
+      ],
+      "requiredParameters": [
+        "2.5mm",
+        "3.0mm",
+        "3.5mm",
+        "2次"
+      ]
+    },
+    "黑糖、风味糖流程图24.12.docx": {
+      "selectedTextBoxCount": 15,
+      "fallbackDuplicateCount": 15,
+      "connectorCount": 14,
+      "requiredTexts": [
+        "4.1配方调味料(生姜粉、阿胶粉等风味）CCP1",
+        "8、金属控制CCP2"
+      ],
+      "requiredControlPoints": [
+        "CCP1",
+        "CCP2"
+      ],
+      "requiredParameters": []
+    }
+  }
+}

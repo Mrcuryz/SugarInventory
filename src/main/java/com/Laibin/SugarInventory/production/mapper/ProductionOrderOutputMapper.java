@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.production.mapper;
 
 import com.Laibin.SugarInventory.production.domain.po.ProductionOrderOutput;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOutputVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionReportOutputRowVO;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -19,6 +20,36 @@ public interface ProductionOrderOutputMapper extends BaseMapper<ProductionOrderO
             "inbound_qr_count AS inboundQrCount, status, created_at AS createdAt, remark " +
             "FROM production_order_output WHERE production_order_id = #{orderId} AND status != 'CANCELED' ORDER BY id DESC")
     List<ProductionOutputVO> listOutputs(@Param("orderId") Long orderId);
+
+    @Select("""
+            <script>
+            SELECT production_order_id AS productionOrderId,
+                   product_id AS productId,
+                   product_name_snapshot AS productName,
+                   product_status AS productStatus,
+                   production_date AS productionDate,
+                   board_count AS boardCount,
+                   piece_count AS pieceCount,
+                   total_pieces AS totalPieces,
+                   total_weight AS totalWeight,
+                   required_qr_count AS requiredQrCount,
+                   bound_qr_count AS boundQrCount,
+                   inbound_qr_count AS inboundQrCount,
+                   created_at AS createdAt,
+                   updated_at AS updatedAt
+            FROM production_order_output
+            WHERE status IN ('BOUND', 'PART_INBOUND', 'INSTOCK')
+              AND production_date BETWEEN #{startDate} AND #{endDate}
+            <if test="productQuery != null and productQuery != ''">
+              AND product_name_snapshot LIKE CONCAT('%', #{productQuery}, '%')
+            </if>
+            ORDER BY production_date ASC, product_name_snapshot ASC, id ASC
+            </script>
+            """)
+    List<ProductionReportOutputRowVO> listRegisteredOutputsForReport(
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate,
+            @Param("productQuery") String productQuery);
 
     @Update("UPDATE production_order_output o SET " +
             "bound_qr_count = (SELECT COUNT(*) FROM production_order_output_code c WHERE c.output_id = o.id AND c.status != 'CANCELED'), " +

@@ -10,8 +10,11 @@ import com.Laibin.SugarInventory.agent.service.AgentMcpWarmupService;
 import com.Laibin.SugarInventory.agent.service.AgentMessageReviewService;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
 import com.Laibin.SugarInventory.agent.vo.AgentSessionVO;
+import com.Laibin.SugarInventory.domain.po.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+
+import java.util.List;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -26,7 +29,10 @@ class AgentSessionControllerWarmupTest {
         AgentConversationMemory conversationMemory = mock(AgentConversationMemory.class);
         AgentMessageReviewService reviewService = mock(AgentMessageReviewService.class);
         AgentMcpWarmupService warmupService = mock(AgentMcpWarmupService.class);
-        LoginUser loginUser = mock(LoginUser.class);
+        User user = new User();
+        user.setId(7);
+        user.setRoleCode("ADMIN");
+        LoginUser loginUser = new LoginUser(user, List.of());
         AgentSessionCreateDTO request = new AgentSessionCreateDTO();
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
         AgentSessionVO created = new AgentSessionVO();

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 import uuid
 from collections.abc import Callable
 from queue import Queue
@@ -16,6 +17,7 @@ from app.cancellation import (
     set_current_cancellation_token,
 )
 from app.model import ModelStreamError, ModelStreamTimeout
+from app.observability import MetricsRegistry
 from app.progress import reset_business_progress_reporter, set_business_progress_reporter
 from app.schemas import CandidateSelectedMessage, ChatRequest, ChatResponse, ResumeEvent, ResumeRequest
 
@@ -36,7 +38,9 @@ def sse_for_request(
     run_registry: AgentRunRegistry | None = None,
     answer_delta_streamer: AnswerDeltaStreamer | None = None,
     run_timeout_ms: int | None = None,
+    metrics: MetricsRegistry | None = None,
 ) -> Iterator[str]:
+    stream_started = time.monotonic()
     builder = StreamEventBuilder(request.agentSessionId, request.messageId)
     terminal_context = (
         {"interruptId": request.message.interruptId}
@@ -54,7 +58,16 @@ def sse_for_request(
         if run_token is not None:
             run_token.raise_if_cancelled()
         yield _event(builder.next("message_start", {"role": "assistant"}))
-        yield _event(builder.next("progress", {"stage": "understanding", "text": _progress_text(request)}))
+        first_progress_event = _event(
+            builder.next("progress", {"stage": "understanding", "text": _progress_text(request)})
+        )
+        if metrics is not None:
+            metrics.observe(
+                "stream_first_progress_duration",
+                time.monotonic() - stream_started,
+                operation="resume" if isinstance(request.message, CandidateSelectedMessage) else "chat",
+            )
+        yield first_progress_event
         try:
             runtime_events: Queue[tuple[str, Any]] = Queue()
             runtime_worker = Thread(

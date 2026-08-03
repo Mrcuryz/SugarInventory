@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "documentId": "doc-aaaaaaaaaaaaaaaaaaaaaaaa",
+  "displayTitle": "样例工艺流程",
+  "sourceInternalTitle": null,
+  "sourceFileName": "样例工艺流程.docx",
+  "sourceType": "DOCX",
+  "documentType": "PROCESS_FLOW",
+  "knowledgeDomain": "PROCESS",
+  "language": "zh-CN",
+  "status": "DRAFT",
+  "sourceBasis": "CLIENT_CONFIRMED_CURRENT",
+  "versionLabel": null,
+  "effectiveFrom": null,
+  "effectiveTo": null,
+  "owner": null,
+  "reviewer": null,
+  "approvalStatus": null,
+  "allowedRoles": [
+    "ADMIN",
+    "SUPER_ADMIN"
+  ],
+  "supersedesDocumentId": null,
+  "supersededByDocumentId": null,
+  "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "productFamilies": [
+    "样例产品"
+  ],
+  "qualityFlags": [],
+  "pages": [],
+  "process": {
+    "steps": [],
+    "branches": [],
+    "controlPoints": []
+  },
+  "extraction": {
+    "parserVersion": "fixture/1.0.0",
+    "processedAt": "2026-07-29T10:00:00+08:00",
+    "status": "SUCCEEDED",
+    "sourceExtractionSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "reviewProfileSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "warnings": []
+  },
+  "documentSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+}

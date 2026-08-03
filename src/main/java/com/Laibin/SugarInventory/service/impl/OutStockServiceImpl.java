@@ -6,6 +6,9 @@ import com.Laibin.SugarInventory.domain.dto.*;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.*;
 import com.Laibin.SugarInventory.domain.vo.*;
+import com.Laibin.SugarInventory.inventoryhistory.domain.StockMovementEventCommand;
+import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementActionContext;
+import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementEventService;
 import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.InStockService;
 import com.Laibin.SugarInventory.service.LoggableService;
@@ -46,16 +49,23 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
     @Lazy
     @Resource
     private SemiProductRecordService semiProductRecordService;
+    @Resource
+    private StockMovementActionContext stockMovementActionContext;
+    @Resource
+    private StockMovementEventService stockMovementEventService;
 
     @Transactional
     @Override
     public OutVO processOutStock(OutStockRequestDTO dto, Integer operatorId) {
-        this.outStock(dto, operatorId);
-        // **7. 返回出库结果**
-        OutVO outVO = new OutVO();
-        outVO.setRemainingQuantity(0);
-        outVO.setMessage("出库成功！");
-        return outVO;
+        try (StockMovementActionContext.Scope ignored =
+                     stockMovementActionContext.open("OUTBOUND", null)) {
+            this.outStock(dto, operatorId);
+            // **7. 返回出库结果**
+            OutVO outVO = new OutVO();
+            outVO.setRemainingQuantity(0);
+            outVO.setMessage("出库成功！");
+            return outVO;
+        }
     }
 
     private List<BatchInfo> outStock(OutStockRequestDTO dto, Integer operatorId) {
@@ -105,6 +115,8 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
     @Transactional
     @Override
     public InVO transferOut(TransferOutStockRequestDTO request, Integer id) {
+        try (StockMovementActionContext.Scope ignored =
+                     stockMovementActionContext.open("TRANSFER_LEGACY", null)) {
         InVO ret = new InVO();
         ret.setRemainingQuantity(0);
         ret.setMessage("入库成功！");
@@ -186,6 +198,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
             }
         }
         return ret;
+        }
     }
 
     @Override
@@ -320,6 +333,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         if (!outStockList.isEmpty()) {
             for (OutStock outStock : outStockList) {
                 outStockMapper.insert(outStock);
+                recordOutStockEvent(outStock, product);
             }
         }
         // **6. 同步更新库位信息**
@@ -373,6 +387,8 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
     @Transactional
     @Override
     public OutVO processStackOutStock(OutStockRequestDTO dto, Integer operatorId) {
+        try (StockMovementActionContext.Scope ignored =
+                     stockMovementActionContext.open("OUTBOUND", null)) {
         Integer quantity = dto.getQuantity();
         Integer outType = dto.getOutType();
         Product product = productMapper.selectById(dto.getProductId());
@@ -462,6 +478,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
             }
             outStock.setOutType(outType == null ? 0 : outType);
             outStockMapper.insert(outStock);
+            recordOutStockEvent(outStock, product);
         }
         warehouseMapper.updateCurCapacity(warehouseId,
                 warehouse.getCurCapacity() - totalOutQuantity);
@@ -475,6 +492,29 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         vo.setRemainingQuantity(0);
         vo.setMessage("出库成功！");
         return vo;
+        }
+    }
+
+    private void recordOutStockEvent(OutStock outStock, Product product) {
+        int pieces = outStock.getPieces() == null ? 0 : outStock.getPieces();
+        int boards = pieces > 0 || outStock.getQuantity() == null ? 0 : outStock.getQuantity();
+        int totalPieces = pieces > 0 ? pieces : boards * product.getPiecesPerPallet();
+        stockMovementEventService.record(StockMovementEventCommand.builder()
+                .eventType("OUTBOUND")
+                .sourceType("OUT_STOCK")
+                .sourceRecordId(outStock.getId().longValue())
+                .occurredAt(outStock.getCreatedAt())
+                .productId(product.getId())
+                .productStatus(product.getStatus())
+                .productionDate(outStock.getInDate())
+                .fromWarehouseId(outStock.getWarehouseId())
+                .boardQuantity(boards)
+                .loosePieceQuantity(pieces)
+                .totalPieces(totalPieces)
+                .totalWeightKg(outStock.getTotalWeight())
+                .operatorId(outStock.getOperatorId())
+                .actionKind("OUTBOUND")
+                .build());
     }
 
 

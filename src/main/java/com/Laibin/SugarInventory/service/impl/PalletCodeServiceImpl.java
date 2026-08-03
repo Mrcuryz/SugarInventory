@@ -59,6 +59,8 @@ import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
 import com.Laibin.SugarInventory.domain.vo.FixedProductQrPoolVO;
 import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
+import com.Laibin.SugarInventory.inventoryhistory.domain.StockMovementEventCommand;
+import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementEventService;
 import com.Laibin.SugarInventory.mapper.AssayMapper;
 import com.Laibin.SugarInventory.mapper.InventoryMapper;
 import com.Laibin.SugarInventory.mapper.OutStockMapper;
@@ -168,6 +170,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     private SemiPreparePoolBalanceMapper semiPreparePoolBalanceMapper;
     @Autowired
     private PalletTaskQueryMapper palletTaskQueryMapper;
+    @Autowired
+    private StockMovementEventService stockMovementEventService;
     @Autowired
     private InStockService inStockService;
     @Autowired
@@ -1142,6 +1146,15 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             );
             TransferTargetLocation targetLocation = moveInventoryForTransferWithRetry(inventory, targetWarehouse, targetSide, product);
             insertTransferFlow(palletCode, task, sourceLocation, targetLocation, operatorId, dto.getRemark());
+            recordPalletTransferEvent(
+                    palletCode,
+                    task,
+                    inventory,
+                    product,
+                    sourceLocation,
+                    targetLocation,
+                    operatorId
+            );
             touchPallet(palletCode, operatorId);
             confirmOutTask(task, operatorId, dto.getRemark());
         }
@@ -1419,7 +1432,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                 throw new BusinessException("当前托盘已处于历史生产占用流程中，不能再做普通出库");
             }
 
-            executePalletLevelOutStock(palletCode, inventory, operatorId);
+            OutStock outStock = executePalletLevelOutStock(palletCode, inventory, operatorId);
+            recordPalletOutEvent(palletCode, task, inventory, outStock, operatorId, bizScene);
 
             if ("DIRECT_OUT".equals(bizScene)) {
                 insertOutFlow(palletCode, task, inventory, operatorId, remark, "半成品出库");
@@ -1820,7 +1834,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         inventory.setLayer(targetLocation.layer());
     }
 
-    private void executePalletLevelOutStock(PalletCode palletCode, Inventory inventory, Integer operatorId) {
+    private OutStock executePalletLevelOutStock(PalletCode palletCode, Inventory inventory, Integer operatorId) {
         Product product = productMapper.selectById(inventory.getProductId());
         if (product == null) {
             throw new BusinessException("产品不存在");
@@ -1850,6 +1864,74 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
 
         inventoryMapper.deleteInventoryById(inventory.getId());
         warehouseMapper.updateCurCapacity(warehouse.getId(), warehouse.getCurCapacity() - 1);
+        return outStock;
+    }
+
+    private void recordPalletTransferEvent(PalletCode palletCode, PalletTask task, Inventory inventory,
+                                           Product product, TransferSourceLocation sourceLocation,
+                                           TransferTargetLocation targetLocation, Integer operatorId) {
+        int loosePieces = inventory.getPieces() == null ? 0 : inventory.getPieces();
+        int boards = loosePieces > 0 ? 0 : Math.max(1, inventory.getQuantity() == null ? 1 : inventory.getQuantity());
+        int totalPieces = loosePieces > 0 ? loosePieces : boards * product.getPiecesPerPallet();
+        stockMovementEventService.record(StockMovementEventCommand.builder()
+                .eventType("TRANSFER")
+                .sourceType("PALLET_TASK")
+                .sourceRecordId(task.getId().longValue())
+                .occurredAt(LocalDateTime.now())
+                .productId(product.getId())
+                .productStatus(inventory.getProductStatus())
+                .productionDate(palletCode.getProductionDate() == null
+                        ? inventory.getEntryDate()
+                        : palletCode.getProductionDate())
+                .fromWarehouseId(sourceLocation.warehouseId())
+                .toWarehouseId(targetLocation.warehouseId())
+                .palletCodeId(palletCode.getId())
+                .boardQuantity(boards)
+                .loosePieceQuantity(loosePieces)
+                .totalPieces(totalPieces)
+                .totalWeightKg(product.getWeightPerPiece().multiply(BigDecimal.valueOf(totalPieces)))
+                .operatorId(operatorId)
+                .actionKind("PALLET_TRANSFER")
+                .businessActionId(preferredTaskActionId(task, "pallet_transfer"))
+                .build());
+    }
+
+    private void recordPalletOutEvent(PalletCode palletCode, PalletTask task, Inventory inventory,
+                                      OutStock outStock, Integer operatorId, String bizScene) {
+        Product product = productMapper.selectById(inventory.getProductId());
+        if (product == null) {
+            throw new BusinessException("产品不存在");
+        }
+        int loosePieces = outStock.getPieces() == null ? 0 : outStock.getPieces();
+        int boards = loosePieces > 0 ? 0 : Math.max(0, outStock.getQuantity());
+        int totalPieces = loosePieces > 0 ? loosePieces : boards * product.getPiecesPerPallet();
+        stockMovementEventService.record(StockMovementEventCommand.builder()
+                .eventType("OUTBOUND")
+                .sourceType("OUT_STOCK")
+                .sourceRecordId(outStock.getId().longValue())
+                .occurredAt(outStock.getCreatedAt())
+                .productId(product.getId())
+                .productStatus(inventory.getProductStatus())
+                .productionDate(palletCode.getProductionDate() == null
+                        ? inventory.getEntryDate()
+                        : palletCode.getProductionDate())
+                .fromWarehouseId(inventory.getWarehouseId())
+                .palletCodeId(palletCode.getId())
+                .boardQuantity(boards)
+                .loosePieceQuantity(loosePieces)
+                .totalPieces(totalPieces)
+                .totalWeightKg(outStock.getTotalWeight())
+                .operatorId(operatorId)
+                .actionKind(bizScene)
+                .businessActionId(preferredTaskActionId(task, "pallet_out"))
+                .build());
+    }
+
+    private String preferredTaskActionId(PalletTask task, String prefix) {
+        if (task.getOperationBatchNo() != null && !task.getOperationBatchNo().isBlank()) {
+            return task.getOperationBatchNo();
+        }
+        return prefix + "_task_" + task.getId();
     }
 
     private BigDecimal buildPalletOutWeight(Product product, Inventory inventory) {

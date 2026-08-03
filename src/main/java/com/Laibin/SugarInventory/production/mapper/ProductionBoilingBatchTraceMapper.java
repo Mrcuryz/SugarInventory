@@ -94,7 +94,7 @@ public interface ProductionBoilingBatchTraceMapper {
             " m.picked_at AS pickedAt",
             "FROM production_order_material m",
             "INNER JOIN production_order po ON po.id = m.production_order_id",
-            "WHERE m.status != 'CANCELED'",
+            "WHERE m.status = 'PICKED'",
             "  AND m.pallet_code_id IN",
             "  <foreach collection='palletCodeIds' item='id' open='(' separator=',' close=')'>",
             "    #{id}",

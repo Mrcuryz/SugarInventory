@@ -128,7 +128,7 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
                 .completedAt(base.getCompletedAt())
                 .limitations(List.of(
                         "本结果仅表示当前订单记录中的计划、领料、产出、标签和入库进度。",
-                        "不计算产出率、损耗率或材料消耗差异，也不代表质量放行结论。"))
+                        "当前数据库没有支撑产出率、损耗率或材料消耗差异的完整业务字段，本结果也不代表质量放行结论。"))
                 .build();
     }
 
@@ -353,7 +353,7 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
                 .records(records)
                 .limitations(List.of(
                         "仅展示生产订单中已登记的实际领料记录及托盘来源。",
-                        "不计算计划差异、损耗、实际消耗率，也不推断未登记的退料或替代用料。"))
+                        "不计算计划差异或消耗比例，也不推断数据库中没有登记的业务动作或数量。"))
                 .build();
     }
 
@@ -460,7 +460,7 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
                 .size(size)
                 .records(safe(result.getRecords()).stream().map(this::toSafeInProcessMaterial).toList())
                 .limitations(List.of(
-                        "仅展示未取消且所属生产订单未完成、未取消的已登记半成品领料记录。",
+                        "仅展示已由用户确认领用、已完成库存扣减，且所属生产订单尚未完成或取消的半成品记录。",
                         "在制记录不代表仍可再次领用、质量已放行、FIFO/FEFO 推荐或实时库存结余。"))
                 .build();
     }

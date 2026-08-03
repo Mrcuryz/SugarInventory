@@ -1011,7 +1011,7 @@ delete_any_record
 | `query_boiling_batch_trace` | 已实现 | Agent v1 production-02 | L1 | 是 | 煮糖批次已登记详情、使用记录和追溯关系 |
 | `query_material_pick_trace` | 已实现 | Agent v1 production-03 | L1 | 是 | 生产订单已登记实际领料和托盘来源 |
 | `query_production_label_completion` | 已实现 | Agent v1 production-04 | L1 | 是 | 生产订单标签预留/使用/回收与二维码绑定/入库完成度 |
-| `query_in_process_materials` | 已实现 | Agent v1 production-05 | L1 | 是 | 当前已登记在制半成品领料记录分页查询 |
+| `query_in_process_materials` | 已实现 | Agent v1 production-05 | L1 | 是 | 已确认领用、已扣减库存且仍关联未完成生产订单的半成品记录分页查询 |
 | `query_material_candidates` | 已实现 | Agent v1 production-05 | L1 | 是 | 受控生产订单的当前半成品库存候选查询 |
 | `query_pallet_tasks` | 已实现 | Agent v1 logistics-01 | L1 | 是 | 当前轮次托盘任务安全分页查询；`task:view` |
 | `query_stock_documents` | 已实现 | Agent v1 logistics-02 | L1 | 是 | 明确来源的入库、出库或半成品单据查询；`record:query` |
@@ -1035,7 +1035,6 @@ delete_any_record
 | `query_agent_tool_audit` | 已实现 | Agent v1 audit-01 | L1 | 是 | Agent 调用结果/错误类别与耗时；不返回参数、Prompt、内部 ID 或堆栈 |
 | `query_agent_answer_reviews` | 已实现 | Agent v1 audit-01 | L1 | 是 | 回答 Review 状态安全摘要；不返回原问题、原回答或决策快照 |
 | `query_inventory_ledger` | 已实现 | Agent v1 inventory-01 | L1 | 是 | 当前库存行台账；不是历史流水，不证明批次合格 |
-| `query_prepare_pool_balance` | 已实现 | Agent v1 inventory-01 | L1 | 是 | 历史半成品备料池当前正余额；不代表订单预留或可领用 |
 | `query_fixed_product_qr_pool` | 已实现 | Agent v1 pallet-02 | L1 | 是 | 固定产品码池当前状态；可打印不表示已打印/启用，不执行任何码状态写入 |
 | `analyze_assay_records`       | 计划            |     M2/M5 | L2 | 否     | 化验统计分析        |
 | `export_assay_report`         | 计划            |        M5 | L2 | 否     | 化验报表导出        |
@@ -1178,7 +1177,7 @@ M1.2 完成时只有以下 6 个已实现业务工具：
 * `get_pallet_status`
 * `get_assay_status`
 
-M1.3/M1.4 及 Agent v1 全模块查询完成后，当前白名单已扩展为 52 个只读业务工具。在原 6 个基础工具之外，新增：
+M1.3/M1.4、Agent v1 全模块查询及首个登记报表完成后，当前白名单为 52 个只读/登记报表工具。在原 6 个基础工具之外，新增：
 
 * `get_inventory_distribution`
 * `query_assay_records`
@@ -1224,8 +1223,8 @@ M1.3/M1.4 及 Agent v1 全模块查询完成后，当前白名单已扩展为 52
 * `query_agent_tool_audit`
 * `query_agent_answer_reviews`
 * `query_inventory_ledger`
-* `query_prepare_pool_balance`
 * `query_fixed_product_qr_pool`
+* `run_registered_report`
 
 仍禁止：
 
@@ -1305,7 +1304,7 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 * 单一板件规格输出 `normalizedPallets` / `normalizedLoosePieces`；跨规格汇总不虚构统一板数，改用 `totalEquivalentPieces`、总重量和“跨规格”展示文本；
 * 普通回答、SSE 和卡片只接收 safe adapter 白名单字段，不显示内部 ID、工具名或原始 JSON。
 
-当前 internal agent gateway 白名单已有 52 个只读工具。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC、审计和当前库存质量筛选工具；仍未增加 login、`preview_*`、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
+当前 internal agent gateway 白名单已有 52 个只读/登记报表工具。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC、审计、当前库存质量筛选，以及首个版本化生产日报运行工具；旧备料池查询已下线，仍未增加 login、`preview_*`、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
 
 仍不支持：库区范围、任意状态字段、库龄分桶、明细下钻和报表导出。这些能力需要独立工具或后续规格评审，不扩展为任意 SQL/HTTP 能力。
 
@@ -1321,7 +1320,7 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 
 ## 18. M1.4 后续模块工具设计索引
 
-状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、当前库存质量筛选、主数据、员工/RBAC、审计和库存补充工具均已实现并加入当前 52 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
+状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、当前库存质量筛选、主数据、员工/RBAC、审计、库存补充和登记报表工具均已实现并加入当前 52 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
 
 详细设计见 `docs/mcp-analysis/m14-module-tool-design.md`。该文档基于已完成的审计、HITL、LLM Wiki Lite、Answer Review 和 `get_inventory_distribution` 链路，拆分 M1.4b-f 后续只读分析工具。
 
@@ -1368,6 +1367,158 @@ M1.4c 第一版口径：打印以 `production_order_label_batch.printed_at` 为�
 
 ---
 
+## 18.1 首个登记报表工具
+
+### `run_registered_report`
+
+状态：已实现七个定义：
+
+* `today_operations_overview_v1@1`
+* `daily_production_overview_v1@1`
+* `inventory_level_trend_v1@1`
+* `quality_assay_result_trend_v1@1`
+* `quality_metric_trend_v1@1`
+* `production_input_output_flow_v1@1`
+* `pallet_task_cycle_time_v1@1`
+
+风险等级：L1，只读确定性聚合
+
+今日运营概览受控输入示例（两个日期必须都是北京时间今天）：
+
+```json
+{
+  "reportDefinitionId": "today_operations_overview_v1",
+  "reportVersion": 1,
+  "startDate": "2026-08-03",
+  "endDate": "2026-08-03"
+}
+```
+
+生产日报受控输入示例：
+
+```json
+{
+  "reportDefinitionId": "daily_production_overview_v1",
+  "reportVersion": 1,
+  "startDate": "2026-07-27",
+  "endDate": "2026-07-27",
+  "productQuery": "黄冰糖"
+}
+```
+
+生产日报上一等长期间对比示例：
+
+```json
+{
+  "reportDefinitionId": "daily_production_overview_v1",
+  "reportVersion": 1,
+  "startDate": "2026-07-21",
+  "endDate": "2026-07-27",
+  "comparisonMode": "PREVIOUS_PERIOD"
+}
+```
+
+库存水平趋势本地/UAT 回放示例：
+
+```json
+{
+  "reportDefinitionId": "inventory_level_trend_v1",
+  "reportVersion": 1,
+  "startDate": "2026-07-14",
+  "endDate": "2026-07-20",
+  "productQuery": "黄冰糖（袋）"
+}
+```
+
+化验判定趋势受控输入示例：
+
+```json
+{
+  "reportDefinitionId": "quality_assay_result_trend_v1",
+  "reportVersion": 1,
+  "startDate": "2026-07-01",
+  "endDate": "2026-07-27",
+  "productQuery": "黄冰糖"
+}
+```
+
+单项化验指标趋势受控输入示例：
+
+```json
+{
+  "reportDefinitionId": "quality_metric_trend_v1",
+  "reportVersion": 1,
+  "startDate": "2026-01-23",
+  "endDate": "2026-07-21",
+  "productQuery": "黄冰糖（袋）",
+  "metricKey": "ph"
+}
+```
+
+生产领料—登记产出趋势受控输入示例：
+
+```json
+{
+  "reportDefinitionId": "production_input_output_flow_v1",
+  "reportVersion": 1,
+  "startDate": "2026-01-23",
+  "endDate": "2026-07-21",
+  "productQuery": "黄冰糖（袋）"
+}
+```
+
+托盘任务处理耗时趋势受控输入示例：
+
+```json
+{
+  "reportDefinitionId": "pallet_task_cycle_time_v1",
+  "reportVersion": 1,
+  "startDate": "2026-05-01",
+  "endDate": "2026-07-31",
+  "taskType": "FINISH_IN"
+}
+```
+
+约束：
+
+* `reportDefinitionId` 只能从上述七个已登记定义中选择，`reportVersion` 固定为 `1`，不接受模型创建报表定义；
+* 除 `today_operations_overview_v1` 外的六个趋势/日报定义支持可选 `comparisonMode=PREVIOUS_PERIOD|CUSTOM`；上一等长期间不接受自定义日期，`CUSTOM` 必须同时提供两个与本期不重叠的对比日期；
+* 两期复用同一报表定义、版本、指标口径和筛选条件；不同天数时只有可累加指标提供日均比较，变化值不自动表示改善或恶化；
+* 日期由北京时间业务上下文归一化；生产日报和库存水平趋势最多 31 天，生产领料—登记产出趋势、托盘任务周期和两类化验趋势最多 366 天；
+* `productQuery` 只是可选产品名称筛选，不提供任意字段过滤；
+* `today_operations_overview_v1` 只支持北京时间今天、全部产品和全部任务，不接受产品、指标、任务类型或跨期比较参数；它组合今日稳定登记产出、今日已登记化验、今日确认领用与稳定产出两条独立序列、当前库存、今日创建托盘任务和当前待处理任务；
+* 概览中的当前库存和当前待处理任务是生成时快照，不等同于今日变化或今日创建范围；领用与产出仍不能直接相除，也不计算计划达成率、良率、收率、损耗率、SLA、原因或预测；
+* 单项指标趋势必须提供 `metricKey`，只允许色值、还原糖分、干燥失重、电导灰分、蔗糖分、不溶于水杂质和 pH 对应的登记键；
+* 权威指标由 Java/SQL 确定性聚合，模型不计算总量；
+* 当前产量口径只包含 `production_order_output` 中生产日期命中范围且状态为 `BOUND`、`PART_INBOUND` 或 `INSTOCK` 的稳定已登记产出；`DRAFT` 草稿和 `CANCELED` 记录均不计入；
+* 标签、二维码绑定和入库数量只作为后续流程进度，不能计入产量；
+* 生产领料—登记产出趋势同时返回两种视图：按实际领料时间与按产出生产日期的独立日历序列，以及按生产订单生产日期归属的输入/稳定产出完整性视图；
+* 订单领料只统计当前写入链路真实产生的 `production_order_material.status=PICKED`；建表注释中预留但没有写入入口的 `CONSUMED/RETURNED` 不计入；
+* 成品订单调用 `/{id}/materials/pick` 前由用户明确确认；同一事务写入 `production_order_material` 和出库/库存流水、删除对应库存并释放二维码，因此 `PICKED + picked_at` 表示已确认生产领用扣减；旧 `semi_prepare_pool*` 与 `production_consumption_record` 不进入现行业务统计；半成品订单输入来自最终确认的煮糖批次使用，但没有独立投料时间；
+* 两条日历序列采用不同业务日期，禁止直接相除或包装成比例；当前数据库没有返工、报废、损耗等业务事实，相应指标不实现；
+* 产品筛选只通过订单的稳定登记产出产品归属，不能用计划产出 JSON 猜测尚无稳定产出的订单产品；无法归属的订单必须进入数据质量提示；
+* 化验趋势按 `assay.sample_date`（生产日期）统计，合格率固定为 `PASS / (PASS + FAIL)`；无标准、标准多候选和缺少判定单独展示；
+* 化验标准版本使用每条记录历史实际采用的版本，不用当前标准重算历史判定；已有化验记录也不能用于反推历史缺化验批次；
+* 单项指标的原始统计包含所有有实测值的样本；指标达标率只比较历史标准快照中范围和单位均可比的样本，不跨单位比较；
+* 样本过少或时间点稀疏时只展示登记事实，不得输出改善、恶化、原因或预测；
+* 托盘任务周期按任务创建日期形成队列；已确认任务的完成耗时、进行中任务截至 `dataAsOf` 的等待时长、取消数量分别展示，不混合统计；
+* 取消任务没有独立取消时间，当前也没有登记 SLA；不得输出取消耗时、逾期、员工绩效、责任归因或现场全部流程效率；
+* 库存水平趋势在生产模式只读取查询范围内连续通过守恒对账的真实 `DAILY_CLOSE` 快照；门禁不满足时必须拒绝，不能自动降级为回放；
+* 本地/UAT 仅在显式开启 `INVENTORY_TREND_SIMULATION_ENABLED=true` 时，允许以当前库存为锚点按已登记入库、半成品入库和出库记录反向回放；回放前件数与重量必须守恒；
+* 回放结果必须在回答、业务卡片、历史快照和 XLSX 中标注“本地历史回放模拟”，不提供历史库位分布，不推断变动原因，也不推进真实连续 7 天发布门禁；
+* 返回 `dataAsOf`、数据质量和限制说明；计划达成率、班次对比、生产良率、损耗、因果解释和预测均不在当前定义内；
+* 只有 `analytics_expert` 可以调用该工具，生产专家不因此获得跨域分析权限；
+* Java 按报表定义重新校验权限：生产日报需要 `production:order:view`；库存水平趋势需要 `inventory:view`；生产领料—登记产出趋势同时需要 `production:order:view` 和 `production:material:view`；化验趋势需要 `assay:view`；托盘任务周期需要 `task:view`；今日运营概览同时需要这五项只读权限；
+* 当前 `ReportRun` 已持久化 30 天，并支持按受控 `reportRunId` 历史读取和 XLSX 同快照导出；读取和导出重新校验所有者、报表权限、有效期和内容哈希；
+* 导出由 Web 报表卡片触发，直接使用已保存快照并生成独立审计引用，不新增任意导出 MCP 工具，也不重新运行报表；
+* Web AI 助手已提供本人历史报表分页列表和跨会话重开：只列出当前仍有全部权限且未过期的快照，打开时继续验证所有者、权限、有效期和内容哈希，并恢复为原七类业务卡片；该页面能力不新增 MCP 工具；今日运营概览新增独立 GoalContract，但仍复用同一个登记报表工具；
+* 当前尚无历史报表刷新、PDF/CSV、短时下载凭证、订阅和到期数据物理清理任务；跨期比较和跨会话原快照重开已经实现，不再属于缺失项。
+* 库存日终快照已增加独立 Capture/Verify 调度、可信采集窗口、运行证据和失败检测；本地回放只解决离线验收等待问题，生产库存趋势仍需连续 7 天守恒对账门禁和产品评审，模型不得绕过门禁生成正式趋势结论。
+
+机器可读定义见 `docs/agent/report-definition-registry.yaml`。
+
+---
+
 ## 19. 模块化 Agent 编排
 
 Python Agent Runtime 已加入第一版主 Agent / 专家 Agent handoff 骨架。主 Agent 负责意图识别、会话上下文、HITL、安全边界和最终自然语言回答，本身不持有业务 MCP 工具。受支持的只读任务按模块交给：
@@ -1381,12 +1532,20 @@ Python Agent Runtime 已加入第一版主 Agent / 专家 Agent handoff 骨架�
 * `master_data_expert`：产品和筛网主数据；
 * `administration_expert`：员工、角色与权限摘要；
 * `audit_expert`：业务日志、Agent 工具审计和回答 Review 摘要。
+* `analytics_expert`：只运行已经登记且版本固定的报表，不直接访问领域原始工具。
+* `knowledge_expert`：只调用 Python 进程内 L0 `search_approved_knowledge`，用于已审核现行资料；它不是仓储 MCP Tool，也不进入 Java Gateway 的 52 工具白名单。
 
 每个专家只接收自己的 context pack 和工具 schema。规划完成后及调用 Java Internal Agent Gateway 前都会校验专家工具白名单；Python 专家白名单不替代 Java 最终权限和只读白名单。
 
 当前专家运行在同一 Python 进程内，默认共享现有模型客户端；已预留按专家注入不同 `ModelClient` 和参数策略的扩展点。详细设计见 `docs/agent/modular-agent-architecture.md`。
 
-生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、52 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。9 个专家的精确白名单和主 Agent 空工具集必须由确定性测试锁定；专家映射 hash 尚未纳入启动握手时，应作为上线阻断项处理。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
+生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、52 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。10 个业务专家的 Gateway 白名单和主 Agent 空工具集必须由确定性测试锁定；Python Runtime 另有 1 个纯进程内知识专家，capability snapshot 必须过滤该 profile，避免把本地能力伪装成 Java/MCP 能力。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
+
+RAG-03C 的 Java 接入不改变上述 registry：`knowledge_expert` 的回答只通过既有 Agent chat/stream
+协议返回，知识卡片由 Java 显式白名单重建；内部 `reviewTrace.knowledgeAudit` 只用于生成
+`agent_handoff` 和 `knowledge_search` 安全审计摘要，`knowledge_search` 是审计标签而不是 MCP
+Tool。非流式与流式链路均不得把 query、evidence、文件路径、内部 ID、检索分数或凭据写入
+用户响应和审计。
 
 ---
 
@@ -1398,8 +1557,8 @@ Python Agent Runtime 已加入第一版主 Agent / 专家 Agent handoff 骨架�
 
 * Agent Runtime 使用服务端时钟和固定业务时区 `Asia/Shanghai` 解析“今天、昨天、前天、本周、上周、本月、上月、本季度、上季度、今年、去年”等表达；
 * 主模型和专家模型只把 `selectedContext.BUSINESS_TIME` 作为当前日期来源，不得使用训练记忆或自行猜测当前年份；
-* Runtime 必须在工具调用前再次根据用户原话归一化日期，不能只信任模型生成的 `productionDate`、`dateRange`、`startDate/endDate` 或日志时间窗口；
+* Runtime 必须在工具调用前再次根据用户原话归一化日期，不能只信任模型生成的 `productionDate`、`dateRange`、`startDate/endDate` 或日志时间窗口；跨期比较同时含两组日期，通用单范围解析器不得把两组日期覆盖成同一区间，Runtime 必须保留结构化的本期/对比期归属并执行日期格式、跨度和非重叠校验；
 * “最近 N 天”继续使用 `LAST_DAYS`，由 MCP 后端在调用时按业务系统日期解析；日历周、月、季度和年度转换为确定的 `RANGE`；
 * 如果用户请求日期范围而模型选择只接受单日的工具，Runtime 必须拒绝该计划并重新选择范围工具，不得静默缩成一天。
 
-该约定适用于化验、库存日期过滤、托盘/二维码生命周期、生产单据、备料池、操作日志和审计等所有带日期参数的只读工具。未来如果开放独立 MCP 给不具备可靠系统时钟的第三方 Host，可增加 L0 `get_business_time_context` 互操作工具；它不能替代 Runtime 的强制日期归一化。
+该约定适用于化验、库存日期过滤、托盘/二维码生命周期、生产单据、生产领用、操作日志和审计等所有带日期参数的只读工具。未来如果开放独立 MCP 给不具备可靠系统时钟的第三方 Host，可增加 L0 `get_business_time_context` 互操作工具；它不能替代 Runtime 的强制日期归一化。

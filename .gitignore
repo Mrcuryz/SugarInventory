@@ -53,6 +53,7 @@ nbdist/
 /target/
 /agent-service/build/
 /agent-service/.eggs/
+/agent-service/.venv/
 .env
 .env.*
 !.env.example

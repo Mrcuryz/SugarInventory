@@ -340,15 +340,15 @@
       "sourceType": "AGENT_AUTOMATION_TEST",
       "evidenceLevel": "DESIGN_OR_TEST_SAMPLE",
       "sourceRef": "agent-service/tests/test_agent_service.py:3463",
-      "classification": "EXISTING_TOOL",
+      "classification": "MIGRATED_LEGACY_WORDING",
       "userRole": "UNKNOWN_NOT_CAPTURED",
-      "goal": "查询半成品备料池余额",
+      "goal": "将旧备料池说法迁移为当前生产订单在制领用查询",
       "expectedOutputType": "data_table",
-      "dataSources": ["query_semi_prepare_pool_balances"],
+      "dataSources": ["query_in_process_materials"],
       "requiresHistoricalFact": false,
       "requiresCrossDomainJoin": false,
       "reliablyAnswerableNow": true,
-      "cannotAnswerReason": "属于生产/半成品能力，不属于 inventory_current_snapshot_v1。"
+      "cannotAnswerReason": "旧备料池流程已停用；只返回当前生产订单已确认领用扣减且订单未完成的记录。"
     },
     {
       "id": "IQ-020",

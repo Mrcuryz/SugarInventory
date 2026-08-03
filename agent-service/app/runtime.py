@@ -14,6 +14,7 @@ from typing import Any
 from app.cancellation import current_cancellation_token
 from app.agents import MAIN_AGENT, AgentHandoffRouter, ExpertBoundaryError
 from app.business_time import BusinessClock
+from app.knowledge import is_static_realtime_mixed_query
 from app.execution import (
     AgentExecutionContext,
     bind_execution_context,
@@ -80,9 +81,22 @@ from app.orchestration import (
     mark_step_started,
     validate_restored_plan,
 )
-from app.observability import MetricsRegistry
+from app.observability import (
+    MetricsRegistry,
+    record_turn_tool_duration,
+    reset_turn_diagnostics,
+    take_turn_tool_durations,
+)
 from app.policies import FastCompletionPolicy, NextActionPolicy, SafeFallbackPolicy
 from app.progress import report_business_progress, report_tool_progress
+from app.rag.contracts import RetrievalStatus
+from app.rag.runtime.contracts import (
+    INTERNAL_KNOWLEDGE_TOOLS,
+    KNOWLEDGE_TOOL_NAME,
+    KnowledgeSearchResponse,
+    TrustedKnowledgeContext,
+)
+from app.rag.runtime.knowledge_tool import ApprovedKnowledgeService
 
 
 AUDIT_CAPABILITY_LABELS: dict[str, str] = {
@@ -94,7 +108,6 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "query_inventory_by_quality_standard": "按质量标准筛选库存",
     "query_inventory_by_assay_metrics": "按化验指标筛选库存",
     "query_inventory_ledger": "库存台账查询",
-    "query_prepare_pool_balance": "生产备料池余额查询",
     "get_warehouse_status": "库位状态查询",
     "query_warehouse_capacity_distribution": "库位容量分布查询",
     "query_warehouse_recent_operations": "近期库位操作查询",
@@ -120,6 +133,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "resolve_production_entities": "生产对象识别",
     "query_boiling_batches": "煮糖批次查询",
     "query_production_order_progress": "生产订单进度查询",
+    "run_registered_report": "登记报表查询",
     "query_boiling_batch_trace": "煮糖批次流转查询",
     "query_material_pick_trace": "生产领料记录查询",
     "query_production_label_completion": "生产标签完成情况查询",
@@ -138,6 +152,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "search_operation_logs": "业务操作日志查询",
     "query_agent_tool_audit": "Agent 工具调用审计查询",
     "query_agent_answer_reviews": "Agent 回答复核查询",
+    "knowledge_search": "现行知识资料查询",
     "agent_runtime": "Agent 问答处理",
 }
 
@@ -176,6 +191,7 @@ class WarehouseAgentRuntime:
         safe_fallback_policy: SafeFallbackPolicy | None = None,
         next_action_policy: NextActionPolicy | None = None,
         business_clock: BusinessClock | None = None,
+        knowledge_service: ApprovedKnowledgeService | None = None,
     ) -> None:
         self.tool_client = tool_client
         self.checkpointer = checkpointer or InMemoryCheckpointer()
@@ -195,12 +211,15 @@ class WarehouseAgentRuntime:
         self.fast_completion_policy = fast_completion_policy or FastCompletionPolicy.default()
         self.safe_fallback_policy = safe_fallback_policy or SafeFallbackPolicy.default()
         self.next_action_policy = next_action_policy or NextActionPolicy()
+        self.knowledge_service = knowledge_service
 
     def chat(self, request: ChatRequest) -> ChatResponse:
         started = time.monotonic()
+        reset_turn_diagnostics()
         try:
             with self.checkpointer.session(request.agentSessionId) as state:
-                return self._chat_locked(request, state)
+                response = self._chat_locked(request, state)
+                return self._attach_performance_debug(response, request.client.debug, started)
         finally:
             self.metrics.observe(
                 "agent_turn_duration",
@@ -232,11 +251,13 @@ class WarehouseAgentRuntime:
 
     def resume(self, request: ResumeRequest) -> ChatResponse:
         started = time.monotonic()
+        reset_turn_diagnostics()
         try:
             with self.checkpointer.session(request.agentSessionId) as state:
                 context = self._pending_execution_context(state.pending_clarification)
                 with bind_execution_context(context):
-                    return self._resume_locked(request, state)
+                    response = self._resume_locked(request, state)
+                    return self._attach_performance_debug(response, request.client.debug, started)
         finally:
             self.metrics.observe(
                 "agent_turn_duration",
@@ -623,14 +644,17 @@ class WarehouseAgentRuntime:
         if completion is not None and plan.routeSnapshot is not None:
             plan.routeSnapshot["goalCompletion"] = completion
         response.reviewTrace = plan.routeSnapshot
+        self._attach_knowledge_audit(response, state)
         if request.client.debug and plan.routeSnapshot:
-            response.debug = {"intentRouter": plan.routeSnapshot}
+            response.debug = {"intentRouter": response.reviewTrace}
         return response
 
     def _begin_registered_goal(self, state: WarehouseAgentState, goal_type: str | None) -> None:
         state.active_goal_type = goal_type
         state.fact_envelopes = []
         state.last_goal_completion = None
+        if goal_type in {"PROCESS_KNOWLEDGE_QUERY", "ENTERPRISE_KNOWLEDGE_QUERY"}:
+            state.last_knowledge_result = None
 
     def _goal_entity_contexts(self, state: WarehouseAgentState) -> dict[str, SelectedEntity]:
         contexts: dict[str, SelectedEntity] = {}
@@ -775,6 +799,60 @@ class WarehouseAgentRuntime:
         response.reviewTrace = trace
         return completion
 
+    def _attach_knowledge_audit(
+        self,
+        response: ChatResponse,
+        state: WarehouseAgentState,
+    ) -> None:
+        goal_type = str(state.active_goal_type or "")
+        if goal_type not in {"PROCESS_KNOWLEDGE_QUERY", "ENTERPRISE_KNOWLEDGE_QUERY"}:
+            return
+        data = state.last_knowledge_result if isinstance(state.last_knowledge_result, dict) else {}
+        status = str(data.get("status") or "").upper()
+        if response.error is not None:
+            status = {
+                "RAG_UNAVAILABLE": "UNAVAILABLE",
+                "UPSTREAM_PERMISSION_DENIED": "FORBIDDEN",
+                "UPSTREAM_BAD_REQUEST": "INVALID_QUERY",
+            }.get(response.error.code, "ERROR")
+        if status not in {
+            "SUCCEEDED",
+            "DEGRADED",
+            "NO_DATA",
+            "UNAVAILABLE",
+            "FORBIDDEN",
+            "INVALID_QUERY",
+            "ERROR",
+        }:
+            status = "ERROR"
+        raw_domains = data.get("knowledgeDomains")
+        domains = [
+            str(value)
+            for value in raw_domains
+            if isinstance(value, str) and value in {
+                "PROCESS",
+                "COMPANY",
+                "PRODUCT_MARKETING",
+                "CERTIFICATION",
+                "SALES",
+            }
+        ] if isinstance(raw_domains, list) else []
+        corpus_version = data.get("corpusVersion")
+        evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+        snapshot: dict[str, Any] = {
+            "targetAgent": "knowledge_expert",
+            "goalType": goal_type,
+            "status": status,
+            "knowledgeDomains": domains,
+            "evidenceCount": min(len(evidence), 10),
+            "degraded": status == "DEGRADED",
+        }
+        if isinstance(corpus_version, str) and corpus_version:
+            snapshot["corpusVersion"] = corpus_version
+        trace = dict(response.reviewTrace or {})
+        trace["knowledgeAudit"] = snapshot
+        response.reviewTrace = trace
+
     def _handle_message_llm(
         self,
         request: ChatRequest,
@@ -783,6 +861,15 @@ class WarehouseAgentRuntime:
     ) -> ChatResponse:
         if self.model_client is None or not self.llm_allowed_experts:
             return self._llm_configuration_error(request.agentSessionId)
+        if is_static_realtime_mixed_query(text):
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=(
+                    "这个问题同时包含现行资料知识和实时业务数据。当前没有登记这类组合配方，"
+                    "请拆成两个问题，例如先问工艺流程，再单独查询当前库存。"
+                ),
+                needsUserSelection=True,
+            )
         trace: dict[str, Any] = {
             "planningMode": "llm",
             "executionInfluence": True,
@@ -824,9 +911,9 @@ class WarehouseAgentRuntime:
                     )
                 )
             except ModelDecisionError as exc:
-                self._append_llm_model_diagnostics(trace)
+                self._append_llm_model_diagnostics(trace, decision_stage="main_route")
                 return self._llm_model_failure(request.agentSessionId, trace, exc)
-            self._append_llm_model_diagnostics(trace)
+            self._append_llm_model_diagnostics(trace, decision_stage="main_route")
             if decision is None:
                 return self._llm_model_error(
                     request.agentSessionId,
@@ -987,6 +1074,7 @@ class WarehouseAgentRuntime:
                 retry_count=0,
                 trace=trace,
             )
+        self._attach_knowledge_audit(response, state)
         return response
 
     def _execute_llm_registered_recipe(
@@ -1053,10 +1141,14 @@ class WarehouseAgentRuntime:
                         observations=self._llm_model_observations(observations),
                         toolCallCount=tool_call_count,
                         maxToolCalls=self.llm_max_tool_calls,
+                        decisionStage="RESULT_ANALYSIS" if observations else "INITIAL",
                     )
                 ) if self.model_client is not None else None
             except ModelDecisionError as exc:
-                self._append_llm_model_diagnostics(trace)
+                self._append_llm_model_diagnostics(
+                    trace,
+                    decision_stage="expert_initial" if not observations else "expert_result_analysis",
+                )
                 fallback = self._llm_safe_expert_failure_fallback(
                     request=request,
                     state=state,
@@ -1071,7 +1163,10 @@ class WarehouseAgentRuntime:
                     return self._finish_llm_response(fallback, trace, request)
                 response = self._llm_model_failure(request.agentSessionId, trace, exc)
                 return self._finish_llm_response(response, trace, request)
-            self._append_llm_model_diagnostics(trace)
+            self._append_llm_model_diagnostics(
+                trace,
+                decision_stage="expert_initial" if not observations else "expert_result_analysis",
+            )
             if decision is None:
                 response = self._llm_model_error(
                     request.agentSessionId,
@@ -1154,6 +1249,15 @@ class WarehouseAgentRuntime:
                     )
                     continue
                 answer = self._sanitize_llm_answer(decision.answer or "", state=state)
+                report_fallback = self._registered_report_answer_fallback(answer, state)
+                if report_fallback is not None:
+                    answer = report_fallback
+                    loop_trace["events"].append(
+                        {
+                            "action": "FINAL_ANSWER",
+                            "status": "REPORT_FACT_CONSISTENCY_FALLBACK",
+                        }
+                    )
                 if answer.startswith("模型回答包含不应向用户展示的内部"):
                     no_data_fallback = self._llm_authoritative_no_data_fallback(
                         request.agentSessionId,
@@ -1264,7 +1368,20 @@ class WarehouseAgentRuntime:
                     state=state,
                     user_message=user_message,
                 )
-            except (ExpertBoundaryError, TypeError, ValueError):
+            except (ExpertBoundaryError, TypeError, ValueError) as exc:
+                validation_answer = self._tool_argument_validation_answer(
+                    decision.toolName,
+                    exc,
+                )
+                if validation_answer is not None:
+                    return self._finish_llm_response(
+                        ChatResponse(
+                            agentSessionId=request.agentSessionId,
+                            answer=validation_answer,
+                        ),
+                        trace,
+                        request,
+                    )
                 planning_rejections += 1
                 if planning_rejections > 1:
                     return self._finish_llm_response(
@@ -1347,14 +1464,17 @@ class WarehouseAgentRuntime:
                 retry_count += 1
             tool_call_count += 1
             try:
-                result = self._call_tool_values(
-                    agent_session_id=request.agentSessionId,
-                    tool_name=decision.toolName,
-                    arguments=arguments,
-                    trace_id=request.client.traceId,
-                    request_id=request.client.requestId,
-                    message_id=request.messageId,
-                )
+                if decision.toolName == KNOWLEDGE_TOOL_NAME:
+                    result = self._call_internal_knowledge_values(request, arguments)
+                else:
+                    result = self._call_tool_values(
+                        agent_session_id=request.agentSessionId,
+                        tool_name=decision.toolName,
+                        arguments=arguments,
+                        trace_id=request.client.traceId,
+                        request_id=request.client.requestId,
+                        message_id=request.messageId,
+                    )
                 self._raise_if_tool_error_payload(result)
             except ToolGatewayError as exc:
                 if exc.code in {"UPSTREAM_UNAUTHORIZED", "SERVICE_AUTHENTICATION_FAILED"}:
@@ -1397,6 +1517,9 @@ class WarehouseAgentRuntime:
                             retryable=False,
                         ),
                     )
+                    return self._finish_llm_response(response, trace, request)
+                if exc.code == "RAG_UNAVAILABLE":
+                    response = self._knowledge_unavailable_response(request.agentSessionId)
                     return self._finish_llm_response(response, trace, request)
                 continue
 
@@ -1464,9 +1587,29 @@ class WarehouseAgentRuntime:
         cards: list[BusinessCard],
         trace: dict[str, Any],
     ) -> ChatResponse | None:
+        data = observation.get("data")
+        if tool_name == KNOWLEDGE_TOOL_NAME:
+            completion = self._evaluate_registered_goal(state)
+            if completion is None or completion.get("status") != "COMPLETE":
+                return None
+            loop_trace = trace.setdefault("expertLoop", {"events": []})
+            loop_trace["completionMode"] = "SAFE_KNOWLEDGE_FORMATTER"
+            loop_trace.setdefault("events", []).append(
+                {
+                    "action": "SAFE_FINAL_ANSWER",
+                    "toolName": KNOWLEDGE_TOOL_NAME,
+                    "observationId": observation.get("observationId"),
+                }
+            )
+            trace["goalCompletion"] = completion
+            self.metrics.increment("llm_fast_completion_total", tool=KNOWLEDGE_TOOL_NAME)
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_knowledge_answer(data if isinstance(data, dict) else {}),
+                cards=list(cards),
+            )
         if not self.fast_completion_policy.allows(tool_name, user_message):
             return None
-        data = observation.get("data")
         if not isinstance(data, dict):
             return None
 
@@ -1601,6 +1744,56 @@ class WarehouseAgentRuntime:
         response.reviewTrace = trace
         if request.client.debug:
             response.debug = {"llmToolLoop": trace}
+        return response
+
+    def _attach_performance_debug(
+        self,
+        response: ChatResponse,
+        debug_enabled: bool,
+        started: float,
+    ) -> ChatResponse:
+        tool_durations = take_turn_tool_durations()
+        if not debug_enabled:
+            return response
+
+        stages = {
+            "main_route": 0,
+            "expert_initial": 0,
+            "expert_result_analysis": 0,
+        }
+        stage_counts = {stage: 0 for stage in stages}
+        decision_count = 0
+        trace = response.reviewTrace if isinstance(response.reviewTrace, dict) else {}
+        diagnostics = trace.get("modelDecisions")
+        if isinstance(diagnostics, list):
+            for diagnostic in diagnostics:
+                if not isinstance(diagnostic, dict):
+                    continue
+                latency_ms = diagnostic.get("latencyMs")
+                stage = str(diagnostic.get("decisionStage") or "")
+                if isinstance(latency_ms, (int, float)):
+                    decision_count += 1
+                    if stage in stages:
+                        stages[stage] += max(0, round(float(latency_ms)))
+                        stage_counts[stage] += 1
+
+        safe_debug = dict(response.debug) if isinstance(response.debug, dict) else {}
+        safe_debug.update(
+            {
+                "performanceSchemaVersion": "1.0",
+                "totalDurationMs": max(0, round((time.monotonic() - started) * 1000)),
+                "mainRouteMs": stages["main_route"],
+                "mainRouteDecisionCount": stage_counts["main_route"],
+                "expertInitialMs": stages["expert_initial"],
+                "expertInitialDecisionCount": stage_counts["expert_initial"],
+                "expertResultAnalysisMs": stages["expert_result_analysis"],
+                "expertResultAnalysisDecisionCount": stage_counts["expert_result_analysis"],
+                "modelDecisionCount": decision_count,
+                "toolDurationMs": max(0, round(sum(tool_durations) * 1000)),
+                "toolCallCount": len(tool_durations),
+            }
+        )
+        response.debug = safe_debug
         return response
 
     def _resume_llm_tool_loop(
@@ -1742,10 +1935,19 @@ class WarehouseAgentRuntime:
         response.reviewTrace = trace
         return response
 
-    def _append_llm_model_diagnostics(self, trace: dict[str, Any]) -> None:
+    def _append_llm_model_diagnostics(
+        self,
+        trace: dict[str, Any],
+        *,
+        decision_stage: str | None = None,
+    ) -> None:
         diagnostics = take_model_decision_diagnostics()
         if diagnostics:
-            trace.setdefault("modelDecisions", []).extend(diagnostics)
+            staged_diagnostics = [
+                {**diagnostic, "decisionStage": decision_stage or "unknown"}
+                for diagnostic in diagnostics
+            ]
+            trace.setdefault("modelDecisions", []).extend(staged_diagnostics)
             for diagnostic in diagnostics:
                 phase = str(diagnostic.get("phase") or "UNKNOWN")
                 outcome = str(diagnostic.get("outcome") or "UNKNOWN")
@@ -1757,6 +1959,7 @@ class WarehouseAgentRuntime:
                         float(latency_ms) / 1000,
                         phase=phase,
                         outcome=outcome,
+                        stage=decision_stage,
                     )
 
     def _llm_context_followup_expert(
@@ -1849,7 +2052,22 @@ class WarehouseAgentRuntime:
                 word in text for word in ("化验", "指标", "产品库存", "托盘", "生产")
             )
         if active_expert == "assay_expert":
-            return any(word in text for word in ("库存", "库位", "仓库", "托盘", "生产订单", "煮糖"))
+            return (
+                any(word in text for word in ("库存", "库位", "仓库", "托盘", "生产订单", "煮糖"))
+                or any(
+                    phrase in text
+                    for phrase in (
+                        "化验趋势",
+                        "质量趋势",
+                        "指标趋势",
+                        "变化趋势",
+                        "质量变化",
+                        "合格率",
+                        "质量如何",
+                        "质量怎么样",
+                    )
+                )
+            )
         if active_expert == "pallet_expert":
             return any(word in text for word in ("产品库存", "库位容量", "化验趋势", "生产订单", "煮糖", "领料"))
         if active_expert == "logistics_expert":
@@ -1857,6 +2075,38 @@ class WarehouseAgentRuntime:
                 word in text
                 for word in ("库存总览", "库存分布", "库位容量", "化验", "质量标准", "生产订单进度", "煮糖", "领料")
             )
+        if active_expert == "analytics_expert":
+            if any(
+                word in text
+                for word in (
+                    "库存",
+                    "库位",
+                    "托盘",
+                    "生产订单",
+                    "煮糖批次",
+                    "领料",
+                    "写入",
+                    "导出",
+                    "预测",
+                )
+            ):
+                return True
+            if any(word in text for word in ("化验", "质量")):
+                return not any(
+                    phrase in text
+                    for phrase in (
+                        "化验趋势",
+                        "质量趋势",
+                        "指标趋势",
+                        "变化趋势",
+                        "质量变化",
+                        "合格率",
+                        "质量如何",
+                        "质量怎么样",
+                        "判定趋势",
+                    )
+                )
+            return False
         return True
 
     def _llm_business_recovery_expert(
@@ -1877,6 +2127,39 @@ class WarehouseAgentRuntime:
         bounded_followup = self._llm_context_followup_expert(state, text)
         if bounded_followup is not None:
             return bounded_followup
+
+        if (
+            "analytics_expert" in self.llm_allowed_experts
+            and any(
+                phrase in text
+                for phrase in (
+                    "产量",
+                    "生产日报",
+                    "生产产出",
+                    "今日生产",
+                    "化验趋势",
+                    "质量趋势",
+                    "指标趋势",
+                    "变化趋势",
+                    "质量变化",
+                    "合格率",
+                    "质量如何",
+                    "质量怎么样",
+                    "色值趋势",
+                    "还原糖分趋势",
+                    "干燥失重趋势",
+                    "电导灰分趋势",
+                    "蔗糖分趋势",
+                    "不溶于水杂质趋势",
+                    "pH趋势",
+                    "ph趋势",
+                    "指标波动",
+                )
+            )
+            and "生产订单" not in text
+            and "煮糖批次" not in text
+        ):
+            return "analytics_expert"
 
         active_expert = str(state.active_agent or "")
         handoff = state.last_agent_handoff if isinstance(state.last_agent_handoff, dict) else {}
@@ -1912,7 +2195,6 @@ class WarehouseAgentRuntime:
                     "expertAgent": profile.name,
                     "businessName": profile.business_name,
                     "domains": sorted(profile.domains),
-                    "scope": list(profile.instructions),
                 }
             )
         return values
@@ -1957,6 +2239,19 @@ class WarehouseAgentRuntime:
             context["PALLET"] = {
                 "stateRef": "CURRENT_PALLET",
                 "displayLabel": self._safe_display_label(state.selected_pallet.display_label),
+            }
+        if state.last_report_context is not None:
+            report_context = state.last_report_context
+            context["REPORT"] = {
+                "stateRef": "CURRENT_REPORT",
+                "reportName": self._safe_display_label(report_context.get("reportName")),
+                "dateRangeLabel": self._safe_display_label(
+                    report_context.get("dateRangeLabel")
+                ),
+                "productScopeLabel": self._safe_display_label(
+                    report_context.get("productScopeLabel")
+                ),
+                "dataAsOf": self._safe_text(report_context.get("dataAsOf")),
             }
         if state.last_assay_records:
             records = state.last_assay_records.get("records")
@@ -2044,9 +2339,79 @@ class WarehouseAgentRuntime:
 
     def _llm_model_observations(self, observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
-            {key: value for key, value in observation.items() if key not in {"callSignature", "resolved"}}
+            {
+                key: value
+                for key, value in observation.items()
+                if key not in {"callSignature", "resolved"}
+            }
             for observation in observations
         ]
+
+    def _compact_registered_report_model_data(self, value: Any) -> dict[str, Any]:
+        """Keep report facts useful to the expert without replaying full card/export rows."""
+        source = value if isinstance(value, dict) else {}
+        compact: dict[str, Any] = {}
+        sampled_list_keys = {
+            "dailySeries",
+            "productBreakdowns",
+            "productionFlowDailySeries",
+            "productionFlowOrderBreakdowns",
+            "palletTaskCycleDailySeries",
+            "palletTaskCycleTypeBreakdowns",
+            "palletTaskPendingItems",
+            "qualitySeries",
+            "qualityProductBreakdowns",
+            "standardBreakdowns",
+            "metricSeries",
+            "metricProductBreakdowns",
+            "metricStandardBreakdowns",
+            "inventoryTrendDailySeries",
+            "inventoryTrendProductBreakdowns",
+        }
+        for key, item in source.items():
+            if key not in sampled_list_keys or not isinstance(item, list):
+                compact[key] = item
+                continue
+            compact[f"{key}TotalCount"] = len(item)
+            compact[key] = self._representative_report_rows(
+                self._non_empty_report_series_rows(key, item),
+                limit=6,
+            )
+        compact["modelObservationNote"] = (
+            "报表指标、数据质量和限制为完整事实；明细序列过长时仅提供前后代表行，"
+            "完整受控明细保留在卡片和报表导出中。"
+        )
+        safe_value = self._llm_safe_tool_data(compact)
+        return safe_value if isinstance(safe_value, dict) else {}
+
+    def _non_empty_report_series_rows(self, key: str, values: list[Any]) -> list[Any]:
+        if key not in {
+            "dailySeries",
+            "productionFlowDailySeries",
+            "palletTaskCycleDailySeries",
+            "inventoryTrendDailySeries",
+        }:
+            return values
+        count_fields = (
+            "outputRecordCount",
+            "materialInputRecordCount",
+            "stableOutputRecordCount",
+            "taskCount",
+        )
+        non_empty = [
+            item
+            for item in values
+            if isinstance(item, dict)
+            and any(self._safe_count(item.get(field)) > 0 for field in count_fields)
+        ]
+        return non_empty or values
+
+    @staticmethod
+    def _representative_report_rows(values: list[Any], *, limit: int) -> list[Any]:
+        if len(values) <= limit:
+            return list(values)
+        head_size = limit // 2
+        return [*values[:head_size], *values[-(limit - head_size) :]]
 
     def _sanitize_llm_context_text(self, value: str) -> str:
         text = re.sub(
@@ -2088,7 +2453,7 @@ class WarehouseAgentRuntime:
             value,
         ):
             return "模型回答包含不应向用户展示的内部信息，本次回答已被 Runtime 拦截。"
-        if any(tool_name in value for tool_name in ALLOWED_TOOLS):
+        if any(tool_name in value for tool_name in (*ALLOWED_TOOLS, *INTERNAL_KNOWLEDGE_TOOLS)):
             return "模型回答包含不应向用户展示的内部工具信息，本次回答已被 Runtime 拦截。"
         value = re.sub(r"\b[a-z_]+_expert\b", "业务专家", value)
         value = value.replace("INVALID_INPUT", "输入不符合要求")
@@ -2191,6 +2556,45 @@ class WarehouseAgentRuntime:
         if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
             return "托盘码不符合系统规则，请核对完整托盘码后重试。"
         return "查询条件不符合当前业务要求，请核对后重试。"
+
+    def _tool_argument_validation_answer(
+        self,
+        tool_name: str,
+        error: Exception,
+    ) -> str | None:
+        if (
+            tool_name == "run_registered_report"
+            and str(error) == "registered report range must not exceed 31 days"
+        ):
+            return (
+                "生产登记产出日报单次最多查询 31 天。"
+                "请把时间范围缩短到 31 天以内，或分段查询；我不会擅自缩短你指定的范围。"
+            )
+        if (
+            tool_name == "run_registered_report"
+            and str(error) == "inventory trend range must not exceed 31 days"
+        ):
+            return (
+                "库存水平趋势单次最多查询 31 天。"
+                "请把时间范围缩短到 31 天以内，或分段查询；我不会擅自缩短你指定的范围。"
+            )
+        if (
+            tool_name == "run_registered_report"
+            and str(error) == "quality trend range must not exceed 366 days"
+        ):
+            return (
+                "化验质量趋势单次最多查询 366 天。"
+                "请把时间范围缩短到 366 天以内，或分段查询；我不会擅自缩短你指定的范围。"
+            )
+        if (
+            tool_name == "run_registered_report"
+            and str(error) == "quality metricKey is required"
+        ):
+            return (
+                "请先说明要查看哪个化验指标：色值、还原糖分、干燥失重、"
+                "电导灰分、蔗糖分、不溶于水杂质或 pH。"
+            )
+        return None
 
     def _no_data_answer(self, tool_name: str) -> str:
         if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
@@ -2635,7 +3039,11 @@ class WarehouseAgentRuntime:
     ) -> tuple[dict[str, Any], list[BusinessCard]]:
         cards: list[BusinessCard] = []
         safe_data: dict[str, Any]
-        if tool_name == "get_inventory_overview":
+        if tool_name == KNOWLEDGE_TOOL_NAME:
+            safe_data = self._knowledge_safe_data(result)
+            state.last_knowledge_result = dict(safe_data)
+            cards = self._knowledge_cards(safe_data)
+        elif tool_name == "get_inventory_overview":
             adapted = self._adapt_inventory_result(result)
             safe_data = adapted.model_dump(exclude_none=True)
             state.last_inventory_result = dict(safe_data)
@@ -2696,6 +3104,26 @@ class WarehouseAgentRuntime:
             safe_data = adapted_progress.model_dump(exclude_none=True)
             state.last_production_order_progress = dict(safe_data)
             cards = [self._production_order_progress_card(adapted_progress)]
+        elif tool_name == "run_registered_report":
+            safe_data = self._adapt_registered_report(result)
+            state.last_report_context = {
+                "reportRunId": self._safe_text(result.get("reportRunId")),
+                "reportDefinitionId": safe_data.get("reportDefinitionId"),
+                "reportVersion": safe_data.get("reportVersion"),
+                "reportName": safe_data.get("reportName"),
+                "dateRangeLabel": safe_data.get("dateRangeLabel"),
+                "productScopeLabel": safe_data.get("productScopeLabel"),
+                "dataAsOf": safe_data.get("dataAsOf"),
+                "metrics": deepcopy(safe_data.get("metrics")),
+                "qualityMetrics": deepcopy(safe_data.get("qualityMetrics")),
+                "metricTrendSummary": deepcopy(safe_data.get("metricTrendSummary")),
+                "productionFlowMetrics": deepcopy(safe_data.get("productionFlowMetrics")),
+                "palletTaskCycleMetrics": deepcopy(safe_data.get("palletTaskCycleMetrics")),
+                "inventoryTrendMetrics": deepcopy(safe_data.get("inventoryTrendMetrics")),
+                "comparison": deepcopy(safe_data.get("comparison")),
+                "dataQuality": deepcopy(safe_data.get("dataQuality")),
+            }
+            cards = [self._registered_report_card(safe_data)]
         elif tool_name == "query_material_pick_trace":
             adapted_materials = self._adapt_production_material_trace(result)
             safe_data = adapted_materials.model_dump(exclude_none=True)
@@ -2739,18 +3167,30 @@ class WarehouseAgentRuntime:
             safe_data=safe_data,
         )
         status = self._llm_result_status(tool_name, safe_data)
+        model_data = (
+            self._compact_registered_report_model_data(safe_data)
+            if tool_name == "run_registered_report"
+            else self._llm_safe_tool_data(safe_data)
+        )
         return (
             {
                 "observationId": observation_id,
                 "status": status,
                 "tool": tool_name,
                 "callSignature": call_signature,
-                "data": self._llm_safe_tool_data(safe_data),
+                "data": model_data,
             },
             cards,
         )
 
     def _llm_result_status(self, tool_name: str, data: dict[str, Any]) -> str:
+        if tool_name == KNOWLEDGE_TOOL_NAME:
+            status = str(data.get("status") or "").upper()
+            if status == RetrievalStatus.NO_DATA.value:
+                return "NO_DATA"
+            if status in {RetrievalStatus.SUCCEEDED.value, RetrievalStatus.DEGRADED.value} and data.get("evidence"):
+                return "AVAILABLE"
+            return "TOOL_ERROR"
         if tool_name in {"resolve_products", "resolve_warehouses", "resolve_production_entities"}:
             status = str(data.get("resolutionStatus") or "").upper()
             return "NO_DATA" if status in {"NOT_FOUND", "NO_MATCH"} else "AVAILABLE"
@@ -2826,6 +3266,9 @@ class WarehouseAgentRuntime:
                 answer="当前我只能使用受控的只读仓储工具。你可以换成库存、库位、托盘或化验状态查询。",
                 needsUserSelection=True,
             )
+
+        if plan.toolName == KNOWLEDGE_TOOL_NAME:
+            return self._answer_knowledge(request, state, plan.arguments)
 
         if plan.toolName == "resolve_products":
             return self._resolve_product_and_continue(request, state, plan.arguments, plan.intent or "inventory")
@@ -3263,7 +3706,7 @@ class WarehouseAgentRuntime:
                          "query_agent_tool_audit": self._format_agent_tool_audit_answer,
                          "query_agent_answer_reviews": self._format_agent_answer_reviews_answer}[plan.toolName]
             return ChatResponse(agentSessionId=request.agentSessionId, answer=formatter(result))
-        if plan.toolName in {"query_inventory_ledger", "query_prepare_pool_balance"}:
+        if plan.toolName == "query_inventory_ledger":
             result = self._call_tool(request, plan.toolName, plan.arguments); self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
             self._record_raw_registered_goal_fact(
@@ -3272,9 +3715,7 @@ class WarehouseAgentRuntime:
                 arguments=plan.arguments,
                 result=result,
             )
-            formatter = {"query_inventory_ledger": self._format_inventory_ledger_answer,
-                         "query_prepare_pool_balance": self._format_prepare_pool_balance_answer}[plan.toolName]
-            return ChatResponse(agentSessionId=request.agentSessionId, answer=formatter(result))
+            return ChatResponse(agentSessionId=request.agentSessionId, answer=self._format_inventory_ledger_answer(result))
         if plan.toolName == "query_fixed_product_qr_pool":
             result = self._call_tool(request, plan.toolName, plan.arguments); self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
@@ -4639,14 +5080,233 @@ class WarehouseAgentRuntime:
                 step_id=context.step_id,
             )
         finally:
+            duration = time.monotonic() - started
             self.metrics.observe(
                 "tool_call_duration",
-                time.monotonic() - started,
+                duration,
                 expert=context.agent_name,
                 tool=tool_name,
             )
+            record_turn_tool_duration(duration)
         self._raise_if_cancelled()
         return result
+
+    def _call_internal_knowledge_values(
+        self,
+        request: ChatRequest | ResumeRequest,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        self._raise_if_cancelled()
+        context = current_execution_context()
+        if context is None:
+            raise ToolGatewayError(
+                "AGENT_EXECUTION_CONTEXT_MISSING",
+                "当前知识查询缺少可校验的专家执行上下文。",
+            )
+        try:
+            if not context.authorizes(KNOWLEDGE_TOOL_NAME):
+                raise ExpertBoundaryError("knowledge tool is outside the immutable execution boundary")
+            self.argument_builder.authorize_tool(context.agent_name, KNOWLEDGE_TOOL_NAME)
+        except ValueError as exc:
+            self.metrics.increment(
+                "expert_tool_not_allowed_total",
+                expert=context.agent_name,
+                tool=KNOWLEDGE_TOOL_NAME,
+            )
+            raise ToolGatewayError(
+                "EXPERT_TOOL_NOT_ALLOWED",
+                "当前专家 Agent 无权调用知识检索。",
+            ) from exc
+        if context.agent_name != "knowledge_expert":
+            raise ToolGatewayError(
+                "EXPERT_TOOL_NOT_ALLOWED",
+                "当前专家 Agent 无权调用知识检索。",
+            )
+        user = request.user
+        if user is None or user.userId is None or user.userId <= 0 or not user.roleCode:
+            raise ToolGatewayError(
+                "UPSTREAM_PERMISSION_DENIED",
+                "当前用户没有执行知识查询的权限。",
+            )
+        if self.knowledge_service is None:
+            raise ToolGatewayError(
+                "RAG_UNAVAILABLE",
+                "知识库当前不可用，请稍后重试。",
+                retryable=True,
+            )
+        report_tool_progress(KNOWLEDGE_TOOL_NAME)
+        response = self.knowledge_service.search_approved_knowledge(
+            arguments,
+            TrustedKnowledgeContext(roleCode=user.roleCode, userId=user.userId),
+        )
+        response = self._filter_untrusted_knowledge_evidence(response)
+        if response.status == RetrievalStatus.FORBIDDEN:
+            raise ToolGatewayError(
+                "UPSTREAM_PERMISSION_DENIED",
+                "当前用户没有执行知识查询的权限。",
+            )
+        if response.status == RetrievalStatus.INVALID_QUERY:
+            raise ToolGatewayError(
+                "UPSTREAM_BAD_REQUEST",
+                "知识查询条件不符合要求，请换一种更明确的问法。",
+            )
+        if response.status == RetrievalStatus.UNAVAILABLE:
+            raise ToolGatewayError(
+                "RAG_UNAVAILABLE",
+                "知识库当前不可用，请稍后重试。",
+                retryable=True,
+            )
+        return response.model_dump(mode="json")
+
+    def _filter_untrusted_knowledge_evidence(
+        self,
+        response: KnowledgeSearchResponse,
+    ) -> KnowledgeSearchResponse:
+        unsafe_pattern = re.compile(
+            r"(?i)(忽略.{0,20}(?:规则|指令|提示)|系统提示|system\s*prompt|"
+            r"调用.{0,20}(?:工具|接口|sql|http)|authorization|bearer\s+|"
+            r"(?:api[_ -]?key|token|密码)\s*[:=]|执行.{0,20}(?:sql|http))"
+        )
+        safe_evidence = tuple(
+            item
+            for item in response.evidence
+            if not unsafe_pattern.search(
+                "\n".join(
+                    (
+                        item.title,
+                        item.content,
+                        item.citation.documentTitle,
+                        item.citation.sectionLabel or "",
+                    )
+                )
+            )
+        )
+        if len(safe_evidence) == len(response.evidence):
+            return response
+        warnings = (*response.warnings, "RAG_EVIDENCE_INSTRUCTION_FILTERED")
+        if response.status in {RetrievalStatus.SUCCEEDED, RetrievalStatus.DEGRADED} and not safe_evidence:
+            return response.model_copy(
+                update={
+                    "status": RetrievalStatus.UNAVAILABLE,
+                    "evidence": (),
+                    "warnings": warnings,
+                }
+            )
+        return response.model_copy(update={"evidence": safe_evidence, "warnings": warnings})
+
+    def _answer_knowledge(
+        self,
+        request: ChatRequest,
+        state: WarehouseAgentState,
+        arguments: dict[str, Any],
+    ) -> ChatResponse:
+        try:
+            result = self._call_internal_knowledge_values(request, arguments)
+        except ToolGatewayError as exc:
+            if exc.code == "RAG_UNAVAILABLE":
+                return self._knowledge_unavailable_response(request.agentSessionId)
+            return self._tool_error_response(request.agentSessionId, exc)
+        safe_data = self._knowledge_safe_data(result)
+        state.last_knowledge_result = dict(safe_data)
+        self._record_tool_message(
+            state,
+            KNOWLEDGE_TOOL_NAME,
+            {
+                "status": safe_data.get("status"),
+                "corpusVersion": safe_data.get("corpusVersion"),
+                "evidenceCount": len(safe_data.get("evidence") or []),
+            },
+        )
+        self._record_registered_goal_fact(
+            state=state,
+            tool_name=KNOWLEDGE_TOOL_NAME,
+            arguments=arguments,
+            safe_data=safe_data,
+        )
+        return ChatResponse(
+            agentSessionId=request.agentSessionId,
+            answer=self._format_knowledge_answer(safe_data),
+            cards=self._knowledge_cards(safe_data),
+        )
+
+    def _knowledge_safe_data(self, result: dict[str, Any]) -> dict[str, Any]:
+        response = KnowledgeSearchResponse.model_validate(result)
+        return response.model_dump(mode="json")
+
+    def _format_knowledge_answer(self, data: dict[str, Any]) -> str:
+        status = str(data.get("status") or "").upper()
+        query_label = self._safe_text(data.get("queryLabel")) or "当前问题"
+        evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+        if status == RetrievalStatus.NO_DATA.value or not evidence:
+            return (
+                f"现行知识材料中没有检索到与“{query_label}”直接相关的内容。"
+                "这只表示本次知识库范围内没有证据，不代表相关事实一定不存在。"
+            )
+        lines = ["根据现行知识材料，找到以下相关内容："]
+        for index, item in enumerate(evidence[:5], start=1):
+            if not isinstance(item, dict):
+                continue
+            title = self._safe_display_label(str(item.get("title") or "现行资料"))
+            content = self._safe_text(item.get("content"))
+            citation = item.get("citation") if isinstance(item.get("citation"), dict) else {}
+            source = self._knowledge_citation_label(citation)
+            lines.append(f"{index}. {title}")
+            if content:
+                lines.append(f"   {content}")
+            lines.append(f"   来源：{source}")
+        if status == RetrievalStatus.DEGRADED.value:
+            lines.append("本次查询使用了可核验的关键词证据；语义检索暂时降级。")
+        return "\n".join(lines)
+
+    def _knowledge_cards(self, data: dict[str, Any]) -> list[BusinessCard]:
+        evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+        cards: list[BusinessCard] = []
+        for item in evidence[:5]:
+            if not isinstance(item, dict):
+                continue
+            citation = item.get("citation") if isinstance(item.get("citation"), dict) else {}
+            cards.append(
+                BusinessCard(
+                    cardType="knowledge_evidence",
+                    title=self._safe_display_label(str(item.get("title") or "现行资料")),
+                    fields=[
+                        {
+                            "label": "内容",
+                            "value": self._safe_text(item.get("content")),
+                        },
+                        {
+                            "label": "来源",
+                            "value": self._knowledge_citation_label(citation),
+                        },
+                    ],
+                )
+            )
+        return cards
+
+    def _knowledge_citation_label(self, citation: dict[str, Any]) -> str:
+        parts = [
+            self._safe_display_label(
+                str(citation.get("documentTitle") or "现行资料")
+            )
+        ]
+        page_number = citation.get("pageNumber")
+        if isinstance(page_number, int) and page_number > 0:
+            parts.append(f"第 {page_number} 页")
+        section = self._safe_text(citation.get("sectionLabel"))
+        if section:
+            parts.append(section)
+        return "，".join(parts)
+
+    def _knowledge_unavailable_response(self, agent_session_id: str) -> ChatResponse:
+        return ChatResponse(
+            agentSessionId=agent_session_id,
+            answer="知识库当前不可用，请稍后重试。实时库存、库位、托盘和化验查询不受影响。",
+            error=AgentError(
+                code="RAG_UNAVAILABLE",
+                message="知识库当前不可用。",
+                retryable=True,
+            ),
+        )
 
     def _raise_if_cancelled(self) -> None:
         token = current_cancellation_token()
@@ -6631,6 +7291,146 @@ class WarehouseAgentRuntime:
                 "outputRecordCount": self._first_scalar([source], "outputRecordCount"),
                 "inboundQrCount": self._first_scalar([source], "inboundQrCount"),
             }
+        if tool_name == "run_registered_report":
+            source = result if isinstance(result, dict) else {}
+            if source.get("reportDefinitionId") == "today_operations_overview_v1":
+                overview = self._dict_value(source.get("operationsOverview"))
+                production = self._dict_value(overview.get("productionOutput"))
+                quality = self._dict_value(overview.get("assayQuality"))
+                flow = self._dict_value(overview.get("productionFlow"))
+                inventory = self._dict_value(overview.get("currentInventory"))
+                tasks = self._dict_value(overview.get("todayPalletTasks"))
+                return {
+                    "reportDefinition": "今日运营概览",
+                    "reportVersion": self._first_scalar([source], "reportVersion"),
+                    "businessDate": self._safe_text(overview.get("businessDate")),
+                    "productionWeightKg": self._first_scalar(
+                        [production], "totalWeightKg"
+                    ),
+                    "assayRecordCount": self._first_scalar(
+                        [quality], "assayRecordCount"
+                    ),
+                    "materialInputWeightKg": self._first_scalar(
+                        [flow], "materialInputWeightKg"
+                    ),
+                    "currentInventoryPieces": self._first_scalar(
+                        [inventory], "totalEquivalentPieces"
+                    ),
+                    "todayTaskCount": self._first_scalar(
+                        [tasks], "cohortTaskCount"
+                    ),
+                    "currentPendingTaskCount": self._first_scalar(
+                        [overview], "currentPendingTaskCount"
+                    ),
+                }
+            if source.get("reportDefinitionId") == "inventory_level_trend_v1":
+                metrics = self._dict_value(source.get("inventoryTrendMetrics"))
+                data_quality = self._dict_value(source.get("dataQuality"))
+                return {
+                    "reportDefinition": "库存水平趋势",
+                    "reportVersion": self._first_scalar([source], "reportVersion"),
+                    "dateRangeLabel": self._safe_text(source.get("dateRangeLabel")),
+                    "dataSourceLabel": (
+                        "本地历史回放模拟"
+                        if bool(data_quality.get("simulationData"))
+                        else "可信日终快照"
+                    ),
+                    "observationDayCount": self._first_scalar(
+                        [metrics], "observationDayCount"
+                    ),
+                    "openingPieces": self._first_scalar([metrics], "openingPieces"),
+                    "closingPieces": self._first_scalar([metrics], "closingPieces"),
+                    "netChangePieces": self._first_scalar(
+                        [metrics], "netChangePieces"
+                    ),
+                    "openingWeightKg": self._first_scalar(
+                        [metrics], "openingWeightKg"
+                    ),
+                    "closingWeightKg": self._first_scalar(
+                        [metrics], "closingWeightKg"
+                    ),
+                    "netChangeWeightKg": self._first_scalar(
+                        [metrics], "netChangeWeightKg"
+                    ),
+                }
+            if source.get("reportDefinitionId") == "pallet_task_cycle_time_v1":
+                task_metrics = self._dict_value(source.get("palletTaskCycleMetrics"))
+                return {
+                    "reportDefinition": "托盘任务处理耗时趋势",
+                    "reportVersion": self._first_scalar([source], "reportVersion"),
+                    "dateRangeLabel": self._safe_text(source.get("dateRangeLabel")),
+                    "cohortTaskCount": self._first_scalar(
+                        [task_metrics], "cohortTaskCount"
+                    ),
+                    "completedTaskCount": self._first_scalar(
+                        [task_metrics], "completedTaskCount"
+                    ),
+                    "inProgressTaskCount": self._first_scalar(
+                        [task_metrics], "inProgressTaskCount"
+                    ),
+                    "canceledTaskCount": self._first_scalar(
+                        [task_metrics], "canceledTaskCount"
+                    ),
+                    "medianDurationSeconds": self._first_scalar(
+                        [task_metrics], "medianDurationSeconds"
+                    ),
+                    "maximumWaitingSeconds": self._first_scalar(
+                        [task_metrics], "maximumWaitingSeconds"
+                    ),
+                }
+            if source.get("reportDefinitionId") == "quality_metric_trend_v1":
+                metric_summary = self._dict_value(source.get("metricTrendSummary"))
+                return {
+                    "reportDefinition": "单项化验指标趋势",
+                    "reportVersion": self._first_scalar([source], "reportVersion"),
+                    "dateRangeLabel": self._safe_text(source.get("dateRangeLabel")),
+                    "metricName": self._safe_text(metric_summary.get("metricName")),
+                    "sampleCount": self._first_scalar(
+                        [metric_summary], "sampleCount"
+                    ),
+                    "averageValue": self._first_scalar(
+                        [metric_summary], "averageValue"
+                    ),
+                    "withinStandardCount": self._first_scalar(
+                        [metric_summary], "withinStandardCount"
+                    ),
+                    "withoutComparableStandardCount": self._first_scalar(
+                        [metric_summary], "withoutComparableStandardCount"
+                    ),
+                }
+            if source.get("reportDefinitionId") == "quality_assay_result_trend_v1":
+                quality_metrics = self._dict_value(source.get("qualityMetrics"))
+                return {
+                    "reportDefinition": "化验判定趋势",
+                    "reportVersion": self._first_scalar([source], "reportVersion"),
+                    "dateRangeLabel": self._safe_text(source.get("dateRangeLabel")),
+                    "assayRecordCount": self._first_scalar(
+                        [quality_metrics], "assayRecordCount"
+                    ),
+                    "passCount": self._first_scalar(
+                        [quality_metrics], "passCount"
+                    ),
+                    "failCount": self._first_scalar(
+                        [quality_metrics], "failCount"
+                    ),
+                    "noStandardCount": self._first_scalar(
+                        [quality_metrics], "noStandardCount"
+                    ),
+                }
+            metrics = self._dict_value(source.get("metrics"))
+            return {
+                "reportDefinition": self._safe_text(
+                    source.get("reportDefinitionId")
+                ),
+                "reportVersion": self._first_scalar([source], "reportVersion"),
+                "dateRangeLabel": self._safe_text(source.get("dateRangeLabel")),
+                "outputRecordCount": self._first_scalar(
+                    [metrics], "outputRecordCount"
+                ),
+                "productionOrderCount": self._first_scalar(
+                    [metrics], "productionOrderCount"
+                ),
+            }
         if tool_name == "query_boiling_batch_trace":
             source = result if isinstance(result, dict) else {}
             return {
@@ -6726,7 +7526,7 @@ class WarehouseAgentRuntime:
         if tool_name in {"search_operation_logs", "query_agent_tool_audit", "query_agent_answer_reviews"}:
             source = result if isinstance(result, dict) else {}
             return {"dataScope": self._safe_text(source.get("dataScope")), "total": self._first_scalar([source], "total"), "recordCount": len(source.get("records") or [])}
-        if tool_name in {"query_inventory_ledger", "query_prepare_pool_balance"}:
+        if tool_name == "query_inventory_ledger":
             source = result if isinstance(result, dict) else {}
             return {"dataScope": self._safe_text(source.get("dataScope")), "total": self._first_scalar([source], "total"), "recordCount": len(source.get("records") or [])}
         if tool_name == "query_fixed_product_qr_pool":
@@ -6850,6 +7650,1670 @@ class WarehouseAgentRuntime:
             info = self._dict_value(result.get("palletInfo") or result.get("baseInfo") or result)
             return {"status": self._safe_text(info.get("status") or info.get("bindStatus"))}
         return {}
+
+    def _adapt_registered_report_comparison(
+        self, raw_value: Any
+    ) -> dict[str, Any] | None:
+        source = self._dict_value(raw_value)
+        mode = (self._safe_text(source.get("comparisonMode")) or "").upper()
+        if mode not in {"PREVIOUS_PERIOD", "CUSTOM"}:
+            return None
+        metrics: list[dict[str, Any]] = []
+        raw_metrics = source.get("metrics")
+        for raw_metric in (raw_metrics if isinstance(raw_metrics, list) else [])[:12]:
+            if not isinstance(raw_metric, dict):
+                continue
+            metric = {
+                "metricCode": self._safe_text(raw_metric.get("metricCode"))[:80],
+                "metricLabel": self._safe_display_label(raw_metric.get("metricLabel")),
+                "unit": self._safe_display_label(raw_metric.get("unit")),
+                "additive": bool(raw_metric.get("additive")),
+            }
+            for key in (
+                "currentValue",
+                "comparisonValue",
+                "absoluteChange",
+                "percentChange",
+                "currentDailyAverage",
+                "comparisonDailyAverage",
+                "dailyAverageAbsoluteChange",
+                "dailyAveragePercentChange",
+            ):
+                metric[key] = self._safe_signed_report_number(raw_metric.get(key))
+            note = self._safe_display_label(raw_metric.get("note"))
+            if note:
+                metric["note"] = note
+            metrics.append(metric)
+        notes = [
+            self._safe_display_label(value)
+            for value in (
+                source.get("notes") if isinstance(source.get("notes"), list) else []
+            )[:5]
+            if self._safe_text(value)
+        ]
+        return {
+            "comparisonMode": mode,
+            "comparisonLabel": self._safe_display_label(source.get("comparisonLabel")),
+            "currentDateRangeLabel": self._safe_display_label(
+                source.get("currentDateRangeLabel")
+            ),
+            "comparisonDateRangeLabel": self._safe_display_label(
+                source.get("comparisonDateRangeLabel")
+            ),
+            "currentPeriodDays": self._bounded_int(
+                source.get("currentPeriodDays"), default=0, minimum=0, maximum=366
+            ),
+            "comparisonPeriodDays": self._bounded_int(
+                source.get("comparisonPeriodDays"), default=0, minimum=0, maximum=366
+            ),
+            "differentPeriodLengths": bool(source.get("differentPeriodLengths")),
+            "comparisonDataAsOf": self._safe_text(source.get("comparisonDataAsOf")),
+            "metrics": metrics,
+            "notes": notes,
+        }
+
+    def _adapt_registered_report(self, result: dict[str, Any]) -> dict[str, Any]:
+        source = result if isinstance(result, dict) else {}
+        if (
+            source.get("reportDefinitionId") == "today_operations_overview_v1"
+            and self._bounded_int(
+                source.get("reportVersion"), default=0, minimum=0, maximum=100
+            )
+            == 1
+        ):
+            return self._adapt_today_operations_overview_report(source)
+        if (
+            source.get("reportDefinitionId") == "inventory_level_trend_v1"
+            and self._bounded_int(
+                source.get("reportVersion"), default=0, minimum=0, maximum=100
+            )
+            == 1
+        ):
+            return self._adapt_inventory_level_trend_report(source)
+        if (
+            source.get("reportDefinitionId") == "pallet_task_cycle_time_v1"
+            and self._bounded_int(
+                source.get("reportVersion"), default=0, minimum=0, maximum=100
+            )
+            == 1
+        ):
+            return self._adapt_pallet_task_cycle_report(source)
+        if (
+            source.get("reportDefinitionId") == "production_input_output_flow_v1"
+            and self._bounded_int(
+                source.get("reportVersion"), default=0, minimum=0, maximum=100
+            )
+            == 1
+        ):
+            return self._adapt_production_input_output_flow_report(source)
+        if (
+            source.get("reportDefinitionId") == "quality_metric_trend_v1"
+            and self._bounded_int(
+                source.get("reportVersion"), default=0, minimum=0, maximum=100
+            )
+            == 1
+        ):
+            return self._adapt_quality_metric_trend_report(source)
+        if (
+            source.get("reportDefinitionId") == "quality_assay_result_trend_v1"
+            and self._bounded_int(
+                source.get("reportVersion"), default=0, minimum=0, maximum=100
+            )
+            == 1
+        ):
+            return self._adapt_quality_assay_trend_report(source)
+        if (
+            source.get("reportDefinitionId") != "daily_production_overview_v1"
+            or self._bounded_int(
+                source.get("reportVersion"), default=0, minimum=0, maximum=100
+            )
+            != 1
+        ):
+            raise ValueError("unsupported registered report result")
+
+        raw_metrics = self._dict_value(source.get("metrics"))
+        metrics = {
+            "outputRecordCount": self._bounded_int(
+                raw_metrics.get("outputRecordCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "productionOrderCount": self._bounded_int(
+                raw_metrics.get("productionOrderCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "totalWeightKg": self._safe_report_number(raw_metrics.get("totalWeightKg")),
+            "totalBoardCount": self._bounded_int(
+                raw_metrics.get("totalBoardCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000_000,
+            ),
+            "loosePieceCount": self._bounded_int(
+                raw_metrics.get("loosePieceCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000_000,
+            ),
+            "totalPieces": self._bounded_int(
+                raw_metrics.get("totalPieces"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000_000,
+            ),
+            "qrProgress": {
+                "required": self._bounded_int(
+                    raw_metrics.get("requiredQrCount"),
+                    default=0,
+                    minimum=0,
+                    maximum=1_000_000_000,
+                ),
+                "bound": self._bounded_int(
+                    raw_metrics.get("boundQrCount"),
+                    default=0,
+                    minimum=0,
+                    maximum=1_000_000_000,
+                ),
+                "inbound": self._bounded_int(
+                    raw_metrics.get("inboundQrCount"),
+                    default=0,
+                    minimum=0,
+                    maximum=1_000_000_000,
+                ),
+            },
+        }
+
+        raw_daily_series = (
+            source.get("dailySeries")
+            if isinstance(source.get("dailySeries"), list)
+            else []
+        )
+        daily_series: list[dict[str, Any]] = []
+        for raw_point in raw_daily_series[:31]:
+            if not isinstance(raw_point, dict):
+                continue
+            daily_series.append(
+                {
+                    "businessDate": self._safe_text(raw_point.get("businessDate")),
+                    "outputRecordCount": self._bounded_int(
+                        raw_point.get("outputRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "productionOrderCount": self._bounded_int(
+                        raw_point.get("productionOrderCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "totalWeightKg": self._safe_report_number(
+                        raw_point.get("totalWeightKg")
+                    ),
+                    "totalBoardCount": self._bounded_int(
+                        raw_point.get("totalBoardCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "loosePieceCount": self._bounded_int(
+                        raw_point.get("loosePieceCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "totalPieces": self._bounded_int(
+                        raw_point.get("totalPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                }
+            )
+
+        raw_product_breakdowns = (
+            source.get("productBreakdowns")
+            if isinstance(source.get("productBreakdowns"), list)
+            else []
+        )
+        product_breakdowns: list[dict[str, Any]] = []
+        for raw_product in raw_product_breakdowns[:30]:
+            if not isinstance(raw_product, dict):
+                continue
+            product_breakdowns.append(
+                {
+                    "productName": self._safe_display_label(
+                        self._safe_text(raw_product.get("productName"))
+                    ),
+                    "outputRecordCount": self._bounded_int(
+                        raw_product.get("outputRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "productionOrderCount": self._bounded_int(
+                        raw_product.get("productionOrderCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "totalWeightKg": self._safe_report_number(
+                        raw_product.get("totalWeightKg")
+                    ),
+                    "totalBoardCount": self._bounded_int(
+                        raw_product.get("totalBoardCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "loosePieceCount": self._bounded_int(
+                        raw_product.get("loosePieceCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "totalPieces": self._bounded_int(
+                        raw_product.get("totalPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                }
+            )
+
+        raw_quality = self._dict_value(source.get("dataQuality"))
+        raw_quality_notes = (
+            raw_quality.get("notes")
+            if isinstance(raw_quality.get("notes"), list)
+            else []
+        )
+        quality_notes = [
+            self._safe_display_label(self._safe_text(value))
+            for value in raw_quality_notes[:10]
+            if self._safe_text(value)
+        ]
+        data_quality = {
+            "partial": bool(raw_quality.get("partial")),
+            "rowsMissingWeight": self._bounded_int(
+                raw_quality.get("rowsMissingWeight"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "rowsMissingPieceConversion": self._bounded_int(
+                raw_quality.get("rowsMissingPieceConversion"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "rowsMissingProductName": self._bounded_int(
+                raw_quality.get("rowsMissingProductName"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "notes": quality_notes,
+        }
+        filters = self._dict_value(source.get("filtersApplied"))
+        raw_limitations = (
+            source.get("limitations")
+            if isinstance(source.get("limitations"), list)
+            else []
+        )
+        limitations = [
+            self._safe_display_label(self._safe_text(value))
+            for value in raw_limitations[:10]
+            if self._safe_text(value)
+        ]
+        return {
+            "dataScope": "生产登记产出",
+            "reportRunId": self._safe_report_run_id(source.get("reportRunId")),
+            "reportDefinitionId": "daily_production_overview_v1",
+            "reportVersion": 1,
+            "reportName": self._safe_display_label(
+                self._safe_text(source.get("reportName")) or "生产登记产出日报"
+            ),
+            "dateRangeLabel": self._safe_display_label(
+                self._safe_text(source.get("dateRangeLabel"))
+            ),
+            "productScopeLabel": self._safe_display_label(
+                self._safe_text(filters.get("productScope")) or "全部产品"
+            ),
+            "dataAsOf": self._safe_text(source.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            "isEmpty": metrics["outputRecordCount"] == 0,
+            "metrics": metrics,
+            "dailySeries": daily_series,
+            "productBreakdowns": product_breakdowns,
+            "comparison": self._adapt_registered_report_comparison(
+                source.get("comparison")
+            ),
+            "dataQuality": data_quality,
+            "limitations": limitations,
+        }
+
+    def _adapt_today_operations_overview_report(
+        self,
+        source: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_overview = self._dict_value(source.get("operationsOverview"))
+        raw_production = self._dict_value(raw_overview.get("productionOutput"))
+        production = {
+            "outputRecordCount": self._bounded_int(
+                raw_production.get("outputRecordCount"),
+                default=0, minimum=0, maximum=1_000_000,
+            ),
+            "productionOrderCount": self._bounded_int(
+                raw_production.get("productionOrderCount"),
+                default=0, minimum=0, maximum=1_000_000,
+            ),
+            "totalWeightKg": self._safe_report_number(
+                raw_production.get("totalWeightKg")
+            ),
+            "totalPieces": self._bounded_int(
+                raw_production.get("totalPieces"),
+                default=0, minimum=0, maximum=1_000_000_000,
+            ),
+        }
+        raw_quality = self._dict_value(raw_overview.get("assayQuality"))
+        quality = {
+            key: self._bounded_int(
+                raw_quality.get(key), default=0, minimum=0, maximum=1_000_000
+            )
+            for key in (
+                "assayRecordCount", "passCount", "failCount",
+                "noStandardCount", "multipleCandidatesCount",
+                "judgedRecordCount",
+            )
+        }
+        quality["passRatePercent"] = self._safe_report_number(
+            raw_quality.get("passRatePercent")
+        )
+        raw_flow = self._dict_value(raw_overview.get("productionFlow"))
+        flow = {
+            key: self._bounded_int(
+                raw_flow.get(key), default=0, minimum=0, maximum=1_000_000
+            )
+            for key in (
+                "materialInputRecordCount", "materialInputOrderCount",
+                "stableOutputRecordCount", "stableOutputOrderCount",
+            )
+        }
+        flow["materialInputWeightKg"] = self._safe_report_number(
+            raw_flow.get("materialInputWeightKg")
+        )
+        flow["stableOutputWeightKg"] = self._safe_report_number(
+            raw_flow.get("stableOutputWeightKg")
+        )
+        raw_inventory = self._dict_value(raw_overview.get("currentInventory"))
+        inventory = {
+            key: self._bounded_int(
+                raw_inventory.get(key),
+                default=0, minimum=0, maximum=1_000_000_000,
+            )
+            for key in (
+                "productCount", "warehouseCount", "palletCount",
+                "totalEquivalentPieces",
+            )
+        }
+        inventory["totalStockText"] = self._safe_display_label(
+            raw_inventory.get("totalStockText")
+        )
+        inventory["totalWeightText"] = self._safe_display_label(
+            raw_inventory.get("totalWeightText")
+        )
+        raw_tasks = self._dict_value(raw_overview.get("todayPalletTasks"))
+        tasks = {
+            key: self._bounded_int(
+                raw_tasks.get(key), default=0, minimum=0, maximum=1_000_000
+            )
+            for key in (
+                "cohortTaskCount", "completedTaskCount", "inProgressTaskCount",
+                "canceledTaskCount",
+            )
+        }
+        current_pending = self._bounded_int(
+            raw_overview.get("currentPendingTaskCount"),
+            default=0, minimum=0, maximum=1_000_000,
+        )
+        raw_data_quality = self._dict_value(source.get("dataQuality"))
+        raw_notes = raw_data_quality.get("notes")
+        notes = [
+            self._safe_display_label(value)
+            for value in (raw_notes if isinstance(raw_notes, list) else [])[:20]
+            if self._safe_text(value)
+        ]
+        raw_limitations = source.get("limitations")
+        limitations = [
+            self._safe_display_label(value)
+            for value in (
+                raw_limitations if isinstance(raw_limitations, list) else []
+            )[:10]
+            if self._safe_text(value)
+        ]
+        is_empty = (
+            production["outputRecordCount"] == 0
+            and quality["assayRecordCount"] == 0
+            and flow["materialInputRecordCount"] == 0
+            and flow["stableOutputRecordCount"] == 0
+            and inventory["productCount"] == 0
+            and inventory["palletCount"] == 0
+            and inventory["totalEquivalentPieces"] == 0
+            and tasks["cohortTaskCount"] == 0
+            and current_pending == 0
+        )
+        return {
+            "dataScope": "北京时间今日已登记运营事实",
+            "reportRunId": self._safe_report_run_id(source.get("reportRunId")),
+            "reportDefinitionId": "today_operations_overview_v1",
+            "reportVersion": 1,
+            "reportName": self._safe_display_label(
+                self._safe_text(source.get("reportName")) or "今日运营概览"
+            ),
+            "dateRangeLabel": self._safe_display_label(
+                source.get("dateRangeLabel")
+            ),
+            "dataAsOf": self._safe_text(source.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            "isEmpty": is_empty,
+            "operationsOverview": {
+                "businessDate": self._safe_text(raw_overview.get("businessDate")),
+                "productionOutput": production,
+                "assayQuality": quality,
+                "productionFlow": flow,
+                "currentInventory": inventory,
+                "todayPalletTasks": tasks,
+                "currentPendingTaskCount": current_pending,
+            },
+            "dataQuality": {
+                "partial": bool(raw_data_quality.get("partial")),
+                "notes": notes,
+            },
+            "limitations": limitations,
+        }
+
+    def _adapt_inventory_level_trend_report(
+        self,
+        source: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_metrics = self._dict_value(source.get("inventoryTrendMetrics"))
+        metrics = {
+            "observationDayCount": self._bounded_int(
+                raw_metrics.get("observationDayCount"),
+                default=0,
+                minimum=0,
+                maximum=31,
+            ),
+            "openingPieces": self._bounded_int(
+                raw_metrics.get("openingPieces"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000_000,
+            ),
+            "closingPieces": self._bounded_int(
+                raw_metrics.get("closingPieces"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000_000,
+            ),
+            "netChangePieces": self._bounded_int(
+                raw_metrics.get("netChangePieces"),
+                default=0,
+                minimum=-1_000_000_000,
+                maximum=1_000_000_000,
+            ),
+            "openingWeightKg": self._safe_report_number(
+                raw_metrics.get("openingWeightKg")
+            ),
+            "closingWeightKg": self._safe_report_number(
+                raw_metrics.get("closingWeightKg")
+            ),
+            "netChangeWeightKg": self._safe_signed_report_number(
+                raw_metrics.get("netChangeWeightKg")
+            ),
+            "increaseDayCount": self._bounded_int(
+                raw_metrics.get("increaseDayCount"), default=0, minimum=0, maximum=30
+            ),
+            "decreaseDayCount": self._bounded_int(
+                raw_metrics.get("decreaseDayCount"), default=0, minimum=0, maximum=30
+            ),
+            "unchangedDayCount": self._bounded_int(
+                raw_metrics.get("unchangedDayCount"), default=0, minimum=0, maximum=30
+            ),
+        }
+
+        daily_series: list[dict[str, Any]] = []
+        raw_daily = source.get("inventoryTrendDailySeries")
+        for raw_point in (raw_daily if isinstance(raw_daily, list) else [])[:31]:
+            if not isinstance(raw_point, dict):
+                continue
+            daily_series.append(
+                {
+                    "businessDate": self._safe_text(raw_point.get("businessDate")),
+                    "totalPieces": self._bounded_int(
+                        raw_point.get("totalPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "totalWeightKg": self._safe_report_number(
+                        raw_point.get("totalWeightKg")
+                    ),
+                    "pieceChange": self._bounded_int(
+                        raw_point.get("pieceChange"),
+                        default=0,
+                        minimum=-1_000_000_000,
+                        maximum=1_000_000_000,
+                    ),
+                    "weightChangeKg": self._safe_signed_report_number(
+                        raw_point.get("weightChangeKg")
+                    ),
+                    "movementRecordCount": self._bounded_int(
+                        raw_point.get("movementRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                }
+            )
+
+        product_breakdowns: list[dict[str, Any]] = []
+        raw_products = source.get("inventoryTrendProductBreakdowns")
+        for raw_product in (
+            raw_products if isinstance(raw_products, list) else []
+        )[:100]:
+            if not isinstance(raw_product, dict):
+                continue
+            product_breakdowns.append(
+                {
+                    "productName": self._safe_display_label(
+                        raw_product.get("productName")
+                    ),
+                    "openingPieces": self._bounded_int(
+                        raw_product.get("openingPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "closingPieces": self._bounded_int(
+                        raw_product.get("closingPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "netChangePieces": self._bounded_int(
+                        raw_product.get("netChangePieces"),
+                        default=0,
+                        minimum=-1_000_000_000,
+                        maximum=1_000_000_000,
+                    ),
+                    "openingWeightKg": self._safe_report_number(
+                        raw_product.get("openingWeightKg")
+                    ),
+                    "closingWeightKg": self._safe_report_number(
+                        raw_product.get("closingWeightKg")
+                    ),
+                    "netChangeWeightKg": self._safe_signed_report_number(
+                        raw_product.get("netChangeWeightKg")
+                    ),
+                }
+            )
+
+        raw_quality = self._dict_value(source.get("dataQuality"))
+        raw_notes = (
+            raw_quality.get("notes")
+            if isinstance(raw_quality.get("notes"), list)
+            else []
+        )
+        simulation = bool(raw_quality.get("simulationData"))
+        data_quality = {
+            "partial": bool(raw_quality.get("partial")),
+            "simulationData": simulation,
+            "replayMovementRecordCount": self._bounded_int(
+                raw_quality.get("replayMovementRecordCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "replayAnchorReconciled": bool(
+                raw_quality.get("replayAnchorReconciled")
+            ),
+            "trustedSnapshotDayCount": self._bounded_int(
+                raw_quality.get("trustedSnapshotDayCount"),
+                default=0,
+                minimum=0,
+                maximum=31,
+            ),
+            "requiredSnapshotDayCount": self._bounded_int(
+                raw_quality.get("requiredSnapshotDayCount"),
+                default=0,
+                minimum=0,
+                maximum=31,
+            ),
+            "notes": [
+                self._safe_display_label(self._safe_text(value))
+                for value in raw_notes[:10]
+                if self._safe_text(value)
+            ],
+        }
+        raw_limitations = (
+            source.get("limitations")
+            if isinstance(source.get("limitations"), list)
+            else []
+        )
+        filters = self._dict_value(source.get("filtersApplied"))
+        return {
+            "dataScope": "本地历史回放模拟" if simulation else "可信日终库存快照",
+            "reportRunId": self._safe_report_run_id(source.get("reportRunId")),
+            "reportDefinitionId": "inventory_level_trend_v1",
+            "reportVersion": 1,
+            "reportName": self._safe_display_label(
+                self._safe_text(source.get("reportName")) or "库存水平趋势"
+            ),
+            "dateRangeLabel": self._safe_display_label(
+                source.get("dateRangeLabel")
+            ),
+            "productScopeLabel": self._safe_display_label(
+                self._safe_text(filters.get("productScope")) or "全部产品"
+            ),
+            "dataSourceLabel": "本地历史回放模拟" if simulation else "可信日终快照",
+            "dataAsOf": self._safe_text(source.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            "isEmpty": metrics["observationDayCount"] == 0,
+            "inventoryTrendMetrics": metrics,
+            "inventoryTrendDailySeries": daily_series,
+            "inventoryTrendProductBreakdowns": product_breakdowns,
+            "comparison": self._adapt_registered_report_comparison(
+                source.get("comparison")
+            ),
+            "dataQuality": data_quality,
+            "limitations": [
+                self._safe_display_label(self._safe_text(value))
+                for value in raw_limitations[:10]
+                if self._safe_text(value)
+            ],
+        }
+
+    def _adapt_pallet_task_cycle_report(
+        self,
+        source: dict[str, Any],
+    ) -> dict[str, Any]:
+        def duration_seconds(value: Any) -> int | None:
+            if value is None:
+                return None
+            return self._bounded_int(
+                value,
+                default=0,
+                minimum=0,
+                maximum=31_622_400,
+            )
+
+        raw_metrics = self._dict_value(source.get("palletTaskCycleMetrics"))
+        metrics: dict[str, Any] = {
+            key: self._bounded_int(
+                raw_metrics.get(key), default=0, minimum=0, maximum=1_000_000
+            )
+            for key in (
+                "cohortTaskCount",
+                "completedTaskCount",
+                "inProgressTaskCount",
+                "canceledTaskCount",
+                "invalidTaskCount",
+            )
+        }
+        for key in (
+            "averageDurationSeconds",
+            "medianDurationSeconds",
+            "p90DurationSeconds",
+            "maximumDurationSeconds",
+            "medianWaitingSeconds",
+            "p90WaitingSeconds",
+            "maximumWaitingSeconds",
+        ):
+            metrics[key] = duration_seconds(raw_metrics.get(key))
+
+        daily_series: list[dict[str, Any]] = []
+        raw_daily = source.get("palletTaskCycleDailySeries")
+        for point in (raw_daily if isinstance(raw_daily, list) else [])[:366]:
+            if not isinstance(point, dict):
+                continue
+            safe_point: dict[str, Any] = {
+                "businessDate": self._safe_text(point.get("businessDate")),
+            }
+            for key in (
+                "taskCount", "completedTaskCount", "inProgressTaskCount", "canceledTaskCount"
+            ):
+                safe_point[key] = self._bounded_int(
+                    point.get(key), default=0, minimum=0, maximum=1_000_000
+                )
+            for key in (
+                "averageDurationSeconds", "medianDurationSeconds", "p90DurationSeconds",
+                "maximumDurationSeconds", "maximumWaitingSeconds"
+            ):
+                safe_point[key] = duration_seconds(point.get(key))
+            daily_series.append(safe_point)
+
+        type_breakdowns: list[dict[str, Any]] = []
+        raw_types = source.get("palletTaskCycleTypeBreakdowns")
+        for item in (raw_types if isinstance(raw_types, list) else [])[:10]:
+            if not isinstance(item, dict):
+                continue
+            safe_item: dict[str, Any] = {
+                "taskTypeLabel": self._safe_display_label(item.get("taskTypeLabel")),
+            }
+            for key in (
+                "taskCount", "completedTaskCount", "inProgressTaskCount",
+                "canceledTaskCount", "invalidTaskCount"
+            ):
+                safe_item[key] = self._bounded_int(
+                    item.get(key), default=0, minimum=0, maximum=1_000_000
+                )
+            for key in (
+                "averageDurationSeconds", "medianDurationSeconds", "p90DurationSeconds",
+                "maximumDurationSeconds", "maximumWaitingSeconds"
+            ):
+                safe_item[key] = duration_seconds(item.get(key))
+            type_breakdowns.append(safe_item)
+
+        pending_items: list[dict[str, Any]] = []
+        raw_pending = source.get("palletTaskPendingItems")
+        for item in (raw_pending if isinstance(raw_pending, list) else [])[:20]:
+            if not isinstance(item, dict):
+                continue
+            pending_items.append(
+                {
+                    "palletCode": self._safe_display_label(item.get("palletCode")),
+                    "taskTypeLabel": self._safe_display_label(item.get("taskTypeLabel")),
+                    "productName": self._safe_display_label(item.get("productName")),
+                    "createdAt": self._safe_text(item.get("createdAt")),
+                    "waitingSeconds": duration_seconds(item.get("waitingSeconds")) or 0,
+                    "targetWarehouseName": self._safe_display_label(
+                        item.get("targetWarehouseName")
+                    ),
+                }
+            )
+
+        raw_quality = self._dict_value(source.get("dataQuality"))
+        data_quality: dict[str, Any] = {"partial": bool(raw_quality.get("partial"))}
+        for key in (
+            "rowsMissingProductName",
+            "invalidDurationCount",
+            "canceledWithoutTerminalTimeCount",
+            "tasksWithoutFlowRecordCount",
+            "tasksWithoutOperationBatchCount",
+        ):
+            data_quality[key] = self._bounded_int(
+                raw_quality.get(key), default=0, minimum=0, maximum=1_000_000
+            )
+        raw_notes = raw_quality.get("notes")
+        data_quality["notes"] = [
+            self._safe_display_label(value)
+            for value in (raw_notes if isinstance(raw_notes, list) else [])[:10]
+            if self._safe_text(value)
+        ]
+        raw_limitations = source.get("limitations")
+        limitations = [
+            self._safe_display_label(value)
+            for value in (raw_limitations if isinstance(raw_limitations, list) else [])[:10]
+            if self._safe_text(value)
+        ]
+        filters = self._dict_value(source.get("filtersApplied"))
+        return {
+            "dataScope": "系统已登记托盘任务处理耗时",
+            "reportRunId": self._safe_report_run_id(source.get("reportRunId")),
+            "reportDefinitionId": "pallet_task_cycle_time_v1",
+            "reportVersion": 1,
+            "reportName": self._safe_display_label(
+                self._safe_text(source.get("reportName")) or "托盘任务处理耗时趋势"
+            ),
+            "dateRangeLabel": self._safe_display_label(source.get("dateRangeLabel")),
+            "productScopeLabel": self._safe_display_label(
+                self._safe_text(filters.get("productScope")) or "全部产品"
+            ),
+            "taskScopeLabel": self._safe_display_label(
+                self._safe_text(filters.get("taskScope")) or "全部托盘任务"
+            ),
+            "dataAsOf": self._safe_text(source.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            "isEmpty": metrics["cohortTaskCount"] == 0,
+            "palletTaskCycleMetrics": metrics,
+            "palletTaskCycleDailySeries": daily_series,
+            "palletTaskCycleTypeBreakdowns": type_breakdowns,
+            "palletTaskPendingItems": pending_items,
+            "comparison": self._adapt_registered_report_comparison(
+                source.get("comparison")
+            ),
+            "dataQuality": data_quality,
+            "limitations": limitations,
+        }
+
+    def _adapt_production_input_output_flow_report(
+        self,
+        source: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_metrics = self._dict_value(source.get("productionFlowMetrics"))
+        count_fields = (
+            "materialInputRecordCount",
+            "materialInputOrderCount",
+            "materialInputPalletCount",
+            "materialInputBoardCount",
+            "materialInputLoosePieceCount",
+            "materialInputTotalPieces",
+            "stableOutputRecordCount",
+            "stableOutputOrderCount",
+            "stableOutputBoardCount",
+            "stableOutputLoosePieceCount",
+            "stableOutputTotalPieces",
+            "cohortOrderCount",
+            "completedOrderCount",
+            "completedOrdersWithInputCount",
+            "completedOrdersMissingInputCount",
+            "completedOrdersWithStableOutputCount",
+            "completedOrdersMissingOutputCount",
+            "ordersWithInputCount",
+            "ordersMissingInputCount",
+            "ordersWithStableOutputCount",
+            "ordersMissingOutputCount",
+        )
+        metrics: dict[str, Any] = {
+            field: self._bounded_int(
+                raw_metrics.get(field),
+                default=0,
+                minimum=0,
+                maximum=1_000_000_000,
+            )
+            for field in count_fields
+        }
+        for field in (
+            "materialInputWeightKg",
+            "stableOutputWeightKg",
+            "cohortMaterialInputWeightKg",
+            "cohortBoilingInputWeightKg",
+            "cohortStableOutputWeightKg",
+        ):
+            metrics[field] = self._safe_report_number(raw_metrics.get(field))
+
+        daily_series: list[dict[str, Any]] = []
+        raw_daily_series = source.get("productionFlowDailySeries")
+        for raw_point in (
+            raw_daily_series if isinstance(raw_daily_series, list) else []
+        )[:366]:
+            if not isinstance(raw_point, dict):
+                continue
+            daily_series.append(
+                {
+                    "businessDate": self._safe_text(raw_point.get("businessDate")),
+                    "materialInputRecordCount": self._bounded_int(
+                        raw_point.get("materialInputRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "materialInputOrderCount": self._bounded_int(
+                        raw_point.get("materialInputOrderCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "materialInputPalletCount": self._bounded_int(
+                        raw_point.get("materialInputPalletCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "materialInputTotalPieces": self._bounded_int(
+                        raw_point.get("materialInputTotalPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "materialInputWeightKg": self._safe_report_number(
+                        raw_point.get("materialInputWeightKg")
+                    ),
+                    "stableOutputRecordCount": self._bounded_int(
+                        raw_point.get("stableOutputRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "stableOutputOrderCount": self._bounded_int(
+                        raw_point.get("stableOutputOrderCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "stableOutputTotalPieces": self._bounded_int(
+                        raw_point.get("stableOutputTotalPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "stableOutputWeightKg": self._safe_report_number(
+                        raw_point.get("stableOutputWeightKg")
+                    ),
+                }
+            )
+
+        order_breakdowns: list[dict[str, Any]] = []
+        raw_order_breakdowns = source.get("productionFlowOrderBreakdowns")
+        for raw_order in (
+            raw_order_breakdowns if isinstance(raw_order_breakdowns, list) else []
+        )[:200]:
+            if not isinstance(raw_order, dict):
+                continue
+            order_breakdowns.append(
+                {
+                    "orderNo": self._safe_display_label(
+                        self._safe_text(raw_order.get("orderNo"))
+                    ),
+                    "orderTypeLabel": self._safe_display_label(
+                        self._safe_text(raw_order.get("orderTypeLabel"))
+                    ),
+                    "orderStatusLabel": self._safe_display_label(
+                        self._safe_text(raw_order.get("orderStatusLabel"))
+                    ),
+                    "productionDate": self._safe_text(
+                        raw_order.get("productionDate")
+                    ),
+                    "inputSourceLabel": self._safe_display_label(
+                        self._safe_text(raw_order.get("inputSourceLabel"))
+                    ),
+                    "inputRecordCount": self._bounded_int(
+                        raw_order.get("inputRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "inputPalletCount": self._bounded_int(
+                        raw_order.get("inputPalletCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "inputTotalPieces": self._bounded_int(
+                        raw_order.get("inputTotalPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "inputWeightKg": self._safe_report_number(
+                        raw_order.get("inputWeightKg")
+                    ),
+                    "stableOutputRecordCount": self._bounded_int(
+                        raw_order.get("stableOutputRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "stableOutputTotalPieces": self._bounded_int(
+                        raw_order.get("stableOutputTotalPieces"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000_000,
+                    ),
+                    "stableOutputWeightKg": self._safe_report_number(
+                        raw_order.get("stableOutputWeightKg")
+                    ),
+                    "outputProductNames": self._safe_display_label(
+                        self._safe_text(raw_order.get("outputProductNames"))
+                    ),
+                    "completenessLabel": self._safe_display_label(
+                        self._safe_text(raw_order.get("completenessLabel"))
+                    ),
+                }
+            )
+
+        raw_quality = self._dict_value(source.get("dataQuality"))
+        quality_count_fields = (
+            "rowsMissingWeight",
+            "rowsMissingPieceConversion",
+            "completedOrderCount",
+            "completedOrdersWithInputCount",
+            "completedOrdersMissingInputCount",
+            "completedOrdersWithStableOutputCount",
+            "completedOrdersMissingOutputCount",
+            "draftOutputExcludedCount",
+            "canceledOutputExcludedCount",
+            "crossDayInboundCount",
+            "unattributedOrderCount",
+        )
+        data_quality: dict[str, Any] = {
+            "partial": bool(raw_quality.get("partial")),
+            "orderBreakdownTruncated": bool(
+                raw_quality.get("orderBreakdownTruncated")
+            ),
+        }
+        for field in quality_count_fields:
+            data_quality[field] = self._bounded_int(
+                raw_quality.get(field),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            )
+        raw_notes = (
+            raw_quality.get("notes")
+            if isinstance(raw_quality.get("notes"), list)
+            else []
+        )
+        data_quality["notes"] = [
+            self._safe_display_label(self._safe_text(value))
+            for value in raw_notes[:10]
+            if self._safe_text(value)
+        ]
+
+        raw_limitations = (
+            source.get("limitations")
+            if isinstance(source.get("limitations"), list)
+            else []
+        )
+        limitations = [
+            self._safe_display_label(self._safe_text(value))
+            for value in raw_limitations[:10]
+            if self._safe_text(value)
+        ]
+        filters = self._dict_value(source.get("filtersApplied"))
+        return {
+            "dataScope": "生产领料与稳定登记产出",
+            "reportRunId": self._safe_report_run_id(source.get("reportRunId")),
+            "reportDefinitionId": "production_input_output_flow_v1",
+            "reportVersion": 1,
+            "reportName": self._safe_display_label(
+                self._safe_text(source.get("reportName"))
+                or "生产领料—登记产出趋势"
+            ),
+            "dateRangeLabel": self._safe_display_label(
+                self._safe_text(source.get("dateRangeLabel"))
+            ),
+            "productScopeLabel": self._safe_display_label(
+                self._safe_text(filters.get("productScope")) or "全部产品"
+            ),
+            "dataAsOf": self._safe_text(source.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            "seriesGranularity": "日",
+            "isEmpty": (
+                metrics["materialInputRecordCount"] == 0
+                and metrics["stableOutputRecordCount"] == 0
+                and metrics["cohortOrderCount"] == 0
+            ),
+            "productionFlowMetrics": metrics,
+            "productionFlowDailySeries": daily_series,
+            "productionFlowOrderBreakdowns": order_breakdowns,
+            "comparison": self._adapt_registered_report_comparison(
+                source.get("comparison")
+            ),
+            "dataQuality": data_quality,
+            "limitations": limitations,
+        }
+
+    def _adapt_quality_assay_trend_report(
+        self,
+        source: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_metrics = self._dict_value(source.get("qualityMetrics"))
+        metrics = {
+            "assayRecordCount": self._bounded_int(
+                raw_metrics.get("assayRecordCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "judgedRecordCount": self._bounded_int(
+                raw_metrics.get("judgedRecordCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "passCount": self._bounded_int(
+                raw_metrics.get("passCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "failCount": self._bounded_int(
+                raw_metrics.get("failCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "noStandardCount": self._bounded_int(
+                raw_metrics.get("noStandardCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "multipleCandidatesCount": self._bounded_int(
+                raw_metrics.get("multipleCandidatesCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "passRatePercent": self._safe_optional_report_number(
+                raw_metrics.get("passRatePercent")
+            ),
+            "distinctProductCount": self._bounded_int(
+                raw_metrics.get("distinctProductCount"),
+                default=0,
+                minimum=0,
+                maximum=100_000,
+            ),
+            "distinctStandardVersionCount": self._bounded_int(
+                raw_metrics.get("distinctStandardVersionCount"),
+                default=0,
+                minimum=0,
+                maximum=100_000,
+            ),
+        }
+
+        quality_series: list[dict[str, Any]] = []
+        raw_series = source.get("qualitySeries")
+        for raw_point in (raw_series if isinstance(raw_series, list) else [])[:366]:
+            if not isinstance(raw_point, dict):
+                continue
+            quality_series.append(
+                {
+                    "periodLabel": self._safe_display_label(
+                        self._safe_text(raw_point.get("periodLabel"))
+                    ),
+                    "periodStart": self._safe_text(raw_point.get("periodStart")),
+                    "periodEnd": self._safe_text(raw_point.get("periodEnd")),
+                    "assayRecordCount": self._bounded_int(
+                        raw_point.get("assayRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "judgedRecordCount": self._bounded_int(
+                        raw_point.get("judgedRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "passCount": self._bounded_int(
+                        raw_point.get("passCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "failCount": self._bounded_int(
+                        raw_point.get("failCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "noStandardCount": self._bounded_int(
+                        raw_point.get("noStandardCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "multipleCandidatesCount": self._bounded_int(
+                        raw_point.get("multipleCandidatesCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "passRatePercent": self._safe_optional_report_number(
+                        raw_point.get("passRatePercent")
+                    ),
+                }
+            )
+
+        product_breakdowns: list[dict[str, Any]] = []
+        raw_products = source.get("qualityProductBreakdowns")
+        for raw_product in (
+            raw_products if isinstance(raw_products, list) else []
+        )[:50]:
+            if not isinstance(raw_product, dict):
+                continue
+            product_breakdowns.append(
+                {
+                    "productName": self._safe_display_label(
+                        self._safe_text(raw_product.get("productName"))
+                    )
+                    or "产品名称未登记",
+                    "assayRecordCount": self._bounded_int(
+                        raw_product.get("assayRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "judgedRecordCount": self._bounded_int(
+                        raw_product.get("judgedRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "passCount": self._bounded_int(
+                        raw_product.get("passCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "failCount": self._bounded_int(
+                        raw_product.get("failCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "noStandardCount": self._bounded_int(
+                        raw_product.get("noStandardCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "multipleCandidatesCount": self._bounded_int(
+                        raw_product.get("multipleCandidatesCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "passRatePercent": self._safe_optional_report_number(
+                        raw_product.get("passRatePercent")
+                    ),
+                }
+            )
+
+        standard_breakdowns: list[dict[str, Any]] = []
+        raw_standards = source.get("standardBreakdowns")
+        for raw_standard in (
+            raw_standards if isinstance(raw_standards, list) else []
+        )[:50]:
+            if not isinstance(raw_standard, dict):
+                continue
+            standard_breakdowns.append(
+                {
+                    "standardLabel": self._safe_display_label(
+                        self._safe_text(raw_standard.get("standardLabel"))
+                    ),
+                    "assayRecordCount": self._bounded_int(
+                        raw_standard.get("assayRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "judgedRecordCount": self._bounded_int(
+                        raw_standard.get("judgedRecordCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "passCount": self._bounded_int(
+                        raw_standard.get("passCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "failCount": self._bounded_int(
+                        raw_standard.get("failCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "passRatePercent": self._safe_optional_report_number(
+                        raw_standard.get("passRatePercent")
+                    ),
+                }
+            )
+
+        raw_quality = self._dict_value(source.get("dataQuality"))
+        raw_notes = (
+            raw_quality.get("notes")
+            if isinstance(raw_quality.get("notes"), list)
+            else []
+        )
+        data_quality = {
+            "partial": bool(raw_quality.get("partial")),
+            "rowsMissingJudgeResult": self._bounded_int(
+                raw_quality.get("rowsMissingJudgeResult"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "rowsMissingStandardVersion": self._bounded_int(
+                raw_quality.get("rowsMissingStandardVersion"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "rowsMissingProductName": self._bounded_int(
+                raw_quality.get("rowsMissingProductName"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "lateRecordedCount": self._bounded_int(
+                raw_quality.get("lateRecordedCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "notes": [
+                self._safe_display_label(self._safe_text(value))
+                for value in raw_notes[:10]
+                if self._safe_text(value)
+            ],
+        }
+        filters = self._dict_value(source.get("filtersApplied"))
+        raw_limitations = (
+            source.get("limitations")
+            if isinstance(source.get("limitations"), list)
+            else []
+        )
+        limitations = [
+            self._safe_display_label(self._safe_text(value))
+            for value in raw_limitations[:10]
+            if self._safe_text(value)
+        ]
+        return {
+            "dataScope": "已登记化验判定",
+            "reportRunId": self._safe_report_run_id(source.get("reportRunId")),
+            "reportDefinitionId": "quality_assay_result_trend_v1",
+            "reportVersion": 1,
+            "reportName": self._safe_display_label(
+                self._safe_text(source.get("reportName")) or "化验判定趋势"
+            ),
+            "dateRangeLabel": self._safe_display_label(
+                self._safe_text(source.get("dateRangeLabel"))
+            ),
+            "productScopeLabel": self._safe_display_label(
+                self._safe_text(filters.get("productScope")) or "全部产品"
+            ),
+            "dataAsOf": self._safe_text(source.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            "seriesGranularity": (
+                "月" if self._safe_text(source.get("seriesGranularity")) == "MONTH" else "日"
+            ),
+            "isEmpty": metrics["assayRecordCount"] == 0,
+            "qualityMetrics": metrics,
+            "qualitySeries": quality_series,
+            "qualityProductBreakdowns": product_breakdowns,
+            "standardBreakdowns": standard_breakdowns,
+            "comparison": self._adapt_registered_report_comparison(
+                source.get("comparison")
+            ),
+            "dataQuality": data_quality,
+            "limitations": limitations,
+        }
+
+    def _adapt_quality_metric_trend_report(
+        self,
+        source: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_summary = self._dict_value(source.get("metricTrendSummary"))
+
+        def metric_number(value: Any) -> str | None:
+            if value is None:
+                return None
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return None
+            if number < -1_000_000_000_000 or number > 1_000_000_000_000:
+                return None
+            return f"{number:.3f}".rstrip("0").rstrip(".")
+
+        summary = {
+            "metricKey": self._safe_text(raw_summary.get("metricKey")),
+            "metricName": self._safe_display_label(
+                self._safe_text(raw_summary.get("metricName"))
+            ),
+            "unit": self._safe_text(raw_summary.get("unit")) or "",
+            "assayRecordCount": self._bounded_int(
+                raw_summary.get("assayRecordCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "sampleCount": self._bounded_int(
+                raw_summary.get("sampleCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "missingValueCount": self._bounded_int(
+                raw_summary.get("missingValueCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "comparableStandardCount": self._bounded_int(
+                raw_summary.get("comparableStandardCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "withinStandardCount": self._bounded_int(
+                raw_summary.get("withinStandardCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "outOfStandardCount": self._bounded_int(
+                raw_summary.get("outOfStandardCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "withoutComparableStandardCount": self._bounded_int(
+                raw_summary.get("withoutComparableStandardCount"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "withinStandardRatePercent": metric_number(
+                raw_summary.get("withinStandardRatePercent")
+            ),
+            "averageValue": metric_number(raw_summary.get("averageValue")),
+            "medianValue": metric_number(raw_summary.get("medianValue")),
+            "minimumValue": metric_number(raw_summary.get("minimumValue")),
+            "maximumValue": metric_number(raw_summary.get("maximumValue")),
+            "p10Value": metric_number(raw_summary.get("p10Value")),
+            "p90Value": metric_number(raw_summary.get("p90Value")),
+        }
+
+        metric_series: list[dict[str, Any]] = []
+        raw_series = source.get("metricSeries")
+        for raw_point in (raw_series if isinstance(raw_series, list) else [])[:366]:
+            if not isinstance(raw_point, dict):
+                continue
+            metric_series.append(
+                {
+                    "periodLabel": self._safe_display_label(
+                        self._safe_text(raw_point.get("periodLabel"))
+                    ),
+                    "periodStart": self._safe_text(raw_point.get("periodStart")),
+                    "periodEnd": self._safe_text(raw_point.get("periodEnd")),
+                    "sampleCount": self._bounded_int(
+                        raw_point.get("sampleCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "averageValue": metric_number(raw_point.get("averageValue")),
+                    "medianValue": metric_number(raw_point.get("medianValue")),
+                    "minimumValue": metric_number(raw_point.get("minimumValue")),
+                    "maximumValue": metric_number(raw_point.get("maximumValue")),
+                }
+            )
+
+        product_breakdowns: list[dict[str, Any]] = []
+        raw_products = source.get("metricProductBreakdowns")
+        for raw_product in (
+            raw_products if isinstance(raw_products, list) else []
+        )[:50]:
+            if not isinstance(raw_product, dict):
+                continue
+            product_breakdowns.append(
+                {
+                    "productName": self._safe_display_label(
+                        self._safe_text(raw_product.get("productName"))
+                    )
+                    or "产品名称未登记",
+                    "sampleCount": self._bounded_int(
+                        raw_product.get("sampleCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "averageValue": metric_number(raw_product.get("averageValue")),
+                    "medianValue": metric_number(raw_product.get("medianValue")),
+                    "minimumValue": metric_number(raw_product.get("minimumValue")),
+                    "maximumValue": metric_number(raw_product.get("maximumValue")),
+                }
+            )
+
+        standard_breakdowns: list[dict[str, Any]] = []
+        raw_standards = source.get("metricStandardBreakdowns")
+        for raw_standard in (
+            raw_standards if isinstance(raw_standards, list) else []
+        )[:50]:
+            if not isinstance(raw_standard, dict):
+                continue
+            standard_breakdowns.append(
+                {
+                    "standardLabel": self._safe_display_label(
+                        self._safe_text(raw_standard.get("standardLabel"))
+                    ),
+                    "rangeLabel": self._safe_display_label(
+                        self._safe_text(raw_standard.get("rangeLabel"))
+                    ),
+                    "unit": self._safe_text(raw_standard.get("unit")) or "",
+                    "sampleCount": self._bounded_int(
+                        raw_standard.get("sampleCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "withinStandardCount": self._bounded_int(
+                        raw_standard.get("withinStandardCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "outOfStandardCount": self._bounded_int(
+                        raw_standard.get("outOfStandardCount"),
+                        default=0,
+                        minimum=0,
+                        maximum=1_000_000,
+                    ),
+                    "withinStandardRatePercent": metric_number(
+                        raw_standard.get("withinStandardRatePercent")
+                    ),
+                }
+            )
+
+        raw_quality = self._dict_value(source.get("dataQuality"))
+        raw_notes = (
+            raw_quality.get("notes")
+            if isinstance(raw_quality.get("notes"), list)
+            else []
+        )
+        data_quality = {
+            "partial": bool(raw_quality.get("partial")),
+            "rowsMissingMetricValue": self._bounded_int(
+                raw_quality.get("rowsMissingMetricValue"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "rowsWithoutComparableMetricStandard": self._bounded_int(
+                raw_quality.get("rowsWithoutComparableMetricStandard"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "rowsWithUnexpectedMetricUnit": self._bounded_int(
+                raw_quality.get("rowsWithUnexpectedMetricUnit"),
+                default=0,
+                minimum=0,
+                maximum=1_000_000,
+            ),
+            "notes": [
+                self._safe_display_label(self._safe_text(value))
+                for value in raw_notes[:10]
+                if self._safe_text(value)
+            ],
+        }
+        filters = self._dict_value(source.get("filtersApplied"))
+        raw_limitations = (
+            source.get("limitations")
+            if isinstance(source.get("limitations"), list)
+            else []
+        )
+        limitations = [
+            self._safe_display_label(self._safe_text(value))
+            for value in raw_limitations[:10]
+            if self._safe_text(value)
+        ]
+        return {
+            "dataScope": "已登记单项化验指标",
+            "reportRunId": self._safe_report_run_id(source.get("reportRunId")),
+            "reportDefinitionId": "quality_metric_trend_v1",
+            "reportVersion": 1,
+            "reportName": self._safe_display_label(
+                self._safe_text(source.get("reportName")) or "单项化验指标趋势"
+            ),
+            "dateRangeLabel": self._safe_display_label(
+                self._safe_text(source.get("dateRangeLabel"))
+            ),
+            "productScopeLabel": self._safe_display_label(
+                self._safe_text(filters.get("productScope")) or "全部产品"
+            ),
+            "dataAsOf": self._safe_text(source.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            "seriesGranularity": (
+                "月"
+                if self._safe_text(source.get("seriesGranularity")) == "MONTH"
+                else "日"
+            ),
+            "isEmpty": summary["sampleCount"] == 0,
+            "metricTrendSummary": summary,
+            "metricSeries": metric_series,
+            "metricProductBreakdowns": product_breakdowns,
+            "metricStandardBreakdowns": standard_breakdowns,
+            "comparison": self._adapt_registered_report_comparison(
+                source.get("comparison")
+            ),
+            "dataQuality": data_quality,
+            "limitations": limitations,
+        }
+
+    @staticmethod
+    def _safe_optional_report_number(value: Any) -> str | None:
+        if value is None:
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        if number < 0 or number > 100:
+            return None
+        return f"{number:.3f}".rstrip("0").rstrip(".")
+
+    @staticmethod
+    def _safe_report_number(value: Any) -> str:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return "0"
+        if number < 0 or number > 1_000_000_000_000:
+            return "0"
+        return f"{number:.3f}".rstrip("0").rstrip(".")
+
+    @staticmethod
+    def _safe_signed_report_number(value: Any) -> str | None:
+        if value is None:
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        if number < -1_000_000_000_000 or number > 1_000_000_000_000:
+            return None
+        return f"{number:.4f}".rstrip("0").rstrip(".")
 
     def _adapt_production_order_progress(self, result: dict[str, Any]) -> SafeProductionOrderProgress:
         source = self._dict_value(result)
@@ -7049,14 +9513,14 @@ class WarehouseAgentRuntime:
         safe = result if isinstance(result, SafeProductionMaterialTrace) else self._adapt_production_material_trace(result)
         if not safe.records:
             return (
-                f"生产订单 {safe.orderNo} 当前状态为{safe.statusLabel}，暂未查询到已登记的实际领料记录。\n\n"
+                f"生产订单 {safe.orderNo} 当前状态为{safe.statusLabel}，暂未查询到已确认领用并完成库存扣减的记录。\n\n"
                 "这不代表计划用料为零，也不代表没有发生尚未登记的现场操作。"
             )
         products = list(dict.fromkeys(record.productLabel for record in safe.records))
         return (
-            f"生产订单 {safe.orderNo} 当前状态为{safe.statusLabel}，共登记 {safe.materialRecordCount} 条实际领料记录。\n\n"
+            f"生产订单 {safe.orderNo} 当前状态为{safe.statusLabel}，共登记 {safe.materialRecordCount} 条已确认领用记录；这些记录在确认时已从仓库库存扣减。\n\n"
             f"涉及原料：{'、'.join(products[:5])}。原料的来源托盘、来源库位和数量见下方卡片。\n\n"
-            "这里只展示实际登记，不计算计划差异、损耗或实际消耗率。"
+            "这里只展示已确认的生产领用扣减，不计算计划差异、收率或损耗率。"
         )
 
     def _production_status_label(self, value: Any) -> str:
@@ -7188,6 +9652,16 @@ class WarehouseAgentRuntime:
         except (TypeError, ValueError):
             return 0
 
+    @staticmethod
+    def _safe_signed_count_text(value: Any) -> str:
+        try:
+            number = int(value or 0)
+        except (TypeError, ValueError):
+            number = 0
+        if number > 1_000_000_000 or number < -1_000_000_000:
+            number = 0
+        return f"+{number}" if number > 0 else str(number)
+
     def _format_production_label_completion_answer(self, result: dict[str, Any]) -> str:
         source = result if isinstance(result, dict) else {}
         order_no = self._safe_text(source.get("orderNo")) or "该生产订单"
@@ -7211,8 +9685,8 @@ class WarehouseAgentRuntime:
         records = source.get("records") if isinstance(source.get("records"), list) else []
         total = self._first_scalar([source], "total") or 0
         if not records:
-            return "当前没有查询到在制半成品领料记录。这表示当前筛选范围内没有已登记记录，不代表查询失败，也不能据此判断是否仍有可领物料或实时库存。"
-        lines = [f"查询到 {total} 条在制半成品领料记录，下面展示本页的 {len(records)} 条。"]
+            return "旧备料池流程已停用。当前没有查询到仍关联未完成生产订单的半成品领用扣减记录；这不代表查询失败，也不能据此判断实时库存。"
+        lines = [f"旧备料池流程已停用。当前查询到 {total} 条仍关联未完成生产订单的半成品领用扣减记录，下面展示本页的 {len(records)} 条。"]
         for item in records[:10]:
             if not isinstance(item, dict):
                 continue
@@ -7222,8 +9696,8 @@ class WarehouseAgentRuntime:
                 f"托盘 {self._safe_text(item.get('palletCode')) or '未标明'}，"
                 f"状态 {self._enum_label('material_status', item.get('materialStatus'))}。"
             )
-        lines.append("在制记录不代表仍可再次领用、质量已放行、FIFO/FEFO 推荐或实时库存结余。")
-        return "".join(lines)
+        lines.append("这些记录在确认领用时已从仓库库存扣减，不代表仍可再次领用、质量已放行、FIFO/FEFO 推荐或实时库存结余。")
+        return "\n\n".join(lines)
 
     def _format_material_candidates_answer(self, result: dict[str, Any]) -> str:
         source = result if isinstance(result, dict) else {}
@@ -7408,6 +9882,614 @@ class WarehouseAgentRuntime:
         if actor_label and time_label:
             return f"{actor_label} · {time_label}"
         return actor_label or time_label
+
+    def _registered_report_card(self, result: dict[str, Any]) -> BusinessCard:
+        if result.get("reportDefinitionId") == "today_operations_overview_v1":
+            return self._today_operations_overview_card(result)
+        if result.get("reportDefinitionId") == "inventory_level_trend_v1":
+            return self._inventory_level_trend_report_card(result)
+        if result.get("reportDefinitionId") == "pallet_task_cycle_time_v1":
+            return self._pallet_task_cycle_report_card(result)
+        if result.get("reportDefinitionId") == "production_input_output_flow_v1":
+            return self._production_input_output_flow_card(result)
+        if result.get("reportDefinitionId") == "quality_metric_trend_v1":
+            return self._quality_metric_trend_card(result)
+        if result.get("reportDefinitionId") == "quality_assay_result_trend_v1":
+            return self._quality_assay_trend_card(result)
+        metrics = self._dict_value(result.get("metrics"))
+        qr_progress = self._dict_value(metrics.get("qrProgress"))
+        summary = {
+            "kind": "daily_production_summary",
+            "reportRunId": self._safe_report_run_id(result.get("reportRunId")),
+            "label": self._safe_display_label(result.get("dateRangeLabel")),
+            "value": f"{self._safe_text(metrics.get('totalWeightKg')) or '0'} kg",
+            "dateRangeLabel": self._safe_display_label(result.get("dateRangeLabel")),
+            "productScopeLabel": self._safe_display_label(
+                result.get("productScopeLabel")
+            ),
+            "dataAsOf": self._safe_text(result.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(result.get("latestRecordAt")),
+            "isEmpty": bool(result.get("isEmpty")),
+            "outputRecordCount": metrics.get("outputRecordCount"),
+            "productionOrderCount": metrics.get("productionOrderCount"),
+            "totalWeightKg": metrics.get("totalWeightKg"),
+            "totalBoardCount": metrics.get("totalBoardCount"),
+            "loosePieceCount": metrics.get("loosePieceCount"),
+            "totalPieces": metrics.get("totalPieces"),
+            "requiredQrCount": qr_progress.get("required"),
+            "boundQrCount": qr_progress.get("bound"),
+            "inboundQrCount": qr_progress.get("inbound"),
+            "dataQualityPartial": self._dict_value(
+                result.get("dataQuality")
+            ).get("partial"),
+            "comparison": deepcopy(result.get("comparison")),
+        }
+        fields: list[dict[str, Any]] = [summary]
+        for product in result.get("productBreakdowns") or []:
+            if not isinstance(product, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "daily_production_product",
+                    "label": self._safe_display_label(product.get("productName")),
+                    "value": f"{self._safe_text(product.get('totalWeightKg')) or '0'} kg",
+                    **product,
+                }
+            )
+        if len(result.get("dailySeries") or []) > 1:
+            for point in result.get("dailySeries") or []:
+                if not isinstance(point, dict):
+                    continue
+                fields.append(
+                    {
+                        "kind": "daily_production_point",
+                        "label": self._safe_text(point.get("businessDate")),
+                        "value": f"{self._safe_text(point.get('totalWeightKg')) or '0'} kg",
+                        **point,
+                    }
+                )
+        quality = self._dict_value(result.get("dataQuality"))
+        for note in quality.get("notes") or []:
+            fields.append(
+                {
+                    "kind": "daily_production_quality_note",
+                    "label": "数据完整性提示",
+                    "value": self._safe_display_label(note),
+                }
+            )
+        return BusinessCard(
+            cardType="daily_production_report",
+            title=f"{self._safe_display_label(result.get('reportName'))} · {self._safe_display_label(result.get('dateRangeLabel'))}",
+            fields=fields,
+        )
+
+    def _today_operations_overview_card(
+        self,
+        result: dict[str, Any],
+    ) -> BusinessCard:
+        overview = self._dict_value(result.get("operationsOverview"))
+        production = self._dict_value(overview.get("productionOutput"))
+        quality = self._dict_value(overview.get("assayQuality"))
+        flow = self._dict_value(overview.get("productionFlow"))
+        inventory = self._dict_value(overview.get("currentInventory"))
+        tasks = self._dict_value(overview.get("todayPalletTasks"))
+        current_pending = self._safe_count(overview.get("currentPendingTaskCount"))
+        summary = {
+            "kind": "today_operations_overview_summary",
+            "reportRunId": self._safe_report_run_id(result.get("reportRunId")),
+            "label": self._safe_display_label(result.get("dateRangeLabel")),
+            "value": (
+                f"产出 {self._safe_text(production.get('totalWeightKg')) or '0'} kg"
+                f" · 化验 {self._safe_count(quality.get('assayRecordCount'))} 条"
+                f" · 当前待处理 {current_pending} 条"
+            ),
+            "dateRangeLabel": self._safe_display_label(
+                result.get("dateRangeLabel")
+            ),
+            "dataAsOf": self._safe_text(result.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(result.get("latestRecordAt")),
+            "isEmpty": bool(result.get("isEmpty")),
+        }
+        fields: list[dict[str, Any]] = [summary]
+        fields.append(
+            {
+                "kind": "today_operations_production",
+                "label": "今日稳定登记产出",
+                "value": (
+                    f"{self._safe_text(production.get('totalWeightKg')) or '0'} kg"
+                    f" · {self._safe_count(production.get('outputRecordCount'))} 条记录"
+                ),
+                **production,
+            }
+        )
+        fields.append(
+            {
+                "kind": "today_operations_quality",
+                "label": "今日已登记化验",
+                "value": (
+                    f"{self._safe_count(quality.get('assayRecordCount'))} 条"
+                    f" · 合格 {self._safe_count(quality.get('passCount'))} 条"
+                    f" · 不合格 {self._safe_count(quality.get('failCount'))} 条"
+                ),
+                **quality,
+            }
+        )
+        fields.append(
+            {
+                "kind": "today_operations_flow",
+                "label": "今日确认领用与稳定产出",
+                "value": (
+                    f"领用 {self._safe_text(flow.get('materialInputWeightKg')) or '0'} kg"
+                    f" · 产出 {self._safe_text(flow.get('stableOutputWeightKg')) or '0'} kg"
+                ),
+                **flow,
+            }
+        )
+        fields.append(
+            {
+                "kind": "today_operations_inventory",
+                "label": "当前库存水平",
+                "value": (
+                    self._safe_display_label(inventory.get("totalStockText"))
+                    or f"{self._safe_count(inventory.get('totalEquivalentPieces'))} 件"
+                ),
+                **inventory,
+            }
+        )
+        fields.append(
+            {
+                "kind": "today_operations_tasks",
+                "label": "托盘任务",
+                "value": (
+                    f"今日创建 {self._safe_count(tasks.get('cohortTaskCount'))} 条"
+                    f" · 当前待处理 {current_pending} 条"
+                ),
+                "currentPendingTaskCount": current_pending,
+                **tasks,
+            }
+        )
+        data_quality = self._dict_value(result.get("dataQuality"))
+        for note in data_quality.get("notes") or []:
+            if self._safe_text(note):
+                fields.append(
+                    {
+                        "kind": "today_operations_quality_note",
+                        "label": "数据完整性提示",
+                        "value": self._safe_display_label(note),
+                    }
+                )
+        fields.append(
+            {
+                "kind": "today_operations_scope_note",
+                "label": "口径边界",
+                "value": (
+                    "今日事实按各自登记业务日期统计；当前库存和当前待处理任务是生成时快照。"
+                    "领用与产出不直接相除，本概览不计算计划达成率、收率、损耗、SLA 或预测。"
+                ),
+            }
+        )
+        return BusinessCard(
+            cardType="today_operations_overview_report",
+            title=(
+                f"{self._safe_display_label(result.get('reportName'))}"
+                f" · {self._safe_display_label(result.get('dateRangeLabel'))}"
+            ),
+            fields=fields,
+        )
+
+    def _inventory_level_trend_report_card(
+        self,
+        result: dict[str, Any],
+    ) -> BusinessCard:
+        metrics = self._dict_value(result.get("inventoryTrendMetrics"))
+        data_quality = self._dict_value(result.get("dataQuality"))
+        simulation = bool(data_quality.get("simulationData"))
+        summary = {
+            "kind": "inventory_level_trend_summary",
+            "reportRunId": self._safe_report_run_id(result.get("reportRunId")),
+            "label": self._safe_display_label(result.get("dateRangeLabel")),
+            "value": (
+                f"期末 {self._safe_count(metrics.get('closingPieces'))} 件"
+                f" · 净变化 {self._safe_signed_count_text(metrics.get('netChangePieces'))} 件"
+            ),
+            "dateRangeLabel": self._safe_display_label(result.get("dateRangeLabel")),
+            "productScopeLabel": self._safe_display_label(
+                result.get("productScopeLabel")
+            ),
+            "dataSourceLabel": self._safe_display_label(
+                result.get("dataSourceLabel")
+            ),
+            "simulationData": simulation,
+            "dataAsOf": self._safe_text(result.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(result.get("latestRecordAt")),
+            "isEmpty": bool(result.get("isEmpty")),
+            "comparison": deepcopy(result.get("comparison")),
+            **metrics,
+        }
+        fields: list[dict[str, Any]] = [summary]
+        for point in result.get("inventoryTrendDailySeries") or []:
+            if not isinstance(point, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "inventory_level_trend_daily",
+                    "label": self._safe_display_label(point.get("businessDate")),
+                    "value": f"{self._safe_count(point.get('totalPieces'))} 件",
+                    **point,
+                }
+            )
+        for product in result.get("inventoryTrendProductBreakdowns") or []:
+            if not isinstance(product, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "inventory_level_trend_product",
+                    "label": self._safe_display_label(product.get("productName")),
+                    "value": (
+                        f"期末 {self._safe_count(product.get('closingPieces'))} 件"
+                        f" · 净变化 {self._safe_signed_count_text(product.get('netChangePieces'))} 件"
+                    ),
+                    **product,
+                }
+            )
+        for note in data_quality.get("notes") or []:
+            if not self._safe_text(note):
+                continue
+            fields.append(
+                {
+                    "kind": "inventory_level_trend_quality_note",
+                    "label": "数据来源说明" if simulation else "数据完整性提示",
+                    "value": self._safe_display_label(note),
+                }
+            )
+        fields.append(
+            {
+                "kind": "inventory_level_trend_scope_note",
+                "label": "口径边界",
+                "value": (
+                    "当前为本地历史回放模拟，仅用于验收报表流程；正式上线仍以连续通过守恒对账的真实日终快照为准。"
+                    if simulation
+                    else "库存趋势表示已登记库存水平变化，不自动解释原因，也不等同于需求预测。"
+                ),
+            }
+        )
+        return BusinessCard(
+            cardType="inventory_level_trend_report",
+            title=(
+                f"{self._safe_display_label(result.get('reportName'))}"
+                f" · {self._safe_display_label(result.get('dateRangeLabel'))}"
+            ),
+            fields=fields,
+        )
+
+    def _pallet_task_cycle_report_card(
+        self,
+        result: dict[str, Any],
+    ) -> BusinessCard:
+        metrics = self._dict_value(result.get("palletTaskCycleMetrics"))
+        summary = {
+            "kind": "pallet_task_cycle_summary",
+            "reportRunId": self._safe_report_run_id(result.get("reportRunId")),
+            "label": self._safe_display_label(result.get("dateRangeLabel")),
+            "value": (
+                f"任务 {self._safe_count(metrics.get('cohortTaskCount'))} 条"
+                f" · 已完成 {self._safe_count(metrics.get('completedTaskCount'))} 条"
+            ),
+            "dateRangeLabel": self._safe_display_label(result.get("dateRangeLabel")),
+            "productScopeLabel": self._safe_display_label(result.get("productScopeLabel")),
+            "taskScopeLabel": self._safe_display_label(result.get("taskScopeLabel")),
+            "dataAsOf": self._safe_text(result.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(result.get("latestRecordAt")),
+            "isEmpty": bool(result.get("isEmpty")),
+            "comparison": deepcopy(result.get("comparison")),
+            **metrics,
+        }
+        fields: list[dict[str, Any]] = [summary]
+        for point in result.get("palletTaskCycleDailySeries") or []:
+            if not isinstance(point, dict) or self._safe_count(point.get("taskCount")) == 0:
+                continue
+            fields.append(
+                {
+                    "kind": "pallet_task_cycle_daily",
+                    "label": self._safe_display_label(point.get("businessDate")),
+                    "value": f"{self._safe_count(point.get('taskCount'))} 条任务",
+                    **point,
+                }
+            )
+        for item in result.get("palletTaskCycleTypeBreakdowns") or []:
+            if not isinstance(item, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "pallet_task_cycle_type",
+                    "label": self._safe_display_label(item.get("taskTypeLabel")),
+                    "value": f"{self._safe_count(item.get('taskCount'))} 条任务",
+                    **item,
+                }
+            )
+        for item in result.get("palletTaskPendingItems") or []:
+            if not isinstance(item, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "pallet_task_cycle_pending",
+                    "label": self._safe_display_label(item.get("palletCode")),
+                    "value": self._safe_display_label(item.get("taskTypeLabel")),
+                    **item,
+                }
+            )
+        quality = self._dict_value(result.get("dataQuality"))
+        for note in quality.get("notes") or []:
+            if self._safe_text(note):
+                fields.append(
+                    {
+                        "kind": "pallet_task_cycle_quality_note",
+                        "label": "数据完整性提示",
+                        "value": self._safe_display_label(note),
+                    }
+                )
+        fields.append(
+            {
+                "kind": "pallet_task_cycle_scope_note",
+                "label": "口径边界",
+                "value": "这里只统计系统已登记托盘任务；完成耗时与进行中等待分开，不代表 SLA、员工绩效或现场全部流程。",
+            }
+        )
+        return BusinessCard(
+            cardType="pallet_task_cycle_report",
+            title=(
+                f"{self._safe_display_label(result.get('reportName'))}"
+                f" · {self._safe_display_label(result.get('dateRangeLabel'))}"
+            ),
+            fields=fields,
+        )
+
+    def _production_input_output_flow_card(
+        self,
+        result: dict[str, Any],
+    ) -> BusinessCard:
+        metrics = self._dict_value(result.get("productionFlowMetrics"))
+        summary = {
+            "kind": "production_input_output_flow_summary",
+            "reportRunId": self._safe_report_run_id(result.get("reportRunId")),
+            "label": self._safe_display_label(result.get("dateRangeLabel")),
+            "value": (
+                f"领料 {self._safe_text(metrics.get('materialInputWeightKg')) or '0'} kg"
+                f" · 稳定登记产出 {self._safe_text(metrics.get('stableOutputWeightKg')) or '0'} kg"
+            ),
+            "dateRangeLabel": self._safe_display_label(result.get("dateRangeLabel")),
+            "productScopeLabel": self._safe_display_label(
+                result.get("productScopeLabel")
+            ),
+            "dataAsOf": self._safe_text(result.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(result.get("latestRecordAt")),
+            "seriesGranularity": self._safe_display_label(
+                result.get("seriesGranularity")
+            ),
+            "isEmpty": bool(result.get("isEmpty")),
+            "comparison": deepcopy(result.get("comparison")),
+            **metrics,
+        }
+        fields: list[dict[str, Any]] = [summary]
+        for point in result.get("productionFlowDailySeries") or []:
+            if not isinstance(point, dict):
+                continue
+            if (
+                self._safe_count(point.get("materialInputRecordCount")) == 0
+                and self._safe_count(point.get("stableOutputRecordCount")) == 0
+            ):
+                continue
+            fields.append(
+                {
+                    "kind": "production_input_output_flow_daily",
+                    "label": self._safe_display_label(point.get("businessDate")),
+                    "value": (
+                        f"领料 {self._safe_text(point.get('materialInputWeightKg')) or '0'} kg"
+                        f" · 产出 {self._safe_text(point.get('stableOutputWeightKg')) or '0'} kg"
+                    ),
+                    **point,
+                }
+            )
+        for order in result.get("productionFlowOrderBreakdowns") or []:
+            if not isinstance(order, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "production_input_output_flow_order",
+                    "label": self._safe_display_label(order.get("orderNo")),
+                    "value": self._safe_display_label(
+                        order.get("completenessLabel")
+                    ),
+                    **order,
+                }
+            )
+        data_quality = self._dict_value(result.get("dataQuality"))
+        for note in data_quality.get("notes") or []:
+            if not self._safe_text(note):
+                continue
+            fields.append(
+                {
+                    "kind": "production_input_output_flow_quality_note",
+                    "label": "数据完整性提示",
+                    "value": self._safe_display_label(note),
+                }
+            )
+        fields.append(
+            {
+                "kind": "production_input_output_flow_scope_note",
+                "label": "口径边界",
+                "value": "领料与稳定登记产出是两条独立序列，不计算产耗比、收率或损耗率。",
+            }
+        )
+        return BusinessCard(
+            cardType="production_input_output_flow_report",
+            title=(
+                f"{self._safe_display_label(result.get('reportName'))}"
+                f" · {self._safe_display_label(result.get('dateRangeLabel'))}"
+            ),
+            fields=fields,
+        )
+
+    def _quality_assay_trend_card(self, result: dict[str, Any]) -> BusinessCard:
+        metrics = self._dict_value(result.get("qualityMetrics"))
+        summary = {
+            "kind": "quality_assay_trend_summary",
+            "reportRunId": self._safe_report_run_id(result.get("reportRunId")),
+            "label": self._safe_display_label(result.get("dateRangeLabel")),
+            "value": f"{self._safe_count(metrics.get('assayRecordCount'))} 条化验",
+            "dateRangeLabel": self._safe_display_label(result.get("dateRangeLabel")),
+            "productScopeLabel": self._safe_display_label(
+                result.get("productScopeLabel")
+            ),
+            "dataAsOf": self._safe_text(result.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(result.get("latestRecordAt")),
+            "seriesGranularity": self._safe_display_label(
+                result.get("seriesGranularity")
+            ),
+            "isEmpty": bool(result.get("isEmpty")),
+            "comparison": deepcopy(result.get("comparison")),
+            **metrics,
+        }
+        fields: list[dict[str, Any]] = [summary]
+        for product in result.get("qualityProductBreakdowns") or []:
+            if not isinstance(product, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "quality_assay_trend_product",
+                    "label": self._safe_display_label(product.get("productName")),
+                    "value": f"{self._safe_count(product.get('assayRecordCount'))} 条",
+                    **product,
+                }
+            )
+        for standard in result.get("standardBreakdowns") or []:
+            if not isinstance(standard, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "quality_assay_trend_standard",
+                    "label": self._safe_display_label(
+                        standard.get("standardLabel")
+                    ),
+                    "value": f"{self._safe_count(standard.get('assayRecordCount'))} 条",
+                    **standard,
+                }
+            )
+        for point in result.get("qualitySeries") or []:
+            if not isinstance(point, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "quality_assay_trend_point",
+                    "label": self._safe_display_label(point.get("periodLabel")),
+                    "value": f"{self._safe_count(point.get('assayRecordCount'))} 条",
+                    **point,
+                }
+            )
+        quality = self._dict_value(result.get("dataQuality"))
+        for note in quality.get("notes") or []:
+            fields.append(
+                {
+                    "kind": "quality_assay_trend_quality_note",
+                    "label": "数据完整性提示",
+                    "value": self._safe_display_label(note),
+                }
+            )
+        return BusinessCard(
+            cardType="quality_assay_trend_report",
+            title=(
+                f"{self._safe_display_label(result.get('reportName'))} · "
+                f"{self._safe_display_label(result.get('dateRangeLabel'))}"
+            ),
+            fields=fields,
+        )
+
+    def _quality_metric_trend_card(self, result: dict[str, Any]) -> BusinessCard:
+        summary_values = self._dict_value(result.get("metricTrendSummary"))
+        unit = self._safe_text(summary_values.get("unit")) or ""
+        summary = {
+            "kind": "quality_metric_trend_summary",
+            "reportRunId": self._safe_report_run_id(result.get("reportRunId")),
+            "label": self._safe_display_label(summary_values.get("metricName")),
+            "value": (
+                f"{self._safe_count(summary_values.get('sampleCount'))} 个样本"
+            ),
+            "dateRangeLabel": self._safe_display_label(result.get("dateRangeLabel")),
+            "productScopeLabel": self._safe_display_label(
+                result.get("productScopeLabel")
+            ),
+            "dataAsOf": self._safe_text(result.get("dataAsOf")),
+            "latestRecordAt": self._safe_text(result.get("latestRecordAt")),
+            "seriesGranularity": self._safe_display_label(
+                result.get("seriesGranularity")
+            ),
+            "isEmpty": bool(result.get("isEmpty")),
+            "comparison": deepcopy(result.get("comparison")),
+            **summary_values,
+        }
+        fields: list[dict[str, Any]] = [summary]
+        for product in result.get("metricProductBreakdowns") or []:
+            if not isinstance(product, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "quality_metric_trend_product",
+                    "label": self._safe_display_label(product.get("productName")),
+                    "value": (
+                        f"均值 {self._safe_text(product.get('averageValue')) or '-'}"
+                        f"{(' ' + unit) if unit else ''}"
+                    ),
+                    **product,
+                }
+            )
+        for standard in result.get("metricStandardBreakdowns") or []:
+            if not isinstance(standard, dict):
+                continue
+            fields.append(
+                {
+                    "kind": "quality_metric_trend_standard",
+                    "label": self._safe_display_label(
+                        standard.get("standardLabel")
+                    ),
+                    "value": self._safe_display_label(
+                        standard.get("rangeLabel")
+                    ),
+                    **standard,
+                }
+            )
+        for point in result.get("metricSeries") or []:
+            if not isinstance(point, dict):
+                continue
+            if self._safe_count(point.get("sampleCount")) <= 0:
+                continue
+            fields.append(
+                {
+                    "kind": "quality_metric_trend_point",
+                    "label": self._safe_display_label(point.get("periodLabel")),
+                    "value": (
+                        f"均值 {self._safe_text(point.get('averageValue')) or '-'}"
+                        f"{(' ' + unit) if unit else ''}"
+                    ),
+                    **point,
+                }
+            )
+        quality = self._dict_value(result.get("dataQuality"))
+        for note in quality.get("notes") or []:
+            fields.append(
+                {
+                    "kind": "quality_metric_trend_quality_note",
+                    "label": "数据完整性提示",
+                    "value": self._safe_display_label(note),
+                }
+            )
+        return BusinessCard(
+            cardType="quality_metric_trend_report",
+            title=(
+                f"{self._safe_display_label(summary_values.get('metricName'))}趋势 · "
+                f"{self._safe_display_label(result.get('dateRangeLabel'))}"
+            ),
+            fields=fields,
+        )
 
     def _production_order_progress_card(self, result: SafeProductionOrderProgress) -> BusinessCard:
         summary: dict[str, Any] = {
@@ -8590,14 +11672,6 @@ class WarehouseAgentRuntime:
         lines.append("这是当前库存行快照，不是完整历史流水；生产日期可能为空，也不证明当前库存批次质量合格，本次未修改库存。")
         return "".join(lines)
 
-    def _format_prepare_pool_balance_answer(self, result: dict[str, Any]) -> str:
-        source = result if isinstance(result, dict) else {}; records = source.get("records") if isinstance(source.get("records"), list) else []
-        lines = [f"历史半成品备料池当前正余额共匹配 {self._first_scalar([source], 'total') or 0} 条："]
-        for item in records[:20]:
-            if isinstance(item, dict): lines.append(f"{self._safe_text(item.get('productName')) or '产品未标明'}，生产日期 {self._safe_text(item.get('productionDate')) or '未标明'}，入池 {self._first_scalar([item], 'inPieces') or 0} 件，已用 {self._first_scalar([item], 'consumedPieces') or 0} 件，剩余 {self._first_scalar([item], 'remainingPieces') or 0} 件。")
-        lines.append("仅包含现存正余额，不是完整历史账；余额不等于已为订单保留、质量合格或可直接领用，本次未执行占用或领用。")
-        return "".join(lines)
-
     def _format_fixed_product_qr_pool_answer(self, result: dict[str, Any]) -> str:
         source = result if isinstance(result, dict) else {}; records = source.get("records") if isinstance(source.get("records"), list) else []
         lines = [f"固定产品二维码池共匹配 {self._first_scalar([source], 'total') or 0} 个码："]
@@ -8716,6 +11790,67 @@ class WarehouseAgentRuntime:
                 if safe is not None:
                     return safe
         return None
+
+    def _safe_report_run_id(self, value: Any) -> str | None:
+        text = self._safe_text(value)
+        if text and re.fullmatch(r"report_run_[a-f0-9]{16}", text):
+            return text
+        return None
+
+    def _registered_report_answer_fallback(
+        self,
+        answer: str,
+        state: WarehouseAgentState,
+    ) -> str | None:
+        context = state.last_report_context
+        if not isinstance(context, dict):
+            return None
+        if context.get("reportDefinitionId") != "quality_metric_trend_v1":
+            return None
+        summary = self._dict_value(context.get("metricTrendSummary"))
+        sample_count = self._safe_count(summary.get("sampleCount"))
+        without_comparable = self._safe_count(
+            summary.get("withoutComparableStandardCount")
+        )
+        if sample_count <= 0 or without_comparable <= 0:
+            return None
+        normalized = "".join((answer or "").split())
+        explains_denominator = any(
+            marker in normalized
+            for marker in (
+                "无可比较标准",
+                "无历史可比标准",
+                "无适用历史标准",
+                "不参与达标率",
+                "不进入达标率",
+            )
+        )
+        overstates_compliance = bool(
+            re.search(r"(全部|均|都).{0,8}(达标|合格|标准范围内|处于.{0,8}标准)", normalized)
+        )
+        if explains_denominator and not overstates_compliance:
+            return None
+        metric_name = self._safe_display_label(summary.get("metricName"))
+        unit = self._safe_text(summary.get("unit")) or ""
+
+        def number_text(key: str) -> str:
+            value = self._safe_text(summary.get(key)) or "-"
+            return f"{value}{(' ' + unit) if unit else ''}"
+
+        comparable = self._safe_count(summary.get("comparableStandardCount"))
+        within = self._safe_count(summary.get("withinStandardCount"))
+        outside = self._safe_count(summary.get("outOfStandardCount"))
+        return (
+            f"{self._safe_display_label(context.get('productScopeLabel'))}"
+            f"在 {self._safe_display_label(context.get('dateRangeLabel'))} "
+            f"共有 {sample_count} 个{metric_name}实测样本。\n\n"
+            f"均值 {number_text('averageValue')}，中位数 {number_text('medianValue')}，"
+            f"范围 {number_text('minimumValue')}～{number_text('maximumValue')}。\n\n"
+            f"其中 {comparable} 个样本有可比较的历史标准："
+            f"{within} 个在标准范围内，{outside} 个超出标准；"
+            f"另有 {without_comparable} 个样本无可比较的历史标准，不参与达标率计算。"
+            "样本较少时只展示观测事实，不判断改善、恶化或原因。"
+        )
 
     def _safe_text(self, value: Any) -> str | None:
         if value is None or isinstance(value, (dict, list, tuple, set)):

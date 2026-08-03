@@ -1257,7 +1257,17 @@ Fallback：
 
 边界：不得展示 chain-of-thought；取消、超时、脱敏和审计规则继续沿用 M1.3R-5.1。
 
-当前实现：Python 已提供 `AgentRunRegistry` 和 `CancellationToken`，每条流式消息按 `messageId` 注册 active run；runtime 在模型调用前、模型流期间、工具调用前后、工具结果写 state 前、最终回答输出前检查取消信号。`AGENT_MODEL_MODE=basic` 只输出已审核答案作为兼容 delta，不伪装 token；`AGENT_MODEL_MODE=openai_compatible` 调用配置的 OpenAI-compatible `/chat/completions` SSE，`text_delta` 来自模型实时 `delta.content` 或 `response.output_text.delta`。reasoning、chain-of-thought、tool calls、raw JSON、token 和内部字段均被忽略或过滤。模型超时、工具超时、模型/工具取消和上游错误通过 `error.category` 分类，Java runtime audit 映射为 `MODEL_TIMEOUT`、`TOOL_TIMEOUT`、`MODEL_CANCELLED`、`TOOL_CANCELLED`、`UPSTREAM_ERROR` 或 `CLIENT_CANCELLED`。
+当前实现：Python 已提供 `AgentRunRegistry` 和 `CancellationToken`，每条流式消息按 `messageId` 注册 active run；runtime 在模型调用前、模型流期间、工具调用前后、工具结果写 state 前、最终回答输出前检查取消信号。`AGENT_PYTHON_MODEL_MODE=basic` 只输出已审核答案作为兼容 delta，不伪装 token；`AGENT_PYTHON_MODEL_MODE=openai_compatible` 调用配置的 OpenAI-compatible `/chat/completions` SSE，`text_delta` 来自模型实时 `delta.content` 或 `response.output_text.delta`。reasoning、chain-of-thought、tool calls、raw JSON、token 和内部字段均被忽略或过滤。模型超时、工具超时、模型/工具取消和上游错误通过 `error.category` 分类，Java runtime audit 映射为 `MODEL_TIMEOUT`、`TOOL_TIMEOUT`、`MODEL_CANCELLED`、`TOOL_CANCELLED`、`UPSTREAM_ERROR` 或 `CLIENT_CANCELLED`。旧的 `AGENT_MODEL_MODE` 只保留为进程级兼容输入；联合部署必须使用 Python 专用变量，避免被 Spring 宽松绑定到 Java 旧规划器的 `agent.model.mode`。
+
+### M1.3R-5.3：阶段性能指标与 MCP 运行制品门禁
+
+Python 运行时对主路由、专家首次决策、专家结果分析、工具调用、整轮耗时和首个业务进度分别采样。内存指标快照对所有登记 histogram 统一输出 `count`、`sum`、`max`、最近秩 `p50` 和 `p95`；指标标签只包含阶段、结果、工具和运行模式，不包含用户原文、Prompt、工具参数或业务字段值。
+
+主 Agent 路由输入只携带专家名称/领域以及 GoalContract 的业务含义/唯一归属。专家完整说明、工具 schema、实体要求、事实要求和限制只在专家决策阶段提供。该收缩不改变 LLM 对目标的理解与委派，也不允许确定性 Router 抢先截获普通业务请求。
+
+Java 在应用就绪前启动隔离 Warehouse MCP 进程执行 `listTools`，把实际集合与受控工具集合精确比较；缺失或意外工具都会使启动失败。预检不调用业务工具，不读取业务数据，完成后立即关闭进程。默认开启，可用 `AGENT_MCP_RUNTIME_VERIFICATION_ENABLED=false` 显式关闭，但必须记录警告。
+
+详细实现与本地性能样本见 `agent-performance-and-mcp-artifact-gate-implementation-2026-08-03.md`。当前正确性与制品门禁通过，端到端 15 秒性能目标仍未通过。
 
 ### M1.3R-6：Human-in-the-loop 统一模型
 
@@ -1384,10 +1394,12 @@ Java：
 ```properties
 agent.runtime.mode=python
 agent.runtime.python-base-url=http://localhost:8091
-agent.runtime.python-timeout-ms=30000
+agent.runtime.python-timeout-ms=100000
 agent.runtime.python-service-key=${AGENT_PYTHON_SERVICE_KEY}
 agent.runtime.fallback-enabled=true
 ```
+
+Java 传输等待窗口必须大于 Python 在 LLM 模式下的运行预算（默认 90000 ms）。当前预留 10000 ms 用于终止事件传输和连接收尾，避免模型、专家或工具仍在受控执行时由 Java 先行截断。单次模型结构化决策默认使用 45000 ms（`AGENT_MODEL_TIMEOUT_MS=45000`）；该值只延长慢请求的容忍上限，不增加正常响应的固有耗时，并为工具调用和整轮收尾保留剩余预算。
 
 Python：
 

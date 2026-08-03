@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AgentSessionServiceImplTest {
@@ -87,6 +88,29 @@ class AgentSessionServiceImplTest {
     }
 
     @Test
+    void createsSessionForSuperAdmin() {
+        loginUser.getUser().setRoleCode("SUPER_ADMIN");
+
+        service.createSession(loginUser, new AgentSessionCreateDTO(), new MockHttpServletRequest());
+
+        verify(sessionMapper).insert(any(AgentSession.class));
+    }
+
+    @Test
+    void rejectsSessionCreationForNonAdmin() {
+        loginUser.getUser().setRoleCode("STAFF");
+
+        assertThatThrownBy(() -> service.createSession(
+                loginUser,
+                new AgentSessionCreateDTO(),
+                new MockHttpServletRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(403);
+        verifyNoInteractions(sessionMapper);
+    }
+
+    @Test
     void createSessionCancelsPendingInterruptsForReplacedActiveSessions() {
         AgentSession previous = activeSession();
         previous.setId("old-session");
@@ -124,6 +148,22 @@ class AgentSessionServiceImplTest {
 
         assertThat(result.getId()).isEqualTo("session-1");
         verify(sessionMapper).selectById("session-1");
+    }
+
+    @Test
+    void validateDelegationRejectsUserWhoseAdminRoleWasRemoved() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+        loginUser.getUser().setRoleCode("QC");
+
+        assertThatThrownBy(() -> service.validateDelegation(
+                claims,
+                new MockHttpServletRequest("GET", "/api/inventory/stock/page"),
+                loginUser))
+                .isInstanceOf(AgentSessionAuthenticationException.class)
+                .extracting("status", "errorCode")
+                .containsExactly(403, "AGENT_ROLE_DENIED");
     }
 
     @Test
@@ -234,6 +274,7 @@ class AgentSessionServiceImplTest {
                 "/api/production/agent-read/orders/label-completion/query",
                 "/api/production/agent-read/materials/in-process/query",
                 "/api/production/agent-read/orders/material-candidates/query",
+                "/api/analytics/agent-read/reports/run",
                 "/api/logistics/agent-read/pallet-tasks/query",
                 "/api/logistics/agent-read/stock-documents/query",
                 "/api/logistics/agent-read/auto-inbound/batches/query",
@@ -256,7 +297,6 @@ class AgentSessionServiceImplTest {
                 "/api/audit/agent-read/agent-tool-audit/query",
                 "/api/audit/agent-read/agent-answer-reviews/query",
                 "/api/inventory/agent-read/ledger/query",
-                "/api/inventory/agent-read/prepare-pool-balance/query",
                 "/api/inventory/agent-read/quality/query",
                 "/api/pallet-codes/agent-read/fixed-product-pool/query");
 
@@ -264,6 +304,20 @@ class AgentSessionServiceImplTest {
             assertThat(service.validateDelegation(
                     claims, new MockHttpServletRequest("POST", path), loginUser)).isSameAs(session);
         }
+    }
+
+    @Test
+    void validateDelegationRejectsRetiredPreparePoolAgentPath() {
+        Claims claims = validClaims();
+        when(sessionMapper.selectById("session-1")).thenReturn(activeSession());
+
+        assertThatThrownBy(() -> service.validateDelegation(
+                claims,
+                new MockHttpServletRequest("POST", "/api/inventory/agent-read/prepare-pool-balance/query"),
+                loginUser))
+                .isInstanceOf(AgentSessionAuthenticationException.class)
+                .extracting("status")
+                .isEqualTo(403);
     }
 
     @Test
@@ -312,6 +366,19 @@ class AgentSessionServiceImplTest {
         assertThat(access.session()).isSameAs(session);
         assertThat(access.loginUser()).isSameAs(loginUser);
         verify(sessionMapper).updateById(session);
+    }
+
+    @Test
+    void requireActiveInternalToolSessionRejectsUserWhoseAdminRoleWasRemoved() {
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+        loginUser.getUser().setRoleCode("STAFF");
+        when(userDetailsService.loadUserByUsername("7")).thenReturn(loginUser);
+
+        assertThatThrownBy(() -> service.requireActiveInternalToolSession("session-1"))
+                .isInstanceOf(AgentSessionAuthenticationException.class)
+                .extracting("status", "errorCode")
+                .containsExactly(403, "AGENT_ROLE_DENIED");
     }
 
     @Test

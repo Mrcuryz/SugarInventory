@@ -28,6 +28,7 @@ public class StdioMcpSessionManager implements McpSessionManager {
             "query_products_without_recent_assay", "query_assay_standard_coverage", "query_qr_code_lifecycle",
             "query_printed_not_inbound_codes", "query_pallet_anomalies", "query_pallet_flow_records",
             "query_qr_batch_inbound_completion", "resolve_production_entities", "query_production_order_progress",
+            "run_registered_report",
             "query_boiling_batches",
             "query_boiling_batch_trace",
             "query_material_pick_trace",
@@ -56,7 +57,6 @@ public class StdioMcpSessionManager implements McpSessionManager {
             "query_agent_tool_audit",
             "query_agent_answer_reviews",
             "query_inventory_ledger",
-            "query_prepare_pool_balance",
             "query_fixed_product_qr_pool",
             "get_warehouse_status", "get_pallet_status", "get_assay_status");
 
@@ -109,10 +109,7 @@ public class StdioMcpSessionManager implements McpSessionManager {
         try {
             Process process = processFactory.start(List.of("java", "-jar", jarPath), environment);
             session = new StdioMcpSession(agentSession.getId(), process, objectMapper);
-            Set<String> actualTools = session.listTools();
-            if (!EXPECTED_TOOLS.equals(actualTools)) {
-                throw new IllegalStateException("Warehouse MCP capability registry mismatch.");
-            }
+            verifyExpectedTools(session.listTools());
             AgentSession activeSession = agentSessionService.requireOwnedActiveSession(loginUser, agentSession.getId());
             return new ManagedSession(session, process, activeSession.getExpiresAt());
         } catch (IOException e) {
@@ -123,6 +120,37 @@ public class StdioMcpSessionManager implements McpSessionManager {
             closeQuietly(session);
             throw e;
         }
+    }
+
+    public void verifyRuntimeCapabilities() {
+        Map<String, String> environment = Map.of(
+                "WAREHOUSE_DELEGATED_TOKEN", "runtime-preflight-unused",
+                "WAREHOUSE_AGENT_SESSION_ID", "runtime-preflight",
+                "WAREHOUSE_API_BASE_URL", apiBaseUrl,
+                "WAREHOUSE_MCP_LOG_FILE", Path.of(logFileDirectory, "warehouse-mcp-runtime-preflight.log").toString()
+        );
+        StdioMcpSession session = null;
+        try {
+            Process process = processFactory.start(List.of("java", "-jar", jarPath), environment);
+            session = new StdioMcpSession("runtime-preflight", process, objectMapper);
+            verifyExpectedTools(session.listTools());
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to start Warehouse MCP runtime artifact.", e);
+        } finally {
+            closeQuietly(session);
+        }
+    }
+
+    private void verifyExpectedTools(Set<String> actualTools) {
+        if (EXPECTED_TOOLS.equals(actualTools)) {
+            return;
+        }
+        Set<String> missing = new java.util.TreeSet<>(EXPECTED_TOOLS);
+        missing.removeAll(actualTools);
+        Set<String> unexpected = new java.util.TreeSet<>(actualTools);
+        unexpected.removeAll(EXPECTED_TOOLS);
+        throw new IllegalStateException(
+                "Warehouse MCP capability registry mismatch; missing=" + missing + ", unexpected=" + unexpected);
     }
 
     @Override

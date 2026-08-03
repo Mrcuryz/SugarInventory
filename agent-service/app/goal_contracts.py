@@ -29,7 +29,6 @@ CoreGoalTypeV1 = Literal[
     "CURRENT_INVENTORY_MATCHING_METRIC",
     "CURRENT_INVENTORY_ASSAY_GAPS",
     "CURRENT_INVENTORY_LEDGER",
-    "PREPARE_POOL_BALANCE",
     "WAREHOUSE_STATUS",
     "WAREHOUSE_CAPACITY_DISTRIBUTION",
     "WAREHOUSE_RECENT_OPERATIONS",
@@ -54,6 +53,15 @@ CoreGoalTypeV1 = Literal[
     "BUSINESS_OPERATION_LOGS",
     "AGENT_TOOL_AUDIT",
     "AGENT_ANSWER_REVIEWS",
+    "DAILY_PRODUCTION_ANALYSIS",
+    "QUALITY_ASSAY_TREND_ANALYSIS",
+    "QUALITY_METRIC_TREND_ANALYSIS",
+    "PRODUCTION_INPUT_OUTPUT_TREND",
+    "PROCESS_EFFICIENCY_TREND",
+    "INVENTORY_LEVEL_TREND_ANALYSIS",
+    "PROCESS_KNOWLEDGE_QUERY",
+    "ENTERPRISE_KNOWLEDGE_QUERY",
+    "TODAY_OPERATIONS_OVERVIEW",
 ]
 CoreFactTypeV1 = Literal[
     "CURRENT_PRODUCT_INVENTORY",
@@ -74,7 +82,6 @@ CoreFactTypeV1 = Literal[
     "CURRENT_INVENTORY_MATCHING_METRIC",
     "CURRENT_INVENTORY_ASSAY_GAPS",
     "CURRENT_INVENTORY_LEDGER",
-    "PREPARE_POOL_BALANCE",
     "WAREHOUSE_STATUS",
     "WAREHOUSE_CAPACITY_DISTRIBUTION",
     "WAREHOUSE_RECENT_OPERATIONS",
@@ -99,6 +106,15 @@ CoreFactTypeV1 = Literal[
     "BUSINESS_OPERATION_LOGS",
     "AGENT_TOOL_AUDIT",
     "AGENT_ANSWER_REVIEWS",
+    "DAILY_PRODUCTION_ANALYSIS",
+    "QUALITY_ASSAY_TREND_ANALYSIS",
+    "QUALITY_METRIC_TREND_ANALYSIS",
+    "PRODUCTION_INPUT_OUTPUT_TREND",
+    "PROCESS_EFFICIENCY_TREND",
+    "INVENTORY_LEVEL_TREND_ANALYSIS",
+    "PROCESS_KNOWLEDGE_QUERY",
+    "ENTERPRISE_KNOWLEDGE_QUERY",
+    "TODAY_OPERATIONS_OVERVIEW",
 ]
 REGISTERED_CORE_GOAL_TYPES: tuple[str, ...] = get_args(CoreGoalTypeV1)
 REGISTERED_CORE_FACT_TYPES: tuple[str, ...] = get_args(CoreFactTypeV1)
@@ -147,6 +163,8 @@ class GoalContractV1(BaseModel):
         "master_data_expert",
         "administration_expert",
         "audit_expert",
+        "analytics_expert",
+        "knowledge_expert",
     ]
     requiredEntityTypes: tuple[Literal["PRODUCT", "WAREHOUSE", "PALLET", "PALLET_TASK", "PRODUCTION_ORDER", "BOILING_BATCH"], ...]
     requiredFactTypes: tuple[CoreFactTypeV1, ...]
@@ -286,7 +304,7 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
             listFields=("records",),
             noDataWhenEmptyList="records",
         ),
-        limitations=("实际领料记录不等于计划差异或材料消耗率分析。",),
+        limitations=("记录表示确认领用时已完成库存扣减，但不等于计划差异、收率或损耗率分析。",),
     ),
     "PALLET_CURRENT_STATUS": GoalContractV1(
         goalType="PALLET_CURRENT_STATUS",
@@ -462,21 +480,6 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         ),
         limitations=("库存台账是当前快照，不是历史库存流水，也不自动证明质量合格。",),
     ),
-    "PREPARE_POOL_BALANCE": GoalContractV1(
-        goalType="PREPARE_POOL_BALANCE",
-        ownerExpert="inventory_expert",
-        requiredEntityTypes=(),
-        requiredFactTypes=("PREPARE_POOL_BALANCE",),
-        allowedTools=("resolve_products", "query_prepare_pool_balance"),
-        evidenceTools=("query_prepare_pool_balance",),
-        factValidation=FactValidationRuleV1(
-            factLabel="备料池余额",
-            requiredFields=("dataScope", "total", "records"),
-            listFields=("records",),
-            noDataWhenEmptyList="records",
-        ),
-        limitations=("备料池正余额不等于已预留、可再次领用或未来生产计划。",),
-    ),
     "WAREHOUSE_STATUS": GoalContractV1(
         goalType="WAREHOUSE_STATUS",
         ownerExpert="warehouse_expert",
@@ -638,7 +641,7 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         allowedTools=("resolve_products", "query_in_process_materials"),
         evidenceTools=("query_in_process_materials",),
         factValidation=FactValidationRuleV1(
-            factLabel="在制物料",
+            factLabel="已确认领用并扣减库存、订单未完成的在制半成品",
             requiredFields=("dataScope", "total", "records"),
             listFields=("records",),
             noDataWhenEmptyList="records",
@@ -885,6 +888,273 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         ),
         limitations=("回答复核记录是治理依据，不替代业务数据源本身。",),
     ),
+    "DAILY_PRODUCTION_ANALYSIS": GoalContractV1(
+        goalType="DAILY_PRODUCTION_ANALYSIS",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("DAILY_PRODUCTION_ANALYSIS",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="按生产日期登记的实际产出分析",
+            requiredFields=(
+                "dataScope",
+                "reportDefinitionId",
+                "reportVersion",
+                "isEmpty",
+                "metrics",
+                "dailySeries",
+                "productBreakdowns",
+                "dataQuality",
+            ),
+            listFields=("dailySeries", "productBreakdowns"),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=(
+            "只统计生产订单中已登记且未取消的产出记录。",
+            "标签、二维码绑定和入库进度不计入产量。",
+            "未登记的计划达成率、班次对比、良率和预测不得生成。",
+        ),
+    ),
+    "TODAY_OPERATIONS_OVERVIEW": GoalContractV1(
+        goalType="TODAY_OPERATIONS_OVERVIEW",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("TODAY_OPERATIONS_OVERVIEW",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="北京时间今日的已登记运营事实概览",
+            requiredFields=(
+                "dataScope",
+                "reportDefinitionId",
+                "reportVersion",
+                "isEmpty",
+                "operationsOverview",
+                "dataQuality",
+            ),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=(
+            "只支持北京时间今天；当前库存和当前待处理任务是生成时快照，不是历史值。",
+            "确认领用与稳定登记产出采用独立业务日期，只能并列展示，不能直接相除。",
+            "当前库存不表示今天的库存变化；库存变化必须使用通过发布门禁的库存趋势报表。",
+            "不得生成计划达成率、良率、收率、损耗率、SLA 逾期、预测或因果结论。",
+        ),
+    ),
+    "QUALITY_ASSAY_TREND_ANALYSIS": GoalContractV1(
+        goalType="QUALITY_ASSAY_TREND_ANALYSIS",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("QUALITY_ASSAY_TREND_ANALYSIS",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="按生产日期登记的化验判定趋势",
+            requiredFields=(
+                "dataScope",
+                "reportDefinitionId",
+                "reportVersion",
+                "isEmpty",
+                "qualityMetrics",
+                "qualitySeries",
+                "qualityProductBreakdowns",
+                "standardBreakdowns",
+                "dataQuality",
+            ),
+            listFields=(
+                "qualitySeries",
+                "qualityProductBreakdowns",
+                "standardBreakdowns",
+            ),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=(
+            "合格率只使用合格与不合格记录作为分母。",
+            "无标准、标准多候选和缺少判定必须单独展示。",
+            "只统计已有化验记录，不能反推历史批次是否缺少化验。",
+            "不得用当前标准重算历史判定或输出因果结论。",
+        ),
+    ),
+    "QUALITY_METRIC_TREND_ANALYSIS": GoalContractV1(
+        goalType="QUALITY_METRIC_TREND_ANALYSIS",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("QUALITY_METRIC_TREND_ANALYSIS",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="按生产日期登记的单项化验指标趋势",
+            requiredFields=(
+                "dataScope",
+                "reportDefinitionId",
+                "reportVersion",
+                "isEmpty",
+                "metricTrendSummary",
+                "metricSeries",
+                "metricProductBreakdowns",
+                "metricStandardBreakdowns",
+                "dataQuality",
+            ),
+            listFields=(
+                "metricSeries",
+                "metricProductBreakdowns",
+                "metricStandardBreakdowns",
+            ),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=(
+            "原始统计包含所有有实测值的样本，指标达标率只统计历史标准快照中可比较的样本。",
+            "无历史标准或指标单位不可比的样本不得进入达标率分母。",
+            "样本过少或时间点稀疏时不得输出改善、恶化或因果结论。",
+            "不得用当前标准重算历史样本。",
+        ),
+    ),
+    "PRODUCTION_INPUT_OUTPUT_TREND": GoalContractV1(
+        goalType="PRODUCTION_INPUT_OUTPUT_TREND",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("PRODUCTION_INPUT_OUTPUT_TREND",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="生产领料与稳定登记产出的独立趋势及订单归属",
+            requiredFields=(
+                "dataScope",
+                "reportDefinitionId",
+                "reportVersion",
+                "isEmpty",
+                "productionFlowMetrics",
+                "productionFlowDailySeries",
+                "productionFlowOrderBreakdowns",
+                "dataQuality",
+            ),
+            listFields=(
+                "productionFlowDailySeries",
+                "productionFlowOrderBreakdowns",
+            ),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=(
+            "成品订单半成品领用在确认时同步扣减仓库库存，可作为已确认生产投入。",
+            "每日领料按领料时间统计，稳定登记产出按生产日期统计，两条序列不能直接相除。",
+            "半成品订单的输入来自最终确认的煮糖批次领用，不代表真实投料时间。",
+            "领用确认时间与产出生产日期不是同一时间口径，且没有返工、报废和损耗事实，不得生成产耗比、收率、损耗率或因果结论。",
+        ),
+    ),
+    "PROCESS_EFFICIENCY_TREND": GoalContractV1(
+        goalType="PROCESS_EFFICIENCY_TREND",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("PROCESS_EFFICIENCY_TREND",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="系统已登记托盘任务处理耗时趋势",
+            requiredFields=(
+                "dataScope",
+                "reportDefinitionId",
+                "reportVersion",
+                "isEmpty",
+                "palletTaskCycleMetrics",
+                "palletTaskCycleDailySeries",
+                "palletTaskCycleTypeBreakdowns",
+                "palletTaskPendingItems",
+                "dataQuality",
+            ),
+            listFields=(
+                "palletTaskCycleDailySeries",
+                "palletTaskCycleTypeBreakdowns",
+                "palletTaskPendingItems",
+            ),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=(
+            "统计队列按任务创建日期形成，完成耗时与进行中等待时长必须分开呈现。",
+            "取消任务没有独立取消时间，只能统计取消数量，不能计算取消耗时。",
+            "当前没有登记 SLA，不得把等待时长称为逾期。",
+            "结果只代表系统已登记托盘任务，不代表现场全部流程、人员绩效或因果结论。",
+        ),
+    ),
+    "INVENTORY_LEVEL_TREND_ANALYSIS": GoalContractV1(
+        goalType="INVENTORY_LEVEL_TREND_ANALYSIS",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("INVENTORY_LEVEL_TREND_ANALYSIS",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="按产品汇总的库存水平变化趋势",
+            requiredFields=(
+                "dataScope",
+                "reportDefinitionId",
+                "reportVersion",
+                "isEmpty",
+                "inventoryTrendMetrics",
+                "inventoryTrendDailySeries",
+                "inventoryTrendProductBreakdowns",
+                "dataQuality",
+            ),
+            listFields=(
+                "inventoryTrendDailySeries",
+                "inventoryTrendProductBreakdowns",
+            ),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=(
+            "正式库存趋势只允许使用已通过守恒对账的连续日终快照。",
+            "本地历史回放必须明确标记为模拟，不得作为生产发布证据。",
+            "库存水平变化不自动解释原因，也不得据此预测未来库存。",
+        ),
+    ),
+    "PROCESS_KNOWLEDGE_QUERY": GoalContractV1(
+        goalType="PROCESS_KNOWLEDGE_QUERY",
+        ownerExpert="knowledge_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("PROCESS_KNOWLEDGE_QUERY",),
+        allowedTools=("search_approved_knowledge",),
+        evidenceTools=("search_approved_knowledge",),
+        factValidation=FactValidationRuleV1(
+            factLabel="现行工艺知识",
+            requiredFields=(
+                "status",
+                "corpusVersion",
+                "queryLabel",
+                "knowledgeDomains",
+                "evidence",
+            ),
+            listFields=("knowledgeDomains", "evidence"),
+            noDataWhenEmptyList="evidence",
+        ),
+        limitations=(
+            "知识材料是静态现行资料，不代表实时库存、批次质量或生产订单状态。",
+            "回答只能依据返回证据，不能用模型记忆补充材料外事实。",
+        ),
+    ),
+    "ENTERPRISE_KNOWLEDGE_QUERY": GoalContractV1(
+        goalType="ENTERPRISE_KNOWLEDGE_QUERY",
+        ownerExpert="knowledge_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("ENTERPRISE_KNOWLEDGE_QUERY",),
+        allowedTools=("search_approved_knowledge",),
+        evidenceTools=("search_approved_knowledge",),
+        factValidation=FactValidationRuleV1(
+            factLabel="现行企业资料知识",
+            requiredFields=(
+                "status",
+                "corpusVersion",
+                "queryLabel",
+                "knowledgeDomains",
+                "evidence",
+            ),
+            listFields=("knowledgeDomains", "evidence"),
+            noDataWhenEmptyList="evidence",
+        ),
+        limitations=(
+            "企业、产品宣传、认证和销售网络回答只表示当前知识库材料记载。",
+            "回答只能依据返回证据，不能用模型记忆补充材料外事实。",
+        ),
+    ),
 }
 
 if set(GOAL_CONTRACTS) != set(REGISTERED_CORE_GOAL_TYPES):
@@ -896,7 +1166,6 @@ for _contract in GOAL_CONTRACTS.values():
 
 DIRECT_PRIMARY_TOOL_GOALS: dict[str, CoreGoalTypeV1] = {
     "query_inventory_ledger": "CURRENT_INVENTORY_LEDGER",
-    "query_prepare_pool_balance": "PREPARE_POOL_BALANCE",
     "get_warehouse_status": "WAREHOUSE_STATUS",
     "query_warehouse_capacity_distribution": "WAREHOUSE_CAPACITY_DISTRIBUTION",
     "query_warehouse_recent_operations": "WAREHOUSE_RECENT_OPERATIONS",
@@ -927,11 +1196,11 @@ DIRECT_PRIMARY_TOOL_GOALS: dict[str, CoreGoalTypeV1] = {
     "search_operation_logs": "BUSINESS_OPERATION_LOGS",
     "query_agent_tool_audit": "AGENT_TOOL_AUDIT",
     "query_agent_answer_reviews": "AGENT_ANSWER_REVIEWS",
+    "run_registered_report": "DAILY_PRODUCTION_ANALYSIS",
 }
 
 RESOLVER_INTENT_GOALS: dict[tuple[str, str], CoreGoalTypeV1] = {
     ("resolve_products", "inventory_ledger"): "CURRENT_INVENTORY_LEDGER",
-    ("resolve_products", "prepare_pool_balance"): "PREPARE_POOL_BALANCE",
     ("resolve_products", "assay_abnormalities"): "ASSAY_ABNORMALITY_SUMMARY",
     ("resolve_products", "assay_standard_coverage"): "CURRENT_INVENTORY_STANDARD_GAPS",
     ("resolve_products", "pallet_anomalies"): "PALLET_ANOMALY_SUMMARY",
@@ -961,6 +1230,21 @@ def registered_goal_for_plan(
     response_mode: str | None = None,
 ) -> CoreGoalTypeV1 | None:
     arguments = arguments or {}
+    if tool_name == "search_approved_knowledge":
+        if intent == "knowledge_process" or response_mode == "knowledge_process":
+            return "PROCESS_KNOWLEDGE_QUERY"
+        if intent == "knowledge_enterprise" or response_mode == "knowledge_enterprise":
+            return "ENTERPRISE_KNOWLEDGE_QUERY"
+        domains = {
+            str(value.value if hasattr(value, "value") else value).upper()
+            for value in (arguments.get("knowledgeDomains") or [])
+        }
+        if domains == {"PROCESS"}:
+            return "PROCESS_KNOWLEDGE_QUERY"
+        if domains and domains.issubset(
+            {"COMPANY", "PRODUCT_MARKETING", "CERTIFICATION", "SALES"}
+        ):
+            return "ENTERPRISE_KNOWLEDGE_QUERY"
     resolver_goal = RESOLVER_INTENT_GOALS.get((str(tool_name or ""), str(intent or "")))
     if resolver_goal is not None:
         return resolver_goal
@@ -1034,6 +1318,21 @@ def registered_goal_for_plan(
         return "CURRENT_INVENTORY_MATCHING_METRIC"
     if tool_name == "query_products_without_recent_assay":
         return "CURRENT_INVENTORY_ASSAY_GAPS"
+    if tool_name == "run_registered_report":
+        if arguments.get("reportDefinitionId") == "today_operations_overview_v1":
+            return "TODAY_OPERATIONS_OVERVIEW"
+        if arguments.get("reportDefinitionId") == "inventory_level_trend_v1":
+            return "INVENTORY_LEVEL_TREND_ANALYSIS"
+        if arguments.get("reportDefinitionId") == "pallet_task_cycle_time_v1":
+            return "PROCESS_EFFICIENCY_TREND"
+        if arguments.get("reportDefinitionId") == "production_input_output_flow_v1":
+            return "PRODUCTION_INPUT_OUTPUT_TREND"
+        if arguments.get("reportDefinitionId") == "quality_metric_trend_v1":
+            return "QUALITY_METRIC_TREND_ANALYSIS"
+        if arguments.get("reportDefinitionId") == "quality_assay_result_trend_v1":
+            return "QUALITY_ASSAY_TREND_ANALYSIS"
+        if arguments.get("reportDefinitionId") == "daily_production_overview_v1":
+            return "DAILY_PRODUCTION_ANALYSIS"
     direct_goal = DIRECT_PRIMARY_TOOL_GOALS.get(str(tool_name or ""))
     if direct_goal is not None:
         return direct_goal
@@ -1165,6 +1464,19 @@ def _fact_status(
     data: dict[str, Any],
 ) -> tuple[FactStatusV1, list[str]]:
     rule = GOAL_CONTRACTS[goal_type].factValidation
+    if goal_type in {"PROCESS_KNOWLEDGE_QUERY", "ENTERPRISE_KNOWLEDGE_QUERY"}:
+        missing = sorted(
+            {"status", "corpusVersion", "queryLabel", "knowledgeDomains", "evidence"}.difference(data)
+        )
+        if missing or not isinstance(data.get("knowledgeDomains"), list) or not isinstance(data.get("evidence"), list):
+            return "INVALID", [f"{rule.factLabel}事实缺少字段：{','.join(missing)}。"]
+        retrieval_status = str(data.get("status") or "").upper()
+        evidence = data.get("evidence") or []
+        if retrieval_status == "NO_DATA" and not evidence:
+            return "NO_DATA", []
+        if retrieval_status in {"SUCCEEDED", "DEGRADED"} and evidence:
+            return "AVAILABLE", []
+        return "INVALID", ["知识检索状态与证据不一致，不能形成完成事实。"]
     if rule.mode == "STANDARD":
         shapes = [
             FactValidationShapeV1(
@@ -1229,7 +1541,15 @@ def _safe_scope(arguments: dict[str, Any]) -> dict[str, str]:
         value = date_range.get(key)
         if value is not None:
             scope[f"dateRange.{key}"] = str(value)
-    for key in ("startDate", "endDate", "standardCode", "standardVersion"):
+    for key in (
+        "startDate",
+        "endDate",
+        "standardCode",
+        "standardVersion",
+        "reportDefinitionId",
+        "reportVersion",
+        "productQuery",
+    ):
         value = arguments.get(key)
         if value is not None:
             scope[key] = str(value)

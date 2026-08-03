@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "documentId": "doc-94170623c8ba7c517d863337",
+  "sourceFileName": "“来冰”企业宣传册.pdf",
+  "sourceSha256": "49ad40ab08e07f305570948ace821df151673dd2aecab679afbd2fc9fe694cc3",
+  "pageCount": 16,
+  "pixelWidth": 3347,
+  "pixelHeight": 1890,
+  "textLayerStatusCounts": {
+    "EMPTY": 12,
+    "SPARSE": 4,
+    "PRESENT": 0
+  },
+  "extractedCharacterCounts": [
+    0,
+    66,
+    67,
+    25,
+    0,
+    0,
+    0,
+    0,
+    0,
+    3,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "packageMetadata": {
+    "title": "企业宣传.cdr",
+    "creator": "CorelDRAW 2020",
+    "producer": "Corel PDF Engine Version 22.0.0.412"
+  }
+}

@@ -3,6 +3,11 @@ import { computed, ref } from 'vue'
 import AgentBusinessCard from './AgentBusinessCard.vue'
 import AgentOptionCard from './AgentOptionCard.vue'
 import { cleanOptionLabel, hasWideBusinessCard, selectedOptionKindLabel, visibleCards } from './agentDisplay'
+import {
+  isKnowledgeCard,
+  isSafeVisibleAgentCard,
+  knowledgeMessageStatus
+} from './knowledgeCardPresentation.mjs'
 
 const props = defineProps({
   item: {
@@ -27,7 +32,8 @@ const emit = defineEmits(['choose-option', 'feedback', 'card-action'])
 
 const feedbackExpanded = ref(false)
 const processExpanded = ref(false)
-const cards = computed(() => visibleCards(props.item))
+const cards = computed(() => visibleCards(props.item).filter(isSafeVisibleAgentCard))
+const knowledgeStatus = computed(() => knowledgeMessageStatus(props.item))
 const processSteps = computed(() => Array.isArray(props.item.processSteps) ? props.item.processSteps : [])
 const processRunning = computed(() => Boolean(props.item.progress && !props.item.finishReason))
 const showProcessDetails = computed(() => processRunning.value || processExpanded.value)
@@ -62,7 +68,7 @@ const showFeedbackTrigger = computed(() => canSendFeedback.value && !props.debug
 const showFeedbackOptions = computed(() => canSendFeedback.value && (props.debugMode || feedbackExpanded.value))
 const bubbleClasses = computed(() => ({
   user: props.item.role === 'user',
-  'wide-card-bubble': hasWideBusinessCard(props.item),
+  'wide-card-bubble': hasWideBusinessCard(props.item) || cards.value.some(isKnowledgeCard),
   'is-error': props.item.finishReason === 'error',
   'is-cancelled': props.item.cancelled || props.item.finishReason === 'cancelled',
   'is-interrupt': props.item.needsUserSelection || ['clarification_required', 'interrupt_required'].includes(props.item.finishReason),
@@ -101,6 +107,19 @@ const sendFeedback = (feedbackType) => {
           <span>{{ step.label }}</span>
         </li>
       </ol>
+    </div>
+    <div
+      v-if="knowledgeStatus"
+      class="knowledge-message-status"
+      :class="`is-${knowledgeStatus.tone}`"
+      :data-knowledge-status="knowledgeStatus.code"
+      :role="knowledgeStatus.tone === 'danger' ? 'alert' : 'status'"
+    >
+      <span class="knowledge-status-dot" aria-hidden="true" />
+      <div>
+        <strong>{{ knowledgeStatus.label }}</strong>
+        <span>{{ knowledgeStatus.detail }}</span>
+      </div>
     </div>
     <div v-if="item.content" class="message-text">{{ item.content }}</div>
 
@@ -261,6 +280,87 @@ const sendFeedback = (feedbackType) => {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 14px;
+}
+
+.knowledge-message-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #f6f9ff;
+  color: #475467;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.knowledge-message-status > div {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.knowledge-message-status strong {
+  color: #175cd3;
+  font-weight: 700;
+}
+
+.knowledge-message-status span:not(.knowledge-status-dot) {
+  overflow-wrap: anywhere;
+}
+
+.knowledge-status-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #2f73ff;
+  box-shadow: 0 0 0 3px rgba(47, 115, 255, 0.12);
+}
+
+.knowledge-message-status.is-warning {
+  border-color: #f7d794;
+  background: #fffbeb;
+}
+
+.knowledge-message-status.is-warning strong {
+  color: #9a6700;
+}
+
+.knowledge-message-status.is-warning .knowledge-status-dot {
+  background: #eaaa08;
+  box-shadow: 0 0 0 3px rgba(234, 170, 8, 0.13);
+}
+
+.knowledge-message-status.is-neutral {
+  border-color: #e4e7ec;
+  background: #f8fafc;
+}
+
+.knowledge-message-status.is-neutral strong {
+  color: #475467;
+}
+
+.knowledge-message-status.is-neutral .knowledge-status-dot {
+  background: #98a2b3;
+  box-shadow: 0 0 0 3px rgba(152, 162, 179, 0.13);
+}
+
+.knowledge-message-status.is-danger {
+  border-color: #fecdca;
+  background: #fffbfa;
+}
+
+.knowledge-message-status.is-danger strong {
+  color: #b42318;
+}
+
+.knowledge-message-status.is-danger .knowledge-status-dot {
+  background: #d92d20;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.12);
 }
 
 .message-progress {

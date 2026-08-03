@@ -2,28 +2,177 @@
   "additionalProperties": false,
   "description": "Model's semantic assessment; Runtime remains the completion authority.",
   "properties": {
-    "schemaVersion": {"const": "1.0", "default": "1.0", "title": "Schemaversion", "type": "string"},
+    "schemaVersion": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schemaversion",
+      "type": "string"
+    },
     "proposedStatus": {
-      "enum": ["COMPLETE", "PARTIAL", "NEEDS_CLARIFICATION", "UNSUPPORTED", "FAILED"],
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "NEEDS_CLARIFICATION",
+        "UNSUPPORTED",
+        "FAILED"
+      ],
       "title": "Proposedstatus",
       "type": "string"
     },
-    "answeredUserGoal": {"title": "Answeredusergoal", "type": "boolean"},
-    "evidenceRefs": {"items": {"type": "string"}, "maxItems": 20, "title": "Evidencerefs", "type": "array"},
+    "answeredUserGoal": {
+      "title": "Answeredusergoal",
+      "type": "boolean"
+    },
+    "evidenceRefs": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Evidencerefs",
+      "type": "array"
+    },
     "missingFacts": {
-      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "CURRENT_PENDING_TASKS", "BOILING_BATCH_TRACE", "PRODUCTION_ORDER_PROGRESS", "PRODUCTION_MATERIAL_TRACE", "PALLET_CURRENT_STATUS", "PALLET_FLOW_HISTORY", "PRODUCT_ASSAY_REPORT", "PRODUCT_ASSAY_HISTORY", "BOILING_BATCH_LIST", "PRODUCTION_OUTPUT_DESTINATIONS", "CURRENT_UNQUALIFIED_INVENTORY", "CURRENT_INVENTORY_MATCHING_STANDARD", "CURRENT_INVENTORY_MATCHING_METRIC", "CURRENT_INVENTORY_ASSAY_GAPS", "CURRENT_INVENTORY_LEDGER", "PREPARE_POOL_BALANCE", "WAREHOUSE_STATUS", "WAREHOUSE_CAPACITY_DISTRIBUTION", "WAREHOUSE_RECENT_OPERATIONS", "WAREHOUSE_MIXED_STORAGE_FACTS", "ASSAY_ABNORMALITY_SUMMARY", "CURRENT_INVENTORY_STANDARD_GAPS", "PALLET_ANOMALY_SUMMARY", "PRINTED_NOT_INBOUND_QR_CODES", "QR_BATCH_INBOUND_COMPLETION", "PRODUCTION_LABEL_COMPLETION", "IN_PROCESS_MATERIALS", "STOCK_DOCUMENTS", "AUTO_INBOUND_BATCH_STATUS", "ASSAY_REFERENCE_DATA", "PRODUCT_QUALITY_CONFIGURATION", "FIXED_PRODUCT_QR_POOL", "MATERIAL_CANDIDATES", "PRODUCT_MASTER_DATA", "SCREEN_MESH_CATALOG", "EMPLOYEE_ROSTER", "ROLE_PERMISSION_CATALOG", "BUSINESS_OPERATION_LOGS", "AGENT_TOOL_AUDIT", "AGENT_ANSWER_REVIEWS", "PRODUCT_LATEST_ASSAY", "ENTITY_RESOLUTION"], "type": "string"},
+      "items": {
+        "enum": [
+          "CURRENT_PRODUCT_INVENTORY",
+          "PRODUCT_INVENTORY_DISTRIBUTION",
+          "WAREHOUSE_INVENTORY_DISTRIBUTION",
+          "CURRENT_PENDING_TASKS",
+          "BOILING_BATCH_TRACE",
+          "PRODUCTION_ORDER_PROGRESS",
+          "PRODUCTION_MATERIAL_TRACE",
+          "PALLET_CURRENT_STATUS",
+          "PALLET_FLOW_HISTORY",
+          "PRODUCT_ASSAY_REPORT",
+          "PRODUCT_ASSAY_HISTORY",
+          "BOILING_BATCH_LIST",
+          "PRODUCTION_OUTPUT_DESTINATIONS",
+          "CURRENT_UNQUALIFIED_INVENTORY",
+          "CURRENT_INVENTORY_MATCHING_STANDARD",
+          "CURRENT_INVENTORY_MATCHING_METRIC",
+          "CURRENT_INVENTORY_ASSAY_GAPS",
+          "CURRENT_INVENTORY_LEDGER",
+          "WAREHOUSE_STATUS",
+          "WAREHOUSE_CAPACITY_DISTRIBUTION",
+          "WAREHOUSE_RECENT_OPERATIONS",
+          "WAREHOUSE_MIXED_STORAGE_FACTS",
+          "ASSAY_ABNORMALITY_SUMMARY",
+          "CURRENT_INVENTORY_STANDARD_GAPS",
+          "PALLET_ANOMALY_SUMMARY",
+          "PRINTED_NOT_INBOUND_QR_CODES",
+          "QR_BATCH_INBOUND_COMPLETION",
+          "PRODUCTION_LABEL_COMPLETION",
+          "IN_PROCESS_MATERIALS",
+          "STOCK_DOCUMENTS",
+          "AUTO_INBOUND_BATCH_STATUS",
+          "ASSAY_REFERENCE_DATA",
+          "PRODUCT_QUALITY_CONFIGURATION",
+          "FIXED_PRODUCT_QR_POOL",
+          "MATERIAL_CANDIDATES",
+          "PRODUCT_MASTER_DATA",
+          "SCREEN_MESH_CATALOG",
+          "EMPLOYEE_ROSTER",
+          "ROLE_PERMISSION_CATALOG",
+          "BUSINESS_OPERATION_LOGS",
+          "AGENT_TOOL_AUDIT",
+          "AGENT_ANSWER_REVIEWS",
+          "DAILY_PRODUCTION_ANALYSIS",
+          "QUALITY_ASSAY_TREND_ANALYSIS",
+          "QUALITY_METRIC_TREND_ANALYSIS",
+          "PRODUCTION_INPUT_OUTPUT_TREND",
+          "PROCESS_EFFICIENCY_TREND",
+          "INVENTORY_LEVEL_TREND_ANALYSIS",
+          "PROCESS_KNOWLEDGE_QUERY",
+          "ENTERPRISE_KNOWLEDGE_QUERY",
+          "TODAY_OPERATIONS_OVERVIEW",
+          "PRODUCT_LATEST_ASSAY",
+          "ENTITY_RESOLUTION"
+        ],
+        "type": "string"
+      },
       "maxItems": 10,
       "title": "Missingfacts",
       "type": "array"
     },
     "failedFacts": {
-      "items": {"enum": ["CURRENT_PRODUCT_INVENTORY", "PRODUCT_INVENTORY_DISTRIBUTION", "WAREHOUSE_INVENTORY_DISTRIBUTION", "CURRENT_PENDING_TASKS", "BOILING_BATCH_TRACE", "PRODUCTION_ORDER_PROGRESS", "PRODUCTION_MATERIAL_TRACE", "PALLET_CURRENT_STATUS", "PALLET_FLOW_HISTORY", "PRODUCT_ASSAY_REPORT", "PRODUCT_ASSAY_HISTORY", "BOILING_BATCH_LIST", "PRODUCTION_OUTPUT_DESTINATIONS", "CURRENT_UNQUALIFIED_INVENTORY", "CURRENT_INVENTORY_MATCHING_STANDARD", "CURRENT_INVENTORY_MATCHING_METRIC", "CURRENT_INVENTORY_ASSAY_GAPS", "CURRENT_INVENTORY_LEDGER", "PREPARE_POOL_BALANCE", "WAREHOUSE_STATUS", "WAREHOUSE_CAPACITY_DISTRIBUTION", "WAREHOUSE_RECENT_OPERATIONS", "WAREHOUSE_MIXED_STORAGE_FACTS", "ASSAY_ABNORMALITY_SUMMARY", "CURRENT_INVENTORY_STANDARD_GAPS", "PALLET_ANOMALY_SUMMARY", "PRINTED_NOT_INBOUND_QR_CODES", "QR_BATCH_INBOUND_COMPLETION", "PRODUCTION_LABEL_COMPLETION", "IN_PROCESS_MATERIALS", "STOCK_DOCUMENTS", "AUTO_INBOUND_BATCH_STATUS", "ASSAY_REFERENCE_DATA", "PRODUCT_QUALITY_CONFIGURATION", "FIXED_PRODUCT_QR_POOL", "MATERIAL_CANDIDATES", "PRODUCT_MASTER_DATA", "SCREEN_MESH_CATALOG", "EMPLOYEE_ROSTER", "ROLE_PERMISSION_CATALOG", "BUSINESS_OPERATION_LOGS", "AGENT_TOOL_AUDIT", "AGENT_ANSWER_REVIEWS", "PRODUCT_LATEST_ASSAY", "ENTITY_RESOLUTION"], "type": "string"},
+      "items": {
+        "enum": [
+          "CURRENT_PRODUCT_INVENTORY",
+          "PRODUCT_INVENTORY_DISTRIBUTION",
+          "WAREHOUSE_INVENTORY_DISTRIBUTION",
+          "CURRENT_PENDING_TASKS",
+          "BOILING_BATCH_TRACE",
+          "PRODUCTION_ORDER_PROGRESS",
+          "PRODUCTION_MATERIAL_TRACE",
+          "PALLET_CURRENT_STATUS",
+          "PALLET_FLOW_HISTORY",
+          "PRODUCT_ASSAY_REPORT",
+          "PRODUCT_ASSAY_HISTORY",
+          "BOILING_BATCH_LIST",
+          "PRODUCTION_OUTPUT_DESTINATIONS",
+          "CURRENT_UNQUALIFIED_INVENTORY",
+          "CURRENT_INVENTORY_MATCHING_STANDARD",
+          "CURRENT_INVENTORY_MATCHING_METRIC",
+          "CURRENT_INVENTORY_ASSAY_GAPS",
+          "CURRENT_INVENTORY_LEDGER",
+          "WAREHOUSE_STATUS",
+          "WAREHOUSE_CAPACITY_DISTRIBUTION",
+          "WAREHOUSE_RECENT_OPERATIONS",
+          "WAREHOUSE_MIXED_STORAGE_FACTS",
+          "ASSAY_ABNORMALITY_SUMMARY",
+          "CURRENT_INVENTORY_STANDARD_GAPS",
+          "PALLET_ANOMALY_SUMMARY",
+          "PRINTED_NOT_INBOUND_QR_CODES",
+          "QR_BATCH_INBOUND_COMPLETION",
+          "PRODUCTION_LABEL_COMPLETION",
+          "IN_PROCESS_MATERIALS",
+          "STOCK_DOCUMENTS",
+          "AUTO_INBOUND_BATCH_STATUS",
+          "ASSAY_REFERENCE_DATA",
+          "PRODUCT_QUALITY_CONFIGURATION",
+          "FIXED_PRODUCT_QR_POOL",
+          "MATERIAL_CANDIDATES",
+          "PRODUCT_MASTER_DATA",
+          "SCREEN_MESH_CATALOG",
+          "EMPLOYEE_ROSTER",
+          "ROLE_PERMISSION_CATALOG",
+          "BUSINESS_OPERATION_LOGS",
+          "AGENT_TOOL_AUDIT",
+          "AGENT_ANSWER_REVIEWS",
+          "DAILY_PRODUCTION_ANALYSIS",
+          "QUALITY_ASSAY_TREND_ANALYSIS",
+          "QUALITY_METRIC_TREND_ANALYSIS",
+          "PRODUCTION_INPUT_OUTPUT_TREND",
+          "PROCESS_EFFICIENCY_TREND",
+          "INVENTORY_LEVEL_TREND_ANALYSIS",
+          "PROCESS_KNOWLEDGE_QUERY",
+          "ENTERPRISE_KNOWLEDGE_QUERY",
+          "TODAY_OPERATIONS_OVERVIEW",
+          "PRODUCT_LATEST_ASSAY",
+          "ENTITY_RESOLUTION"
+        ],
+        "type": "string"
+      },
       "maxItems": 10,
       "title": "Failedfacts",
       "type": "array"
     },
-    "contradictions": {"items": {"type": "string"}, "maxItems": 10, "title": "Contradictions", "type": "array"},
-    "limitations": {"items": {"type": "string"}, "maxItems": 10, "title": "Limitations", "type": "array"},
+    "contradictions": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Contradictions",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Limitations",
+      "type": "array"
+    },
     "suggestedFollowupActions": {
       "items": {
         "enum": [
@@ -43,7 +192,10 @@
       "type": "array"
     }
   },
-  "required": ["proposedStatus", "answeredUserGoal"],
+  "required": [
+    "proposedStatus",
+    "answeredUserGoal"
+  ],
   "title": "ResultReasoningDraftV1",
   "type": "object"
 }

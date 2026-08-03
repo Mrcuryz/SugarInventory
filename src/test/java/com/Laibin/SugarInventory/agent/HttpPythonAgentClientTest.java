@@ -25,6 +25,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HttpPythonAgentClientTest {
     private HttpServer server;
 
+    @Test
+    void defaultJavaTimeoutExceedsPythonLlmRunBudget() {
+        assertThat(new AgentRuntimeProperties().getPythonTimeoutMs()).isEqualTo(100000);
+    }
+
     @AfterEach
     void tearDown() {
         if (server != null) {
@@ -52,7 +57,9 @@ class HttpPythonAgentClientTest {
             chatBody.set(objectMapper.readTree(exchange.getRequestBody()));
             respond(exchange, 200, """
                     {"agentSessionId":"agt_001","answer":"库存查询完成。","needsUserSelection":false,
-                     "cards":[],"suggestions":[],"debug":null,"error":null}
+                     "cards":[],"suggestions":[],
+                     "reviewTrace":{"knowledgeAudit":{"targetAgent":"knowledge_expert","status":"SUCCEEDED"}},
+                     "debug":null,"error":null}
                     """);
         });
         server.start();
@@ -75,6 +82,8 @@ class HttpPythonAgentClientTest {
         assertThat(serviceKey).hasValue("python-service-secret");
         assertThat(chatServiceKey).hasValue("python-service-secret");
         assertThat(response.getAnswer()).isEqualTo("库存查询完成。");
+        assertThat(response.getReviewTrace().path("knowledgeAudit").path("targetAgent").asText())
+                .isEqualTo("knowledge_expert");
         String bodyText = chatBody.get().toString();
         assertThat(bodyText).doesNotContain(
                 "python-service-secret", "delegationToken", "Authorization", "refreshToken", "password");
@@ -106,7 +115,7 @@ class HttpPythonAgentClientTest {
                 "{\"status\":\"UP\",\"dependencies\":{\"toolGateway\":\"UP\"}}"));
         server.createContext("/internal/agent/capabilities", exchange -> respond(exchange, 200,
                 expectedCapabilities().replace(
-                        "d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062",
+                        "a6f14110f4573d404a2ac6ad9d33d4797a8e6ae8478d87ede2d8867a86025b68",
                         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")));
         server.start();
 
@@ -121,7 +130,7 @@ class HttpPythonAgentClientTest {
     @Test
     void javaExpertProfileRegistryMatchesThePythonCanonicalHash() {
         assertThat(McpInternalAgentToolGatewayService.agentProfileRegistryHash(new ObjectMapper()))
-                .isEqualTo("d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062");
+                .isEqualTo("a6f14110f4573d404a2ac6ad9d33d4797a8e6ae8478d87ede2d8867a86025b68");
     }
 
     @Test
@@ -231,9 +240,9 @@ class HttpPythonAgentClientTest {
     private String expectedCapabilities() {
         return """
                 {"runtimeVersion":"0.2.0","protocolVersion":"1.0",
-                 "toolRegistryHash":"5cb3d9d529f8268c4cd9135436720e9e9dbb70df4fcbb95e6b93bba85881e82d",
+                 "toolRegistryHash":"f7085c17b9d41ae037e3d092fe818ebc5dcadc3aab6b32b36a55b4e8f168d46f",
                  "recipeRegistryHash":"c5ee0907e4134024138ff5489bd9b58d92c4103663a00f0d0d14fa5a40d12385",
-                 "agentProfileRegistryHash":"d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062",
+                 "agentProfileRegistryHash":"a6f14110f4573d404a2ac6ad9d33d4797a8e6ae8478d87ede2d8867a86025b68",
                  "toolCount":52,"recipeCount":1,"agentProfiles":[]}
                 """;
     }

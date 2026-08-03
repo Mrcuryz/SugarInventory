@@ -11,11 +11,15 @@ import {
   streamAgentMessage,
   submitAgentMessageReviewFeedback
 } from '@/api/agent'
+import { exportRegisteredReportRunXlsx } from '@/api/analyticsReport'
 import { useAuthStore } from '@/stores/auth'
 import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
+import RegisteredReportHistoryDialog from '@/components/agent/RegisteredReportHistoryDialog.vue'
+import { isAgentAdminRole } from '@/components/agent/agentAccess.mjs'
 import PalletTaskBatchDialog from '@/components/agent/PalletTaskBatchDialog.vue'
 import { cleanOptionLabel } from '@/components/agent/agentDisplay'
 import { appendProcessStep } from '@/components/agent/agentProcessTrace.mjs'
+import { safeReviewAnswerSummary, safeReviewAnswerText } from '@/components/agent/reviewPayload.mjs'
 import { applyTaskBatchCompletion } from '@/components/agent/taskCardPresentation.mjs'
 
 const visible = ref(false)
@@ -29,6 +33,7 @@ const messages = ref([])
 const scrollRef = ref(null)
 const pendingSelection = ref(null)
 const debugMode = ref(false)
+const reportHistoryVisible = ref(false)
 const shadowCompareMode = import.meta.env.VITE_AGENT_SHADOW_COMPARE === 'true'
 const composerAutosize = Object.freeze({ minRows: 1, maxRows: 3 })
 const authStore = useAuthStore()
@@ -55,7 +60,7 @@ const sessionStatusClass = computed(() => ({
   active: sessionStatus.value === 'ACTIVE',
   inactive: sessionStatus.value !== 'ACTIVE'
 }))
-const isAdmin = computed(() => ['ADMIN', 'SUPER_ADMIN'].includes(session.value?.roleCode || authStore.roleCode))
+const isAdmin = computed(() => isAgentAdminRole(session.value?.roleCode || authStore.roleCode))
 const currentUserName = computed(() => session.value?.name || authStore.name || authStore.employeeId || '当前用户')
 const assistantName = computed(() => '智能仓储助手')
 const userAvatarText = computed(() => avatarText(currentUserName.value, '用'))
@@ -67,6 +72,7 @@ const avatarText = (name, fallback) => {
 }
 
 const open = async () => {
+  if (!isAdmin.value) return
   if (!session.value) {
     await startSession()
   }
@@ -198,8 +204,8 @@ const recordAssistantReview = async (userQuestion, assistantMessage, selectedOpt
     await recordAgentMessageReview(session.value.agentSessionId, {
       messageId: assistantMessage.messageId,
       userQuestion,
-      assistantAnswerTextSafe: assistantMessage.content,
-      assistantAnswerSummary: assistantMessage.content,
+      assistantAnswerTextSafe: safeReviewAnswerText(assistantMessage.content),
+      assistantAnswerSummary: safeReviewAnswerSummary(assistantMessage.content),
       pagePath: window.location.pathname,
       ...intentReviewPayload(assistantMessage.intentTrace),
       actualIntentSummary: formatIntentTrace(assistantMessage.intentTrace) || (selectedOption?.displayLabel
@@ -559,6 +565,34 @@ const scrollToBottom = async () => {
 
 defineExpose({ open })
 const handleCardAction = async (action) => {
+  if (action?.actionKind === 'export_report_run') {
+    const reportRunId = String(action.reportRunId || '').trim()
+    if (!/^report_run_[a-f0-9]{16}$/.test(reportRunId)) {
+      ElMessage.warning('这份报表缺少可用的历史快照，请重新查询后再导出')
+      return
+    }
+    try {
+      const response = await exportRegisteredReportRunXlsx(reportRunId)
+      const contentDisposition = String(response.headers?.['content-disposition'] || '')
+      const encodedName = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+      const fallbackName = `业务报表_${new Date().toISOString().slice(0, 10)}.xlsx`
+      const filename = encodedName
+        ? decodeURIComponent(encodedName)
+        : fallbackName
+      const url = URL.createObjectURL(response.data)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = filename
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+      ElMessage.success('报表已按本次查询快照导出')
+    } catch (error) {
+      ElMessage.error('报表导出失败，请稍后重试')
+    }
+    return
+  }
   if (action?.actionKind === 'create_assay') {
     await router.push({
       path: '/assay',
@@ -591,6 +625,20 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
     message.cards = message.cards.map(card => applyTaskBatchCompletion(card, palletCodes).card)
   })
 }
+
+const formatSnapshotTime = value => String(value || '')
+  .replace('T', ' ')
+  .replace(/\.\d+$/, '')
+
+const handleHistoricalReportOpened = ({ item, card } = {}) => {
+  if (!item || !card) return
+  messages.value.push({
+    role: 'assistant',
+    content: `已打开历史报表快照：${item.reportName}（${item.dateRangeLabel}）。这是生成于 ${formatSnapshotTime(item.generatedAt)} 的原始结果，不会随当前数据自动变化。`,
+    cards: [card]
+  })
+  scrollToBottom()
+}
 </script>
 
 <template>
@@ -620,6 +668,9 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
             <span>库存、库位、托盘和化验查询</span>
           </div>
         </div>
+        <button type="button" class="history-entry" @click="reportHistoryVisible = true">
+          历史报表
+        </button>
       </div>
     </template>
 
@@ -690,6 +741,10 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
     :pallet-codes="taskBatchDialog.palletCodes"
     @completed="handleTaskBatchCompleted"
   />
+  <RegisteredReportHistoryDialog
+    v-model="reportHistoryVisible"
+    @opened="handleHistoricalReportOpened"
+  />
 </template>
 
 <style scoped lang="scss">
@@ -755,6 +810,23 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
   min-width: 0;
   display: grid;
   gap: 3px;
+}
+
+.history-entry {
+  flex: none;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d7e4ff;
+  border-radius: 8px;
+  background: #f5f8ff;
+  color: var(--app-primary);
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #b8ccff;
+    background: #edf4ff;
+  }
 }
 
 .assistant-title-row {
@@ -1040,6 +1112,10 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
   .assistant-header {
     gap: 10px;
     padding-right: 30px;
+  }
+
+  .history-entry {
+    padding: 0 9px;
   }
 
   .assistant-title-row {

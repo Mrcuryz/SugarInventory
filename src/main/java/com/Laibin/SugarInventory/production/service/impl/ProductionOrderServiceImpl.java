@@ -16,6 +16,8 @@ import com.Laibin.SugarInventory.mapper.PalletFlowRecordMapper;
 import com.Laibin.SugarInventory.mapper.PalletTaskMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
+import com.Laibin.SugarInventory.inventoryhistory.domain.StockMovementEventCommand;
+import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementEventService;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionMaterialCandidateQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionInProcessMaterialQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionFinishDTO;
@@ -60,6 +62,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.imageio.ImageIO;
@@ -105,6 +108,8 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
     private final OutStockMapper outStockMapper;
     private final ObjectMapper objectMapper;
     private final ProductionBoilingBatchService boilingBatchService;
+    @Autowired
+    private StockMovementEventService stockMovementEventService;
 
     @Override
     public PageResult<ProductionOrderPageVO> pageOrders(ProductionOrderQueryDTO query) {
@@ -212,7 +217,8 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
             Warehouse warehouse = inventory.getWarehouseId() == null ? null : warehouseMapper.selectByIdForUpdate(inventory.getWarehouseId());
             ProductionOrderMaterial material = buildMaterialSnapshot(order, palletCode, inventory, product, warehouse, operatorId, operatorName, now, dto.getRemark());
             materialMapper.insert(material);
-            insertMaterialOutStock(inventory, product, operatorId);
+            OutStock outStock = insertMaterialOutStock(inventory, product, operatorId, now);
+            recordMaterialPickMovement(order, palletCode, inventory, product, outStock, operatorId);
             inventoryMapper.deleteInventoryById(inventory.getId());
             if (warehouse != null) {
                 warehouseMapper.updateCurCapacity(warehouse.getId(), Math.max(0, safeInt(warehouse.getCurCapacity()) - 1));
@@ -1009,7 +1015,8 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
                 + "|token=" + labelCode.getLabelToken();
     }
 
-    private void insertMaterialOutStock(Inventory inventory, Product product, Integer operatorId) {
+    private OutStock insertMaterialOutStock(Inventory inventory, Product product,
+                                            Integer operatorId, LocalDateTime occurredAt) {
         int pieces = safeInt(inventory.getPieces());
         int quantity = pieces > 0 ? 0 : Math.max(1, safeInt(inventory.getQuantity()));
         OutStock outStock = new OutStock();
@@ -1023,10 +1030,38 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
         outStock.setOutDate(LocalDate.now());
         outStock.setOperatorId(operatorId);
         outStock.setAssayId(inventory.getAssayId());
-        outStock.setCreatedAt(LocalDateTime.now());
+        outStock.setCreatedAt(occurredAt);
         int totalPieces = pieces > 0 ? pieces : quantity * safeInt(product.getPiecesPerPallet());
         outStock.setTotalWeight(product.getWeightPerPiece().multiply(BigDecimal.valueOf(totalPieces)));
         outStockMapper.insert(outStock);
+        return outStock;
+    }
+
+    private void recordMaterialPickMovement(ProductionOrder order, PalletCode palletCode, Inventory inventory,
+                                            Product product, OutStock outStock, Integer operatorId) {
+        int loosePieces = outStock.getPieces() == null ? 0 : outStock.getPieces();
+        int boards = loosePieces > 0 ? 0 : Math.max(0, outStock.getQuantity());
+        int totalPieces = loosePieces > 0 ? loosePieces : boards * product.getPiecesPerPallet();
+        stockMovementEventService.record(StockMovementEventCommand.builder()
+                .eventType("OUTBOUND")
+                .sourceType("OUT_STOCK")
+                .sourceRecordId(outStock.getId().longValue())
+                .occurredAt(outStock.getCreatedAt())
+                .productId(product.getId())
+                .productStatus(inventory.getProductStatus())
+                .productionDate(palletCode.getProductionDate() == null
+                        ? inventory.getEntryDate()
+                        : palletCode.getProductionDate())
+                .fromWarehouseId(inventory.getWarehouseId())
+                .palletCodeId(palletCode.getId())
+                .boardQuantity(boards)
+                .loosePieceQuantity(loosePieces)
+                .totalPieces(totalPieces)
+                .totalWeightKg(outStock.getTotalWeight())
+                .operatorId(operatorId)
+                .actionKind("PRODUCTION_MATERIAL_PICK")
+                .businessActionId("production_order_" + order.getId() + "_material_pick")
+                .build());
     }
 
     private void insertMaterialPickFlow(ProductionOrder order, PalletCode palletCode, Inventory inventory,

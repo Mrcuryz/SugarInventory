@@ -25,7 +25,7 @@ import java.util.function.Consumer;
 public class HttpPythonAgentClient implements PythonAgentClient {
     static final String SERVICE_KEY_HEADER = "X-Agent-Service-Key";
     static final String EXPECTED_PROTOCOL_VERSION = "1.0";
-    static final String EXPECTED_TOOL_REGISTRY_HASH = "5cb3d9d529f8268c4cd9135436720e9e9dbb70df4fcbb95e6b93bba85881e82d";
+    static final String EXPECTED_TOOL_REGISTRY_HASH = "f7085c17b9d41ae037e3d092fe818ebc5dcadc3aab6b32b36a55b4e8f168d46f";
     static final String EXPECTED_RECIPE_REGISTRY_HASH = "c5ee0907e4134024138ff5489bd9b58d92c4103663a00f0d0d14fa5a40d12385";
     static final int EXPECTED_TOOL_COUNT = 52;
     static final int EXPECTED_RECIPE_COUNT = 1;

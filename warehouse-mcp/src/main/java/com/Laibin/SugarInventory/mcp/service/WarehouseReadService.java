@@ -44,6 +44,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolveReq
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionEntityResolutionResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RegisteredReportRunRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.RegisteredReportRunResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceRequest;
@@ -462,6 +464,33 @@ public class WarehouseReadService {
         }
         return apiClient.postData("/api/production/agent-read/orders/progress/query",
                 new ProductionOrderProgressRequest(request.orderRef().trim()), ProductionOrderProgressResponse.class);
+    }
+
+    public RegisteredReportRunResponse runRegisteredReport(RegisteredReportRunRequest request) {
+        if (request == null
+                || request.reportDefinitionId() == null
+                || request.reportDefinitionId().isBlank()
+                || request.reportVersion() == null
+                || request.startDate() == null
+                || request.endDate() == null) {
+            throw new IllegalArgumentException(
+                    "reportDefinitionId, reportVersion, startDate and endDate are required");
+        }
+        RegisteredReportRunRequest normalized = new RegisteredReportRunRequest(
+                request.reportDefinitionId().trim(),
+                request.reportVersion(),
+                request.startDate().trim(),
+                request.endDate().trim(),
+                trimToNull(request.productQuery()),
+                trimToNull(request.metricKey()),
+                trimToNull(request.taskType()),
+                trimToNull(request.comparisonMode()),
+                trimToNull(request.comparisonStartDate()),
+                trimToNull(request.comparisonEndDate()));
+        return apiClient.postData(
+                "/api/analytics/agent-read/reports/run",
+                normalized,
+                RegisteredReportRunResponse.class);
     }
 
     public ProductionBoilingBatchListResponse queryBoilingBatches(ProductionBoilingBatchListRequest request) {

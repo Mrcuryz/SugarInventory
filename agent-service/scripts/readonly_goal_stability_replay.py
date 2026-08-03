@@ -102,7 +102,9 @@ def main() -> int:
 
     settings = Settings.from_env()
     if settings.model_mode != "openai_compatible" or not settings.model_api_key:
-        raise RuntimeError("Set AGENT_MODEL_MODE=openai_compatible and AGENT_MODEL_API_KEY before live replay.")
+        raise RuntimeError(
+            "Set AGENT_PYTHON_MODEL_MODE=openai_compatible and AGENT_MODEL_API_KEY before live replay."
+        )
 
     document = load_existing(args.output, args.fresh)
     document.update(

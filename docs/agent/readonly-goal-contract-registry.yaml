@@ -1,9 +1,10 @@
-version: "1.0"
-updated_at: "2026-07-24"
-scope: "52 个 Agent v1 L1 只读工具的用户目标归属"
-current_contract_count: 43
+version: "1.1"
+updated_at: "2026-08-03"
+scope: "第一阶段 L1 只读工具、第二阶段登记报表及 RAG-03B L0 进程内知识目标归属"
+current_contract_count: 51
 planned_contract_count: 0
 classified_tool_count: 52
+classified_internal_knowledge_tool_count: 1
 
 principles:
   - "GoalContract 按用户业务结果登记，不按工具数量一对一生成。"
@@ -12,6 +13,7 @@ principles:
   - "CURRENT 表示已进入 Runtime GoalContract、FactEnvelope 和 CompletionEvaluator。"
   - "PLANNED 表示工具已经可用但目标合同尚未进入 Runtime；当前 planned_goals 为空。"
   - "同一工具可以在一个目标中作为主查询工具，在另一个目标中作为支撑工具。"
+  - "search_approved_knowledge 是 Python 进程内 L0 能力，不计入 52 个仓储 MCP/登记报表工具。"
 
 current_goals:
   CURRENT_PRODUCT_INVENTORY:
@@ -86,10 +88,6 @@ current_goals:
     owner_expert: inventory_expert
     primary_tools: [query_inventory_ledger]
     supporting_tools: [resolve_products, resolve_warehouses]
-  PREPARE_POOL_BALANCE:
-    owner_expert: inventory_expert
-    primary_tools: [query_prepare_pool_balance]
-    supporting_tools: [resolve_products]
   WAREHOUSE_STATUS:
     owner_expert: warehouse_expert
     primary_tools: [get_warehouse_status]
@@ -190,6 +188,42 @@ current_goals:
   AGENT_ANSWER_REVIEWS:
     owner_expert: audit_expert
     primary_tools: [query_agent_answer_reviews]
+    supporting_tools: []
+  DAILY_PRODUCTION_ANALYSIS:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  TODAY_OPERATIONS_OVERVIEW:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  INVENTORY_LEVEL_TREND_ANALYSIS:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  QUALITY_ASSAY_TREND_ANALYSIS:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  QUALITY_METRIC_TREND_ANALYSIS:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  PRODUCTION_INPUT_OUTPUT_TREND:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  PROCESS_EFFICIENCY_TREND:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  PROCESS_KNOWLEDGE_QUERY:
+    owner_expert: knowledge_expert
+    primary_tools: [search_approved_knowledge]
+    supporting_tools: []
+  ENTERPRISE_KNOWLEDGE_QUERY:
+    owner_expert: knowledge_expert
+    primary_tools: [search_approved_knowledge]
     supporting_tools: []
 
 planned_goals: {}

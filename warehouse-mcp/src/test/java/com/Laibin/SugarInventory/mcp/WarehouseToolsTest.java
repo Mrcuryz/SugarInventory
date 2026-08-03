@@ -1004,6 +1004,313 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void runsFixedRegisteredProductionReportThroughReadOnlyEndpoint() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"REGISTERED_PRODUCTION_OUTPUT",
+                  "reportRunId":"report_run_opaque",
+                  "reportDefinitionId":"daily_production_overview_v1",
+                  "reportVersion":1,
+                  "reportName":"生产登记产出日报",
+                  "startDate":"2026-07-27",
+                  "endDate":"2026-07-27",
+                  "dateRangeLabel":"2026-07-27",
+                  "dataAsOf":"2026-07-27T16:30:00",
+                  "filtersApplied":{"productScope":"全部产品"},
+                  "metrics":{"totalWeightKg":2500,"productionOrderCount":2,"outputRecordCount":3},
+                  "dailySeries":[],
+                  "productBreakdowns":[],
+                  "comparison":{"comparisonMode":"PREVIOUS_PERIOD","comparisonDateRangeLabel":"2026-07-26","metrics":[{"metricCode":"totalWeightKg","absoluteChange":500}]},
+                  "dataQuality":{"partial":false,"notes":[]},
+                  "limitations":[]
+                }
+                """)));
+
+        var response = tools.runRegisteredReport(
+                "daily_production_overview_v1",
+                1,
+                LocalDate.of(2026, 7, 27),
+                LocalDate.of(2026, 7, 27),
+                " 黄冰糖 ",
+                null,
+                null,
+                "PREVIOUS_PERIOD",
+                null,
+                null);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.reportDefinitionId()).isEqualTo("daily_production_overview_v1");
+        assertThat(response.metrics().path("totalWeightKg").decimalValue())
+                .isEqualByComparingTo("2500");
+        assertThat(response.comparison().path("comparisonMode").asText())
+                .isEqualTo("PREVIOUS_PERIOD");
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getMethod()).isEqualTo("POST");
+        assertThat(recorded.getPath()).isEqualTo("/api/analytics/agent-read/reports/run");
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"reportVersion\":1")
+                .contains("\"productQuery\":\"黄冰糖\"")
+                .contains("\"comparisonMode\":\"PREVIOUS_PERIOD\"");
+    }
+
+    @Test
+    void preservesTodayOperationsOverviewThroughReadOnlyEndpoint() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"REGISTERED_TODAY_OPERATIONS_SNAPSHOT",
+                  "reportRunId":"report_run_today",
+                  "reportDefinitionId":"today_operations_overview_v1",
+                  "reportVersion":1,
+                  "reportName":"今日运营概览",
+                  "startDate":"2026-08-03",
+                  "endDate":"2026-08-03",
+                  "dateRangeLabel":"2026-08-03",
+                  "operationsOverview":{
+                    "businessDate":"2026-08-03",
+                    "productionOutput":{"totalWeightKg":1980,"outputRecordCount":1},
+                    "assayQuality":{"assayRecordCount":3,"passCount":2},
+                    "productionFlow":{"materialInputWeightKg":2000,"stableOutputWeightKg":1980},
+                    "currentInventory":{"totalEquivalentPieces":550,"totalStockText":"13 板 30 件"},
+                    "todayPalletTasks":{"cohortTaskCount":4,"completedTaskCount":2},
+                    "currentPendingTaskCount":7
+                  },
+                  "dataQuality":{"partial":false,"notes":[]},
+                  "limitations":[]
+                }
+                """)));
+
+        var response = tools.runRegisteredReport(
+                "today_operations_overview_v1",
+                1,
+                LocalDate.of(2026, 8, 3),
+                LocalDate.of(2026, 8, 3),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.operationsOverview().path("currentPendingTaskCount").asInt())
+                .isEqualTo(7);
+        assertThat(response.operationsOverview().path("assayQuality")
+                .path("assayRecordCount").asInt()).isEqualTo(3);
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"reportDefinitionId\":\"today_operations_overview_v1\"")
+                .contains("\"productQuery\":null")
+                .contains("\"comparisonMode\":null");
+    }
+
+    @Test
+    void preservesRegisteredQualityTrendSectionsThroughReadOnlyEndpoint() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"REGISTERED_QUALITY_ASSAY",
+                  "reportRunId":"report_run_quality",
+                  "reportDefinitionId":"quality_assay_result_trend_v1",
+                  "reportVersion":1,
+                  "reportName":"化验判定趋势",
+                  "startDate":"2026-07-01",
+                  "endDate":"2026-07-27",
+                  "dateRangeLabel":"2026-07-01 至 2026-07-27",
+                  "dataAsOf":"2026-07-27T16:30:00",
+                  "filtersApplied":{"productScope":"产品名称包含“黄冰糖”"},
+                  "qualityMetrics":{"assayRecordCount":3,"passCount":1,"failCount":1,"passRatePercent":50.0},
+                  "seriesGranularity":"DAY",
+                  "qualitySeries":[{"periodLabel":"2026-07-17","assayRecordCount":3}],
+                  "qualityProductBreakdowns":[{"productName":"黄冰糖（袋）","assayRecordCount":3}],
+                  "standardBreakdowns":[{"standardLabel":"黄冰糖 v1","assayRecordCount":2}],
+                  "dailySeries":[],
+                  "productBreakdowns":[],
+                  "dataQuality":{"partial":false,"notes":[]},
+                  "limitations":[]
+                }
+                """)));
+
+        var response = tools.runRegisteredReport(
+                "quality_assay_result_trend_v1",
+                1,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 27),
+                "黄冰糖",
+                null,
+                null);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.qualityMetrics().path("assayRecordCount").asInt()).isEqualTo(3);
+        assertThat(response.seriesGranularity()).isEqualTo("DAY");
+        assertThat(response.qualitySeries()).hasSize(1);
+        assertThat(response.qualityProductBreakdowns()).hasSize(1);
+        assertThat(response.standardBreakdowns()).hasSize(1);
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"reportDefinitionId\":\"quality_assay_result_trend_v1\"");
+    }
+
+    @Test
+    void preservesRegisteredQualityMetricTrendSectionsAndMetricKey() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"REGISTERED_QUALITY_METRIC",
+                  "reportRunId":"report_run_quality_metric",
+                  "reportDefinitionId":"quality_metric_trend_v1",
+                  "reportVersion":1,
+                  "reportName":"单项化验指标趋势",
+                  "startDate":"2026-01-29",
+                  "endDate":"2026-07-27",
+                  "metricTrendSummary":{"metricKey":"ph","metricName":"pH","sampleCount":3,"average":5.067},
+                  "metricSeries":[{"periodLabel":"2026-07","sampleCount":2,"average":7.1}],
+                  "metricProductBreakdowns":[{"productName":"黄冰糖（袋）","sampleCount":3}],
+                  "metricStandardBreakdowns":[{"standardLabel":"黄冰糖 v1","sampleCount":1}],
+                  "dailySeries":[],
+                  "productBreakdowns":[],
+                  "qualitySeries":[],
+                  "qualityProductBreakdowns":[],
+                  "standardBreakdowns":[],
+                  "dataQuality":{"partial":false,"rowsWithoutComparableMetricStandard":2,"notes":[]},
+                  "limitations":[]
+                }
+                """)));
+
+        var response = tools.runRegisteredReport(
+                "quality_metric_trend_v1",
+                1,
+                LocalDate.of(2026, 1, 29),
+                LocalDate.of(2026, 7, 27),
+                "黄冰糖（袋）",
+                "ph",
+                null);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.metricTrendSummary().path("metricName").asText()).isEqualTo("pH");
+        assertThat(response.metricSeries()).hasSize(1);
+        assertThat(response.metricProductBreakdowns()).hasSize(1);
+        assertThat(response.metricStandardBreakdowns()).hasSize(1);
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"reportDefinitionId\":\"quality_metric_trend_v1\"")
+                .contains("\"metricKey\":\"ph\"");
+    }
+
+    @Test
+    void preservesRegisteredProductionInputOutputFlowSections() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"REGISTERED_PRODUCTION_INPUT_OUTPUT_FLOW",
+                  "reportRunId":"report_run_production_flow",
+                  "reportDefinitionId":"production_input_output_flow_v1",
+                  "reportVersion":1,
+                  "reportName":"生产领料—登记产出趋势",
+                  "startDate":"2026-06-01",
+                  "endDate":"2026-07-27",
+                  "productionFlowMetrics":{
+                    "materialInputRecordCount":2,
+                    "materialInputWeightKg":1656.8,
+                    "stableOutputRecordCount":3,
+                    "stableOutputWeightKg":1983.8
+                  },
+                  "productionFlowDailySeries":[
+                    {
+                      "businessDate":"2026-06-30",
+                      "materialInputWeightKg":1656.8,
+                      "stableOutputWeightKg":1983.8
+                    }
+                  ],
+                  "productionFlowOrderBreakdowns":[
+                    {
+                      "orderNo":"PO202606300001",
+                      "orderTypeLabel":"成品生产",
+                      "orderStatusLabel":"已完成",
+                      "completenessLabel":"输入和稳定产出均已登记"
+                    }
+                  ],
+                  "dataQuality":{"partial":false,"notes":[]},
+                  "limitations":["两条序列不能直接相除。"]
+                }
+                """)));
+
+        var response = tools.runRegisteredReport(
+                "production_input_output_flow_v1",
+                1,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 7, 27),
+                "黄冰糖（袋）",
+                null,
+                null);
+
+        assertThat(response.error()).isNull();
+        assertThat(response.productionFlowMetrics().path("materialInputRecordCount").asInt())
+                .isEqualTo(2);
+        assertThat(response.productionFlowDailySeries()).hasSize(1);
+        assertThat(response.productionFlowOrderBreakdowns()).hasSize(1);
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"reportDefinitionId\":\"production_input_output_flow_v1\"")
+                .contains("\"productQuery\":\"黄冰糖（袋）\"")
+                .contains("\"metricKey\":null");
+    }
+
+    @Test
+    void preservesRegisteredPalletTaskCycleSectionsAndControlledFilter() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"REGISTERED_PALLET_TASK_CYCLE_TIME",
+                  "reportRunId":"report_run_task_cycle",
+                  "reportDefinitionId":"pallet_task_cycle_time_v1",
+                  "reportVersion":1,
+                  "reportName":"托盘任务处理耗时趋势",
+                  "startDate":"2026-06-01",
+                  "endDate":"2026-07-31",
+                  "palletTaskCycleMetrics":{
+                    "cohortTaskCount":48,
+                    "completedTaskCount":38,
+                    "inProgressTaskCount":6,
+                    "canceledTaskCount":4,
+                    "medianDurationSeconds":48
+                  },
+                  "palletTaskCycleDailySeries":[
+                    {"businessDate":"2026-06-30","taskCount":4,"completedTaskCount":2}
+                  ],
+                  "palletTaskCycleTypeBreakdowns":[
+                    {"taskTypeLabel":"成品入库任务","taskCount":28,"completedTaskCount":21}
+                  ],
+                  "palletTaskPendingItems":[
+                    {"palletCode":"BT001","taskTypeLabel":"成品入库任务","waitingSeconds":3600}
+                  ],
+                  "dataQuality":{"partial":true,"notes":["任务没有操作批次号。"]},
+                  "limitations":["不代表员工绩效。"]
+                }
+                """)));
+
+        var response = tools.runRegisteredReport(
+                "pallet_task_cycle_time_v1",
+                1,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 7, 31),
+                "黄冰糖",
+                null,
+                "FINISH_IN");
+
+        assertThat(response.error()).isNull();
+        assertThat(response.palletTaskCycleMetrics().path("cohortTaskCount").asInt()).isEqualTo(48);
+        assertThat(response.palletTaskCycleDailySeries()).hasSize(1);
+        assertThat(response.palletTaskCycleTypeBreakdowns()).hasSize(1);
+        assertThat(response.palletTaskPendingItems()).hasSize(1);
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"reportDefinitionId\":\"pallet_task_cycle_time_v1\"")
+                .contains("\"taskType\":\"FINISH_IN\"");
+    }
+
+    @Test
     void delegatedTokenTakesPrecedenceAndSendsAgentSessionHeader() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         WarehouseApiClient delegatedClient = new WarehouseApiClient(

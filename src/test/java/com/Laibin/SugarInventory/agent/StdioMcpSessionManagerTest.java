@@ -144,6 +144,58 @@ class StdioMcpSessionManagerTest {
         assertThat(processRef.get().isAlive()).isFalse();
     }
 
+    @Test
+    void verifiesRuntimeArtifactWithIsolatedNonAuthorizingEnvironment() {
+        AgentSessionService sessionService = mock(AgentSessionService.class);
+        AtomicReference<Map<String, String>> envRef = new AtomicReference<>();
+        AtomicReference<FakeProcess> processRef = new AtomicReference<>();
+        McpProcessFactory factory = (command, environment) -> {
+            envRef.set(environment);
+            FakeProcess process = new FakeProcess();
+            processRef.set(process);
+            return process;
+        };
+        StdioMcpSessionManager manager = new StdioMcpSessionManager(
+                sessionService,
+                factory,
+                new ObjectMapper(),
+                "warehouse-mcp/target/warehouse-mcp-0.1.0.jar",
+                "http://localhost:8080",
+                "logs/mcp");
+
+        manager.verifyRuntimeCapabilities();
+
+        assertThat(envRef.get())
+                .containsEntry("WAREHOUSE_AGENT_SESSION_ID", "runtime-preflight")
+                .containsEntry("WAREHOUSE_DELEGATED_TOKEN", "runtime-preflight-unused")
+                .containsEntry("WAREHOUSE_API_BASE_URL", "http://localhost:8080");
+        assertThat(processRef.get().isAlive()).isFalse();
+    }
+
+    @Test
+    void rejectsRuntimeArtifactWithDifferentToolRegistryAndClosesProcess() {
+        AgentSessionService sessionService = mock(AgentSessionService.class);
+        AtomicReference<FakeProcess> processRef = new AtomicReference<>();
+        McpProcessFactory factory = (command, environment) -> {
+            FakeProcess process = new FakeProcess(
+                    FakeProcess.CAPABILITY_RESPONSES.replace("get_assay_status", "unexpected_stale_tool"));
+            processRef.set(process);
+            return process;
+        };
+        StdioMcpSessionManager manager = new StdioMcpSessionManager(
+                sessionService,
+                factory,
+                new ObjectMapper(),
+                "warehouse-mcp/target/warehouse-mcp-0.1.0.jar",
+                "http://localhost:8080",
+                "logs/mcp");
+
+        assertThatThrownBy(manager::verifyRuntimeCapabilities)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("get_assay_status");
+        assertThat(processRef.get().isAlive()).isFalse();
+    }
+
     private LoginUser loginUser() {
         User user = new User();
         user.setId(7);
@@ -166,6 +218,7 @@ class StdioMcpSessionManagerTest {
                 {"name":"query_pallet_flow_records"},{"name":"query_qr_batch_inbound_completion"},
                 {"name":"resolve_production_entities"},{"name":"query_boiling_batches"},
                 {"name":"query_production_order_progress"},
+                {"name":"run_registered_report"},
                 {"name":"query_boiling_batch_trace"},
                 {"name":"query_material_pick_trace"},
                 {"name":"query_production_label_completion"},
@@ -193,11 +246,19 @@ class StdioMcpSessionManagerTest {
                 {"name":"query_agent_tool_audit"},
                 {"name":"query_agent_answer_reviews"},
                 {"name":"query_inventory_ledger"},
-                {"name":"query_prepare_pool_balance"},
                 {"name":"query_fixed_product_qr_pool"},
                 {"name":"get_warehouse_status"},{"name":"get_pallet_status"},{"name":"get_assay_status"}]}}
                 """;
+        private final String capabilityResponses;
         private boolean alive = true;
+
+        private FakeProcess() {
+            this(CAPABILITY_RESPONSES);
+        }
+
+        private FakeProcess(String capabilityResponses) {
+            this.capabilityResponses = capabilityResponses;
+        }
 
         @Override
         public OutputStream getOutputStream() {
@@ -206,7 +267,7 @@ class StdioMcpSessionManagerTest {
 
         @Override
         public InputStream getInputStream() {
-            List<String> lines = CAPABILITY_RESPONSES.lines().map(String::trim).filter(line -> !line.isEmpty()).toList();
+            List<String> lines = capabilityResponses.lines().map(String::trim).filter(line -> !line.isEmpty()).toList();
             String wire = lines.get(0) + "\n" + String.join("", lines.subList(1, lines.size())) + "\n";
             return new ByteArrayInputStream(wire.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }

@@ -30,13 +30,13 @@ from app.state_models import EntityContextV1, WarehouseAgentState
 from app.state_store import InMemoryCheckpointer, deserialize_state, serialize_state
 from app.tools.client import MockToolClient
 from app.tools.client import ALLOWED_TOOLS
+from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS
 
 
 def test_priority_readonly_goal_contracts_are_registered() -> None:
-    assert len(GOAL_CONTRACTS) == 43
+    assert len(GOAL_CONTRACTS) == 51
     assert {
         "CURRENT_INVENTORY_LEDGER",
-        "PREPARE_POOL_BALANCE",
         "WAREHOUSE_STATUS",
         "WAREHOUSE_CAPACITY_DISTRIBUTION",
         "WAREHOUSE_RECENT_OPERATIONS",
@@ -50,6 +50,9 @@ def test_priority_readonly_goal_contracts_are_registered() -> None:
         "IN_PROCESS_MATERIALS",
         "STOCK_DOCUMENTS",
         "AUTO_INBOUND_BATCH_STATUS",
+        "PROCESS_KNOWLEDGE_QUERY",
+        "ENTERPRISE_KNOWLEDGE_QUERY",
+        "TODAY_OPERATIONS_OVERVIEW",
     }.issubset(GOAL_CONTRACTS)
     assert all(
         contract.evidenceTools
@@ -69,6 +72,9 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
     current = registry["current_goals"]
     planned = registry["planned_goals"]
 
+    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 51
+    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 52
+    assert registry["classified_internal_knowledge_tool_count"] == len(INTERNAL_KNOWLEDGE_TOOLS) == 1
     assert set(current) == set(GOAL_CONTRACTS)
     for goal_type, contract in GOAL_CONTRACTS.items():
         item = current[goal_type]
@@ -83,7 +89,7 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
         for key in ("primary_tools", "supporting_tools")
         for tool in item[key]
     }
-    assert classified_tools == set(ALLOWED_TOOLS)
+    assert classified_tools == set(ALLOWED_TOOLS) | set(INTERNAL_KNOWLEDGE_TOOLS)
 
 
 def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:
@@ -97,10 +103,86 @@ def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:
     corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
     cases = corpus["cases"]
 
-    assert len(cases) == len(GOAL_CONTRACTS) == 43
-    assert len({case["id"] for case in cases}) == 43
+    assert len(cases) == len(GOAL_CONTRACTS) == 51
+    assert len({case["id"] for case in cases}) == 51
     assert {case["goalType"] for case in cases} == set(GOAL_CONTRACTS)
     assert all(str(case["input"]).strip() for case in cases)
+
+
+def test_registered_report_registry_matches_runtime_goal_and_tool_boundary() -> None:
+    registry_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "agent"
+        / "report-definition-registry.yaml"
+    )
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    report = registry["definitions"]["daily_production_overview_v1"]
+
+    assert registry["runtime_contract"]["runner_tool"] == "run_registered_report"
+    assert registry["runtime_contract"]["owner_expert"] == "analytics_expert"
+    assert report["version"] == 1
+    assert report["goal_type"] == "DAILY_PRODUCTION_ANALYSIS"
+    assert set(report["metrics"]) >= {
+        "totalWeightKg",
+        "productionOrderCount",
+        "outputRecordCount",
+    }
+    contract = GOAL_CONTRACTS["DAILY_PRODUCTION_ANALYSIS"]
+    assert contract.ownerExpert == "analytics_expert"
+    assert contract.allowedTools == ("run_registered_report",)
+    quality_report = registry["definitions"]["quality_assay_result_trend_v1"]
+    assert quality_report["version"] == 1
+    assert quality_report["goal_type"] == "QUALITY_ASSAY_TREND_ANALYSIS"
+    assert set(quality_report["metrics"]) >= {
+        "assayRecordCount",
+        "passCount",
+        "failCount",
+        "passRatePercent",
+    }
+    metric_report = registry["definitions"]["quality_metric_trend_v1"]
+    assert metric_report["version"] == 1
+    assert metric_report["goal_type"] == "QUALITY_METRIC_TREND_ANALYSIS"
+    assert set(metric_report["metrics"]) >= {
+        "sampleCount",
+        "averageValue",
+        "medianValue",
+        "withinStandardRatePercent",
+    }
+    flow_report = registry["definitions"]["production_input_output_flow_v1"]
+    assert flow_report["version"] == 1
+    assert flow_report["goal_type"] == "PRODUCTION_INPUT_OUTPUT_TREND"
+    assert set(flow_report["metrics"]) >= {
+        "materialInputWeightKg",
+        "stableOutputWeightKg",
+        "completedOrdersMissingInputCount",
+        "completedOrdersMissingOutputCount",
+    }
+    flow_contract = GOAL_CONTRACTS["PRODUCTION_INPUT_OUTPUT_TREND"]
+    assert flow_contract.ownerExpert == "analytics_expert"
+    assert flow_contract.allowedTools == ("run_registered_report",)
+    inventory_report = registry["definitions"]["inventory_level_trend_v1"]
+    assert inventory_report["version"] == 1
+    assert inventory_report["goal_type"] == "INVENTORY_LEVEL_TREND_ANALYSIS"
+    assert set(inventory_report["metrics"]) >= {
+        "closingPieces",
+        "closingWeightKg",
+        "netChangePieces",
+        "netChangeWeightKg",
+    }
+    assert inventory_report["release_gate"]["local_replay_does_not_advance_gate"] is True
+    today_report = registry["definitions"]["today_operations_overview_v1"]
+    assert today_report["version"] == 1
+    assert today_report["goal_type"] == "TODAY_OPERATIONS_OVERVIEW"
+    assert today_report["date_scope"] == "BEIJING_TODAY_ONLY"
+    assert set(today_report["sections"]) == {
+        "productionOutput",
+        "assayQuality",
+        "productionFlow",
+        "currentInventory",
+        "todayPalletTasks",
+        "currentPendingTaskCount",
+    }
 
 
 def test_goal_contract_types_are_the_single_source_for_model_semantic_schemas() -> None:
@@ -139,10 +221,6 @@ def test_priority_goal_fact_shapes_are_declarative_and_accept_safe_results() -> 
         "CURRENT_INVENTORY_LEDGER": (
             "query_inventory_ledger",
             {"dataScope": "CURRENT", "total": 1, "records": [{"productName": "黄冰糖"}]},
-        ),
-        "PREPARE_POOL_BALANCE": (
-            "query_prepare_pool_balance",
-            {"dataScope": "CURRENT", "total": 1, "records": [{"productName": "白冰糖"}]},
         ),
         "WAREHOUSE_STATUS": (
             "get_warehouse_status",
@@ -311,6 +389,119 @@ def test_remaining_readonly_goal_fact_shapes_accept_safe_results() -> None:
         "AGENT_ANSWER_REVIEWS": (
             "query_agent_answer_reviews",
             {"dataScope": "AUDIT", "total": 1, "records": [{}]},
+        ),
+        "DAILY_PRODUCTION_ANALYSIS": (
+            "run_registered_report",
+            {
+                "dataScope": "生产登记产出",
+                "reportDefinitionId": "daily_production_overview_v1",
+                "reportVersion": 1,
+                "isEmpty": False,
+                "metrics": {"totalWeightKg": "2500"},
+                "dailySeries": [{"businessDate": "2026-07-21", "totalWeightKg": "2500"}],
+                "productBreakdowns": [{"productName": "黄冰糖（袋）", "totalWeightKg": "2500"}],
+                "dataQuality": {"partial": False, "notes": []},
+            },
+        ),
+        "INVENTORY_LEVEL_TREND_ANALYSIS": (
+            "run_registered_report",
+            {
+                "dataScope": "本地历史回放模拟",
+                "reportDefinitionId": "inventory_level_trend_v1",
+                "reportVersion": 1,
+                "isEmpty": False,
+                "inventoryTrendMetrics": {
+                    "openingPieces": 550,
+                    "closingPieces": 790,
+                    "netChangePieces": 240,
+                },
+                "inventoryTrendDailySeries": [
+                    {"businessDate": "2026-07-20", "totalPieces": 790}
+                ],
+                "inventoryTrendProductBreakdowns": [
+                    {"productName": "黄冰糖（袋）", "netChangePieces": 240}
+                ],
+                "dataQuality": {
+                    "partial": True,
+                    "simulationData": True,
+                    "notes": ["本地历史回放模拟"],
+                },
+            },
+        ),
+        "QUALITY_ASSAY_TREND_ANALYSIS": (
+            "run_registered_report",
+            {
+                "dataScope": "已登记化验判定",
+                "reportDefinitionId": "quality_assay_result_trend_v1",
+                "reportVersion": 1,
+                "isEmpty": False,
+                "qualityMetrics": {"assayRecordCount": 1},
+                "qualitySeries": [{"periodLabel": "2026-07"}],
+                "qualityProductBreakdowns": [{"productName": "黄冰糖（袋）"}],
+                "standardBreakdowns": [{"standardLabel": "黄冰糖 v1"}],
+                "dataQuality": {"partial": False, "notes": []},
+            },
+        ),
+        "QUALITY_METRIC_TREND_ANALYSIS": (
+            "run_registered_report",
+            {
+                "dataScope": "已登记化验指标",
+                "reportDefinitionId": "quality_metric_trend_v1",
+                "reportVersion": 1,
+                "isEmpty": False,
+                "metricTrendSummary": {"sampleCount": 1},
+                "metricSeries": [{"periodLabel": "2026-07"}],
+                "metricProductBreakdowns": [{"productName": "黄冰糖（袋）"}],
+                "metricStandardBreakdowns": [{"standardLabel": "黄冰糖 v1"}],
+                "dataQuality": {"partial": False, "notes": []},
+            },
+        ),
+        "PRODUCTION_INPUT_OUTPUT_TREND": (
+            "run_registered_report",
+            {
+                "dataScope": "生产领料与稳定登记产出",
+                "reportDefinitionId": "production_input_output_flow_v1",
+                "reportVersion": 1,
+                "isEmpty": False,
+                "productionFlowMetrics": {
+                    "materialInputWeightKg": "1656.8",
+                    "stableOutputWeightKg": "1983.8",
+                },
+                "productionFlowDailySeries": [
+                    {
+                        "businessDate": "2026-06-30",
+                        "materialInputWeightKg": "1656.8",
+                        "stableOutputWeightKg": "1983.8",
+                    }
+                ],
+                "productionFlowOrderBreakdowns": [
+                    {"orderNo": "PO202606300001"}
+                ],
+                "dataQuality": {"partial": False, "notes": []},
+            },
+        ),
+        "PROCESS_EFFICIENCY_TREND": (
+            "run_registered_report",
+            {
+                "dataScope": "系统已登记托盘任务处理耗时",
+                "reportDefinitionId": "pallet_task_cycle_time_v1",
+                "reportVersion": 1,
+                "isEmpty": False,
+                "palletTaskCycleMetrics": {
+                    "cohortTaskCount": 4,
+                    "completedTaskCount": 2,
+                },
+                "palletTaskCycleDailySeries": [
+                    {"businessDate": "2026-07-30", "taskCount": 4}
+                ],
+                "palletTaskCycleTypeBreakdowns": [
+                    {"taskTypeLabel": "成品入库任务", "taskCount": 4}
+                ],
+                "palletTaskPendingItems": [
+                    {"palletCode": "BT001", "waitingSeconds": 3600}
+                ],
+                "dataQuality": {"partial": False, "notes": []},
+            },
         ),
     }
 
@@ -784,6 +975,7 @@ def _chat_payload(content: str) -> dict[str, object]:
     return {
         "agentSessionId": "agt_goal_contract",
         "messageId": "msg_goal_contract",
+        "user": {"userId": 7, "name": "测试管理员", "roleCode": "ADMIN"},
         "message": {"type": "user_message", "content": content},
         "client": {"traceId": "trace_goal_contract", "requestId": "req_goal_contract", "debug": True},
     }

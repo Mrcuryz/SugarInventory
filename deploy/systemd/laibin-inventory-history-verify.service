@@ -1,0 +1,15 @@
+[Unit]
+Description=Verify Laibin inventory daily close evidence
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=laibin
+Group=laibin
+WorkingDirectory=/opt/laibin-sugar/backend
+EnvironmentFile=/etc/laibin-sugar/backend.env
+ExecStart=/usr/bin/java -jar /opt/laibin-sugar/backend/app.jar --spring.main.web-application-type=none --inventory.history.one-shot-mode=verify --agent.mcp.warmup-enabled=false --spring.task.scheduling.enabled=false --knife4j.enable=false --springdoc.api-docs.enabled=false --springdoc.swagger-ui.enabled=false
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027

@@ -102,6 +102,7 @@ def _checkpointer(redis: FakeRedis) -> StateCheckpointer:
 def _chat_payload(message: str) -> dict[str, Any]:
     return {
         "agentSessionId": "agt_redis_restore",
+        "user": {"userId": 7, "name": "测试管理员", "roleCode": "ADMIN"},
         "message": {"type": "user_message", "content": message},
         "client": {"traceId": "trace_restore", "requestId": "req_restore"},
     }
@@ -218,6 +219,7 @@ def test_two_runtime_instances_resume_same_persisted_hitl_plan_without_permissio
         "/internal/agent/resume",
         json={
             "agentSessionId": "agt_redis_restore",
+            "user": {"userId": 7, "name": "测试管理员", "roleCode": "ADMIN"},
             "resumeToken": pending.resume_token,
             "event": {
                 "type": "candidate_selected",

@@ -1,0 +1,566 @@
+version: "1.1"
+updated_at: "2026-08-03"
+runtime_contract:
+  runner_tool: run_registered_report
+  owner_expert: analytics_expert
+  report_run_id: "每次运行生成不透明 report_run_* 引用；服务端持久化确定性事实快照，并可按原始权限复核后导出 XLSX。"
+  authority: "权威指标只由 Java/SQL 确定性聚合生成，模型只负责理解、选择登记报表和分析结果。"
+  comparison:
+    modes:
+      PREVIOUS_PERIOD: "紧邻本期之前的等长期间；不接受额外自定义日期。"
+      CUSTOM: "用户明确指定的非重叠对比期间；必须同时提供 comparisonStartDate 和 comparisonEndDate。"
+    invariants:
+      - "本期与对比期必须复用同一 reportDefinitionId、reportVersion、metricDefinitionVersion、dataScope 和领域筛选。"
+      - "只比较 registry 中登记的指标；模型不得临时选择更有利的基准或自行重算权威指标。"
+      - "两期天数不同时，可累加指标同时返回日均值；不可累加指标不做日均换算。"
+      - "正负变化只表示登记数值差异，不自动解释为改善、恶化或因果关系。"
+      - "比较结果与本期完整事实保存在同一个 ReportRun 快照，并进入同快照 XLSX 导出。"
+    metrics_by_definition:
+      daily_production_overview_v1: [totalWeightKg, outputRecordCount, productionOrderCount, totalPieces]
+      inventory_level_trend_v1: [closingPieces, closingWeightKg, netChangePieces, netChangeWeightKg]
+      quality_assay_result_trend_v1: [assayRecordCount, passRatePercent, failCount, noStandardCount]
+      quality_metric_trend_v1: [sampleCount, averageValue, medianValue, withinStandardRatePercent]
+      production_input_output_flow_v1: [materialInputWeightKg, stableOutputWeightKg, completedOrdersMissingInputCount, completedOrdersMissingOutputCount]
+      pallet_task_cycle_time_v1: [completedTaskCount, medianDurationSeconds, p90DurationSeconds, inProgressTaskCount]
+
+definitions:
+  today_operations_overview_v1:
+    status: CURRENT
+    version: 1
+    goal_type: TODAY_OPERATIONS_OVERVIEW
+    display_name: 今日运营概览
+    data_scope: REGISTERED_TODAY_OPERATIONS_SNAPSHOT
+    metric_definition_version: today_registered_operations_snapshot_v1
+    permission: "production:order:view + production:material:view + assay:view + inventory:view + task:view"
+    date_scope: BEIJING_TODAY_ONLY
+    sections:
+      - productionOutput
+      - assayQuality
+      - productionFlow
+      - currentInventory
+      - todayPalletTasks
+      - currentPendingTaskCount
+    business_time:
+      timezone: Asia/Shanghai
+      production_output_date: production_order_output.production_date
+      assay_date: assay.sample_date
+      material_pick_date: production_order_material.picked_at
+      pallet_task_cohort_date: pallet_task.created_at
+      current_snapshot_time: report.dataAsOf
+    query:
+      required: [startDate, endDate]
+      invariants:
+        - "startDate 与 endDate 必须相同，且等于 Asia/Shanghai 的今天。"
+        - "首版只支持全部产品和全部任务，不接受 productQuery、metricKey、taskType 或比较参数。"
+    fact_selection:
+      include:
+        - "今日稳定登记产出：复用 daily_production_overview_v1 的产出事实和口径。"
+        - "今日已登记化验：复用 quality_assay_result_trend_v1 的判定事实和口径。"
+        - "今日确认领用与稳定登记产出：复用 production_input_output_flow_v1 的两条独立序列。"
+        - "当前库存水平：生成时的全部在库库存分布聚合快照。"
+        - "今日创建托盘任务：复用 pallet_task_cycle_time_v1 的当日创建队列；当前待处理任务另按生成时状态统计。"
+    metrics:
+      productionOutput: "稳定登记产出的记录数、订单数、重量和折算件数。"
+      assayQuality: "已登记化验数、明确判定数、合格、不合格、无适用标准及多标准候选数量。"
+      productionFlow: "按确认领用日期统计的领用事实与按生产日期统计的稳定产出事实。"
+      currentInventory: "生成时当前产品数、库位数、托盘数、折算件数、数量文本和重量文本。"
+      todayPalletTasks: "今日创建任务的已完成、进行中和已取消数量。"
+      currentPendingTaskCount: "生成时全量当前待处理任务数；不等同于今日创建任务数。"
+    forbidden_conclusions:
+      - "把当前库存说成今日库存变化。"
+      - "把今日创建任务与当前全部待处理任务混为同一队列。"
+      - "将确认领用与稳定登记产出直接相除。"
+      - "计划达成率、良率、收率、损耗率、SLA、绩效、原因归因或预测。"
+      - "把该定义用于历史日期或跨期比较。"
+
+  daily_production_overview_v1:
+    status: CURRENT
+    version: 1
+    goal_type: DAILY_PRODUCTION_ANALYSIS
+    display_name: 生产登记产出日报
+    data_scope: REGISTERED_PRODUCTION_OUTPUT
+    metric_definition_version: production_registered_output_v1
+    permission: production:order:view
+    business_time:
+      timezone: Asia/Shanghai
+      business_date_field: production_order_output.production_date
+      recorded_time_fields:
+        - production_order_output.updated_at
+        - production_order_output.created_at
+    query:
+      required:
+        - startDate
+        - endDate
+      optional:
+        - productQuery
+      max_range_days: 31
+      product_filter_semantics: "product_name_snapshot 包含匹配；省略时为当前用户可见的全部产品。"
+    fact_selection:
+      include:
+        - "生产日期在查询范围内，且 status 为 BOUND、PART_INBOUND 或 INSTOCK 的 production_order_output"
+      exclude:
+        - "status = DRAFT；草稿仍可编辑或删除，不是稳定的已登记产出事实"
+        - "status = CANCELED"
+    metrics:
+      outputRecordCount:
+        label: 已登记产出记录数
+        formula: "COUNT(output rows)"
+        unit: 条
+      productionOrderCount:
+        label: 有产出登记的生产订单数
+        formula: "COUNT(DISTINCT production_order_id)"
+        unit: 单
+      totalWeightKg:
+        label: 已登记产出重量
+        formula: "SUM(total_weight)，缺失重量的记录不进入重量合计"
+        unit: kg
+      totalBoardCount:
+        label: 已登记整板数
+        formula: "SUM(board_count)"
+        unit: 板
+      loosePieceCount:
+        label: 已登记散件数
+        formula: "SUM(piece_count)"
+        unit: 件
+      totalPieces:
+        label: 已登记折算总件数
+        formula: "SUM(total_pieces)，缺少换算的记录不进入该合计"
+        unit: 件
+      qrProgress:
+        label: 后续二维码及入库进度
+        formula: "分别 SUM(required_qr_count / bound_qr_count / inbound_qr_count)"
+        authority_note: "只表示产出登记后的流程进度，不计入产量。"
+    dimensions:
+      - production_date
+      - product_name_snapshot
+      - product_status
+    data_quality:
+      - rowsMissingWeight
+      - rowsMissingPieceConversion
+      - rowsMissingProductName
+    forbidden_conclusions:
+      - 计划达成率
+      - 班次或产线对比
+      - 实时车间产量
+      - 良率
+      - 损耗率
+      - 产能利用率
+      - 预测
+
+  inventory_level_trend_v1:
+    status: CURRENT_GATED
+    version: 1
+    goal_type: INVENTORY_LEVEL_TREND_ANALYSIS
+    display_name: 库存水平趋势
+    data_scope:
+      production: TRUSTED_DAILY_CLOSE_SNAPSHOT
+      local_uat: HISTORICAL_REPLAY_SIMULATION
+    metric_definition_version: inventory_level_v1
+    permission: inventory:view
+    business_time:
+      timezone: Asia/Shanghai
+      snapshot_business_date_field: inventory_daily_snapshot.business_date
+      replay_recorded_time_fields:
+        - in_stock.created_at
+        - semi_product_record.created_at
+        - out_stock.created_at
+    query:
+      required:
+        - startDate
+        - endDate
+      optional:
+        - productQuery
+      max_range_days: 31
+      product_filter_semantics: "产品名称包含匹配；省略时为当前用户可见的全部产品。"
+    source_modes:
+      production:
+        enabled_when: "INVENTORY_LEVEL_TREND 发布门禁为 ELIGIBLE，且查询范围完全位于可信窗口内。"
+        facts:
+          - "读取已完成的 DAILY_CLOSE 产品日终快照。"
+          - "每个业务日必须存在 PASSED 守恒对账结果。"
+      local_uat:
+        enabled_when: "仅显式设置 INVENTORY_TREND_SIMULATION_ENABLED=true。"
+        facts:
+          - "以当前库存为锚点，按入库、半成品入库和出库登记流水反向回放。"
+          - "回放前必须校验当前库存与累计入出库在件数、重量上守恒。"
+        presentation_rule: "界面、模型回答、历史快照和 XLSX 必须显示‘本地历史回放模拟’，不得简称为正式库存趋势。"
+    metrics:
+      openingPieces:
+        label: 期初库存件数
+        formula: "查询首日产品库存件数合计"
+        unit: 件
+      closingPieces:
+        label: 期末库存件数
+        formula: "查询末日产品库存件数合计"
+        unit: 件
+      netChangePieces:
+        label: 库存件数净变化
+        formula: "closingPieces - openingPieces"
+        unit: 件
+      openingWeightKg:
+        label: 期初库存重量
+        formula: "查询首日产品库存重量合计"
+        unit: kg
+      closingWeightKg:
+        label: 期末库存重量
+        formula: "查询末日产品库存重量合计"
+        unit: kg
+      netChangeWeightKg:
+        label: 库存重量净变化
+        formula: "closingWeightKg - openingWeightKg"
+        unit: kg
+    dimensions:
+      - business_date
+      - product_name
+    release_gate:
+      required_consecutive_days: 7
+      snapshot_type: DAILY_CLOSE
+      reconciliation_status: PASSED
+      local_replay_does_not_advance_gate: true
+    forbidden_conclusions:
+      - "把历史回放模拟说成正式日终快照。"
+      - "根据库存水平变化自动推断入出库原因。"
+      - "把登记时间等同于现场实际发生时间。"
+      - "根据 7 天回放直接预测未来库存或生成补货计划。"
+
+  quality_assay_result_trend_v1:
+    status: CURRENT
+    version: 1
+    goal_type: QUALITY_ASSAY_TREND_ANALYSIS
+    display_name: 化验判定趋势
+    data_scope: REGISTERED_QUALITY_ASSAY
+    metric_definition_version: quality_assay_judgement_v1
+    permission: assay:view
+    business_time:
+      timezone: Asia/Shanghai
+      business_date_field: assay.sample_date
+      business_date_semantics: 生产日期
+      recorded_time_fields:
+        - assay.created_at
+    query:
+      required:
+        - startDate
+        - endDate
+      optional:
+        - productQuery
+      max_range_days: 366
+      product_filter_semantics: "product.product_name 包含匹配；省略时为当前用户可见的全部产品。"
+      trend_granularity: "31 天以内按日；超过 31 天按月。"
+    fact_selection:
+      include:
+        - "生产日期在查询范围内的 assay 记录"
+      exclude:
+        - "不存在的化验记录；本报表不从当前库存反推历史缺化验批次"
+    metrics:
+      assayRecordCount:
+        label: 已登记化验记录数
+        formula: "COUNT(assay rows)"
+        unit: 条
+      judgedRecordCount:
+        label: 有明确合格/不合格判定的记录数
+        formula: "PASS + FAIL"
+        unit: 条
+      passCount:
+        label: 合格记录数
+        formula: "COUNT(judge_result = PASS)"
+        unit: 条
+      failCount:
+        label: 不合格记录数
+        formula: "COUNT(judge_result = FAIL)"
+        unit: 条
+      noStandardCount:
+        label: 无适用标准记录数
+        formula: "COUNT(judge_result = NO_STANDARD)"
+        unit: 条
+      multipleCandidatesCount:
+        label: 标准多候选记录数
+        formula: "COUNT(judge_result = MULTIPLE_CANDIDATES)"
+        unit: 条
+      passRatePercent:
+        label: 明确判定合格率
+        formula: "PASS / (PASS + FAIL) * 100；分母为 0 时不展示"
+        unit: "%"
+    dimensions:
+      - sample_date
+      - product_name
+      - applied_standard_name
+      - applied_standard_version
+    data_quality:
+      - rowsMissingJudgeResult
+      - rowsMissingStandardVersion
+      - rowsMissingProductName
+      - lateRecordedCount
+    forbidden_conclusions:
+      - 使用当前标准重算历史判定
+      - 把无标准或标准多候选计入合格率分母
+      - 从已有化验记录推断历史批次均已化验
+      - 未经证据给出质量变化原因
+      - 小样本下断言质量改善或恶化
+
+  quality_metric_trend_v1:
+    status: CURRENT
+    version: 1
+    goal_type: QUALITY_METRIC_TREND_ANALYSIS
+    display_name: 化验单指标趋势
+    data_scope: REGISTERED_QUALITY_ASSAY_METRIC
+    metric_definition_version: quality_assay_metric_statistics_v1
+    permission: assay:view
+    business_time:
+      timezone: Asia/Shanghai
+      business_date_field: assay.sample_date
+      business_date_semantics: 生产日期
+      recorded_time_fields:
+        - assay.created_at
+    query:
+      required:
+        - startDate
+        - endDate
+        - metricKey
+      optional:
+        - productQuery
+      max_range_days: 366
+      metric_key_allowlist:
+        - color_value
+        - reducing_sugar
+        - dry_weight_loss
+        - conductivity_ash
+        - sucrose
+        - insoluble_impurity
+        - ph
+      product_filter_semantics: "product.product_name 包含匹配；省略时为当前用户可见的全部产品。"
+      trend_granularity: "31 天以内按日；超过 31 天按月。"
+    fact_selection:
+      include:
+        - "生产日期在查询范围内且所选指标存在实测值的 assay 记录"
+        - "无可比较历史标准的实测值仍进入原始数值统计"
+      exclude:
+        - "缺少所选指标实测值的记录不进入数值统计"
+        - "单位不一致或无历史标准快照的记录不进入指标达标率"
+    metrics:
+      sampleCount:
+        label: 指标实测样本数
+        formula: "COUNT(selected metric value IS NOT NULL)"
+        unit: 个
+      averageValue:
+        label: 指标均值
+        formula: "AVG(selected metric value)"
+        unit: "随 metricKey 登记单位"
+      medianValue:
+        label: 指标中位数
+        formula: "P50(selected metric value)"
+        unit: "随 metricKey 登记单位"
+      minimumValue:
+        label: 指标最小值
+        formula: "MIN(selected metric value)"
+        unit: "随 metricKey 登记单位"
+      maximumValue:
+        label: 指标最大值
+        formula: "MAX(selected metric value)"
+        unit: "随 metricKey 登记单位"
+      p10Value:
+        label: 指标第 10 百分位
+        formula: "P10(selected metric value)"
+        unit: "随 metricKey 登记单位"
+      p90Value:
+        label: 指标第 90 百分位
+        formula: "P90(selected metric value)"
+        unit: "随 metricKey 登记单位"
+      withinStandardRatePercent:
+        label: 历史适用标准下的指标达标率
+        formula: "within / (within + out) * 100；只比较历史标准快照中范围和单位均可比的样本"
+        unit: "%"
+    dimensions:
+      - sample_date
+      - product_name
+      - selected_metric
+      - applied_standard_name
+      - applied_standard_version
+    data_quality:
+      - rowsMissingMetricValue
+      - rowsWithoutComparableMetricStandard
+      - rowsWithUnexpectedMetricUnit
+      - lateRecordedCount
+    forbidden_conclusions:
+      - 使用当前标准重算历史指标达标情况
+      - 把无历史标准或单位不可比样本计入指标达标率
+      - 将不同单位的指标值合并比较
+      - 小样本或稀疏时间点下断言改善、恶化
+      - 未经证据给出变化原因或预测
+
+  production_input_output_flow_v1:
+    status: CURRENT
+    version: 1
+    goal_type: PRODUCTION_INPUT_OUTPUT_TREND
+    display_name: 生产领料—登记产出趋势
+    data_scope: REGISTERED_PRODUCTION_INPUT_OUTPUT_FLOW
+    metric_definition_version: production_input_output_independent_series_v1
+    permission: "production:order:view + production:material:view"
+    business_time:
+      timezone: Asia/Shanghai
+      input_business_date_field: production_order_material.picked_at
+      input_business_date_semantics: 实际领料发生日期
+      output_business_date_field: production_order_output.production_date
+      output_business_date_semantics: 稳定登记产出的生产日期
+    query:
+      required:
+        - startDate
+        - endDate
+      optional:
+        - productQuery
+      max_range_days: 366
+      product_filter_semantics: "只通过订单的稳定登记产出产品名称归属；不得使用计划产出 JSON 猜测尚无稳定产出的订单产品。"
+      trend_granularity: 日
+    fact_selection:
+      include:
+        - "日历领料序列：picked_at 在查询范围内，且 status 为 PICKED；当前写入链路只产生该状态，按已登记领料事实统计，不声称实际消耗。"
+        - "日历产出序列：production_date 在查询范围内，且 status 为 BOUND、PART_INBOUND 或 INSTOCK 的稳定 production_order_output。"
+        - "订单归属视图：生产日期在范围内的生产订单；成品订单输入来自实际领料，半成品订单输入来自最终确认的煮糖批次使用记录。"
+      exclude:
+        - "DRAFT 和 CANCELED 产出不进入稳定登记产出。"
+        - "没有稳定登记产出的订单不能通过计划产出字段归属到产品筛选范围。"
+    metrics:
+      materialInputWeightKg:
+        label: 按实际领料时间登记的领料重量
+        formula: "SUM(production_order_material.total_weight)"
+        unit: kg
+      stableOutputWeightKg:
+        label: 按生产日期登记的稳定产出重量
+        formula: "SUM(stable production_order_output.total_weight)"
+        unit: kg
+      completedOrdersWithInputCount:
+        label: 已完成且有订单输入事实的订单数
+        formula: "COUNT(completed cohort orders with actual material or confirmed boiling usage)"
+        unit: 单
+      completedOrdersMissingInputCount:
+        label: 已完成但缺少订单输入事实的订单数
+        formula: "completedOrderCount - completedOrdersWithInputCount"
+        unit: 单
+      completedOrdersWithStableOutputCount:
+        label: 已完成且有稳定登记产出的订单数
+        formula: "COUNT(completed cohort orders with stable output)"
+        unit: 单
+      completedOrdersMissingOutputCount:
+        label: 已完成但缺少稳定登记产出的订单数
+        formula: "completedOrderCount - completedOrdersWithStableOutputCount"
+        unit: 单
+    dimensions:
+      - material_picked_date
+      - output_production_date
+      - production_order
+      - order_type
+      - stable_output_product
+    data_quality:
+      - completedOrdersMissingInputCount
+      - completedOrdersMissingOutputCount
+      - rowsMissingWeight
+      - rowsMissingPieceConversion
+      - draftOutputExcludedCount
+      - canceledOutputExcludedCount
+      - crossDayInboundCount
+      - unattributedOrderCount
+      - orderBreakdownTruncated
+    forbidden_conclusions:
+      - 将确认领用扣减改写成未确认、未扣减的普通领料
+      - 将半成品最终确认领用称为真实投料时间
+      - 将按领料时间与按生产日期的两条日序列直接相除
+      - 产耗比
+      - 收率
+      - 损耗率
+      - 在制、返工、回收、副产物或报废推断
+      - 未经证据给出变化原因或预测
+
+  pallet_task_cycle_time_v1:
+    status: CURRENT
+    version: 1
+    goal_type: PROCESS_EFFICIENCY_TREND
+    display_name: 托盘任务处理耗时趋势
+    data_scope: REGISTERED_PALLET_TASK_CYCLE_TIME
+    metric_definition_version: registered_pallet_task_cycle_v1
+    permission: task:view
+    business_time:
+      timezone: Asia/Shanghai
+      cohort_business_date_field: pallet_task.created_at
+      completion_time_field: pallet_task.confirmed_at
+      pending_observation_time: report.dataAsOf
+    query:
+      required:
+        - startDate
+        - endDate
+      optional:
+        - productQuery
+        - taskType
+      max_range_days: 366
+      task_type_allowlist:
+        - ALL
+        - INBOUND
+        - SEMI_IN
+        - FINISH_IN
+        - OUT
+        - TRANSFER
+      product_filter_semantics: "使用报表生成时的当前产品主数据名称包含匹配；任务没有历史产品名称快照。"
+      trend_granularity: 日
+    fact_selection:
+      include:
+        - "创建时间在范围内的托盘任务形成队列。"
+        - "CONFIRMED 且创建/确认时间有效的任务进入完成耗时统计。"
+        - "PENDING 且创建时间有效的任务使用 dataAsOf 计算当前等待时长，并与完成耗时分开。"
+        - "CANCELED 只进入取消数量。"
+      exclude:
+        - "取消任务没有独立取消时间，不计算取消耗时。"
+        - "缺少必要时间、未知状态或结束早于开始的记录不进入耗时统计。"
+    metrics:
+      cohortTaskCount:
+        label: 队列任务数
+        formula: "COUNT(tasks created in range)"
+        unit: 条
+      completedTaskCount:
+        label: 已完成任务数
+        formula: "COUNT(status = CONFIRMED)"
+        unit: 条
+      inProgressTaskCount:
+        label: 进行中任务数
+        formula: "COUNT(status = PENDING)"
+        unit: 条
+      canceledTaskCount:
+        label: 已取消任务数
+        formula: "COUNT(status = CANCELED)"
+        unit: 条
+      averageDurationSeconds:
+        label: 完成耗时均值
+        formula: "AVG(confirmed_at - created_at) over valid completed tasks"
+        unit: 秒
+      medianDurationSeconds:
+        label: 完成耗时中位数
+        formula: "P50(confirmed_at - created_at) over valid completed tasks"
+        unit: 秒
+      p90DurationSeconds:
+        label: 完成耗时 P90
+        formula: "nearest-rank P90(confirmed_at - created_at) over valid completed tasks"
+        unit: 秒
+      maximumDurationSeconds:
+        label: 完成耗时最大值
+        formula: "MAX(confirmed_at - created_at) over valid completed tasks"
+        unit: 秒
+      maximumWaitingSeconds:
+        label: 进行中最长等待
+        formula: "MAX(dataAsOf - created_at) over valid pending tasks"
+        unit: 秒
+    dimensions:
+      - task_created_date
+      - task_type
+      - current_product_name
+    data_quality:
+      - invalidDurationCount
+      - canceledWithoutTerminalTimeCount
+      - tasksWithoutFlowRecordCount
+      - tasksWithoutOperationBatchCount
+      - rowsMissingProductName
+    forbidden_conclusions:
+      - 将进行中等待混入完成耗时
+      - 将取消任务计入完成耗时
+      - 在没有登记 SLA 时称为逾期
+      - 员工绩效或责任归因
+      - 现场全部流程效率
+      - 生产订单阶段耗时
+      - 标签到入库耗时
+      - 未经证据给出原因或预测

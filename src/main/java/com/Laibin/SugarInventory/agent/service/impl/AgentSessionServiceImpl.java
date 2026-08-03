@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.SpringSecurity.JwtUtils;
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.agent.dto.AgentSessionCreateDTO;
 import com.Laibin.SugarInventory.agent.dto.AgentToolAuditDTO;
+import com.Laibin.SugarInventory.agent.security.AgentAccessPolicy;
 import com.Laibin.SugarInventory.agent.security.AgentSessionAuthenticationException;
 import com.Laibin.SugarInventory.agent.service.AgentInterruptStateService;
 import com.Laibin.SugarInventory.agent.service.AgentSessionService;
@@ -64,6 +65,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             "/api/production/agent-read/orders/label-completion/query",
             "/api/production/agent-read/materials/in-process/query",
             "/api/production/agent-read/orders/material-candidates/query",
+            "/api/analytics/agent-read/reports/run",
             "/api/logistics/agent-read/pallet-tasks/query",
             "/api/logistics/agent-read/stock-documents/query",
             "/api/logistics/agent-read/auto-inbound/batches/query",
@@ -86,7 +88,6 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             "/api/audit/agent-read/agent-tool-audit/query",
             "/api/audit/agent-read/agent-answer-reviews/query",
             "/api/inventory/agent-read/ledger/query",
-            "/api/inventory/agent-read/prepare-pool-balance/query",
             "/api/inventory/agent-read/quality/query",
             "/api/pallet-codes/agent-read/fixed-product-pool/query"
     );
@@ -122,7 +123,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     @Override
     @Transactional
     public AgentSessionVO createSession(LoginUser loginUser, AgentSessionCreateDTO dto, HttpServletRequest request) {
-        requireLoginUser(loginUser);
+        AgentAccessPolicy.requireAdmin(loginUser);
         List<String> scopes = normalizeRequestedScopes(dto == null ? null : dto.getRequestedScopes());
         LocalDateTime now = LocalDateTime.now();
         cancelPendingInterruptsForReplacedSessions(loginUser.getUser().getId());
@@ -159,7 +160,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
 
     @Override
     public List<AgentSessionVO> listCurrentSessions(LoginUser loginUser) {
-        requireLoginUser(loginUser);
+        AgentAccessPolicy.requireAdmin(loginUser);
         List<AgentSession> sessions = agentSessionMapper.selectList(new LambdaQueryWrapper<AgentSession>()
                 .eq(AgentSession::getUserId, loginUser.getUser().getId())
                 .orderByDesc(AgentSession::getIssuedAt));
@@ -168,7 +169,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
 
     @Override
     public AgentSession requireOwnedActiveSession(LoginUser loginUser, String agentSessionId) {
-        requireLoginUser(loginUser);
+        AgentAccessPolicy.requireAdmin(loginUser);
         AgentSession session = agentSessionMapper.selectById(agentSessionId);
         if (session == null || !Objects.equals(session.getUserId(), loginUser.getUser().getId())) {
             throw new BusinessException(404, "Agent session was not found.");
@@ -209,6 +210,10 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             markLastError(session, "AGENT_USER_INVALID");
             throw auth(HttpServletResponse.SC_UNAUTHORIZED, "AGENT_USER_INVALID", "Agent user is not active.");
         }
+        if (!AgentAccessPolicy.isAdmin(loginUser)) {
+            markLastError(session, "AGENT_ROLE_DENIED");
+            throw auth(HttpServletResponse.SC_FORBIDDEN, "AGENT_ROLE_DENIED", "Agent access is restricted to administrators.");
+        }
 
         session.setLastUsedAt(LocalDateTime.now());
         session.setLastErrorCode(null);
@@ -238,7 +243,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     @Override
     @Transactional
     public void revokeSession(LoginUser loginUser, String agentSessionId, String revokedReason) {
-        requireLoginUser(loginUser);
+        AgentAccessPolicy.requireAdmin(loginUser);
         AgentSession session = agentSessionMapper.selectById(agentSessionId);
         if (session == null || !Objects.equals(session.getUserId(), loginUser.getUser().getId())) {
             throw new BusinessException(404, "Agent session was not found.");
@@ -285,6 +290,10 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         if (!userStillValid(userDetails)) {
             markLastError(session, "AGENT_USER_INVALID");
             throw auth(HttpServletResponse.SC_UNAUTHORIZED, "AGENT_USER_INVALID", "Agent user is not active.");
+        }
+        if (!(userDetails instanceof LoginUser loginUser) || !AgentAccessPolicy.isAdmin(loginUser)) {
+            markLastError(session, "AGENT_ROLE_DENIED");
+            throw auth(HttpServletResponse.SC_FORBIDDEN, "AGENT_ROLE_DENIED", "Agent access is restricted to administrators.");
         }
         if (!jwtUtils.getScopes(claims).contains(SCOPE_WAREHOUSE_READ)) {
             markLastError(session, "AGENT_SCOPE_DENIED");
@@ -370,12 +379,6 @@ public class AgentSessionServiceImpl implements AgentSessionService {
                 .collect(Collectors.toList());
     }
 
-    private void requireLoginUser(LoginUser loginUser) {
-        if (loginUser == null || loginUser.getUser() == null || loginUser.getUser().getId() == null) {
-            throw new BusinessException(401, "Authentication is required.");
-        }
-    }
-
     private boolean isExpired(AgentSession session) {
         return session.getExpiresAt() != null && session.getExpiresAt().isBefore(LocalDateTime.now());
     }
@@ -384,13 +387,13 @@ public class AgentSessionServiceImpl implements AgentSessionService {
         if (userDetails == null || !userDetails.isEnabled()) {
             return false;
         }
-        if (userDetails instanceof LoginUser loginUser) {
-            return loginUser.getUser() != null
-                    && loginUser.getUser().getId() != null
-                    && loginUser.getUser().getRoleCode() != null
-                    && !loginUser.getUser().getRoleCode().isBlank();
+        if (!(userDetails instanceof LoginUser loginUser)) {
+            return false;
         }
-        return true;
+        return loginUser.getUser() != null
+                && loginUser.getUser().getId() != null
+                && loginUser.getUser().getRoleCode() != null
+                && !loginUser.getUser().getRoleCode().isBlank();
     }
 
     private boolean isAllowedDelegatedRequest(HttpServletRequest request) {

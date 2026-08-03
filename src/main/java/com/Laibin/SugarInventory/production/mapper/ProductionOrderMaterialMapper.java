@@ -55,7 +55,7 @@ public interface ProductionOrderMaterialMapper extends BaseMapper<ProductionOrde
             "production_date AS productionDate, warehouse_id AS warehouseId, warehouse_name_snapshot AS warehouseName, " +
             "side, `row_number` AS rowNumber, layer, quantity, unit, pieces, total_pieces AS totalPieces, total_weight AS totalWeight, " +
             "status, picked_by_name AS pickedByName, picked_at AS pickedAt, remark " +
-            "FROM production_order_material WHERE production_order_id = #{orderId} AND status != 'CANCELED' ORDER BY picked_at DESC, id DESC")
+            "FROM production_order_material WHERE production_order_id = #{orderId} AND status = 'PICKED' ORDER BY picked_at DESC, id DESC")
     List<ProductionMaterialVO> listMaterials(@Param("orderId") Long orderId);
 
     @Select("<script>" +
@@ -68,7 +68,7 @@ public interface ProductionOrderMaterialMapper extends BaseMapper<ProductionOrde
             "FROM production_order_material m " +
             "INNER JOIN production_order o ON m.production_order_id = o.id " +
             "LEFT JOIN product p ON m.product_id = p.id " +
-            "WHERE m.status != 'CANCELED' " +
+            "WHERE m.status = 'PICKED' " +
             "  AND m.product_status = '半成品' " +
             "  AND o.status NOT IN ('CANCELED', 'COMPLETED') " +
             "<if test='query.productName != null and query.productName != \"\"'>AND m.product_name_snapshot LIKE CONCAT('%', #{query.productName}, '%') </if>" +
@@ -86,7 +86,7 @@ public interface ProductionOrderMaterialMapper extends BaseMapper<ProductionOrde
             "SELECT COUNT(*) FROM production_order_material m " +
             "INNER JOIN production_order o ON m.production_order_id = o.id " +
             "LEFT JOIN product p ON m.product_id = p.id " +
-            "WHERE m.status != 'CANCELED' " +
+            "WHERE m.status = 'PICKED' " +
             "  AND m.product_status = '半成品' " +
             "  AND o.status NOT IN ('CANCELED', 'COMPLETED') " +
             "<if test='query.productName != null and query.productName != \"\"'>AND m.product_name_snapshot LIKE CONCAT('%', #{query.productName}, '%') </if>" +

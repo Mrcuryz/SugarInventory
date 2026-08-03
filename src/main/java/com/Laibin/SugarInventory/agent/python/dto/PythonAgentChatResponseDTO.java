@@ -14,6 +14,7 @@ public class PythonAgentChatResponseDTO {
     private boolean needsUserSelection;
     private List<BusinessCard> cards = new ArrayList<>();
     private List<String> suggestions = new ArrayList<>();
+    private JsonNode reviewTrace;
     private JsonNode debug;
     private AgentError error;
 

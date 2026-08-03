@@ -90,6 +90,7 @@ def chat_request(message: str, session_id: str = "agt_llm") -> ChatRequest:
         {
             "agentSessionId": session_id,
             "messageId": "msg_001",
+            "user": {"userId": 7, "name": "测试管理员", "roleCode": "ADMIN"},
             "message": {"type": "user_message", "content": message},
             "client": {"traceId": "trace_001", "requestId": "req_001", "debug": True},
         }
@@ -134,6 +135,24 @@ def test_llm_planning_mode_is_disabled_by_default(monkeypatch: pytest.MonkeyPatc
     assert Settings.from_env().planning_mode == "deterministic"
 
 
+def test_python_specific_model_mode_precedes_legacy_shared_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENT_PYTHON_MODEL_MODE", "openai_compatible")
+    monkeypatch.setenv("AGENT_MODEL_MODE", "rule")
+
+    assert Settings.from_env().model_mode == "openai_compatible"
+
+
+def test_legacy_model_mode_remains_supported_for_process_local_environments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AGENT_PYTHON_MODEL_MODE", raising=False)
+    monkeypatch.setenv("AGENT_MODEL_MODE", "openai-compatible")
+
+    assert Settings.from_env().model_mode == "openai_compatible"
+
+
 def test_openai_compatible_model_has_project_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AGENT_MODEL_BASE_URL", raising=False)
     monkeypatch.delenv("AGENT_MODEL_NAME", raising=False)
@@ -144,9 +163,41 @@ def test_openai_compatible_model_has_project_defaults(monkeypatch: pytest.Monkey
     assert settings.model_name == "deepseek-v4-flash"
 
 
+def test_stage_specific_models_default_to_the_base_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENT_MODEL_NAME", "base-test-model")
+    monkeypatch.delenv("AGENT_MAIN_ROUTE_MODEL_NAME", raising=False)
+    monkeypatch.delenv("AGENT_EXPERT_INITIAL_MODEL_NAME", raising=False)
+    monkeypatch.delenv("AGENT_EXPERT_RESULT_MODEL_NAME", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.main_route_model_name == "base-test-model"
+    assert settings.expert_initial_model_name == "base-test-model"
+    assert settings.expert_result_model_name == "base-test-model"
+
+
+def test_stage_specific_models_can_be_overridden_independently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENT_MODEL_NAME", "base-test-model")
+    monkeypatch.setenv("AGENT_MAIN_ROUTE_MODEL_NAME", "main-route-test-model")
+    monkeypatch.setenv("AGENT_EXPERT_INITIAL_MODEL_NAME", "expert-initial-test-model")
+    monkeypatch.setenv("AGENT_EXPERT_RESULT_MODEL_NAME", "expert-result-test-model")
+
+    settings = Settings.from_env()
+
+    assert settings.model_name == "base-test-model"
+    assert settings.main_route_model_name == "main-route-test-model"
+    assert settings.expert_initial_model_name == "expert-initial-test-model"
+    assert settings.expert_result_model_name == "expert-result-test-model"
+
+
 def test_pallet_expert_is_enabled_after_read_only_lifecycle_rollout() -> None:
     assert "pallet_expert" in Settings().llm_allowed_experts
     assert "logistics_expert" in Settings().llm_allowed_experts
+    assert "analytics_expert" in Settings().llm_allowed_experts
 
 
 def test_llm_limits_are_hard_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -338,7 +389,7 @@ def test_model_visible_schema_explains_global_scope_and_flat_argument_tools() ->
     )
 
     assert "扁平字段" in inventory["query_inventory_ledger"]["description"]
-    assert "不要求生产订单或煮糖批次" in inventory["query_prepare_pool_balance"]["description"]
+    assert "query_prepare_pool_balance" not in inventory
     assert "省略 warehouseRef" in warehouse["query_warehouse_recent_operations"]["description"]
     assert "全部仓库" in warehouse["query_warehouse_mixed_storage_facts"]["description"]
     assert "productScope=ALL" in assay["query_products_without_recent_assay"]["description"]
@@ -383,15 +434,15 @@ def test_active_goal_is_exposed_to_expert_as_controlled_contract() -> None:
     model = ScriptedLlmModel([], [])
     runtime, store = runtime_for(model, MockToolClient())
     state = store.get("agt_llm")
-    state.active_goal_type = "PREPARE_POOL_BALANCE"
+    state.active_goal_type = "IN_PROCESS_MATERIALS"
 
     active_goal = runtime._llm_selected_context(state)["ACTIVE_GOAL"]
 
-    assert active_goal["businessResult"] == "备料池余额"
-    assert active_goal["ownerExpert"] == "inventory_expert"
+    assert active_goal["businessResult"] == "已确认领用并扣减库存、订单未完成的在制半成品"
+    assert active_goal["ownerExpert"] == "production_expert"
     assert active_goal["requiredEntityTypes"] == []
-    assert active_goal["allowedTools"] == ["resolve_products", "query_prepare_pool_balance"]
-    assert active_goal["evidenceTools"] == ["query_prepare_pool_balance"]
+    assert active_goal["allowedTools"] == ["resolve_products", "query_in_process_materials"]
+    assert active_goal["evidenceTools"] == ["query_in_process_materials"]
 
 
 def test_scope_only_followup_reuses_active_goal_expert() -> None:
@@ -511,6 +562,1264 @@ def test_model_visible_schema_uses_controlled_production_refs() -> None:
     assert schemas["query_material_pick_trace"]["properties"]["orderRef"]["const"] == (
         "CURRENT_PRODUCTION_ORDER"
     )
+
+
+def test_analytics_expert_only_runs_registered_report_with_fixed_definition() -> None:
+    router = AgentHandoffRouter()
+    handoff = router.handoff_for_agent("analytics_expert")
+    profile = router.profile("analytics_expert")
+    schemas = ToolArgumentBuilder().llm_visible_tool_schemas(handoff)
+
+    assert handoff.allowed_tools == ("run_registered_report",)
+    assert any("31 天" in instruction for instruction in profile.instructions)
+    assert any("下方卡片" in instruction for instruction in profile.instructions)
+    assert any("逐字引用" in instruction for instruction in profile.instructions)
+    assert any("折算后的总件数" in instruction for instruction in profile.instructions)
+    assert set(schemas) == {"run_registered_report"}
+    assert schemas["run_registered_report"]["properties"]["reportDefinitionId"]["enum"] == [
+        "daily_production_overview_v1",
+        "quality_assay_result_trend_v1",
+        "quality_metric_trend_v1",
+        "production_input_output_flow_v1",
+        "pallet_task_cycle_time_v1",
+        "inventory_level_trend_v1",
+        "today_operations_overview_v1",
+    ]
+    assert "ph" in schemas["run_registered_report"]["properties"]["metricKey"]["enum"]
+    assert schemas["run_registered_report"]["properties"]["reportVersion"]["const"] == 1
+
+
+def test_registered_report_arguments_reject_unknown_definition_and_overlong_range() -> None:
+    builder = ToolArgumentBuilder(business_clock=fixed_test_clock())
+    state = InMemoryCheckpointer().get("agt_registered_report_arguments")
+
+    with pytest.raises(ValueError, match="unsupported reportDefinitionId"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                "reportDefinitionId": "arbitrary_report",
+                "reportVersion": 1,
+                "startDate": "2026-07-21",
+                "endDate": "2026-07-21",
+            },
+            state=state,
+            user_message="今天产量如何",
+        )
+
+    with pytest.raises(ValueError, match="31 days"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                "reportDefinitionId": "daily_production_overview_v1",
+                "reportVersion": 1,
+                "startDate": "2026-06-01",
+                "endDate": "2026-07-21",
+            },
+            state=state,
+            user_message="最近两个月产量如何",
+        )
+
+    quality_arguments = builder.validate_llm_arguments(
+        tool_name="run_registered_report",
+        arguments={
+            "reportDefinitionId": "quality_assay_result_trend_v1",
+            "reportVersion": 1,
+            "startDate": "2025-07-22",
+            "endDate": "2026-07-21",
+            "productQuery": "黄冰糖",
+        },
+        state=state,
+        user_message="最近一年黄冰糖质量趋势",
+    )
+    assert quality_arguments["reportDefinitionId"] == "quality_assay_result_trend_v1"
+    assert quality_arguments["productQuery"] == "黄冰糖"
+
+    metric_arguments = builder.validate_llm_arguments(
+        tool_name="run_registered_report",
+        arguments={
+            "reportDefinitionId": "quality_metric_trend_v1",
+            "reportVersion": 1,
+            "startDate": "2026-01-23",
+            "endDate": "2026-07-21",
+            "productQuery": "黄冰糖（袋）",
+            "metricKey": "ph",
+        },
+        state=state,
+        user_message="最近180天黄冰糖（袋）的pH趋势",
+    )
+    assert metric_arguments["metricKey"] == "ph"
+
+    flow_arguments = builder.validate_llm_arguments(
+        tool_name="run_registered_report",
+        arguments={
+            "reportDefinitionId": "production_input_output_flow_v1",
+            "reportVersion": 1,
+            "startDate": "2026-01-23",
+            "endDate": "2026-07-21",
+            "productQuery": "黄冰糖（袋）",
+        },
+        state=state,
+        user_message="最近180天黄冰糖（袋）的领料和登记产出趋势",
+    )
+    assert flow_arguments["reportDefinitionId"] == "production_input_output_flow_v1"
+    assert flow_arguments["productQuery"] == "黄冰糖（袋）"
+
+    today_arguments = builder.validate_llm_arguments(
+        tool_name="run_registered_report",
+        arguments={
+            "reportDefinitionId": "today_operations_overview_v1",
+            "reportVersion": 1,
+            "startDate": "2026-07-21",
+            "endDate": "2026-07-21",
+        },
+        state=state,
+        user_message="今天整体运营情况如何",
+    )
+    assert today_arguments == {
+        "reportDefinitionId": "today_operations_overview_v1",
+        "reportVersion": 1,
+        "startDate": "2026-07-21",
+        "endDate": "2026-07-21",
+    }
+
+    with pytest.raises(ValueError, match="Beijing today"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                "reportDefinitionId": "today_operations_overview_v1",
+                "reportVersion": 1,
+                "startDate": "2026-07-20",
+                "endDate": "2026-07-20",
+            },
+            state=state,
+            user_message="昨天整体运营情况如何",
+        )
+
+    with pytest.raises(ValueError, match="does not support filters"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                "reportDefinitionId": "today_operations_overview_v1",
+                "reportVersion": 1,
+                "startDate": "2026-07-21",
+                "endDate": "2026-07-21",
+                "productQuery": "黄冰糖",
+            },
+            state=state,
+            user_message="今天黄冰糖运营情况如何",
+        )
+
+    with pytest.raises(ValueError, match="metricKey is required"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                "reportDefinitionId": "quality_metric_trend_v1",
+                "reportVersion": 1,
+                "startDate": "2026-01-23",
+                "endDate": "2026-07-21",
+            },
+            state=state,
+            user_message="最近180天的指标趋势",
+        )
+
+    with pytest.raises(ValueError, match="366 days"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                "reportDefinitionId": "quality_assay_result_trend_v1",
+                "reportVersion": 1,
+                "startDate": "2025-07-01",
+                "endDate": "2026-07-21",
+            },
+            state=state,
+            user_message="查询超过一年的化验趋势",
+        )
+
+    with pytest.raises(ValueError, match="366 days"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                "reportDefinitionId": "production_input_output_flow_v1",
+                "reportVersion": 1,
+                "startDate": "2025-07-01",
+                "endDate": "2026-07-21",
+            },
+            state=state,
+            user_message="查询超过一年的生产领料产出趋势",
+        )
+
+
+def test_registered_report_arguments_validate_deterministic_comparison_periods() -> None:
+    builder = ToolArgumentBuilder(business_clock=fixed_test_clock())
+    state = InMemoryCheckpointer().get("agt_registered_report_comparison")
+    base = {
+        "reportDefinitionId": "daily_production_overview_v1",
+        "reportVersion": 1,
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-21",
+    }
+
+    previous = builder.validate_llm_arguments(
+        tool_name="run_registered_report",
+        arguments={**base, "comparisonMode": "PREVIOUS_PERIOD"},
+        state=state,
+        user_message="和上周比，最近 7 天产量如何",
+    )
+    assert previous["comparisonMode"] == "PREVIOUS_PERIOD"
+    assert "comparisonStartDate" not in previous
+
+    custom = builder.validate_llm_arguments(
+        tool_name="run_registered_report",
+        arguments={
+            **base,
+            "comparisonMode": "CUSTOM",
+            "comparisonStartDate": "2026-07-01",
+            "comparisonEndDate": "2026-07-07",
+        },
+        state=state,
+        user_message="最近 7 天和 7 月 1 日到 7 日对比",
+    )
+    assert custom["comparisonStartDate"] == "2026-07-01"
+
+    with pytest.raises(ValueError, match="must not overlap"):
+        builder.validate_llm_arguments(
+            tool_name="run_registered_report",
+            arguments={
+                **base,
+                "comparisonMode": "CUSTOM",
+                "comparisonStartDate": "2026-07-14",
+                "comparisonEndDate": "2026-07-16",
+            },
+            state=state,
+            user_message="对比这两个重叠区间",
+        )
+
+
+def test_llm_daily_production_report_uses_analytics_expert_and_returns_report_card() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "DAILY_PRODUCTION_ANALYSIS")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "daily_production_overview_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-07-21",
+                    "endDate": "2026-07-21",
+                },
+            ),
+            final(
+                "今天已登记产出 2500 kg，涉及 2 个生产订单、3 条产出记录。",
+                "obs_1",
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": {
+                "reportRunId": "rr_opaque",
+                "reportDefinitionId": "daily_production_overview_v1",
+                "reportVersion": 1,
+                "reportName": "生产登记产出日报",
+                "dateRangeLabel": "2026-07-21",
+                "filtersApplied": {"productScope": "全部产品"},
+                "dataAsOf": "2026-07-21T12:00:00+08:00",
+                "latestRecordAt": "2026-07-21T11:30:00",
+                "isEmpty": False,
+                "metrics": {
+                    "outputRecordCount": 3,
+                    "productionOrderCount": 2,
+                    "totalWeightKg": 2500,
+                    "totalBoardCount": 3,
+                    "loosePieceCount": 5,
+                    "totalPieces": 125,
+                    "requiredQrCount": 120,
+                    "boundQrCount": 100,
+                    "inboundQrCount": 80,
+                },
+                "dailySeries": [
+                    {
+                        "businessDate": "2026-07-21",
+                        "outputRecordCount": 3,
+                        "productionOrderCount": 2,
+                        "totalWeightKg": 2500,
+                        "totalBoardCount": 3,
+                        "loosePieceCount": 5,
+                        "totalPieces": 125,
+                    }
+                ],
+                "productBreakdowns": [
+                    {
+                        "productName": "黄冰糖（袋）",
+                        "outputRecordCount": 3,
+                        "productionOrderCount": 2,
+                        "totalWeightKg": 2500,
+                        "totalBoardCount": 3,
+                        "loosePieceCount": 5,
+                        "totalPieces": 125,
+                    }
+                ],
+                "comparison": {
+                    "comparisonMode": "PREVIOUS_PERIOD",
+                    "comparisonLabel": "上一等长期间",
+                    "currentDateRangeLabel": "2026-07-21",
+                    "comparisonDateRangeLabel": "2026-07-20",
+                    "currentPeriodDays": 1,
+                    "comparisonPeriodDays": 1,
+                    "differentPeriodLengths": False,
+                    "metrics": [
+                        {
+                            "metricCode": "totalWeightKg",
+                            "metricLabel": "已登记产出重量",
+                            "unit": "kg",
+                            "additive": True,
+                            "currentValue": 2500,
+                            "comparisonValue": 3000,
+                            "absoluteChange": -500,
+                            "percentChange": -16.6667,
+                            "currentDailyAverage": 2500,
+                            "comparisonDailyAverage": 3000,
+                            "dailyAverageAbsoluteChange": -500,
+                            "dailyAveragePercentChange": -16.6667,
+                        }
+                    ],
+                    "notes": ["变化只描述登记数值差异，不代表改善或恶化。"],
+                },
+                "dataQuality": {
+                    "partial": False,
+                    "rowsMissingWeight": 0,
+                    "rowsMissingPieceConversion": 0,
+                    "rowsMissingProductName": 0,
+                    "notes": [],
+                },
+                "limitations": [
+                    "只统计生产订单中已登记且未取消的产出记录。",
+                    "二维码绑定和入库进度不计入产量。",
+                ],
+            }
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(chat_request("今天产量如何？"))
+
+    assert response.error is None
+    assert response.answer == "今天已登记产出 2500 kg，涉及 2 个生产订单、3 条产出记录。"
+    assert [item["toolName"] for item in tools.calls] == ["run_registered_report"]
+    assert tools.calls[0]["expertAgent"] == "analytics_expert"
+    assert tools.calls[0]["arguments"] == {
+        "reportDefinitionId": "daily_production_overview_v1",
+        "reportVersion": 1,
+        "startDate": "2026-07-21",
+        "endDate": "2026-07-21",
+    }
+    assert [card.cardType for card in response.cards] == ["daily_production_report"]
+    assert response.cards[0].fields[0]["comparison"]["metrics"][0]["absoluteChange"] == "-500"
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
+    assert store.get("agt_llm").last_report_context["reportName"] == "生产登记产出日报"
+    assert store.get("agt_llm").last_report_context["comparison"]["comparisonMode"] == "PREVIOUS_PERIOD"
+    assert "daily_production_overview_v1" not in json.dumps(
+        model.expert_requests[-1].observations,
+        ensure_ascii=False,
+    )
+
+
+def test_llm_today_operations_overview_uses_registered_facts_and_safe_card() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "TODAY_OPERATIONS_OVERVIEW")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "today_operations_overview_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-07-21",
+                    "endDate": "2026-07-21",
+                },
+            ),
+            final(
+                "今天已登记产出 1980 kg，共有 3 条化验记录；当前待处理任务 7 条。各模块口径见卡片。",
+                "obs_1",
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": {
+                "reportRunId": "report_run_today123456",
+                "reportDefinitionId": "today_operations_overview_v1",
+                "reportVersion": 1,
+                "reportName": "今日运营概览",
+                "dateRangeLabel": "2026-07-21",
+                "dataAsOf": "2026-07-21T16:30:00+08:00",
+                "latestRecordAt": "2026-07-21T16:15:00",
+                "operationsOverview": {
+                    "businessDate": "2026-07-21",
+                    "productionOutput": {
+                        "outputRecordCount": 1,
+                        "productionOrderCount": 1,
+                        "totalWeightKg": 1980,
+                        "totalPieces": 80,
+                    },
+                    "assayQuality": {
+                        "assayRecordCount": 3,
+                        "judgedRecordCount": 2,
+                        "passCount": 2,
+                        "failCount": 0,
+                        "noStandardCount": 1,
+                        "multipleCandidatesCount": 0,
+                        "passRatePercent": 100,
+                    },
+                    "productionFlow": {
+                        "materialInputRecordCount": 2,
+                        "materialInputOrderCount": 1,
+                        "materialInputWeightKg": 2000,
+                        "stableOutputRecordCount": 1,
+                        "stableOutputOrderCount": 1,
+                        "stableOutputWeightKg": 1980,
+                    },
+                    "currentInventory": {
+                        "productCount": 5,
+                        "warehouseCount": 3,
+                        "palletCount": 12,
+                        "totalEquivalentPieces": 550,
+                        "totalStockText": "13 板 30 件",
+                        "totalWeightText": "13750 kg",
+                    },
+                    "todayPalletTasks": {
+                        "cohortTaskCount": 4,
+                        "completedTaskCount": 2,
+                        "inProgressTaskCount": 1,
+                        "canceledTaskCount": 1,
+                    },
+                    "currentPendingTaskCount": 7,
+                },
+                "dataQuality": {"partial": False, "notes": []},
+                "limitations": [
+                    "今日事实与当前快照分开解释。",
+                    "领用与产出不能直接相除。",
+                ],
+            }
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(chat_request("今天整体运营情况如何？"))
+
+    assert response.error is None
+    assert [item["toolName"] for item in tools.calls] == ["run_registered_report"]
+    assert tools.calls[0]["arguments"]["reportDefinitionId"] == (
+        "today_operations_overview_v1"
+    )
+    assert [card.cardType for card in response.cards] == [
+        "today_operations_overview_report"
+    ]
+    fields = response.cards[0].fields
+    assert fields[0]["kind"] == "today_operations_overview_summary"
+    assert next(
+        item for item in fields if item["kind"] == "today_operations_quality"
+    )["judgedRecordCount"] == 2
+    assert next(
+        item for item in fields if item["kind"] == "today_operations_tasks"
+    )["currentPendingTaskCount"] == 7
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
+
+
+def test_llm_production_input_output_flow_uses_independent_series_and_safe_card() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "PRODUCTION_INPUT_OUTPUT_TREND")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "production_input_output_flow_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-06-01",
+                    "endDate": "2026-07-21",
+                    "productQuery": "黄冰糖（袋）",
+                },
+            ),
+            final(
+                "领料和稳定登记产出分别见卡片。两者采用不同业务日期，不能直接计算产耗比。",
+                "obs_1",
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": {
+                "reportRunId": "report_run_0123456789abcdef",
+                "reportDefinitionId": "production_input_output_flow_v1",
+                "reportVersion": 1,
+                "reportName": "生产领料—登记产出趋势",
+                "dateRangeLabel": "2026-06-01 至 2026-07-21",
+                "filtersApplied": {
+                    "productScope": "稳定登记产出产品名称包含“黄冰糖（袋）”"
+                },
+                "dataAsOf": "2026-07-21T12:00:00+08:00",
+                "latestRecordAt": "2026-06-30T15:34:00",
+                "seriesGranularity": "DAY",
+                "productionFlowMetrics": {
+                    "materialInputRecordCount": 2,
+                    "materialInputOrderCount": 1,
+                    "materialInputPalletCount": 2,
+                    "materialInputBoardCount": 2,
+                    "materialInputLoosePieceCount": 0,
+                    "materialInputTotalPieces": 80,
+                    "materialInputWeightKg": 1656.8,
+                    "stableOutputRecordCount": 3,
+                    "stableOutputOrderCount": 2,
+                    "stableOutputBoardCount": 3,
+                    "stableOutputLoosePieceCount": 0,
+                    "stableOutputTotalPieces": 120,
+                    "stableOutputWeightKg": 1983.8,
+                    "cohortOrderCount": 2,
+                    "completedOrderCount": 2,
+                    "completedOrdersWithInputCount": 1,
+                    "completedOrdersMissingInputCount": 1,
+                    "completedOrdersWithStableOutputCount": 2,
+                    "completedOrdersMissingOutputCount": 0,
+                    "ordersWithInputCount": 1,
+                    "ordersMissingInputCount": 1,
+                    "ordersWithStableOutputCount": 2,
+                    "ordersMissingOutputCount": 0,
+                    "cohortMaterialInputWeightKg": 1656.8,
+                    "cohortBoilingInputWeightKg": 0,
+                    "cohortStableOutputWeightKg": 1983.8,
+                },
+                "productionFlowDailySeries": [
+                    {
+                        "businessDate": "2026-06-29",
+                        "materialInputRecordCount": 2,
+                        "materialInputOrderCount": 1,
+                        "materialInputPalletCount": 2,
+                        "materialInputTotalPieces": 80,
+                        "materialInputWeightKg": 1656.8,
+                        "stableOutputRecordCount": 0,
+                        "stableOutputOrderCount": 0,
+                        "stableOutputTotalPieces": 0,
+                        "stableOutputWeightKg": 0,
+                    },
+                    {
+                        "businessDate": "2026-06-30",
+                        "materialInputRecordCount": 0,
+                        "materialInputOrderCount": 0,
+                        "materialInputPalletCount": 0,
+                        "materialInputTotalPieces": 0,
+                        "materialInputWeightKg": 0,
+                        "stableOutputRecordCount": 3,
+                        "stableOutputOrderCount": 2,
+                        "stableOutputTotalPieces": 120,
+                        "stableOutputWeightKg": 1983.8,
+                    },
+                ],
+                "productionFlowOrderBreakdowns": [
+                    {
+                        "orderNo": "PO202606300001",
+                        "orderTypeLabel": "成品生产",
+                        "orderStatusLabel": "已完成",
+                        "productionDate": "2026-06-30",
+                        "inputSourceLabel": "实际领料记录",
+                        "inputRecordCount": 2,
+                        "inputPalletCount": 2,
+                        "inputTotalPieces": 80,
+                        "inputWeightKg": 1656.8,
+                        "stableOutputRecordCount": 1,
+                        "stableOutputTotalPieces": 40,
+                        "stableOutputWeightKg": 327,
+                        "outputProductNames": "黄冰糖（袋）",
+                        "completenessLabel": "输入和稳定产出均已登记",
+                    },
+                    {
+                        "orderNo": "PO202606300002",
+                        "orderTypeLabel": "成品生产",
+                        "orderStatusLabel": "已完成",
+                        "productionDate": "2026-06-30",
+                        "inputSourceLabel": "实际领料记录",
+                        "inputRecordCount": 0,
+                        "inputPalletCount": 0,
+                        "inputTotalPieces": 0,
+                        "inputWeightKg": 0,
+                        "stableOutputRecordCount": 2,
+                        "stableOutputTotalPieces": 80,
+                        "stableOutputWeightKg": 1656.8,
+                        "outputProductNames": "黄冰糖（袋）",
+                        "completenessLabel": "缺少输入登记",
+                    },
+                ],
+                "dataQuality": {
+                    "partial": True,
+                    "completedOrderCount": 2,
+                    "completedOrdersWithInputCount": 1,
+                    "completedOrdersMissingInputCount": 1,
+                    "completedOrdersWithStableOutputCount": 2,
+                    "completedOrdersMissingOutputCount": 0,
+                    "unattributedOrderCount": 0,
+                    "orderBreakdownTruncated": False,
+                    "notes": ["1 个已完成订单缺少输入登记。"],
+                },
+                "limitations": [
+                    "确认领用时已完成库存扣减，但领用确认时间与产出生产日期不能直接相除。",
+                    "每日领料按领料发生时间统计，每日产出按生产日期统计。",
+                ],
+            }
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(
+        chat_request("最近180天黄冰糖（袋）的生产领料和登记产出趋势")
+    )
+
+    assert response.error is None
+    assert tools.calls[0]["arguments"]["reportDefinitionId"] == (
+        "production_input_output_flow_v1"
+    )
+    assert [card.cardType for card in response.cards] == [
+        "production_input_output_flow_report"
+    ]
+    assert response.cards[0].fields[0]["reportRunId"] == (
+        "report_run_0123456789abcdef"
+    )
+    assert any(
+        field["kind"] == "production_input_output_flow_scope_note"
+        and "不计算产耗比" in field["value"]
+        for field in response.cards[0].fields
+    )
+    assert all(
+        "FINISH" not in json.dumps(field, ensure_ascii=False)
+        and "COMPLETED" not in json.dumps(field, ensure_ascii=False)
+        for field in response.cards[0].fields
+    )
+    assert store.get("agt_llm").last_goal_completion["goalType"] == (
+        "PRODUCTION_INPUT_OUTPUT_TREND"
+    )
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
+
+
+def test_llm_inventory_level_trend_preserves_simulation_boundary_and_card() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "INVENTORY_LEVEL_TREND_ANALYSIS")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "inventory_level_trend_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-07-14",
+                    "endDate": "2026-07-20",
+                    "productQuery": "黄冰糖（袋）",
+                },
+            ),
+            final(
+                "这 7 天黄冰糖（袋）库存由 550 件增至 790 件，净增加 240 件。当前结果是本地历史回放模拟，不能作为正式日终快照。",
+                "obs_1",
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": {
+                "reportRunId": "report_run_inventory_uat",
+                "reportDefinitionId": "inventory_level_trend_v1",
+                "reportVersion": 1,
+                "reportName": "库存水平趋势（历史回放模拟）",
+                "dateRangeLabel": "2026-07-14 至 2026-07-20",
+                "filtersApplied": {
+                    "productScope": "产品名称包含“黄冰糖（袋）”",
+                    "dataSource": "本地历史回放模拟",
+                },
+                "dataAsOf": "2026-08-01T12:00:00+08:00",
+                "latestRecordAt": "2026-07-20T16:00:00",
+                "inventoryTrendMetrics": {
+                    "observationDayCount": 7,
+                    "openingPieces": 550,
+                    "closingPieces": 790,
+                    "netChangePieces": 240,
+                    "openingWeightKg": 13750,
+                    "closingWeightKg": 19750,
+                    "netChangeWeightKg": 6000,
+                    "increaseDayCount": 1,
+                    "decreaseDayCount": 0,
+                    "unchangedDayCount": 5,
+                },
+                "inventoryTrendDailySeries": [
+                    {
+                        "businessDate": "2026-07-14",
+                        "totalPieces": 550,
+                        "totalWeightKg": 13750,
+                        "pieceChange": 0,
+                        "weightChangeKg": 0,
+                        "movementRecordCount": 0,
+                    },
+                    {
+                        "businessDate": "2026-07-20",
+                        "totalPieces": 790,
+                        "totalWeightKg": 19750,
+                        "pieceChange": 240,
+                        "weightChangeKg": 6000,
+                        "movementRecordCount": 6,
+                    },
+                ],
+                "inventoryTrendProductBreakdowns": [
+                    {
+                        "productName": "黄冰糖（袋）",
+                        "openingPieces": 550,
+                        "closingPieces": 790,
+                        "netChangePieces": 240,
+                        "openingWeightKg": 13750,
+                        "closingWeightKg": 19750,
+                        "netChangeWeightKg": 6000,
+                    }
+                ],
+                "dataQuality": {
+                    "partial": True,
+                    "simulationData": True,
+                    "replayMovementRecordCount": 6,
+                    "replayAnchorReconciled": True,
+                    "trustedSnapshotDayCount": 0,
+                    "requiredSnapshotDayCount": 7,
+                    "notes": ["当前为本地历史回放模拟。"],
+                },
+                "limitations": ["正式环境仍需连续 7 天真实日终快照。"],
+            }
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(
+        chat_request("2026年7月14日至20日黄冰糖（袋）的库存变化趋势如何")
+    )
+
+    assert response.error is None
+    assert tools.calls[0]["arguments"]["reportDefinitionId"] == (
+        "inventory_level_trend_v1"
+    )
+    assert [card.cardType for card in response.cards] == [
+        "inventory_level_trend_report"
+    ]
+    summary = response.cards[0].fields[0]
+    assert summary["simulationData"] is True
+    assert summary["openingPieces"] == 550
+    assert summary["closingPieces"] == 790
+    assert any(
+        field["kind"] == "inventory_level_trend_scope_note"
+        and "正式上线" in field["value"]
+        for field in response.cards[0].fields
+    )
+    assert store.get("agt_llm").last_goal_completion["goalType"] == (
+        "INVENTORY_LEVEL_TREND_ANALYSIS"
+    )
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
+
+
+def test_llm_pallet_task_cycle_separates_duration_waiting_and_scope() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "PROCESS_EFFICIENCY_TREND")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "pallet_task_cycle_time_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-05-01",
+                    "endDate": "2026-07-31",
+                    "taskType": "FINISH_IN",
+                },
+            ),
+            final(
+                "最近90天共登记28条成品入库任务，其中21条已完成、4条仍在等待、3条已取消。完成耗时与等待时长口径不同，详情见卡片。",
+                "obs_1",
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": {
+                "reportRunId": "report_run_0123456789abcdef",
+                "reportDefinitionId": "pallet_task_cycle_time_v1",
+                "reportVersion": 1,
+                "reportName": "托盘任务处理耗时趋势",
+                "dateRangeLabel": "2026-05-01 至 2026-07-31",
+                "filtersApplied": {
+                    "productScope": "全部产品",
+                    "taskScope": "成品入库任务",
+                },
+                "dataAsOf": "2026-07-31T18:00:00+08:00",
+                "latestRecordAt": "2026-07-20T16:00:00",
+                "palletTaskCycleMetrics": {
+                    "cohortTaskCount": 28,
+                    "completedTaskCount": 21,
+                    "inProgressTaskCount": 4,
+                    "canceledTaskCount": 3,
+                    "invalidTaskCount": 0,
+                    "averageDurationSeconds": 243780,
+                    "medianDurationSeconds": 48,
+                    "p90DurationSeconds": 5097116,
+                    "maximumDurationSeconds": 5108516,
+                    "medianWaitingSeconds": 6712056,
+                    "p90WaitingSeconds": 7351380,
+                    "maximumWaitingSeconds": 7351380,
+                },
+                "palletTaskCycleDailySeries": [
+                    {
+                        "businessDate": "2026-06-30",
+                        "taskCount": 4,
+                        "completedTaskCount": 2,
+                        "inProgressTaskCount": 1,
+                        "canceledTaskCount": 1,
+                        "medianDurationSeconds": 48,
+                    }
+                ],
+                "palletTaskCycleTypeBreakdowns": [
+                    {
+                        "taskTypeLabel": "成品入库任务",
+                        "taskCount": 28,
+                        "completedTaskCount": 21,
+                        "inProgressTaskCount": 4,
+                        "canceledTaskCount": 3,
+                        "medianDurationSeconds": 48,
+                    }
+                ],
+                "palletTaskPendingItems": [
+                    {
+                        "palletCode": "BT001",
+                        "taskTypeLabel": "成品入库任务",
+                        "productName": "黄冰糖（袋）",
+                        "createdAt": "2026-05-01T10:00:00",
+                        "waitingSeconds": 7351380,
+                        "targetWarehouseName": "尚未登记目标库位",
+                    }
+                ],
+                "dataQuality": {
+                    "partial": True,
+                    "tasksWithoutOperationBatchCount": 24,
+                    "notes": ["24 条任务没有操作批次号，不能计算批量作业耗时。"],
+                },
+                "limitations": [
+                    "当前没有登记 SLA，只能描述已等待时长，不能称为逾期。",
+                    "本报表不代表现场全部操作或员工绩效。",
+                ],
+            }
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(chat_request("最近90天成品入库任务处理耗时如何"))
+
+    assert response.error is None
+    assert tools.calls[0]["arguments"]["taskType"] == "FINISH_IN"
+    assert [card.cardType for card in response.cards] == [
+        "pallet_task_cycle_report"
+    ]
+    assert any(
+        field["kind"] == "pallet_task_cycle_pending"
+        and field["palletCode"] == "BT001"
+        for field in response.cards[0].fields
+    )
+    assert any(
+        field["kind"] == "pallet_task_cycle_scope_note"
+        and "员工绩效" in field["value"]
+        for field in response.cards[0].fields
+    )
+    assert store.get("agt_llm").last_goal_completion["goalType"] == (
+        "PROCESS_EFFICIENCY_TREND"
+    )
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
+
+
+def test_registered_report_model_observation_is_compact_but_card_keeps_full_rows() -> None:
+    runtime, _ = runtime_for(
+        ScriptedLlmModel([], []),
+        MockToolClient({}),
+        allowed_experts=("analytics_expert",),
+    )
+    daily_rows = [
+        {
+            "businessDate": f"2026-07-{index:02d}",
+            "materialInputRecordCount": 1,
+            "materialInputWeightKg": str(index),
+            "stableOutputRecordCount": 1,
+            "stableOutputWeightKg": str(index + 100),
+        }
+        for index in range(1, 21)
+    ]
+    order_rows = [
+        {
+            "orderNo": f"PO{index:04d}",
+            "completenessLabel": "输入和稳定产出均已登记",
+        }
+        for index in range(1, 21)
+    ]
+    report_data = {
+        "reportName": "生产领料—登记产出趋势",
+        "dateRangeLabel": "2026-07-01 至 2026-07-20",
+        "productScopeLabel": "全部产品",
+        "productionFlowMetrics": {
+            "materialInputRecordCount": 20,
+            "materialInputWeightKg": "210",
+            "stableOutputRecordCount": 20,
+            "stableOutputWeightKg": "2210",
+        },
+        "productionFlowDailySeries": daily_rows,
+        "productionFlowOrderBreakdowns": order_rows,
+        "dataQuality": {"partial": False, "notes": []},
+        "limitations": ["确认领用时已完成库存扣减，但领用确认时间与产出生产日期不能直接相除。"],
+    }
+
+    compact_data = runtime._compact_registered_report_model_data(report_data)
+    model_observation = runtime._llm_model_observations(
+        [
+            {
+                "observationId": "obs_1",
+                "status": "AVAILABLE",
+                "tool": "run_registered_report",
+                "data": compact_data,
+                "callSignature": "hidden",
+            }
+        ]
+    )[0]
+
+    assert model_observation["data"]["productionFlowDailySeriesTotalCount"] == 20
+    assert len(model_observation["data"]["productionFlowDailySeries"]) == 6
+    assert model_observation["data"]["productionFlowDailySeries"][0]["businessDate"] == (
+        "2026-07-01"
+    )
+    assert model_observation["data"]["productionFlowDailySeries"][-1]["businessDate"] == (
+        "2026-07-20"
+    )
+    assert model_observation["data"]["productionFlowOrderBreakdownsTotalCount"] == 20
+    assert len(model_observation["data"]["productionFlowOrderBreakdowns"]) == 6
+    assert model_observation["data"]["productionFlowMetrics"]["materialInputRecordCount"] == 20
+    assert "完整受控明细保留在卡片和报表导出中" in (
+        model_observation["data"]["modelObservationNote"]
+    )
+    assert "callSignature" not in model_observation
+
+    sparse_daily_rows = [
+        {
+            "businessDate": f"2026-{(index // 28) + 1:02d}-{(index % 28) + 1:02d}",
+            "materialInputRecordCount": 1 if index == 100 else 0,
+            "stableOutputRecordCount": 0,
+        }
+        for index in range(180)
+    ]
+    sparse_compact = runtime._compact_registered_report_model_data(
+        {
+            **report_data,
+            "productionFlowDailySeries": sparse_daily_rows,
+        }
+    )
+    assert sparse_compact["productionFlowDailySeriesTotalCount"] == 180
+    assert sparse_compact["productionFlowDailySeries"] == [sparse_daily_rows[100]]
+
+    card = runtime._production_input_output_flow_card(report_data)
+    assert sum(
+        field["kind"] == "production_input_output_flow_daily"
+        for field in card.fields
+    ) == 20
+    assert sum(
+        field["kind"] == "production_input_output_flow_order"
+        for field in card.fields
+    ) == 20
+
+
+def test_llm_daily_production_report_explains_overlong_range_without_generic_error() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "DAILY_PRODUCTION_ANALYSIS")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "daily_production_overview_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-05-31",
+                    "endDate": "2026-07-29",
+                },
+            )
+        ],
+    )
+    runtime, _ = runtime_for(
+        model,
+        MockToolClient({}),
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(chat_request("最近60天的产量"))
+
+    assert response.error is None
+    assert response.cards == []
+    assert "单次最多查询 31 天" in response.answer
+    assert "不会擅自缩短" in response.answer
+
+
+def test_llm_quality_assay_trend_uses_registered_report_and_returns_quality_card() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "QUALITY_ASSAY_TREND_ANALYSIS")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "quality_assay_result_trend_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-07-01",
+                    "endDate": "2026-07-21",
+                    "productQuery": "黄冰糖",
+                },
+            ),
+            final(
+                "最近21天共3条化验，其中1条合格、1条不合格，另有1条无标准。",
+                "obs_1",
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": {
+                "reportRunId": "rr_quality_opaque",
+                "reportDefinitionId": "quality_assay_result_trend_v1",
+                "reportVersion": 1,
+                "reportName": "化验判定趋势",
+                "dateRangeLabel": "2026-07-01 至 2026-07-21",
+                "filtersApplied": {"productScope": "产品名称包含“黄冰糖”"},
+                "dataAsOf": "2026-07-21T12:00:00+08:00",
+                "latestRecordAt": "2026-07-17T16:15:00",
+                "seriesGranularity": "DAY",
+                "qualityMetrics": {
+                    "assayRecordCount": 3,
+                    "judgedRecordCount": 2,
+                    "passCount": 1,
+                    "failCount": 1,
+                    "noStandardCount": 1,
+                    "multipleCandidatesCount": 0,
+                    "passRatePercent": 50.0,
+                    "distinctProductCount": 1,
+                    "distinctStandardVersionCount": 1,
+                },
+                "qualitySeries": [
+                    {
+                        "periodLabel": "2026-07-17",
+                        "periodStart": "2026-07-17",
+                        "periodEnd": "2026-07-17",
+                        "assayRecordCount": 3,
+                        "judgedRecordCount": 2,
+                        "passCount": 1,
+                        "failCount": 1,
+                        "noStandardCount": 1,
+                        "multipleCandidatesCount": 0,
+                        "passRatePercent": 50.0,
+                    }
+                ],
+                "qualityProductBreakdowns": [
+                    {
+                        "productName": "黄冰糖（袋）",
+                        "assayRecordCount": 3,
+                        "judgedRecordCount": 2,
+                        "passCount": 1,
+                        "failCount": 1,
+                        "noStandardCount": 1,
+                        "multipleCandidatesCount": 0,
+                        "passRatePercent": 50.0,
+                    }
+                ],
+                "standardBreakdowns": [
+                    {
+                        "standardLabel": "黄冰糖 v1",
+                        "assayRecordCount": 2,
+                        "judgedRecordCount": 2,
+                        "passCount": 1,
+                        "failCount": 1,
+                        "passRatePercent": 50.0,
+                    }
+                ],
+                "dataQuality": {
+                    "partial": False,
+                    "rowsMissingJudgeResult": 0,
+                    "rowsMissingStandardVersion": 0,
+                    "rowsMissingProductName": 0,
+                    "lateRecordedCount": 1,
+                    "notes": ["1 条化验记录晚于生产日期录入；趋势仍按生产日期统计。"],
+                },
+                "limitations": [
+                    "合格率固定为合格数除以合格数与不合格数之和。",
+                    "本报表只统计已有化验记录。",
+                ],
+            }
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(chat_request("最近21天黄冰糖质量趋势如何？"))
+
+    assert response.error is None
+    assert [item["toolName"] for item in tools.calls] == ["run_registered_report"]
+    assert tools.calls[0]["arguments"]["reportDefinitionId"] == (
+        "quality_assay_result_trend_v1"
+    )
+    assert [card.cardType for card in response.cards] == [
+        "quality_assay_trend_report"
+    ]
+    assert store.get("agt_llm").last_goal_completion["goalType"] == (
+        "QUALITY_ASSAY_TREND_ANALYSIS"
+    )
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
+
+
+def test_llm_quality_metric_trend_uses_historical_standard_and_returns_metric_card() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "QUALITY_METRIC_TREND_ANALYSIS")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "quality_metric_trend_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-01-23",
+                    "endDate": "2026-07-21",
+                    "productQuery": "黄冰糖（袋）",
+                    "metricKey": "ph",
+                },
+            ),
+            final(
+                "最近180天的pH样本均处于标准范围，达标率100%。",
+                "obs_1",
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": {
+                "reportRunId": "report_run_0123456789abcdef",
+                "reportDefinitionId": "quality_metric_trend_v1",
+                "reportVersion": 1,
+                "reportName": "单项化验指标趋势",
+                "dateRangeLabel": "2026-01-23 至 2026-07-21",
+                "filtersApplied": {"productScope": "产品名称包含“黄冰糖（袋）”"},
+                "dataAsOf": "2026-07-21T12:00:00+08:00",
+                "latestRecordAt": "2026-07-17T16:15:00",
+                "seriesGranularity": "MONTH",
+                "metricTrendSummary": {
+                    "metricKey": "ph",
+                    "metricName": "pH",
+                    "unit": "",
+                    "assayRecordCount": 3,
+                    "sampleCount": 3,
+                    "missingValueCount": 0,
+                    "comparableStandardCount": 1,
+                    "withinStandardCount": 1,
+                    "outOfStandardCount": 0,
+                    "withoutComparableStandardCount": 2,
+                    "withinStandardRatePercent": 100.0,
+                    "averageValue": 5.067,
+                    "medianValue": 7.0,
+                    "minimumValue": 1.0,
+                    "maximumValue": 7.2,
+                    "p10Value": 2.2,
+                    "p90Value": 7.16,
+                },
+                "metricSeries": [
+                    {
+                        "periodLabel": "2026-04",
+                        "periodStart": "2026-04-01",
+                        "periodEnd": "2026-04-30",
+                        "sampleCount": 1,
+                        "averageValue": 1.0,
+                        "medianValue": 1.0,
+                        "minimumValue": 1.0,
+                        "maximumValue": 1.0,
+                    },
+                    {
+                        "periodLabel": "2026-07",
+                        "periodStart": "2026-07-01",
+                        "periodEnd": "2026-07-31",
+                        "sampleCount": 2,
+                        "averageValue": 7.1,
+                        "medianValue": 7.1,
+                        "minimumValue": 7.0,
+                        "maximumValue": 7.2,
+                    },
+                ],
+                "metricProductBreakdowns": [
+                    {
+                        "productName": "黄冰糖（袋）",
+                        "sampleCount": 3,
+                        "averageValue": 5.067,
+                        "medianValue": 7.0,
+                        "minimumValue": 1.0,
+                        "maximumValue": 7.2,
+                    }
+                ],
+                "metricStandardBreakdowns": [
+                    {
+                        "standardLabel": "黄冰糖 v1",
+                        "rangeLabel": "6 - 9",
+                        "unit": "",
+                        "sampleCount": 1,
+                        "withinStandardCount": 1,
+                        "outOfStandardCount": 0,
+                        "withinStandardRatePercent": 100.0,
+                    }
+                ],
+                "dataQuality": {
+                    "partial": False,
+                    "rowsMissingMetricValue": 0,
+                    "rowsWithoutComparableMetricStandard": 2,
+                    "rowsWithUnexpectedMetricUnit": 0,
+                    "notes": ["2 个实测样本没有可比较的历史指标标准。"],
+                },
+                "limitations": ["样本较少时不输出趋势方向。"],
+            }
+        }
+    )
+    runtime, store = runtime_for(
+        model,
+        tools,
+        allowed_experts=("analytics_expert",),
+    )
+
+    response = runtime.chat(chat_request("最近180天黄冰糖（袋）的pH趋势如何？"))
+
+    assert response.error is None
+    assert tools.calls[0]["arguments"]["metricKey"] == "ph"
+    assert [card.cardType for card in response.cards] == [
+        "quality_metric_trend_report"
+    ]
+    assert response.cards[0].fields[0]["reportRunId"] == "report_run_0123456789abcdef"
+    assert response.cards[0].fields[0]["unit"] == ""
+    assert "2 个样本无可比较的历史标准" in response.answer
+    assert "不参与达标率计算" in response.answer
+    assert [field["label"] for field in response.cards[0].fields if field["kind"] == "quality_metric_trend_point"] == [
+        "2026-04",
+        "2026-07",
+    ]
+    assert store.get("agt_llm").last_goal_completion["goalType"] == (
+        "QUALITY_METRIC_TREND_ANALYSIS"
+    )
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
 
 
 def test_llm_boiling_batch_range_uses_main_and_production_expert_before_tool() -> None:
@@ -1834,6 +3143,48 @@ def test_context_bound_inventory_query_reuses_expert_and_fast_formats_result() -
     assert runtime.metrics.snapshot()["counters"][
         'llm_fast_completion_total{tool="get_inventory_overview"}'
     ] == 1
+    assert response.debug is not None
+    assert response.debug["performanceSchemaVersion"] == "1.0"
+    assert response.debug["totalDurationMs"] >= response.debug["toolDurationMs"]
+    assert response.debug["toolCallCount"] == 1
+    assert response.debug["modelDecisionCount"] == 0
+    assert response.debug["mainRouteDecisionCount"] == 0
+    assert response.debug["expertInitialDecisionCount"] == 0
+    assert response.debug["expertResultAnalysisDecisionCount"] == 0
+
+
+def test_model_diagnostics_are_tagged_with_the_runtime_decision_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime, _ = runtime_for(ScriptedLlmModel([], []), MockToolClient())
+    trace: dict[str, Any] = {}
+    monkeypatch.setattr(
+        "app.runtime.take_model_decision_diagnostics",
+        lambda: [
+            {
+                "phase": "EXPERT_ACTION",
+                "attempt": 1,
+                "latencyMs": 123,
+                "outcome": "SUCCESS",
+                "httpStatus": 200,
+                "validationPaths": [],
+            }
+        ],
+    )
+
+    runtime._append_llm_model_diagnostics(trace, decision_stage="expert_initial")
+
+    assert trace["modelDecisions"] == [
+        {
+            "phase": "EXPERT_ACTION",
+            "attempt": 1,
+            "latencyMs": 123,
+            "outcome": "SUCCESS",
+            "httpStatus": 200,
+            "validationPaths": [],
+            "decisionStage": "expert_initial",
+        }
+    ]
 
 
 def test_llm_loop_resolves_product_then_uses_runtime_bound_product() -> None:
@@ -1873,6 +3224,10 @@ def test_llm_loop_resolves_product_then_uses_runtime_bound_product() -> None:
     assert [item["toolName"] for item in tools.calls] == ["resolve_products", "get_inventory_overview"]
     assert tools.calls[1]["arguments"] == {"productId": 84}
     assert tools.calls[1]["expertAgent"] == "inventory_expert"
+    assert [request.decisionStage for request in model.expert_requests] == [
+        "INITIAL",
+        "RESULT_ANALYSIS",
+    ]
     second_request = model.expert_requests[1]
     assert second_request.selectedContext["PRODUCT"]["canonicalName"] == "黄冰糖（袋）"
     assert "84" not in json.dumps(second_request.selectedContext, ensure_ascii=False)
