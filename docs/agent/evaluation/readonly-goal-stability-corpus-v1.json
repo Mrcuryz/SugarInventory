@@ -14,6 +14,7 @@
     {"id": "L02", "goalType": "STOCK_DOCUMENTS", "input": "查询最近7天的入库单"},
     {"id": "L03", "goalType": "AUTO_INBOUND_BATCH_STATUS", "input": "查询最近一次自动报数入库批次"},
     {"id": "L04", "goalType": "FINISH_INBOUND_TASK_TRANSITION_PREVIEW", "input": "请预览成品入库待处理任务BT0019N1"},
+    {"id": "L05", "goalType": "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW", "input": "请预览成品出库待处理任务BT00135D"},
     {"id": "P01", "goalType": "PALLET_CURRENT_STATUS", "input": "查询托盘BT0015OY当前状态"},
     {"id": "P02", "goalType": "PALLET_FLOW_HISTORY", "input": "查询托盘BT0015OY的完整流转历史"},
     {"id": "P03", "goalType": "PALLET_ANOMALY_SUMMARY", "input": "查询当前有哪些托盘异常"},

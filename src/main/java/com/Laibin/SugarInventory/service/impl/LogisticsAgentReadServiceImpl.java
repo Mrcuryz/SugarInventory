@@ -10,9 +10,11 @@ import com.Laibin.SugarInventory.domain.dto.StockDocumentAgentQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.InStockQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.OutRecordQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.SemiProductRecordDTO;
+import com.Laibin.SugarInventory.domain.po.PalletCode;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.vo.InStockVO;
 import com.Laibin.SugarInventory.domain.vo.OutStockRecordVO;
+import com.Laibin.SugarInventory.domain.vo.PalletInventoryVO;
 import com.Laibin.SugarInventory.domain.vo.RecordDetailVO;
 import com.Laibin.SugarInventory.domain.vo.StockDocumentsAgentVO;
 import com.Laibin.SugarInventory.service.LogisticsAgentReadService;
@@ -69,6 +71,7 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
     private static final int TASK_PREVIEW_VERSION = 1;
     private static final int TASK_PREVIEW_TTL_MINUTES = 5;
     private static final String FINISH_INBOUND_TRANSITION = "CONFIRM_FINISH_INBOUND";
+    private static final String FINISH_OUTBOUND_TRANSITION = "CONFIRM_FINISH_OUTBOUND";
 
     @Override
     public PalletTasksAgentVO queryPalletTasks(PalletTaskAgentQueryDTO query) {
@@ -241,8 +244,11 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
         if (request == null || !Integer.valueOf(TASK_PREVIEW_VERSION).equals(request.getPreviewVersion())) {
             throw new BusinessException(400, "当前仅支持第 1 版任务预览协议");
         }
+        if (FINISH_OUTBOUND_TRANSITION.equals(request.getTransition())) {
+            return previewFinishOutboundTasks(request, user);
+        }
         if (!FINISH_INBOUND_TRANSITION.equals(request.getTransition())) {
-            throw new BusinessException(400, "当前仅支持成品入库任务预览");
+            throw new BusinessException(400, "当前仅支持成品入库或成品出库任务预览");
         }
         List<String> requestedCodes = normalizePreviewCodes(request.getPalletCodes());
 
@@ -312,6 +318,100 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                 .build();
     }
 
+    private TaskTransitionPreviewVO previewFinishOutboundTasks(TaskTransitionPreviewDTO request, User user) {
+        List<String> requestedCodes = normalizePreviewCodes(request.getPalletCodes());
+
+        PalletTaskQueryDTO query = new PalletTaskQueryDTO();
+        query.setCodes(String.join(",", requestedCodes));
+        query.setTaskType("OUT");
+        query.setBizScene("FINISH_OUT");
+        query.setStatus("PENDING");
+        query.setPageNum(1L);
+        query.setPageSize((long) requestedCodes.size());
+        PageResult<PalletTaskPageVO> current = palletCodeService.pagePalletTasks(query);
+
+        Map<String, PalletTaskPageVO> rowsByCode = new LinkedHashMap<>();
+        for (PalletTaskPageVO row : safe(current.getRecords())) {
+            String code = row.getCode() == null ? null : row.getCode().trim().toUpperCase(Locale.ROOT);
+            if (code != null && requestedCodes.contains(code)) rowsByCode.putIfAbsent(code, row);
+        }
+
+        List<String> blockingIssues = new ArrayList<>();
+        List<TaskTransitionPreviewVO.Task> eligibleTasks = new ArrayList<>();
+        List<PalletTaskPageVO> eligibleRows = new ArrayList<>();
+        for (String code : requestedCodes) {
+            PalletTaskPageVO row = rowsByCode.get(code);
+            if (row == null) {
+                blockingIssues.add("托盘 " + code + " 的成品出库任务已不存在、状态已变化或不在当前轮次。");
+                continue;
+            }
+            try {
+                PalletCode pallet = palletCodeService.parseAndFind(code);
+                if (!"INSTOCK".equalsIgnoreCase(pallet.getStatus())) {
+                    throw new BusinessException("托盘当前不在可出库状态");
+                }
+                if (!"成品".equals(pallet.getProductStatus())) {
+                    throw new BusinessException("当前不是成品托盘");
+                }
+                if (pallet.getProductId() == null || pallet.getProductionDate() == null) {
+                    throw new BusinessException("托盘当前绑定信息不完整");
+                }
+                PalletInventoryVO inventory = palletCodeService.getInventoryByCode(code);
+                eligibleRows.add(row);
+                eligibleTasks.add(TaskTransitionPreviewVO.Task.builder()
+                        .palletCode(row.getCode())
+                        .currentTaskStatus(row.getTaskStatus())
+                        .productName(row.getProductName())
+                        .productType(row.getProductType())
+                        .productionDate(row.getProductionDate())
+                        .totalWeight(row.getTotalWeight())
+                        .quantityLockedByProductionOutput(false)
+                        .currentWarehouseName(inventory.getWarehouseName())
+                        .currentSide(inventory.getSide())
+                        .currentRowNumber(inventory.getRowNumber())
+                        .currentLayer(inventory.getLayer())
+                        .currentInventoryQuantity(inventory.getQuantity())
+                        .currentInventoryUnit(Boolean.TRUE.equals(inventory.getUnit()) ? "件" : "板")
+                        .build());
+            } catch (BusinessException e) {
+                blockingIssues.add("托盘 " + code + " 当前不满足成品出库条件：" + e.getMessage() + "。");
+            }
+        }
+
+        boolean ready = blockingIssues.isEmpty() && eligibleTasks.size() == requestedCodes.size();
+        String stateDigest = digestTaskState(eligibleRows, request.getTransition(), eligibleTasks);
+        LocalDateTime previewedAt = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime expiresAt = previewedAt.plusMinutes(TASK_PREVIEW_TTL_MINUTES);
+        String previewRef = ready
+                ? taskTransitionPreviewRefCodec.encode(user.getId(), stateDigest, expiresAt)
+                : null;
+
+        return TaskTransitionPreviewVO.builder()
+                .dataScope("CURRENT_FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW")
+                .previewVersion(TASK_PREVIEW_VERSION)
+                .previewStatus(ready ? "READY" : "CONFLICT")
+                .previewRef(previewRef)
+                .stateDigest(stateDigest)
+                .previewedAt(previewedAt)
+                .expiresAt(expiresAt)
+                .transition(FINISH_OUTBOUND_TRANSITION)
+                .transitionLabel("确认成品出库")
+                .canOpenBusinessDialog(ready)
+                .requestedTaskCount(requestedCodes.size())
+                .eligibleTaskCount(eligibleTasks.size())
+                .tasks(List.copyOf(eligibleTasks))
+                .requiredUserInputs(List.of())
+                .blockingIssues(List.copyOf(blockingIssues))
+                .warnings(List.of(
+                        "业务弹窗打开和最终提交时都会重新检查任务、托盘和库存状态；状态变化后需要重新预览。",
+                        "最终确认成品出库会移除对应库存并释放托盘；本次预览不会执行这些操作。"))
+                .limitations(List.of(
+                        "本预览只读取当前成品出库待处理任务、托盘和库存，不修改任务、库存、二维码或业务单据。",
+                        "本次预览不能直接执行任何业务写入。",
+                        "最终提交仍由当前登录用户在既有业务弹窗中完成并接受原接口权限、校验、事务和审计。"))
+                .build();
+    }
+
     private List<String> normalizePreviewCodes(List<String> codes) {
         if (codes == null || codes.isEmpty() || codes.size() > 20) {
             throw new BusinessException(400, "托盘码数量必须在 1 到 20 之间");
@@ -328,6 +428,14 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
     }
 
     private String digestTaskState(List<PalletTaskPageVO> rows, String transition) {
+        return digestTaskState(rows, transition, List.of());
+    }
+
+    private String digestTaskState(
+            List<PalletTaskPageVO> rows,
+            String transition,
+            List<TaskTransitionPreviewVO.Task> previewTasks
+    ) {
         try {
             StringBuilder canonical = new StringBuilder("v1|").append(transition);
             rows.stream().sorted(Comparator.comparing(PalletTaskPageVO::getCode)).forEach(row -> canonical
@@ -336,6 +444,15 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                     .append('|').append(row.getTaskType())
                     .append('|').append(row.getTaskStatus())
                     .append('|').append(row.getCreatedAt()));
+            previewTasks.stream().sorted(Comparator.comparing(TaskTransitionPreviewVO.Task::getPalletCode))
+                    .forEach(task -> canonical
+                            .append("|inventory|").append(task.getPalletCode())
+                            .append('|').append(task.getCurrentWarehouseName())
+                            .append('|').append(task.getCurrentSide())
+                            .append('|').append(task.getCurrentRowNumber())
+                            .append('|').append(task.getCurrentLayer())
+                            .append('|').append(task.getCurrentInventoryQuantity())
+                            .append('|').append(task.getCurrentInventoryUnit()));
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(digest);

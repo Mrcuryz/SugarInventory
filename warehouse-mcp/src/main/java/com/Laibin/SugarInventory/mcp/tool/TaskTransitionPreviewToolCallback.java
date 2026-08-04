@@ -17,7 +17,7 @@ public final class TaskTransitionPreviewToolCallback implements ToolCallback {
         this.mapper = mapper;
         this.definition = DefaultToolDefinition.builder()
                 .name("preview_task_transition")
-                .description("Preview selected pending finished-product inbound tasks without changing any business data.")
+                .description("Preview selected pending finished-product inbound or outbound tasks without changing any business data.")
                 .inputSchema(schema)
                 .build();
     }

@@ -10,16 +10,26 @@ export const taskTransitionPreviewTasks = card => (card?.fields || []).filter(
 
 export const taskTransitionPreviewDialogAction = card => {
   const summary = taskTransitionPreviewSummary(card)
+  const supportedActions = {
+    confirmIn: '成品入库',
+    finishOutConfirm: '成品出库'
+  }
+  const expectedGroupLabel = supportedActions[summary?.batchAction]
   const palletCodes = [...new Set((summary?.palletCodes || []).map(
     code => String(code || '').trim().toUpperCase()
   ).filter(Boolean))]
-  if (!summary?.canOpenBusinessDialog || summary?.batchAction !== 'confirmIn' || !palletCodes.length) {
+  if (
+    !summary?.canOpenBusinessDialog
+    || !expectedGroupLabel
+    || summary?.taskGroupLabel !== expectedGroupLabel
+    || !palletCodes.length
+  ) {
     return null
   }
   return {
     actionKind: 'open_task_batch',
-    batchAction: 'confirmIn',
-    taskGroupLabel: '成品入库',
+    batchAction: summary.batchAction,
+    taskGroupLabel: expectedGroupLabel,
     palletCodes
   }
 }

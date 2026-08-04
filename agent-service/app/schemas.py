@@ -533,6 +533,8 @@ class SafeTaskTransitionPreviewTask(BaseModel):
     totalWeightText: str | None = None
     presetLocationLabel: str | None = None
     quantityRuleLabel: str | None = None
+    currentLocationLabel: str | None = None
+    currentInventoryQuantityText: str | None = None
 
 
 class SafeTaskTransitionPreview(BaseModel):
@@ -545,6 +547,8 @@ class SafeTaskTransitionPreview(BaseModel):
     previewedAt: str | None = None
     expiresAt: str | None = None
     transitionLabel: str
+    batchAction: Literal["confirmIn", "finishOutConfirm"]
+    taskGroupLabel: Literal["成品入库", "成品出库"]
     canOpenBusinessDialog: bool
     requestedTaskCount: int
     eligibleTaskCount: int

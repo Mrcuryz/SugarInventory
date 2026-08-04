@@ -1014,7 +1014,7 @@ delete_any_record
 | `query_in_process_materials` | 已实现 | Agent v1 production-05 | L1 | 是 | 已确认领用、已扣减库存且仍关联未完成生产订单的半成品记录分页查询 |
 | `query_material_candidates` | 已实现 | Agent v1 production-05 | L1 | 是 | 受控生产订单的当前半成品库存候选查询 |
 | `query_pallet_tasks` | 已实现 | Agent v1 logistics-01 | L1 | 是 | 当前轮次托盘任务安全分页查询；`task:view` |
-| `preview_task_transition` | 已实现 | Agent v2 L2 preview-01 | L2 | 是 | 对 1～20 个已选成品入库待处理任务重新读取并生成短期预览；`task:view + task:confirm`；不执行写入 |
+| `preview_task_transition` | 已实现 | Agent v2 L2 preview-01/02 | L2 | 是 | 按受控类型对 1～20 个已选成品入库或成品出库待处理任务重新读取并生成短期预览；`task:view + task:confirm`；不执行写入 |
 | `query_stock_documents` | 已实现 | Agent v1 logistics-02 | L1 | 是 | 明确来源的入库、出库或半成品单据查询；`record:query` |
 | `query_auto_inbound_batches` | 已实现 | Agent v1 logistics-03 | L1 | 是 | 当前用户 Redis 中未过期的近期智能报数批次；不确认入库 |
 | `get_auto_inbound_batch_detail` | 已实现 | Agent v1 logistics-03 | L1 | 是 | 通过用户绑定受控引用读取安全详情；不返回原始文本和内部 ID |
@@ -1549,9 +1549,9 @@ RAG-03C 的 Java 接入不改变上述 registry：`knowledge_expert` 的回答�
 Tool。非流式与流式链路均不得把 query、evidence、文件路径、内部 ID、检索分数或凭据写入
 用户响应和审计。
 
-待处理任务的首个 UI 安全跳转仍保留：Runtime 对“处理/确认当前待处理入库、出库或调拨任务”先委派 `logistics_expert` 调用 L1 `query_pallet_tasks` 并强制 `status=PENDING`。在此基础上，成品入库分组已经接入正式 L2 `preview_task_transition`：用户明确选择 1～20 个托盘后，主模型再次理解预览请求，物流专家使用固定 `previewVersion=1` 和 `transition=CONFIRM_FINISH_INBOUND` 调用工具；Java 使用当前用户同时校验 `task:view`、`task:confirm`，重新读取 `FINISH_IN + PENDING` 当前轮次任务。
+待处理任务的首个 UI 安全跳转仍保留：Runtime 对“处理/确认当前待处理入库、出库或调拨任务”先委派 `logistics_expert` 调用 L1 `query_pallet_tasks` 并强制 `status=PENDING`。在此基础上，成品入库和成品出库分组均已接入同一个正式 L2 `preview_task_transition`。用户明确选择 1～20 个托盘后，主模型再次理解预览请求，物流专家只能选择两个显式转换之一：`CONFIRM_FINISH_INBOUND` 或 `CONFIRM_FINISH_OUTBOUND`。Java 使用当前用户同时校验 `task:view`、`task:confirm`；入库重新读取 `FINISH_IN + PENDING` 当前轮次任务，出库重新读取 `OUT + FINISH_OUT + PENDING`，并核对托盘仍在库、仍为成品、绑定完整且当前库存存在。
 
-预览只有在全部所选任务仍存在且状态一致时才返回“可继续”和 5 分钟有效的内部签名引用；任一任务变化则整批返回冲突，不生成引用，也不允许打开业务弹窗。普通回答和卡片只展示用户可读状态、托盘、产品、日期、重量、预设位置和待确认字段，不展示签名引用、状态摘要、原始 `PENDING` 或内部任务 ID。签名引用不是 `executionToken`，当前没有任何工具消费它；最终提交仍由现有成品入库业务弹窗重新查询、校验并调用原业务接口。其他任务类型暂时保持原 UI 跳转，所有 `execute_*` 和普通写入指令继续 fail-closed。
+预览只有在全部所选任务仍满足对应条件时才返回“可继续”和 5 分钟有效的内部签名引用；任一任务变化则整批返回冲突，不生成引用，也不允许打开业务弹窗。普通回答和卡片只展示用户可读状态、托盘、产品、日期，以及该类型必要的预设位置或当前库存位置/数量，不展示签名引用、状态摘要、原始 `PENDING` 或内部任务 ID。当前没有任何 execute 工具消费预览引用；最终提交仍由对应的现有业务弹窗重新查询、校验并调用原业务接口。调拨等其他任务类型暂时保持原 UI 跳转，所有 `execute_*` 和普通写入指令继续 fail-closed。
 
 ---
 

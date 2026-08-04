@@ -129,6 +129,82 @@ class LogisticsAgentReadServiceImplTest {
     }
 
     @Test
+    void previewsSelectedPendingFinishOutboundTasksWithCurrentInventoryFacts() {
+        PalletCodeService palletCodeService = mock(PalletCodeService.class);
+        PalletTaskPageVO row = new PalletTaskPageVO();
+        row.setTaskId(201); row.setTaskType("OUT"); row.setBizScene("FINISH_OUT");
+        row.setTaskStatus("PENDING"); row.setCode("BT00135D"); row.setProductName("黄冰糖（袋）");
+        row.setProductionDate(java.time.LocalDate.of(2026, 5, 7));
+        row.setCreatedAt(java.time.LocalDateTime.of(2026, 5, 7, 8, 0));
+        when(palletCodeService.pagePalletTasks(any())).thenReturn(new PageResult<>(1L, List.of(row)));
+        var pallet = new com.Laibin.SugarInventory.domain.po.PalletCode();
+        pallet.setStatus("INSTOCK"); pallet.setProductStatus("成品"); pallet.setProductId(84);
+        pallet.setProductionDate(java.time.LocalDate.of(2026, 5, 7));
+        when(palletCodeService.parseAndFind("BT00135D")).thenReturn(pallet);
+        var inventory = new com.Laibin.SugarInventory.domain.vo.PalletInventoryVO();
+        inventory.setWarehouseName("2"); inventory.setSide("LEFT");
+        inventory.setRowNumber(2); inventory.setLayer(1); inventory.setQuantity(1); inventory.setUnit(false);
+        when(palletCodeService.getInventoryByCode("BT00135D")).thenReturn(inventory);
+        LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
+                palletCodeService, mock(InStockService.class), mock(OutStockService.class),
+                mock(SemiProductRecordService.class), mock(AutoInboundParseService.class),
+                new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET),
+                new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
+        var request = new com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO();
+        request.setPreviewVersion(1); request.setTransition("CONFIRM_FINISH_OUTBOUND");
+        request.setPalletCodes(List.of("bt00135d"));
+        var user = new com.Laibin.SugarInventory.domain.po.User(); user.setId(7);
+
+        var result = service.previewTaskTransition(request, user);
+
+        assertThat(result.getDataScope()).isEqualTo("CURRENT_FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW");
+        assertThat(result.getPreviewStatus()).isEqualTo("READY");
+        assertThat(result.isCanOpenBusinessDialog()).isTrue();
+        assertThat(result.getPreviewRef()).startsWith("tpr1_");
+        assertThat(result.getRequiredUserInputs()).isEmpty();
+        assertThat(result.getTasks()).singleElement().satisfies(task -> {
+            assertThat(task.getPalletCode()).isEqualTo("BT00135D");
+            assertThat(task.getCurrentWarehouseName()).isEqualTo("2");
+            assertThat(task.getCurrentSide()).isEqualTo("LEFT");
+            assertThat(task.getCurrentInventoryQuantity()).isEqualTo(1);
+            assertThat(task.getCurrentInventoryUnit()).isEqualTo("板");
+        });
+        org.mockito.Mockito.verify(palletCodeService, org.mockito.Mockito.never())
+                .confirmFinishOutTasks(any(), any());
+    }
+
+    @Test
+    void finishOutboundPreviewFailsClosedWhenPalletIsNoLongerInStock() {
+        PalletCodeService palletCodeService = mock(PalletCodeService.class);
+        PalletTaskPageVO row = new PalletTaskPageVO();
+        row.setTaskId(201); row.setTaskType("OUT"); row.setBizScene("FINISH_OUT");
+        row.setTaskStatus("PENDING"); row.setCode("BT00135D");
+        row.setCreatedAt(java.time.LocalDateTime.of(2026, 5, 7, 8, 0));
+        when(palletCodeService.pagePalletTasks(any())).thenReturn(new PageResult<>(1L, List.of(row)));
+        var pallet = new com.Laibin.SugarInventory.domain.po.PalletCode();
+        pallet.setStatus("FREE"); pallet.setProductStatus("成品"); pallet.setProductId(84);
+        pallet.setProductionDate(java.time.LocalDate.of(2026, 5, 7));
+        when(palletCodeService.parseAndFind("BT00135D")).thenReturn(pallet);
+        LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
+                palletCodeService, mock(InStockService.class), mock(OutStockService.class),
+                mock(SemiProductRecordService.class), mock(AutoInboundParseService.class),
+                new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET),
+                new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
+        var request = new com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO();
+        request.setPreviewVersion(1); request.setTransition("CONFIRM_FINISH_OUTBOUND");
+        request.setPalletCodes(List.of("BT00135D"));
+        var user = new com.Laibin.SugarInventory.domain.po.User(); user.setId(7);
+
+        var result = service.previewTaskTransition(request, user);
+
+        assertThat(result.getPreviewStatus()).isEqualTo("CONFLICT");
+        assertThat(result.isCanOpenBusinessDialog()).isFalse();
+        assertThat(result.getPreviewRef()).isNull();
+        assertThat(result.getBlockingIssues()).singleElement().asString().contains("不在可出库状态");
+        org.mockito.Mockito.verify(palletCodeService, org.mockito.Mockito.never()).getInventoryByCode(any());
+    }
+
+    @Test
     void previewFailsClosedWhenAnySelectedTaskIsNoLongerEligible() {
         PalletCodeService palletCodeService = mock(PalletCodeService.class);
         when(palletCodeService.pagePalletTasks(any())).thenReturn(new PageResult<>(0L, List.of()));

@@ -559,7 +559,10 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["previewVersion", "transition", "palletCodes"],
         "properties": {
             "previewVersion": {"type": "integer", "const": 1},
-            "transition": {"type": "string", "const": "CONFIRM_FINISH_INBOUND"},
+            "transition": {
+                "type": "string",
+                "enum": ["CONFIRM_FINISH_INBOUND", "CONFIRM_FINISH_OUTBOUND"],
+            },
             "palletCodes": {
                 "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1, "maxLength": 100,
@@ -743,7 +746,7 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_qr_batch_inbound_completion": "查询二维码批次的入库完成情况；不确认或补录入库。",
     "query_fixed_product_qr_pool": "查询固定产品二维码池当前状态；不打印、启用、作废或恢复二维码。",
     "query_pallet_tasks": "查询当前托盘任务记录；用户问待处理任务时使用 status=PENDING。只读返回分类和状态，不执行确认、取消、入库、出库或调拨。",
-    "preview_task_transition": "对用户已明确选择的成品入库待处理托盘码生成第 1 版短期预览。必须传 previewVersion=1、transition=CONFIRM_FINISH_INBOUND 和 1~20 个 palletCodes。预览不执行任务、不修改库存，previewRef 不是 executionToken。",
+    "preview_task_transition": "对用户已明确选择的成品入库或成品出库待处理托盘码生成第 1 版短期预览。transition 只能是 CONFIRM_FINISH_INBOUND 或 CONFIRM_FINISH_OUTBOUND，且必须传 1~20 个 palletCodes。预览不执行任务、不修改库存。",
     "query_stock_documents": "查询指定类型和日期范围的入库单、出库单或半成品单据；相对日期以 BUSINESS_TIME 为准。",
     "query_auto_inbound_batches": "查询最近登记的自动报数入库批次；无须先提供产品或批次。返回空 records 或 count=0 时就是权威无数据结果，应引用该次观察直接回答。",
     "get_auto_inbound_batch_detail": "使用上一查询返回的受控批次引用查询自动报数入库批次详情；不得猜测内部引用。",
@@ -1699,7 +1702,13 @@ class ToolArgumentBuilder:
             return ModelPlanDecision(action="call_tool", toolName="query_pallet_tasks",
                                      arguments=self._validate("query_pallet_tasks", args),
                                      intent=route.intent_subtype, responseMode="pallet_tasks", routeSnapshot=snapshot)
-        if route.intent_subtype == "finish_inbound_task_transition_preview":
+        if route.intent_subtype in {
+            "finish_inbound_task_transition_preview",
+            "finish_outbound_task_transition_preview",
+        }:
+            outbound = route.intent_subtype == "finish_outbound_task_transition_preview"
+            task_group = "成品出库" if outbound else "成品入库"
+            transition = "CONFIRM_FINISH_OUTBOUND" if outbound else "CONFIRM_FINISH_INBOUND"
             codes = re.findall(
                 r"(?<![A-Za-z0-9-])([A-Za-z]{2,}[A-Za-z0-9-]*\d[A-Za-z0-9-]*)(?![A-Za-z0-9-])",
                 user_message or "",
@@ -1707,7 +1716,7 @@ class ToolArgumentBuilder:
             if not codes:
                 return ModelPlanDecision(
                     action="ask_user",
-                    prompt="请先在待处理任务卡片中选择成品入库托盘。",
+                    prompt=f"请先在待处理任务卡片中选择{task_group}托盘。",
                     intent=route.intent_subtype,
                     responseMode="task_transition_preview",
                     routeSnapshot=snapshot,
@@ -1717,7 +1726,7 @@ class ToolArgumentBuilder:
                 toolName="preview_task_transition",
                 arguments=self._validate("preview_task_transition", {
                     "previewVersion": 1,
-                    "transition": "CONFIRM_FINISH_INBOUND",
+                    "transition": transition,
                     "palletCodes": codes,
                 }),
                 intent=route.intent_subtype,
@@ -2795,7 +2804,8 @@ class ToolArgumentBuilder:
         if tool_name == "preview_task_transition":
             if arguments.get("previewVersion") != 1:
                 raise ValueError("previewVersion must be 1")
-            if arguments.get("transition") != "CONFIRM_FINISH_INBOUND":
+            transition = arguments.get("transition")
+            if transition not in {"CONFIRM_FINISH_INBOUND", "CONFIRM_FINISH_OUTBOUND"}:
                 raise ValueError("unsupported task transition")
             raw_codes = arguments.get("palletCodes")
             if not isinstance(raw_codes, list) or not 1 <= len(raw_codes) <= 20:
@@ -2809,7 +2819,7 @@ class ToolArgumentBuilder:
                     codes.append(code)
             return {
                 "previewVersion": 1,
-                "transition": "CONFIRM_FINISH_INBOUND",
+                "transition": transition,
                 "palletCodes": codes,
             }
         if tool_name == "query_stock_documents":

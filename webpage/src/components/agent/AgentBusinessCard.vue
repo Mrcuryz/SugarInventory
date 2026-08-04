@@ -310,7 +310,9 @@ const openTaskBatch = (group) => {
   const selected = selectedGroupRecords(group)
   if (!group.batchAction || !selected.length) return
   emit('card-action', {
-    actionKind: group.key === 'finish_in' ? 'request_task_transition_preview' : 'open_task_batch',
+    actionKind: ['finish_in', 'finish_out'].includes(group.key)
+      ? 'request_task_transition_preview'
+      : 'open_task_batch',
     batchAction: group.batchAction,
     taskGroupLabel: group.label,
     palletCodes: selected.map(record => record.palletCode).filter(Boolean)
@@ -508,6 +510,8 @@ const exportRegisteredReport = () => {
                 <span v-if="task.productionDate">生产日期：{{ task.productionDate }}</span>
                 <span v-if="task.totalWeightText">重量：{{ task.totalWeightText }}</span>
                 <span v-if="task.presetLocationLabel">预设位置：{{ task.presetLocationLabel }}</span>
+                <span v-if="task.currentLocationLabel">当前位置：{{ task.currentLocationLabel }}</span>
+                <span v-if="task.currentInventoryQuantityText">当前库存：{{ task.currentInventoryQuantityText }}</span>
                 <span v-if="task.quantityRuleLabel">{{ task.quantityRuleLabel }}</span>
               </div>
             </article>
@@ -529,7 +533,7 @@ const exportRegisteredReport = () => {
               :disabled="!taskTransitionPreviewSummary.canOpenBusinessDialog"
               @click="openTaskTransitionPreviewDialog"
             >
-              打开成品入库业务弹窗
+              打开{{ taskTransitionPreviewSummary.taskGroupLabel }}业务弹窗
             </el-button>
           </div>
         </section>
@@ -628,8 +632,8 @@ const exportRegisteredReport = () => {
               @click="openTaskBatch(group)"
             >
               {{ selectedGroupRecords(group).length
-                ? `${group.key === 'finish_in' ? '预览所选' : '处理所选'} ${selectedGroupRecords(group).length} 条`
-                : `${group.key === 'finish_in' ? '选择任务后预览' : '选择任务后处理'}` }}
+                ? `${['finish_in', 'finish_out'].includes(group.key) ? '预览所选' : '处理所选'} ${selectedGroupRecords(group).length} 条`
+                : `${['finish_in', 'finish_out'].includes(group.key) ? '选择任务后预览' : '选择任务后处理'}` }}
             </el-button>
           </div>
         </section>

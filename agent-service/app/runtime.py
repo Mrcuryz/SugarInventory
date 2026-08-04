@@ -9868,6 +9868,16 @@ class WarehouseAgentRuntime:
         result: dict[str, Any],
     ) -> SafeTaskTransitionPreview:
         source = result if isinstance(result, dict) else {}
+        transition = self._safe_text(source.get("transition"))
+        transition_presentation = {
+            "CONFIRM_FINISH_INBOUND": ("confirmIn", "成品入库", "确认成品入库"),
+            "CONFIRM_FINISH_OUTBOUND": ("finishOutConfirm", "成品出库", "确认成品出库"),
+        }
+        recognized_transition = transition in transition_presentation
+        batch_action, task_group_label, fallback_transition_label = transition_presentation.get(
+            transition,
+            ("confirmIn", "成品入库", "不支持的任务预览"),
+        )
         tasks: list[SafeTaskTransitionPreviewTask] = []
         raw_tasks = source.get("tasks") if isinstance(source.get("tasks"), list) else []
         for raw_task in raw_tasks[:20]:
@@ -9879,6 +9889,20 @@ class WarehouseAgentRuntime:
                 weight = f"{weight} kg"
             warehouse = self._safe_text(item.get("presetWarehouseName"))
             side = self._controlled_task_label("warehouse_side", item.get("presetSide"), "")
+            current_warehouse = self._safe_text(item.get("currentWarehouseName"))
+            current_side = self._controlled_task_label("warehouse_side", item.get("currentSide"), "")
+            current_row = self._safe_text(item.get("currentRowNumber"))
+            current_layer = self._safe_text(item.get("currentLayer"))
+            current_location_parts = [
+                value for value in (
+                    f"{current_warehouse}号库位" if current_warehouse else None,
+                    current_side or None,
+                    f"第{current_row}行" if current_row else None,
+                    f"第{current_layer}层" if current_layer else None,
+                ) if value
+            ]
+            current_quantity = self._safe_text(item.get("currentInventoryQuantity"))
+            current_unit = self._safe_text(item.get("currentInventoryUnit"))
             tasks.append(SafeTaskTransitionPreviewTask(
                 palletCode=self._safe_text(item.get("palletCode")) or "托盘未标明",
                 currentTaskStatusLabel=self._controlled_task_label(
@@ -9892,21 +9916,33 @@ class WarehouseAgentRuntime:
                     "按生产订单登记数量，业务弹窗中不可修改"
                     if item.get("quantityLockedByProductionOutput") is True
                     else "在业务弹窗中确认单位和数量"
+                    if task_group_label == "成品入库"
+                    else None
+                ),
+                currentLocationLabel=" ".join(current_location_parts) or None,
+                currentInventoryQuantityText=(
+                    f"{current_quantity} {current_unit or ''}".strip()
+                    if current_quantity else None
                 ),
             ))
         preview_status = self._safe_text(source.get("previewStatus")) or "CONFLICT"
+        blocking_issues = self._safe_text_list(source.get("blockingIssues"), limit=20)
+        if not recognized_transition:
+            blocking_issues.append("任务预览类型不受支持，请重新查询后选择任务。")
         return SafeTaskTransitionPreview(
             previewVersion=int(self._first_scalar([source], "previewVersion") or 1),
             previewStatusLabel="可继续" if preview_status == "READY" else "需要重新选择",
             previewedAt=self._safe_text(source.get("previewedAt")),
             expiresAt=self._safe_text(source.get("expiresAt")),
-            transitionLabel=self._safe_text(source.get("transitionLabel")) or "确认成品入库",
-            canOpenBusinessDialog=bool(source.get("canOpenBusinessDialog")),
+            transitionLabel=self._safe_text(source.get("transitionLabel")) or fallback_transition_label,
+            batchAction=batch_action,
+            taskGroupLabel=task_group_label,
+            canOpenBusinessDialog=recognized_transition and bool(source.get("canOpenBusinessDialog")),
             requestedTaskCount=int(self._first_scalar([source], "requestedTaskCount") or 0),
             eligibleTaskCount=int(self._first_scalar([source], "eligibleTaskCount") or 0),
             tasks=tasks,
             requiredUserInputs=self._safe_text_list(source.get("requiredUserInputs"), limit=10),
-            blockingIssues=self._safe_text_list(source.get("blockingIssues"), limit=20),
+            blockingIssues=blocking_issues,
             warnings=self._safe_text_list(source.get("warnings"), limit=20),
             limitations=[
                 "本次预览只进行检查，不会确认任务或修改库存。",
@@ -10774,8 +10810,8 @@ class WarehouseAgentRuntime:
             "requiredUserInputs": result.requiredUserInputs,
             "blockingIssues": result.blockingIssues,
             "warnings": result.warnings,
-            "batchAction": "confirmIn",
-            "taskGroupLabel": "成品入库",
+            "batchAction": result.batchAction,
+            "taskGroupLabel": result.taskGroupLabel,
             "palletCodes": pallet_codes,
         }]
         for index, task in enumerate(result.tasks, start=1):
@@ -10788,7 +10824,7 @@ class WarehouseAgentRuntime:
             fields.append(field)
         return BusinessCard(
             cardType="task_transition_preview",
-            title=f"成品入库任务处理预览 · {result.previewStatusLabel}",
+            title=f"{result.taskGroupLabel}任务处理预览 · {result.previewStatusLabel}",
             fields=fields,
         )
 
@@ -11451,9 +11487,16 @@ class WarehouseAgentRuntime:
         if not result.canOpenBusinessDialog:
             issues = "\n".join(f"- {item}" for item in result.blockingIssues) or "- 所选任务状态已变化。"
             return (
-                "这次成品入库任务预览无法继续。\n\n"
+                f"这次{result.taskGroupLabel}任务预览无法继续。\n\n"
                 f"{issues}\n\n"
                 "请重新查询当前待处理任务后再选择；本次没有修改任何业务数据。"
+            )
+        if result.taskGroupLabel == "成品出库":
+            return (
+                f"已完成 {result.eligibleTaskCount} 条成品出库任务的实时预览，当前托盘仍在库且库存记录存在。\n\n"
+                "打开弹窗后，可核对托盘、产品和当前库位，并按需填写备注；"
+                "最终确认时系统会再次检查状态并执行出库。\n\n"
+                "本次只生成预览，没有确认任务，也没有扣减库存。"
             )
         return (
             f"已完成 {result.eligibleTaskCount} 条成品入库任务的实时预览，当前都仍可进入业务弹窗。\n\n"

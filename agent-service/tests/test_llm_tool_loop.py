@@ -4109,6 +4109,21 @@ def test_preview_task_transition_arguments_are_closed_and_controlled() -> None:
         "transition": "CONFIRM_FINISH_INBOUND",
         "palletCodes": ["BT0019N1"],
     }
+    outbound_validated = builder.validate_llm_arguments(
+        tool_name="preview_task_transition",
+        arguments={
+            "previewVersion": 1,
+            "transition": "CONFIRM_FINISH_OUTBOUND",
+            "palletCodes": ["bt00135d"],
+        },
+        state=WarehouseAgentState(),
+        user_message="请预览成品出库任务 BT00135D",
+    )
+    assert outbound_validated == {
+        "previewVersion": 1,
+        "transition": "CONFIRM_FINISH_OUTBOUND",
+        "palletCodes": ["BT00135D"],
+    }
     with pytest.raises(ValueError):
         builder.validate_llm_arguments(
             tool_name="preview_task_transition",
@@ -4178,4 +4193,68 @@ def test_llm_finish_inbound_preview_uses_expert_tool_and_hides_control_refs() ->
     assert response.cards[0].fields[0]["canOpenBusinessDialog"] is True
     state = store.get("agt_llm")
     assert state.active_goal_type == "FINISH_INBOUND_TASK_TRANSITION_PREVIEW"
+    assert state.last_goal_completion["status"] == "COMPLETE"
+
+
+def test_llm_finish_outbound_preview_uses_expert_tool_and_opens_only_controlled_dialog() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert", "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW")],
+        [
+            call("preview_task_transition", {
+                "previewVersion": 1,
+                "transition": "CONFIRM_FINISH_OUTBOUND",
+                "palletCodes": ["BT00135D"],
+            }),
+            final("已完成 1 条成品出库任务预览，可以打开业务弹窗继续核对。", "obs_1"),
+        ],
+    )
+    tools = MockToolClient({
+        "preview_task_transition": {
+            "dataScope": "CURRENT_FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW",
+            "previewVersion": 1,
+            "previewStatus": "READY",
+            "previewRef": "tpr1_hidden_outbound_signature",
+            "stateDigest": "b" * 64,
+            "previewedAt": "2026-08-05T09:00:00",
+            "expiresAt": "2026-08-05T09:05:00",
+            "transition": "CONFIRM_FINISH_OUTBOUND",
+            "transitionLabel": "确认成品出库",
+            "canOpenBusinessDialog": True,
+            "requestedTaskCount": 1,
+            "eligibleTaskCount": 1,
+            "tasks": [{
+                "palletCode": "BT00135D",
+                "currentTaskStatus": "PENDING",
+                "productName": "黄冰糖（袋）",
+                "productionDate": "2026-05-07",
+                "currentWarehouseName": "2",
+                "currentSide": "LEFT",
+                "currentRowNumber": 2,
+                "currentLayer": 1,
+                "currentInventoryQuantity": 1,
+                "currentInventoryUnit": "板",
+            }],
+            "requiredUserInputs": [],
+            "blockingIssues": [],
+            "warnings": [],
+            "limitations": ["本次没有执行出库。"],
+        }
+    })
+    runtime, store = runtime_for(model, tools)
+
+    response = runtime.chat(chat_request("请预览以下成品出库待处理任务：BT00135D"))
+
+    assert response.error is None
+    assert tools.calls[0]["arguments"]["transition"] == "CONFIRM_FINISH_OUTBOUND"
+    summary = response.cards[0].fields[0]
+    task = response.cards[0].fields[1]
+    assert summary["batchAction"] == "finishOutConfirm"
+    assert summary["taskGroupLabel"] == "成品出库"
+    assert task["currentLocationLabel"] == "2号库位 左侧 第2行 第1层"
+    assert task["currentInventoryQuantityText"] == "1 板"
+    rendered = json.dumps(response.cards[0].model_dump(), ensure_ascii=False)
+    assert "tpr1_hidden_outbound_signature" not in rendered
+    assert "b" * 64 not in rendered
+    state = store.get("agt_llm")
+    assert state.active_goal_type == "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW"
     assert state.last_goal_completion["status"] == "COMPLETE"

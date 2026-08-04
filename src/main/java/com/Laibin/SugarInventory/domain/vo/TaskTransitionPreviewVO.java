@@ -41,5 +41,11 @@ public class TaskTransitionPreviewVO {
         String presetWarehouseName;
         String presetSide;
         boolean quantityLockedByProductionOutput;
+        String currentWarehouseName;
+        String currentSide;
+        Integer currentRowNumber;
+        Integer currentLayer;
+        Integer currentInventoryQuantity;
+        String currentInventoryUnit;
     }
 }

@@ -540,6 +540,9 @@ public class WarehouseTools {
                     "preview_task_transition", () -> readService.previewTaskTransition(request));
         } catch (WarehouseApiException e) {
             return TaskTransitionPreviewResponse.error(ErrorMapper.upstream(e));
+        } catch (IllegalArgumentException e) {
+            return TaskTransitionPreviewResponse.error(
+                    ErrorMapper.invalid("transition", "Unsupported task transition preview request"));
         } catch (RuntimeException e) {
             log.warn("preview_task_transition failed; errorType={}, message={}",
                     e.getClass().getSimpleName(), safeLogValue(e.getMessage()));

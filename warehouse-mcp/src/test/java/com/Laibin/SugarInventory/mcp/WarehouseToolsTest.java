@@ -1368,6 +1368,54 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void previewsFinishedOutboundTasksThroughTheSameControlledNoWriteEndpoint() throws Exception {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"CURRENT_FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW",
+                  "previewVersion":1,
+                  "previewStatus":"READY",
+                  "previewRef":"tpr1_signature",
+                  "stateDigest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "previewedAt":"2026-08-05T09:00:00",
+                  "expiresAt":"2026-08-05T09:05:00",
+                  "transition":"CONFIRM_FINISH_OUTBOUND",
+                  "transitionLabel":"确认成品出库",
+                  "canOpenBusinessDialog":true,
+                  "requestedTaskCount":1,
+                  "eligibleTaskCount":1,
+                  "tasks":[{"palletCode":"BT00135D","currentTaskStatus":"PENDING","currentWarehouseName":"2","currentInventoryQuantity":1,"currentInventoryUnit":"板"}],
+                  "requiredUserInputs":[],
+                  "blockingIssues":[],
+                  "warnings":[],
+                  "limitations":["不修改业务数据。"]
+                }
+                """)));
+
+        var response = tools.previewTaskTransition(new TaskTransitionPreviewRequest(
+                1, "CONFIRM_FINISH_OUTBOUND", List.of("BT00135D")));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.canOpenBusinessDialog()).isTrue();
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/logistics/agent-read/pallet-tasks/transition/preview");
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"transition\":\"CONFIRM_FINISH_OUTBOUND\"")
+                .contains("\"palletCodes\":[\"BT00135D\"]");
+        assertThat(recorded.getPath()).doesNotMatch(FORBIDDEN_WRITE_PATHS);
+    }
+
+    @Test
+    void rejectsUnknownTaskTransitionBeforeCallingBackend() {
+        var response = tools.previewTaskTransition(new TaskTransitionPreviewRequest(
+                1, "DELETE_TASK", List.of("BT00135D")));
+
+        assertThat(response.error()).isNotNull();
+        assertThat(response.error().code()).isEqualTo("INVALID_ARGUMENT");
+        assertThat(backend.getRequestCount()).isZero();
+    }
+
+    @Test
     void delegatedTokenTakesPrecedenceAndSendsAgentSessionHeader() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         WarehouseApiClient delegatedClient = new WarehouseApiClient(

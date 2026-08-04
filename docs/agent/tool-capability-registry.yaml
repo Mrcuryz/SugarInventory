@@ -460,18 +460,19 @@ tools:
     data_scope: "CURRENT_PALLET_TASKS"
 
   preview_task_transition:
-    business_name: "成品入库任务处理预览"
+    business_name: "成品入库/出库任务处理预览"
     risk_level: "L2"
     owner_expert: "logistics_expert"
     can_answer:
-      - "重查 1 到 20 个已明确选择的成品入库待处理托盘，生成短期、签名、不可变状态摘要。"
+      - "按受控转换类型重查 1 到 20 个已明确选择的成品入库或成品出库待处理托盘，生成短期、签名、不可变状态摘要。"
+      - "成品出库预览同时核对托盘仍在库、产品仍为成品、绑定完整且当前库存记录存在。"
       - "说明哪些字段仍需用户在既有业务弹窗中确认。"
     cannot_answer:
       - "不能确认任务、写入库存、创建单据或改变二维码状态。"
       - "previewRef 不是 executionToken，不能用于任何 execute 操作。"
     required_slots: ["preview_version", "transition", "pallet_codes"]
     permission: "task:view + task:confirm"
-    data_scope: "CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW"
+    data_scope: "CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW | CURRENT_FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW"
 
   query_stock_documents:
     business_name: "库存单据查询"

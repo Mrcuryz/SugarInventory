@@ -16,7 +16,7 @@ public class TaskTransitionPreviewDTO {
     private Integer previewVersion;
 
     @NotNull
-    @Schema(description = "受控转换类型，首版仅支持 CONFIRM_FINISH_INBOUND")
+    @Schema(description = "受控转换类型，首版支持 CONFIRM_FINISH_INBOUND、CONFIRM_FINISH_OUTBOUND")
     private String transition;
 
     @NotEmpty

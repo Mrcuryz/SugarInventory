@@ -600,7 +600,8 @@ public class WarehouseReadService {
                 || request.palletCodes() == null || request.palletCodes().isEmpty()) {
             throw new IllegalArgumentException("previewVersion, transition and palletCodes are required");
         }
-        if (request.previewVersion() != 1 || !"CONFIRM_FINISH_INBOUND".equals(request.transition())) {
+        if (request.previewVersion() != 1 || !Set.of(
+                "CONFIRM_FINISH_INBOUND", "CONFIRM_FINISH_OUTBOUND").contains(request.transition())) {
             throw new IllegalArgumentException("unsupported task transition preview");
         }
         if (request.palletCodes().size() > 20) {

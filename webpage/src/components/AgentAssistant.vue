@@ -624,11 +624,16 @@ const handleCardAction = async (action) => {
   }
   if (action?.actionKind === 'request_task_transition_preview') {
     const palletCodes = [...new Set((action.palletCodes || []).map(code => String(code || '').trim().toUpperCase()).filter(Boolean))]
-    if (action.batchAction !== 'confirmIn' || action.taskGroupLabel !== '成品入库' || !palletCodes.length) {
-      ElMessage.warning('当前选择不能生成成品入库预览，请重新选择任务')
+    const previewGroups = {
+      confirmIn: '成品入库',
+      finishOutConfirm: '成品出库'
+    }
+    const expectedGroup = previewGroups[action.batchAction]
+    if (!expectedGroup || action.taskGroupLabel !== expectedGroup || !palletCodes.length) {
+      ElMessage.warning('当前选择不能生成任务预览，请重新选择任务')
       return
     }
-    await send({ message: `请预览以下成品入库待处理任务：${palletCodes.join('、')}` })
+    await send({ message: `请预览以下${expectedGroup}待处理任务：${palletCodes.join('、')}` })
     return
   }
   if (action?.actionKind === 'open_task_batch') {
