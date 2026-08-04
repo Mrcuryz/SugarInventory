@@ -11,6 +11,9 @@ import com.Laibin.SugarInventory.domain.dto.AutoInboundBatchesAgentQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AutoInboundBatchDetailAgentQueryDTO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchesAgentVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchDetailAgentVO;
+import com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO;
+import com.Laibin.SugarInventory.domain.vo.TaskTransitionPreviewVO;
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -53,5 +56,13 @@ public class LogisticsAgentReadController {
             @RequestBody AutoInboundBatchDetailAgentQueryDTO query,
             @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(service.getAutoInboundBatchDetail(query, loginUser.getUser()));
+    }
+
+    @PostMapping("/pallet-tasks/transition/preview")
+    @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm')")
+    public Result<TaskTransitionPreviewVO> previewTaskTransition(
+            @RequestBody @Valid TaskTransitionPreviewDTO request,
+            @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(service.previewTaskTransition(request, loginUser.getUser()));
     }
 }

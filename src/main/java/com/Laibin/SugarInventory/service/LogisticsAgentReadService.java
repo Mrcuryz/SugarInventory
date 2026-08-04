@@ -9,6 +9,8 @@ import com.Laibin.SugarInventory.domain.dto.AutoInboundBatchesAgentQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AutoInboundBatchDetailAgentQueryDTO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchesAgentVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchDetailAgentVO;
+import com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO;
+import com.Laibin.SugarInventory.domain.vo.TaskTransitionPreviewVO;
 
 public interface LogisticsAgentReadService {
     PalletTasksAgentVO queryPalletTasks(PalletTaskAgentQueryDTO query);
@@ -18,4 +20,6 @@ public interface LogisticsAgentReadService {
     AutoInboundBatchesAgentVO queryAutoInboundBatches(AutoInboundBatchesAgentQueryDTO query, User user);
 
     AutoInboundBatchDetailAgentVO getAutoInboundBatchDetail(AutoInboundBatchDetailAgentQueryDTO query, User user);
+
+    TaskTransitionPreviewVO previewTaskTransition(TaskTransitionPreviewDTO request, User user);
 }

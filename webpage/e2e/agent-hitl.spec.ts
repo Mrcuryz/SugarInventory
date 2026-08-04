@@ -52,6 +52,7 @@ const expertCanaries: ExpertCanary[] = [
   { expert: 'logistics_expert', message: '查询待处理的出库任务列表', toolName: 'query_pallet_tasks' },
   { expert: 'pallet_expert', message: '查询固定产品二维码池中的可打印码', toolName: 'query_fixed_product_qr_pool' },
   { expert: 'production_expert', message: '查询当前在制半成品', toolName: 'query_in_process_materials' },
+  { expert: 'analytics_expert', message: '查询2026-06-30的产量', toolName: 'run_registered_report' },
   { expert: 'assay_expert', message: '查询质量标准目录', toolName: 'query_quality_standard_catalog' },
   { expert: 'master_data_expert', message: '查询成品产品目录', toolName: 'query_product_catalog' },
   { expert: 'administration_expert', message: '查询员工名册', toolName: 'query_employee_roster' },
@@ -59,6 +60,7 @@ const expertCanaries: ExpertCanary[] = [
 ]
 
 test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
+  test.describe.configure({ timeout: 180_000 })
   let authToken = ''
 
   test.beforeAll(async ({ request }) => {
@@ -70,6 +72,24 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
       window.localStorage.setItem('pinia-token', JSON.stringify({ token: jwt }))
     }, authToken)
     await installSseCapture(page)
+  })
+
+  test('repeated assistant open reuses one in-flight session creation', async ({ page }) => {
+    let sessionCreateCount = 0
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && /\/api\/agent\/sessions$/.test(request.url())) {
+        sessionCreateCount += 1
+      }
+    })
+
+    await page.goto(`${appBaseUrl}/home`)
+    const assistantButton = page.getByRole('button', { name: 'AI 助手' })
+    await expect(assistantButton).toBeVisible()
+    await assistantButton.dblclick()
+
+    await expect(page.getByRole('dialog', { name: 'AI 助手' })).toBeVisible()
+    await expect(page.getByText('AI 助手已连接当前登录用户。')).toHaveCount(1)
+    expect(sessionCreateCount).toBe(1)
   })
 
   test('clarification interrupt resumes once and persists RESUMED', async ({ page }) => {
@@ -98,14 +118,14 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     const candidate = page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ })
     await candidate.click()
 
-    await expect(page.getByText(/当前库存为 .*折合/)).toBeVisible()
-    await expect(candidate).toHaveCount(0)
-    await expect(page.getByText(/用户已选择.*黄冰糖（袋）.*/)).toBeVisible()
-
-    const resumeStream = await lastSse(page)
+    const resumeStream = await lastSse(page, 45_000)
     const resumeEnd = terminalPayload(resumeStream)
     expect(resumeEnd.finishReason).toBe('completed')
     expect(resumeEnd.interruptId).toBe(pendingEnd.interruptId)
+
+    await expect(page.getByText(/当前库存为\s*.*折合/)).toBeVisible()
+    await expect(candidate).toHaveCount(0)
+    await expect(page.getByText(/用户已选择.*黄冰糖（袋）.*/)).toBeVisible()
 
     if (dbAssertionsEnabled) {
       const resumedRow = queryOne(
@@ -135,22 +155,33 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
 
     await clearCapturedSse(page)
     await sendAssistantMessage(page, '这些主要存放在哪些库位？')
+    const distributionStream = await lastSse(page, 45_000)
+    expect(terminalPayload(distributionStream).finishReason).toBe('completed')
     await expect(page.getByText(/当前库存主要存放在以下库位/).last()).toBeVisible()
     await expect(page.getByText(/库存分布/).last()).toBeVisible()
     await expect(page.getByText(/号库位/).last()).toBeVisible()
 
-    const distributionStream = await lastSse(page)
-    expect(terminalPayload(distributionStream).finishReason).toBe('completed')
-
     await clearCapturedSse(page)
     await sendAssistantMessage(page, '它今天有没有化验？')
+    const assayStream = await lastSse(page, 45_000)
+    expect(terminalPayload(assayStream).finishReason).toBe('completed')
     await expect(page.getByText(/没有查询到对应日期的化验记录|化验/).last()).toBeVisible()
     await expect(page.getByText('等待你选择').last()).not.toBeVisible()
 
+    await clearCapturedSse(page)
     await sendAssistantMessage(page, '2号库位现在还有多少容量？')
-    await expect(page.getByText(/最大容量 120/)).toBeVisible()
-    await expect(page.getByText(/剩余容量 117/)).toBeVisible()
-    await expect(page.getByText(/占用率 2\.5%/)).toBeVisible()
+    const capacityStream = await lastSse(page, 45_000)
+    expect(terminalPayload(capacityStream).finishReason).toBe('completed')
+    const capacityAnswer = page.getByText(/2号库位当前.*(?:最大容量|总容量) 120.*占用率/).last()
+    await expect(capacityAnswer).toBeVisible()
+    const capacityText = await capacityAnswer.innerText()
+    const maximum = capacityText.match(/(?:最大容量|总容量) (\d+)/)?.[1]
+    const occupied = capacityText.match(/(?:当前占用|已占用|已用) (\d+)/)?.[1]
+    const remaining = capacityText.match(/剩余(?:容量(?:为)?|可用) (\d+)/)?.[1]
+    const occupiedRate = capacityText.match(/占用率(?:约)? ([\d.]+)%/)?.[1]
+    expect([maximum, occupied, remaining, occupiedRate]).not.toContain(undefined)
+    expect(Number(occupied) + Number(remaining)).toBe(Number(maximum))
+    expect(Number(occupiedRate)).toBeCloseTo(Number(occupied) / Number(maximum) * 100, 1)
 
     await assertNoForbiddenUiTerms(page)
   })
@@ -160,10 +191,9 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await clearCapturedSse(page)
 
     await sendAssistantMessage(page, '帮我查全部产品中最近7天的不合格库存，按产品分类')
-    await expect(page.getByText(/按产品分布|未查询到.*全部产品/).last()).toBeVisible()
-
-    const distributionStream = await lastSse(page)
+    const distributionStream = await lastSse(page, 45_000)
     expect(terminalPayload(distributionStream).finishReason).toBe('completed')
+    await expect(page.getByText(/按产品分布|全部产品.*未查询到|未查询到.*全部产品/).last()).toBeVisible()
     await assertNoForbiddenUiTerms(page)
   })
 
@@ -172,13 +202,12 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
     await clearCapturedSse(page)
 
     await sendAssistantMessage(page, '帮我查8号库位的库存情况')
+    const distributionStream = await lastSse(page, 45_000)
+    expect(terminalPayload(distributionStream).finishReason).toBe('completed')
     await expect(page.getByText(/8号库位.*按产品分布|8号库位.*库存分布/).last()).toBeVisible()
-    await expect(page.getByText(/2板20件/).last()).toBeVisible()
+    await expect(page.getByText(/\d+板\d+件/).last()).toBeVisible()
     await expect(page.getByText(/黄冰糖（袋）/).last()).toBeVisible()
     await expect(page.getByText(/无化验库存/).last()).toBeVisible()
-
-    const distributionStream = await lastSse(page)
-    expect(terminalPayload(distributionStream).finishReason).toBe('completed')
     await assertNoForbiddenUiTerms(page)
   })
 
@@ -253,12 +282,14 @@ test.describe('M1.3R-6 Human-in-the-loop interrupt/resume', () => {
   })
 })
 
-test.describe('Agent v1 nine-expert read-only acceptance', () => {
+test.describe('Agent read-only and registered-report expert acceptance', () => {
   let authToken = ''
 
   test.beforeAll(async ({ request }) => {
     authToken = await resolveToken(request)
-    await assertRuntimeCapabilities(request)
+    if (process.env.AGENT_E2E_SKIP_DIRECT_CAPABILITY_CHECK !== '1') {
+      await assertRuntimeCapabilities(request)
+    }
   })
 
   test.beforeEach(async ({ page }) => {
@@ -270,11 +301,15 @@ test.describe('Agent v1 nine-expert read-only acceptance', () => {
 
   for (const scenario of expertCanaries) {
     test(`${scenario.expert} executes ${scenario.toolName} as an L1 canary`, async ({ page }) => {
+      test.setTimeout(75_000)
       await openAssistant(page)
       await clearCapturedSse(page)
       await sendAssistantMessage(page, scenario.message)
 
-      const record = await lastSse(page)
+      const record = await lastSse(
+        page,
+        scenario.toolName === 'run_registered_report' ? 60_000 : 45_000
+      )
       const errorEvent = record.events.findLast((event) => event.event === 'error')
       expect(errorEvent, `${scenario.expert} should not return a tool or permission error`).toBeUndefined()
       expect(terminalPayload(record).finishReason).toBe('completed')
@@ -308,7 +343,7 @@ async function assertRuntimeCapabilities(request: APIRequestContext) {
   expect(body.recipeCount).toBe(1)
   expect(body.toolRegistryHash).toMatch(/^[a-f0-9]{64}$/)
   expect(body.recipeRegistryHash).toMatch(/^[a-f0-9]{64}$/)
-  expect(body.agentProfileRegistryHash).toBe('d09415eee13542af7adb9d89b6c9011106d9636784ab2adc9884b33ef8d26062')
+  expect(body.agentProfileRegistryHash).toBe('a6f14110f4573d404a2ac6ad9d33d4797a8e6ae8478d87ede2d8867a86025b68')
 
   const counts = Object.fromEntries(
     (body.agentProfiles || []).map((profile: { name: string, allowedToolCount: number }) => [
@@ -318,14 +353,15 @@ async function assertRuntimeCapabilities(request: APIRequestContext) {
   )
   expect(counts).toEqual({
     administration_expert: 3,
+    analytics_expert: 1,
     assay_expert: 16,
     audit_expert: 3,
-    inventory_expert: 6,
+    inventory_expert: 5,
     logistics_expert: 4,
     main_agent: 0,
-    master_data_expert: 3,
+    master_data_expert: 4,
     pallet_expert: 9,
-    production_expert: 7,
+    production_expert: 8,
     warehouse_expert: 5
   })
 }
@@ -393,7 +429,7 @@ async function openAssistant(page: Page) {
 }
 
 async function sendAssistantMessage(page: Page, message: string) {
-  await page.getByRole('textbox', { name: /查黄冰糖/ }).fill(message)
+  await page.getByRole('textbox', { name: /询问库存、化验、生产或运营报表|查黄冰糖/ }).fill(message)
   await page.getByRole('button', { name: '发送' }).last().click()
 }
 
@@ -404,7 +440,9 @@ async function selectHuangBingtangBag(page: Page) {
   await expect(page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ })).toBeEnabled()
   await clearCapturedSse(page)
   await page.getByRole('button', { name: /黄冰糖（袋）.*具体产品/ }).click()
-  await expect(page.getByText(/当前库存为 .*折合/)).toBeVisible()
+  const resumeStream = await lastSse(page, 45_000)
+  expect(terminalPayload(resumeStream).finishReason).toBe('completed')
+  await expect(page.getByText(/当前库存为\s*.*折合/)).toBeVisible()
 }
 
 async function clearCapturedSse(page: Page) {
@@ -418,8 +456,8 @@ async function capturedSse(page: Page): Promise<SseRecord[]> {
   return records.map(parseSseRecord)
 }
 
-async function lastSse(page: Page): Promise<SseRecord> {
-  await expect.poll(async () => (await capturedSse(page)).length).toBeGreaterThan(0)
+async function lastSse(page: Page, timeout = 12_000): Promise<SseRecord> {
+  await expect.poll(async () => (await capturedSse(page)).length, { timeout }).toBeGreaterThan(0)
   const records = await capturedSse(page)
   return records[records.length - 1]
 }

@@ -1284,6 +1284,26 @@ public final class ToolModels {
         }
     }
 
+    public record TaskTransitionPreviewRequest(
+            Integer previewVersion, String transition, List<String> palletCodes
+    ) {
+    }
+
+    public record TaskTransitionPreviewResponse(
+            String dataScope, int previewVersion, String previewStatus, String previewRef,
+            String stateDigest, String previewedAt, String expiresAt,
+            String transition, String transitionLabel, boolean canOpenBusinessDialog,
+            int requestedTaskCount, int eligibleTaskCount, List<JsonNode> tasks,
+            List<String> requiredUserInputs, List<String> blockingIssues,
+            List<String> warnings, List<String> limitations, ToolError error
+    ) {
+        public static TaskTransitionPreviewResponse error(ToolError error) {
+            return new TaskTransitionPreviewResponse(
+                    null, 0, null, null, null, null, null, null, null,
+                    false, 0, 0, List.of(), List.of(), List.of(), List.of(), List.of(), error);
+        }
+    }
+
     public record StockDocumentsRequest(
             String documentType, String productName, String warehouseName, String operatorName,
             String startDate, String endDate, Integer page, Integer size

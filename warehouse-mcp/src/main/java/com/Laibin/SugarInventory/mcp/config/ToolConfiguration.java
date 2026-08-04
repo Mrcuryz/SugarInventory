@@ -14,6 +14,7 @@ import com.Laibin.SugarInventory.mcp.tool.PalletAnomaliesToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.PalletFlowRecordsToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.QrBatchInboundCompletionToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.PalletTasksToolCallback;
+import com.Laibin.SugarInventory.mcp.tool.TaskTransitionPreviewToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.StockDocumentsToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AutoInboundBatchesToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AutoInboundBatchDetailToolCallback;
@@ -115,6 +116,7 @@ public class ToolConfiguration {
                         productionMaterialCandidatesSchema(),
                         WarehouseTools.class.getMethod("queryMaterialCandidates", String.class, Integer.class, Integer.class)),
                 new PalletTasksToolCallback(warehouseTools, objectMapper, palletTasksSchema()),
+                new TaskTransitionPreviewToolCallback(warehouseTools, objectMapper, taskTransitionPreviewSchema()),
                 new StockDocumentsToolCallback(warehouseTools, objectMapper, stockDocumentsSchema()),
                 new AutoInboundBatchesToolCallback(warehouseTools, objectMapper, autoInboundBatchesSchema()),
                 new AutoInboundBatchDetailToolCallback(warehouseTools, objectMapper, autoInboundBatchDetailSchema()),
@@ -342,6 +344,12 @@ public class ToolConfiguration {
     private static String palletTasksSchema() {
         return """
                 {"type":"object","additionalProperties":false,"properties":{"code":{"type":"string","minLength":1,"maxLength":100},"taskType":{"type":"string","enum":["IN","SEMI_IN","FINISH_IN","OUT","TRANSFER"]},"bizScene":{"type":"string","enum":["DIRECT_OUT","PREPARE_CONSUMED","FINISH_OUT"]},"status":{"type":"string","enum":["PENDING","CONFIRMED","CANCELED"]},"productName":{"type":"string","minLength":1,"maxLength":100},"productType":{"type":"string","minLength":1,"maxLength":50},"productStatus":{"type":"string","enum":["半成品","成品"]},"targetWarehouseName":{"type":"string","minLength":1,"maxLength":100},"productionDateStart":{"type":"string","format":"date"},"productionDateEnd":{"type":"string","format":"date"},"page":{"type":"integer","minimum":1},"size":{"type":"integer","minimum":1,"maximum":50}}}
+                """;
+    }
+
+    private static String taskTransitionPreviewSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["previewVersion","transition","palletCodes"],"properties":{"previewVersion":{"type":"integer","const":1},"transition":{"type":"string","const":"CONFIRM_FINISH_INBOUND"},"palletCodes":{"type":"array","minItems":1,"maxItems":20,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":100,"pattern":"^[A-Za-z0-9-]+$"}}}}
                 """;
     }
 

@@ -99,6 +99,8 @@ class NextActionPolicy:
             return ["查询库存分布"]
         if tool_name == "query_pallet_tasks" and safe_data.get("records"):
             return ["只看入库任务", "只看出库任务", "查看第一条任务详情"]
+        if tool_name == "preview_task_transition" and safe_data.get("canOpenBusinessDialog"):
+            return ["打开成品入库业务弹窗"]
         if tool_name == "query_boiling_batch_trace" and safe_data.get("usages"):
             return ["查看关联生产订单"]
         if tool_name == "query_production_order_progress":

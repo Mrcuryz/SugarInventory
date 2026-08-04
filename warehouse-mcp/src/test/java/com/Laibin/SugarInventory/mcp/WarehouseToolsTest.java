@@ -19,6 +19,7 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolutionStatus;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseRecentOperationsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewRequest;
 import com.Laibin.SugarInventory.mcp.service.WarehouseReadService;
 import com.Laibin.SugarInventory.mcp.tool.InventoryDistributionToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.WarehouseTools;
@@ -91,6 +92,22 @@ class WarehouseToolsTest {
         assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.AMBIGUOUS);
         assertThat(response.needsUserSelection()).isTrue();
         assertThat(response.candidates()).hasSize(2);
+    }
+
+    @Test
+    void resolveProductsStripsInventoryOverviewIntentSuffix() throws InterruptedException {
+        backend.enqueue(json(result("""
+                [{"id":1,"productName":"黄冰糖（袋）25kg/件40件/板","status":"成品"}]
+                """)));
+
+        var response = tools.resolveProducts(new ResolveProductsRequest(
+                "黄冰糖（袋）25kg/件40件/板总览", null, null, 10));
+
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.UNIQUE);
+        RecordedRequest request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getRequestUrl().queryParameter("name"))
+                .isEqualTo("黄冰糖（袋）25kg/件40件/板");
     }
 
     @Test
@@ -1308,6 +1325,46 @@ class WarehouseToolsTest {
         assertThat(recorded.getBody().readUtf8())
                 .contains("\"reportDefinitionId\":\"pallet_task_cycle_time_v1\"")
                 .contains("\"taskType\":\"FINISH_IN\"");
+    }
+
+    @Test
+    void previewsFinishedInboundTasksThroughDedicatedNoWriteEndpoint() throws Exception {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+                  "previewVersion":1,
+                  "previewStatus":"READY",
+                  "previewRef":"tpr1_signature",
+                  "stateDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "previewedAt":"2026-08-04T21:00:00",
+                  "expiresAt":"2026-08-04T21:05:00",
+                  "transition":"CONFIRM_FINISH_INBOUND",
+                  "transitionLabel":"确认成品入库",
+                  "canOpenBusinessDialog":true,
+                  "requestedTaskCount":1,
+                  "eligibleTaskCount":1,
+                  "tasks":[{"palletCode":"BT0019N1","currentTaskStatus":"PENDING","productName":"黄冰糖（袋）"}],
+                  "requiredUserInputs":["入库库位"],
+                  "blockingIssues":[],
+                  "warnings":[],
+                  "limitations":["不修改业务数据。"]
+                }
+                """)));
+
+        var response = tools.previewTaskTransition(new TaskTransitionPreviewRequest(
+                1, "CONFIRM_FINISH_INBOUND", List.of("BT0019N1")));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.canOpenBusinessDialog()).isTrue();
+        assertThat(response.previewRef()).startsWith("tpr1_");
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/logistics/agent-read/pallet-tasks/transition/preview");
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"previewVersion\":1")
+                .contains("\"transition\":\"CONFIRM_FINISH_INBOUND\"")
+                .contains("\"palletCodes\":[\"BT0019N1\"]");
+        assertThat(recorded.getPath()).doesNotMatch(FORBIDDEN_WRITE_PATHS);
     }
 
     @Test

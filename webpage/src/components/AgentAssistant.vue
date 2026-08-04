@@ -45,6 +45,7 @@ const taskBatchDialog = reactive({
 })
 let activeStreamController = null
 let activeAssistantMessage = null
+let sessionStartPromise = null
 
 const sessionStatus = computed(() => session.value?.status || '未启动')
 const sessionStatusLabel = computed(() => {
@@ -64,6 +65,13 @@ const isAdmin = computed(() => isAgentAdminRole(session.value?.roleCode || authS
 const currentUserName = computed(() => session.value?.name || authStore.name || authStore.employeeId || '当前用户')
 const assistantName = computed(() => '智能仓储助手')
 const userAvatarText = computed(() => avatarText(currentUserName.value, '用'))
+const suggestedQuestions = Object.freeze([
+  '今天整体运营情况如何？',
+  '查看当前待处理任务',
+  '查看最近30天化验质量趋势',
+  '查看最近30天生产领料和产出趋势'
+])
+const showSuggestedQuestions = computed(() => messages.value.length <= 1 && !sending.value)
 
 const avatarText = (name, fallback) => {
   const normalized = String(name || '').trim()
@@ -82,8 +90,11 @@ const open = async () => {
 }
 
 const startSession = async () => {
+  if (session.value?.agentSessionId) return session.value
+  if (sessionStartPromise) return sessionStartPromise
+
   loadingSession.value = true
-  try {
+  sessionStartPromise = (async () => {
     const result = await createAgentSession({
       clientType: 'WEB',
       requestedScopes: ['mcp:warehouse:read'],
@@ -92,9 +103,15 @@ const startSession = async () => {
     session.value = result.data
     messages.value.push({
       role: 'assistant',
-      content: 'AI 助手已连接当前登录用户。你可以直接问库存、库位、托盘和化验状态。'
+      content: 'AI 助手已连接当前登录用户。你可以直接问库存、库位、托盘、化验、生产情况和运营报表。'
     })
+    return session.value
+  })()
+
+  try {
+    return await sessionStartPromise
   } finally {
+    sessionStartPromise = null
     loadingSession.value = false
   }
 }
@@ -605,6 +622,15 @@ const handleCardAction = async (action) => {
     suspendAssistant()
     return
   }
+  if (action?.actionKind === 'request_task_transition_preview') {
+    const palletCodes = [...new Set((action.palletCodes || []).map(code => String(code || '').trim().toUpperCase()).filter(Boolean))]
+    if (action.batchAction !== 'confirmIn' || action.taskGroupLabel !== '成品入库' || !palletCodes.length) {
+      ElMessage.warning('当前选择不能生成成品入库预览，请重新选择任务')
+      return
+    }
+    await send({ message: `请预览以下成品入库待处理任务：${palletCodes.join('、')}` })
+    return
+  }
   if (action?.actionKind === 'open_task_batch') {
     const supportedActions = new Set(['confirmIn', 'semiOutConfirm', 'finishOutConfirm', 'transferConfirm'])
     const palletCodes = [...new Set((action.palletCodes || []).map(code => String(code || '').trim()).filter(Boolean))]
@@ -665,7 +691,7 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
             </span>
           </div>
           <div class="assistant-subtitle">
-            <span>库存、库位、托盘和化验查询</span>
+            <span>库存、化验、生产与运营报表</span>
           </div>
         </div>
         <button type="button" class="history-entry" @click="reportHistoryVisible = true">
@@ -710,13 +736,28 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
         </div>
       </el-scrollbar>
 
+      <div v-if="showSuggestedQuestions" class="suggested-questions" aria-label="推荐问题">
+        <span class="suggested-questions-label">可以这样问</span>
+        <div class="suggested-question-list">
+          <button
+            v-for="question in suggestedQuestions"
+            :key="question"
+            type="button"
+            class="suggested-question"
+            @click="send({ message: question })"
+          >
+            {{ question }}
+          </button>
+        </div>
+      </div>
+
       <div class="composer">
         <el-input
           v-model="input"
           type="textarea"
           :autosize="composerAutosize"
           maxlength="500"
-          placeholder="询问库存、库位、托盘或化验…"
+          placeholder="询问库存、化验、生产或运营报表…"
           @keydown="handleComposerKeydown"
         />
         <div class="composer-actions">
@@ -1007,6 +1048,45 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
   box-shadow: 0 -8px 22px rgba(29, 33, 41, 0.04);
 }
 
+.suggested-questions {
+  flex: 0 0 auto;
+  padding: 10px 18px 0;
+  border-top: 1px solid var(--assistant-border);
+  background: #ffffff;
+}
+
+.suggested-questions-label {
+  display: block;
+  margin-bottom: 7px;
+  color: #7b879c;
+  font-size: 12px;
+}
+
+.suggested-question-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.suggested-question {
+  padding: 6px 10px;
+  border: 1px solid #dbe6fb;
+  border-radius: 999px;
+  color: #315fbd;
+  background: #f7faff;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.suggested-question:hover,
+.suggested-question:focus-visible {
+  border-color: #8db3ff;
+  background: #eef4ff;
+  outline: none;
+}
+
 .composer :deep(.el-textarea__inner) {
   min-height: 42px !important;
   max-height: 82px !important;
@@ -1145,6 +1225,10 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
 
   .composer {
     padding: 12px;
+  }
+
+  .suggested-questions {
+    padding: 9px 12px 0;
   }
 }
 </style>

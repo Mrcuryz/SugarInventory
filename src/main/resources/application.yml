@@ -69,6 +69,11 @@ analytics:
   inventory-trend:
     simulation-enabled: ${INVENTORY_TREND_SIMULATION_ENABLED:false}
 agent:
+  reports:
+    retention:
+      cleanup-enabled: ${AGENT_REPORT_CLEANUP_ENABLED:true}
+      cleanup-cron: "${AGENT_REPORT_CLEANUP_CRON:0 30 2 * * ?}"
+      cleanup-batch-size: ${AGENT_REPORT_CLEANUP_BATCH_SIZE:1000}
   mcp:
     runtime-verification-enabled: ${AGENT_MCP_RUNTIME_VERIFICATION_ENABLED:true}
     warmup-enabled: ${AGENT_MCP_WARMUP_ENABLED:true}

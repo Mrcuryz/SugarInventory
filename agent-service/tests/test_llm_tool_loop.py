@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app.agents import AgentHandoffRouter
 from app.business_time import BusinessClock
 from app.config import Settings
-from app.graph.state import InMemoryCheckpointer, SelectedEntity
+from app.graph.state import InMemoryCheckpointer, SelectedEntity, WarehouseAgentState
 from app.model import BasicModelClient, ExpertLoopRequest, MainAgentRouteRequest, ModelDecisionError
 from app.runtime import WarehouseAgentRuntime
 from app.schemas import (
@@ -4090,3 +4090,92 @@ def test_llm_inventory_metric_query_keeps_closed_metric_and_numeric_operator() -
         "operator": "GTE",
         "value": 99.7,
     }
+def test_preview_task_transition_arguments_are_closed_and_controlled() -> None:
+    builder = ToolArgumentBuilder()
+
+    validated = builder.validate_llm_arguments(
+        tool_name="preview_task_transition",
+        arguments={
+            "previewVersion": 1,
+            "transition": "CONFIRM_FINISH_INBOUND",
+            "palletCodes": ["bt0019n1", "BT0019N1"],
+        },
+        state=WarehouseAgentState(),
+        user_message="请预览成品入库任务 BT0019N1",
+    )
+
+    assert validated == {
+        "previewVersion": 1,
+        "transition": "CONFIRM_FINISH_INBOUND",
+        "palletCodes": ["BT0019N1"],
+    }
+    with pytest.raises(ValueError):
+        builder.validate_llm_arguments(
+            tool_name="preview_task_transition",
+            arguments={
+                "previewVersion": 1,
+                "transition": "CONFIRM_FINISH_INBOUND",
+                "palletCodes": ["BT0019N1", "bad code"],
+            },
+            state=WarehouseAgentState(),
+            user_message="预览任务",
+        )
+
+
+def test_llm_finish_inbound_preview_uses_expert_tool_and_hides_control_refs() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert", "FINISH_INBOUND_TASK_TRANSITION_PREVIEW")],
+        [
+            call("preview_task_transition", {
+                "previewVersion": 1,
+                "transition": "CONFIRM_FINISH_INBOUND",
+                "palletCodes": ["BT0019N1"],
+            }),
+            final("已完成 1 条成品入库任务预览，可以打开业务弹窗继续核对。", "obs_1"),
+        ],
+    )
+    tools = MockToolClient({
+        "preview_task_transition": {
+            "dataScope": "CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+            "previewVersion": 1,
+            "previewStatus": "READY",
+            "previewRef": "tpr1_hidden_signature",
+            "stateDigest": "a" * 64,
+            "previewedAt": "2026-08-04T21:00:00",
+            "expiresAt": "2026-08-04T21:05:00",
+            "transition": "CONFIRM_FINISH_INBOUND",
+            "transitionLabel": "确认成品入库",
+            "canOpenBusinessDialog": True,
+            "requestedTaskCount": 1,
+            "eligibleTaskCount": 1,
+            "tasks": [{
+                "palletCode": "BT0019N1",
+                "currentTaskStatus": "PENDING",
+                "productName": "黄冰糖（袋）",
+                "productionDate": "2026-05-22",
+                "totalWeight": 1000,
+                "quantityLockedByProductionOutput": False,
+            }],
+            "requiredUserInputs": ["入库库位", "入库日期"],
+            "blockingIssues": [],
+            "warnings": ["最终提交前会重新检查任务状态。"],
+            "limitations": ["previewRef 不是 executionToken。"],
+        }
+    })
+    runtime, store = runtime_for(model, tools)
+
+    response = runtime.chat(chat_request("请预览以下成品入库待处理任务：BT0019N1"))
+
+    assert response.error is None
+    assert tools.calls[0]["toolName"] == "preview_task_transition"
+    assert response.cards[0].cardType == "task_transition_preview"
+    rendered = json.dumps(response.cards[0].model_dump(), ensure_ascii=False)
+    assert "tpr1_hidden_signature" not in rendered
+    assert "a" * 64 not in rendered
+    assert "PENDING" not in rendered
+    assert "previewRef" not in rendered
+    assert "executionToken" not in rendered
+    assert response.cards[0].fields[0]["canOpenBusinessDialog"] is True
+    state = store.get("agt_llm")
+    assert state.active_goal_type == "FINISH_INBOUND_TASK_TRANSITION_PREVIEW"
+    assert state.last_goal_completion["status"] == "COMPLETE"

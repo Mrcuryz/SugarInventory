@@ -70,6 +70,7 @@ _TOOL_PROGRESS_STAGE = {
     "query_in_process_materials": "production_query",
     "query_material_candidates": "production_query",
     "query_pallet_tasks": "logistics_query",
+    "preview_task_transition": "logistics_query",
     "query_stock_documents": "logistics_query",
     "query_auto_inbound_batches": "logistics_query",
     "get_auto_inbound_batch_detail": "logistics_query",

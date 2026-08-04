@@ -123,6 +123,12 @@ def evidence_response(
             ["多晶体白冰糖"],
         ),
         (
+            "白砂糖金属检测限值是什么？",
+            "PROCESS_KNOWLEDGE_QUERY",
+            ["PROCESS"],
+            ["白砂糖"],
+        ),
+        (
             "公司有哪些认证和销售网络",
             "ENTERPRISE_KNOWLEDGE_QUERY",
             ["COMPANY", "PRODUCT_MARKETING", "CERTIFICATION", "SALES"],

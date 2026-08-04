@@ -19,10 +19,10 @@
 
 - 最后更新：2026-08-03
 - 当前阶段：`RAG 交付收口`
-- 当前工作状态：`WORKTREE_ENGINEERING_VALIDATED / V1_ARTIFACT_VALIDATED / SOURCE_INTEGRATION_PENDING / ONLINE_DEPLOYMENT_UNVERIFIED`
-- 当前 corpus version：`laibin-rag-2026-07-29-v1`（正式 pointer 已选中；在线加载未验证）
+- 当前工作状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`
+- 当前 corpus version：`laibin-rag-2026-07-29-v1`（正式 pointer 已选中；隔离 Python/Web 已加载验证，当前部署未切换）
 - 当前材料数量：10
-- 当前运行时能力：2026-08-02 隔离实例曾完成成功、降级、无证据、不可用和权限验收；2026-08-03 复核时 28091 已停止，当前 8091 无法使用已知验收密钥认证，在线 RAG 状态未验证
+- 当前运行时能力：当前提交已完成 28091 Python 及 5174→28080→28091 Web 全链路隔离验收；当前 8080/8091/5173 未切换
 - 当前权限决策：仅 `ADMIN` 和 `SUPER_ADMIN`
 - 当前更新方式：离线整库重建和版本切换
 
@@ -1716,6 +1716,187 @@ v2 纠偏：
 - 含报表、模型模式、流式诊断或其他业务改动的文件继续按 hunk 处理；
 - 不修改、不还原工作区中的非 RAG 内容，不创建提交，不启动或切换服务。
 
+### 2026-08-03 — RAG 源码集成收口与当前提交回归
+
+状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / ONLINE_DEPLOYMENT_UNVERIFIED`
+
+完成内容：
+
+- 重新核对共享工作区后确认 `HEAD=4150e6d` 且与 `origin/dev` 一致；
+- RAG 离线管线、Runtime、专项测试、设计文档及 Agent/Java/Web/Deploy 集成点已进入该提交；
+- `4150e6d` 由共享工作区中的其他任务创建并推送，本线程没有创建、改写或回退提交；
+- 提交同时包含 analytics/reporting 基线，提交标题没有单独体现 RAG，本日志补充其交付可追溯性；
+- 正式 v1 artifact、模型、真实 env、密钥和运行日志继续按设计保留在 Git 外。
+
+环境处理：
+
+- 仓库原先误跟踪的 `.venv` 已由当前提交移除，系统 Python 初始缺少 `pip` 和 RAG 测试依赖；
+- `python -m ensurepip --upgrade` 因 `C:\Python312\Scripts` 无写权限失败；
+- 改用 `python -m ensurepip --user --upgrade` 恢复 pip，并以 `--user` 安装 `.[test]` 和
+  `.[rag-runtime]`；未在仓库内创建虚拟环境，也未将第三方依赖加入 Git；
+- RAG 首次收集因缺少 `pypdf` 失败；补齐 test 依赖后两个真实检索测试因缺少 `fastembed`
+  失败；补齐 rag-runtime 依赖后全部通过。这些失败均属于环境依赖缺失，不是代码断言失败。
+
+验证命令和结果：
+
+- `python -m pytest tests/rag -q`：`119 passed, 5 skipped`；
+- `python -m pytest -q`：`454 passed, 5 skipped`；
+- `mvn -q test`：`316 passed, 0 failed, 0 errors, 0 skipped`；
+- `node --test <23 个 src/**/*.test.mjs>`：`67 passed`；
+- `npm run build`：通过；仅保留既有 Sass legacy API 和大 chunk 警告；
+- 回归开始前 `git status --short` 为空，测试基于 `4150e6d` 执行。
+
+当前限制：
+
+- 2026-08-02 隔离实例的 10/10 UAT 仍是有效历史证据，但发生在 `4150e6d` 形成之前；
+- 本阶段没有启动、停止或切换 8080/8091，也没有读取未知认证密钥；
+- 当前在线实例是否配置真实 env、只读模型和正式 v1 corpus 仍未验证；
+- 只有完成同一提交、同一 artifact 的受控部署和管理员/非管理员验收后，才能标记整体上线完成。
+
+下一步：
+
+- 准备受控部署 env 和只读模型目录；
+- 启动独立端口实例，验证认证 health、`RAG=READY`、v1 corpus version、知识冒烟和权限；
+- 对确定提交和 artifact 复跑 Web 管理员/非管理员验收并记录部署事实。
+
+### 2026-08-03 — RAG 当前提交隔离部署验证开始
+
+状态：`IN_PROGRESS / CONTROLLED_AGENT_28091`
+
+目标：
+
+- 从当前源码提交和正式 v1 artifact 启动新的隔离 Agent 实例；
+- 验证服务密钥认证、health、`RAG=READY`、corpus version、管理员知识检索和非管理员拒绝；
+- 不复用未知的 8091 认证密钥，不停止或重配当前 8080/8091 服务。
+
+隔离边界：
+
+- 监听地址固定为 `127.0.0.1:28091`，启动前确认端口空闲；
+- 使用 `AGENT_ENV=test`、内存状态、确定性规划和 mock tool gateway，只验证静态知识链路；
+- mock tool gateway 不启用免认证，所有内部端点仍要求随机 `X-Agent-Service-Key`；
+- 不连接数据库、Redis 或生产系统，不执行仓储写操作，不调用外部模型；
+- RAG 使用正式 `deploy/simple/artifacts/rag` 根目录和本地核验模型；
+- 临时服务密钥、PID 和 stdout/stderr 仅放在工作区外的 `C:\tmp`，不写入日志或 Git；
+- 正式 artifact、pointer、release 和模型只读使用，不执行发布、回滚或内容重建。
+
+前置事实：
+
+- `HEAD=4150e6d` 且与 `origin/dev` 一致；
+- 当前 8080、8091 正在监听，28091 空闲；
+- 正式 `current.json` 和本地模型目录存在，Compose 模型挂载目录尚未准备；
+- 外部 `laibin-shadow-model.env` 存在，但仅登记了模型和数据库变量，没有可复用的
+  `AGENT_PYTHON_SERVICE_KEY`；本切片不会读取或打印变量值。
+
+下一步：
+
+- 对正式 release 重跑不可变发布校验；
+- 核对模型必需文件并启动 28091；
+- 完成认证、能力、检索、权限和日志安全验收。
+
+### 2026-08-03 — RAG 当前提交隔离部署验证完成
+
+状态：`COMPLETED / ISOLATED_RUNTIME_28091_VERIFIED / CURRENT_WEB_DEPLOYMENT_UNVERIFIED`
+
+完成内容：
+
+- 正式 v1 release 在启动前和验收后均通过 10 文档、196 chunks、83 条评测、23 个文件及
+  release SHA 校验；release 可写文件 0，无 pointer 临时文件、发布锁或 prepared 审计残留；
+- 将构建模型复制到 Git 忽略的 `deploy/simple/artifacts/rag-model`，7 个文件、95,332,206
+  字节，逐文件哈希差异 0，可写文件 0，reparse point 0；
+- 在 `127.0.0.1:28091` 启动 PID 28764，使用 test/memory/deterministic/mock 隔离配置；
+- 无密钥和错误密钥 health 均返回 401；正确密钥返回 `UP`、RAG `READY`、目标 v1；
+- ADMIN 工艺知识和数值证据成功，SUPER_ADMIN 冻结无证据用例返回 `NO_DATA`，STAFF 返回
+  403，静态知识与实时库存混合问题返回 `needsUserSelection=true`；
+- 数值回答包含 `Φ1.5mm`、`Φ2.0mm`、`Φ2.5mm`，成功和无证据响应均未匹配路径、凭据或
+  不允许的内部字段；
+- 运行时指标记录 ADMIN 成功 2 次、SUPER_ADMIN 无证据 1 次；成功 p95 约 32.956 ms，
+  无证据约 2.957 ms；
+- 进程仅有 loopback 已建立连接，非回环连接 0；日志中服务密钥和常见凭据模式匹配 0；
+- 新增 `rag-controlled-runtime-validation-2026-08-03.md` 保存完整验收事实。
+
+命令问题与纠正：
+
+- 第一次模型复制使用 `Copy-Item -LiteralPath <path>\*`，通配符没有展开，目标保持空并由校验
+  报告 7 个缺失文件；随后仅对已验证为空的目标显式枚举复制，最终哈希和只读检查通过；
+- 任意“月球仓库”问法没有命中知识目标，因此不作为无证据验收；改用既有冻结 UAT 问法后
+  `NO_DATA` 通过；
+- 省略“生产工艺”语境的数值问法没有命中知识目标；补全明确静态工艺语境后命中全部冻结数值。
+
+安全与运行边界：
+
+- 临时服务密钥随机生成，文件关闭 ACL 继承且仅授权当前 Windows 用户；密钥值未输出、未写入
+  文档或 Git；
+- 当前 8080/8091 未停止或重配，28091 验收结束后继续运行；
+- 本切片没有连接数据库、Redis、生产系统或外部模型，没有修改仓储业务数据；
+- 真实 `deploy/simple/.env` 和当前 Web/Java 到 28091 的完整链路仍未验证。
+
+下一步：
+
+- 准备持久化、受控分发的真实部署 env；
+- 在新端口启动 Java 隔离实例并指向 28091；
+- 从当前 Web 对同一提交执行 ADMIN/SUPER_ADMIN/STAFF 验收，再决定是否切换 8091。
+
+### 2026-08-03 — 当前提交 Java/Web 隔离全链路验收启动
+
+状态：`IN_PROGRESS / CONTROLLED_JAVA_28080_WEB_5174`
+
+目标：
+
+- 从精确 `HEAD=4150e6d` 导出干净副本，避免当前共享工作区的未暂存改动进入验收构建；
+- 在 `127.0.0.1:28080` 启动临时 Java，并通过受控服务密钥接入已验证的 Python 28091；
+- 在 `127.0.0.1:5174` 启动同一提交的临时 Web，完成真实浏览器登录、知识问答和权限门禁验收；
+- 不停止、不重配现有 8080、8091、5173 服务，不切换正式部署流量。
+
+安全与数据边界：
+
+- 数据库变量仅从甲方提供的本地环境文件注入，不打印值；已确认 URL 指向本机，不连接生产数据库；
+- 仅允许 Web 登录、Agent 会话和审计产生本地测试记录，不执行库存、托盘、库位、盘点等仓储业务写操作；
+- 禁用 MCP warmup/runtime verification 和可配置定时任务；验收窗口避开 00:00、03:00 固定任务触发点，完成后停止临时 Java/Web；
+- Java JWT、内部工具密钥和 Python 服务密钥只在工作区外临时运行目录保存或进程内传递，不写入文档、日志或 Git；
+- Python 保持 deterministic/mock tool gateway，仅验证静态 RAG 链路，不调用外部模型和实时仓储工具。
+
+计划验证：
+
+- Java 启动、登录和到 Python 28091 的受认证调用；
+- 管理员 Web 静态知识成功、数值证据、无证据和静态/实时混合路由；
+- 普通员工 Web Agent 入口不可见且后端接口拒绝；
+- 浏览器控制台、服务日志、端口和临时进程边界；
+- 验收完成后补齐证据、结果和遗留风险，再决定是否具备正式切换条件。
+
+### 2026-08-03 — 当前提交 Java/Web 隔离全链路验收完成
+
+状态：`COMPLETED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`
+
+完成内容：
+
+- 从 `4150e6d` 只导出 `pom.xml`、`src/`、`webpage/` 共 945 个文件，干净构建 Java JAR 成功；
+- 在 28080 启动 Java 并指向已验证的 28091，在 5174 启动同提交 Web 并代理到 28080；
+- ADMIN 页面入口、会话连接、静态知识 5 张来源卡片、`Φ1.5mm`/`Φ2.0mm`/`Φ2.5mm` 数值、
+  `NO_DATA` 安全限定和静态/实时混合拆分均通过；
+- STAFF 页面无 AI 助手入口；直接创建会话返回 HTTP 200、统一业务码 403、`data=null`；
+- 本地花名册没有 SUPER_ADMIN 账号，未伪造 Web 身份；该角色复用同日 28091 可信上下文验收；
+- 浏览器控制台错误 0；验收窗口 Java WARN/ERROR 0；24 个日志/文本证据文件中密钥和凭据模式命中 0；
+- Java PID 43200、Web PID 18056 在核对命令行身份后停止；28091 继续运行，现有 8080/8091/5173
+  未由本轮停止或重配；
+- 新增 `rag-controlled-web-runtime-validation-2026-08-03.md` 保存环境、场景、纠偏和证据事实。
+
+命令问题与纠正：
+
+- 全仓 `git archive` 由 Windows `tar` 解压时遇到中文路径错误；改为在新目录只导出运行所需路径；
+- Java 首次使用 7 段 cron 被 Spring 拒绝并在监听前退出；改用有效 6 段表达式和显式 JDK 21；
+- 首次会话冒烟使用未登记 scope，未创建会话；改用与 Web 一致的空请求体后成功；
+- 首个“来宾白砂糖”问法因产品标签不在正式语料而按精确范围拒绝，未擅自映射；
+- “筛网孔径”不是冻结金属检测数值的准确语义；改用“金属检测限值”后命中全部三项数值；
+- 数值对话框截图受滚动位置影响没有单独覆盖三项数值，因此以 Playwright DOM 三项各 3 处可见
+  命中为主证据，并在验证记录中明确说明。
+
+遗留门禁：
+
+- 持久化真实部署 env 尚未准备；
+- 现有 Web/Java/Python 服务尚未切换到本轮验证配置；
+- 切换后 health、corpus version、ADMIN/STAFF 和回滚准备冒烟尚未执行；
+- 若甲方要求 SUPER_ADMIN Web 现场验收，需要管理员先创建真实测试账号。
+
 ## 4. 后续切片
 
 | 切片 | 内容 | 当前状态 |
@@ -1730,7 +1911,7 @@ v2 纠偏：
 | `RAG-03B` | `knowledge_expert`、目标、事实、路由和安全引用 | `ENGINEERING_TESTS_PASSED` |
 | `RAG-03C` | Java 安全映射、知识调用审计和引用响应透传 | `ENGINEERING_TESTS_PASSED` |
 | `RAG-04` | Web 管理员展示、审计和真实浏览器验收 | `COMPLETED / UAT_10_OF_10_PASSED` |
-| `RAG-05` | 发布、原子切换和恢复机制 | `WORKTREE_ENGINEERING_VALIDATED / V1_ARTIFACT_VALIDATED / SOURCE_INTEGRATION_PENDING / ONLINE_DEPLOYMENT_UNVERIFIED` |
+| `RAG-05` | 发布、原子切换和恢复机制 | `SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED` |
 
 ## 5. 日志模板
 

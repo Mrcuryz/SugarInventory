@@ -1,6 +1,6 @@
 # RAG-05 发布、原子切换与回滚设计
 
-状态：`WORKTREE_ENGINEERING_VALIDATED / V1_ARTIFACT_VALIDATED / SOURCE_INTEGRATION_PENDING / ONLINE_DEPLOYMENT_UNVERIFIED`
+状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`
 日期：2026-08-02
 适用范围：来宾智能仓储 Web Agent 静态知识库的部署发布与恢复
 
@@ -171,10 +171,17 @@ deploy/simple/artifacts/rag/
 2026-08-03 重新核查确认：
 
 - 正式 v1 artifact、pointer 和 `COMMITTED` 发布审计仍完整且通过校验；
-- 2026-08-02 的 28091 隔离验证实例已经停止，当前 8091 无法使用已知验收密钥认证，因此不能把
-  历史首次激活记录表述为当前在线状态；
-- RAG 源码、测试和文档在当前 Git HEAD 中均不存在，工作区相关文件尚未被 Git 跟踪；
-- `deploy/simple/.env` 和 `deploy/simple/artifacts/rag-model` 尚未准备；
-- RAG-05 的发布器和 artifact 子任务已验证，但源代码集成与当前部署门禁尚未关闭。
+- RAG 源码、测试和文档已进入 `4150e6d`，集成后全量回归通过；
+- `deploy/simple/artifacts/rag-model` 已准备为 7 个逐文件哈希一致的只读模型文件；
+- 当前提交在 28091 从正式 v1 根目录启动，认证 health、`RAG=READY`、corpus version、管理员
+  成功/无证据、STAFF 拒绝及安全检查通过；
+- 28091 使用隔离 test/memory/deterministic/mock 配置，没有连接数据库、Redis 或外部模型；
+- 从精确 `4150e6d` 导出干净 Java/Web，在 5174→28080→28091 完成 ADMIN 数值、无证据、
+  静态/实时混合路由和 STAFF 双层门禁真实浏览器验收；
+- 28080/5174 验收后停止，28091 保持运行；当前 8080/8091/5173 未由本轮停止或重配；
+- RAG-05 的源码、artifact、隔离 Python 和隔离 Web 全链路门禁已关闭；真实部署 env、现有服务
+  切换和切换后冒烟门禁仍未关闭。
 
-当前权威状态见 `rag-current-state-audit-2026-08-03.md`。
+当前权威状态见 `rag-current-state-audit-2026-08-03.md`，隔离实例证据见
+`rag-controlled-runtime-validation-2026-08-03.md` 和
+`rag-controlled-web-runtime-validation-2026-08-03.md`。

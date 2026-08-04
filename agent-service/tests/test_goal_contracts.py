@@ -34,7 +34,7 @@ from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS
 
 
 def test_priority_readonly_goal_contracts_are_registered() -> None:
-    assert len(GOAL_CONTRACTS) == 51
+    assert len(GOAL_CONTRACTS) == 52
     assert {
         "CURRENT_INVENTORY_LEDGER",
         "WAREHOUSE_STATUS",
@@ -72,8 +72,8 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
     current = registry["current_goals"]
     planned = registry["planned_goals"]
 
-    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 51
-    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 52
+    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 52
+    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 53
     assert registry["classified_internal_knowledge_tool_count"] == len(INTERNAL_KNOWLEDGE_TOOLS) == 1
     assert set(current) == set(GOAL_CONTRACTS)
     for goal_type, contract in GOAL_CONTRACTS.items():
@@ -103,8 +103,8 @@ def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:
     corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
     cases = corpus["cases"]
 
-    assert len(cases) == len(GOAL_CONTRACTS) == 51
-    assert len({case["id"] for case in cases}) == 51
+    assert len(cases) == len(GOAL_CONTRACTS) == 52
+    assert len({case["id"] for case in cases}) == 52
     assert {case["goalType"] for case in cases} == set(GOAL_CONTRACTS)
     assert all(str(case["input"]).strip() for case in cases)
 
@@ -551,6 +551,46 @@ def test_quality_goal_all_scope_completes_without_forcing_product_entity() -> No
     )
 
     assert fact.status == "NO_DATA"
+    assert completion.status == "COMPLETE"
+
+
+def test_finish_inbound_task_transition_preview_is_a_distinct_l2_goal() -> None:
+    assert registered_goal_for_plan(
+        tool_name="preview_task_transition",
+        arguments={
+            "previewVersion": 1,
+            "transition": "CONFIRM_FINISH_INBOUND",
+            "palletCodes": ["BT0019N1"],
+        },
+        intent="finish_inbound_task_transition_preview",
+    ) == "FINISH_INBOUND_TASK_TRANSITION_PREVIEW"
+    fact = build_fact_envelope(
+        goal_type="FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+        tool_name="preview_task_transition",
+        arguments={
+            "previewVersion": 1,
+            "transition": "CONFIRM_FINISH_INBOUND",
+            "palletCodes": ["BT0019N1"],
+        },
+        safe_data={
+            "previewVersion": 1,
+            "previewStatusLabel": "可以继续",
+            "canOpenBusinessDialog": True,
+            "requestedTaskCount": 1,
+            "eligibleTaskCount": 1,
+            "tasks": [{"palletCode": "BT0019N1"}],
+            "blockingIssues": [],
+        },
+        entity_contexts={},
+    )
+
+    completion = GoalCompletionEvaluator().evaluate(
+        goal_type="FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+        entity_contexts={},
+        facts=[fact],
+    )
+
+    assert fact.status == "AVAILABLE"
     assert completion.status == "COMPLETE"
 
 

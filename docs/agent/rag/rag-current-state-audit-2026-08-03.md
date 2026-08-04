@@ -1,22 +1,26 @@
 # RAG 当前真实状态审计
 
-状态：`AUTHORITATIVE_CURRENT_BASELINE`
+状态：`AUTHORITATIVE_CURRENT_BASELINE / SOURCE_INTEGRATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`
 审计日期：2026-08-03
 时区：`Asia/Shanghai`
 审计方式：只读核对工作区、Git、原始材料、artifact、进程、配置、测试和既有文档
 
 ## 1. 结论
 
-当前 RAG 已完成真实材料的离线处理、本地工作区实现、固定评测、隔离浏览器 UAT 和 v1 artifact
-发布验证，但尚未完成源码版本库集成和当前在线部署验收。因此不得标记为“整体完成上线”。
+当前 RAG 已完成真实材料的离线处理、源码版本库集成、固定评测和 v1 artifact 发布验证，并已
+基于集成后的当前提交完成全量工程回归、28091 隔离 Python 运行态验收及
+5174→28080→28091 隔离真实浏览器全链路验收；现有 Web/Java/8091 尚未切换到该配置。因此不得
+标记为“当前部署已整体上线”。
 
 权威状态为：
 
 ```text
-WORKTREE_ENGINEERING_VALIDATED
 V1_ARTIFACT_VALIDATED
-SOURCE_INTEGRATION_PENDING
-ONLINE_DEPLOYMENT_UNVERIFIED
+SOURCE_INTEGRATED
+ENGINEERING_REGRESSION_PASSED
+ISOLATED_RUNTIME_28091_VERIFIED
+ISOLATED_WEB_5174_VERIFIED
+CURRENT_DEPLOYMENT_NOT_SWITCHED
 DOCUMENTATION_CORRECTED
 ```
 
@@ -52,46 +56,57 @@ DOCUMENTATION_CORRECTED
 
 2026-08-03 重新执行：
 
-- Python 全量：`449 passed, 5 skipped`；
+- Python 全量：`454 passed, 5 skipped`；
 - RAG 专项：`119 passed, 5 skipped`；
-- Java 全量：`312 passed, 0 failed, 0 errors, 0 skipped`；
-- Web Node：`65 passed`；
+- Java 全量：`316 passed, 0 failed, 0 errors, 0 skipped`；
+- Web Node：`67 passed`；
 - Web `npm run build`：通过，仅有既有 Sass legacy API 和大 chunk 警告；
-- `git diff --check`：通过；
-- RAG 相关 74 个文本文件通过 UTF-8 严格解码且无 BOM。
+- 回归开始前 `git status --short` 为空，测试基于当前 `HEAD=4150e6d` 执行；
+- RAG 专项首次收集因系统 Python 缺少 `pypdf` 失败，补齐项目声明的 `test` 依赖后为
+  `117 passed, 5 skipped, 2 failed`；两个失败均为缺少 `fastembed`，补齐 `rag-runtime` 依赖后
+  复跑为 `119 passed, 5 skipped`。
 
-这些结果证明当前工作区实现具备工程可用性，不证明 clean checkout 或当前在线服务已经具备该能力。
+这些结果证明当前提交中的源码具备工程可用性，不证明当前在线服务已经加载该能力。
 
-## 3. 尚未完成的部分
+## 3. 已收口与尚未完成的部分
 
-### 3.1 源码版本库集成
+### 3.1 源码版本库集成已收口
 
-- 当前 Git HEAD 为 `c9e2274`；
-- Git HEAD 在 Agent、Java、Web 和简单部署目录中没有 RAG 集成引用；
-- `agent-service/app/rag`、RAG 测试和 RAG 文档被 Git 跟踪的文件数为 0；
-- 当前 RAG 范围有 74 个未跟踪文件，另有部署示例和 Compose 的已跟踪修改；
-- 当前共享工作区还包含其他并行功能改动，不能把整个 dirty worktree 直接视为 RAG 交付物。
+- 当前 Git HEAD 为 `4150e6d`，并与 `origin/dev` 一致；
+- RAG 离线管线、Runtime、专项测试、设计文档及 Agent/Java/Web/Deploy 集成点均已进入该提交；
+- 当前提交包含 81 个匹配 RAG 专属目录或关键集成点的路径；
+- 工程回归开始前工作区和索引均为空；
+- 该提交由共享工作区中的其他任务创建并推送，提交标题为 analytics/reporting 基线，未单独体现
+  RAG 集成；本审计只记录事实，不重写或回退该提交。
 
-结论：换机、清理工作区或从当前 HEAD 构建时无法重现 RAG，源码交付尚未完成。
+结论：RAG 源码交付已可由当前提交重建；Git 忽略的 v1 artifact 和本地模型仍需按发布记录及部署
+手册单独供应，这是既定部署边界，不属于源码缺失。
 
-### 3.2 当前在线部署
+### 3.2 隔离运行态与当前 Web 部署
 
-- 2026-08-02 的 28091 隔离实例曾以 `UP/READY` 加载 v1并完成验收；
-- 2026-08-03 复核时 28091、18080、18091 均已停止；
-- 当前 8080 和 8091 正在监听，但 8091 使用已知验收密钥返回 401，不能确认其配置或 corpus；
-- 没有读取进程内存、环境或日志绕过认证；
-- `deploy/simple/.env` 不存在；
-- `deploy/simple/artifacts/rag-model` 不存在；
-- 本地构建模型仍存在于 Git 忽略的 `agent-service/build/rag-models/fast-bge-small-zh-v1.5`。
+- 从 `4150e6d` 在 `127.0.0.1:28091` 启动新的隔离 Python Agent；
+- 实例使用 test、memory、deterministic、mock tool gateway，不连接数据库、Redis 或外部模型；
+- 无密钥和错误密钥均返回 401，正确密钥 health 为 `UP`、RAG 为 `READY`；
+- capabilities 报告 `laibin-rag-2026-07-29-v1`；
+- ADMIN 成功及数值证据、SUPER_ADMIN 无证据、STAFF 403、静态与实时混合问题拆分均通过；
+- 进程非回环连接 0，日志凭据匹配 0；正式 release 验收后复检仍通过；
+- 部署模型目录已准备为 7 个只读、逐文件哈希一致且无 reparse point 的文件；
+- 从精确 `4150e6d` 导出干净 Java/Web，临时 5174→28080→28091 链路完成 ADMIN 成功、三项数值、
+  无证据、静态/实时混合问题及 STAFF 双层门禁真实浏览器验收；
+- Java/Web 临时进程验收后已停止，28091 保持运行；当前 8080/8091/5173 未由本轮停止或重配；
+- 真实 `deploy/simple/.env`、现有服务切换及切换后冒烟仍未执行。
 
-结论：当前没有一个可由本审计凭据验证为加载正式 v1 的在线 RAG 实例。
+结论：当前提交和正式 v1 已通过隔离 Python 与隔离 Web 全链路；现有 Web/Java/8091 尚未切换，
+不能标记为当前部署上线。完整证据见 `rag-controlled-runtime-validation-2026-08-03.md` 和
+`rag-controlled-web-runtime-validation-2026-08-03.md`。
 
 ### 3.3 当前快照验收可追溯性
 
-- RAG-04 曾在隔离环境完成 10/10 浏览器 UAT；
-- 该结果是有效历史证据；
-- 由于 RAG 源码未进入 Git，且当前工作区测试数量已继续变化，历史 UAT 未绑定可重建提交；
-- 当前部署完成后仍需对确定提交和确定 artifact 重新执行受控验收。
+- RAG-04 的 10/10 浏览器 UAT 仍是有效历史证据；
+- 当前源码已绑定到可重建提交 `4150e6d`；
+- 2026-08-03 已从该提交干净导出并对确定 v1 artifact 重做 ADMIN/STAFF 关键路径受控验收；
+- 本地没有 SUPER_ADMIN 账号，未伪造 Web 身份；该角色由同日 28091 可信上下文验收覆盖；
+- 当前部署切换后仍需执行 health、corpus version、ADMIN/STAFF 和回滚准备冒烟。
 
 ## 4. 测试版本纠偏
 
@@ -107,18 +122,23 @@ DOCUMENTATION_CORRECTED
 
 ## 5. 正确的交付收口顺序
 
-1. 纠正文档中的完成状态和业务 v2 表述；
-2. 从共享 dirty worktree 中识别 RAG 所需源码、测试、Java/Web 集成和部署配置；
-3. 在不混入其他功能的前提下纳入版本控制，并记录确定提交；
-4. 从该提交运行 Python、RAG、Java、Web 和构建回归；
-5. 准备真实部署 env 和只读模型目录；
-6. 启动受控 Agent 实例并验证认证 health、`RAG=READY`、v1 corpus version 和知识冒烟；
-7. 对同一提交和 artifact 执行管理员/非管理员 Web 验收；
-8. 记录部署事实后，才能将整体状态改为 `COMPLETED`。
+1. 已完成：纠正文档中的完成状态和业务 v2 表述；
+2. 已完成：识别并集成 RAG 源码、测试、Java/Web 集成和部署配置；
+3. 已完成：记录确定提交 `4150e6d`；
+4. 已完成：从该提交运行 Python、RAG、Java、Web 和构建回归；
+5. 部分完成：只读模型目录已准备；持久化真实部署 env 待完成；
+6. 已完成：启动 28091 受控 Agent 并验证认证 health、`RAG=READY`、v1 corpus version 和知识冒烟；
+7. 已完成：对同一提交和 artifact 执行管理员/非管理员隔离 Web 验收；
+8. 待完成：准备持久化真实部署 env、切换现有服务并执行切换后冒烟；
+9. 待完成：记录部署事实后，将当前部署状态改为 `COMPLETED`。
 
 ## 6. 状态解释
 
 - `V1_ARTIFACT_VALIDATED` 只表示语料发布目录和 pointer 完整，不等于进程在线；
-- `WORKTREE_ENGINEERING_VALIDATED` 只表示当前工作区测试通过，不等于代码已提交；
-- 历史隔离 UAT 通过不等于当前 8091 已加载 RAG；
+- `SOURCE_INTEGRATED` 表示源码已进入确定提交，不表示 Git 忽略的 artifact、模型或真实 env 已部署；
+- `ENGINEERING_REGRESSION_PASSED` 表示当前提交的自动化测试和构建通过，不等于在线实例通过验收；
+- `ISOLATED_RUNTIME_28091_VERIFIED` 表示隔离 Python Agent 通过；
+- `ISOLATED_WEB_5174_VERIFIED` 表示同一提交的隔离 Browser/Java/Python 全链路通过，不等于现有
+  Web/Java/8091 已切换；
+- `CURRENT_DEPLOYMENT_NOT_SWITCHED` 表示正式运行流量尚未指向本轮验证配置；
 - 当前没有业务 v2，也没有真实 v2 待办。

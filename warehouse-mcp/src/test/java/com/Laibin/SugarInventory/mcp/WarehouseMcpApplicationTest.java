@@ -44,6 +44,7 @@ class WarehouseMcpApplicationTest {
                 "get_quality_standard_detail",
                 "get_role_permission_summary",
                 "get_warehouse_status",
+                "preview_task_transition",
                 "query_agent_answer_reviews",
                 "query_agent_tool_audit",
                 "query_assay_abnormalities",
@@ -122,6 +123,7 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("query_in_process_materials"));
         assertObjectClosed(schemas.get("query_material_candidates"));
         assertObjectClosed(schemas.get("query_pallet_tasks"));
+        assertObjectClosed(schemas.get("preview_task_transition"));
         assertObjectClosed(schemas.get("query_stock_documents"));
         assertObjectClosed(schemas.get("query_auto_inbound_batches"));
         assertObjectClosed(schemas.get("get_auto_inbound_batch_detail"));
@@ -231,6 +233,8 @@ class WarehouseMcpApplicationTest {
         assertIntegerBounds(schemas.get("query_material_candidates"), "size", 1, 50);
         assertStringBounds(schemas.get("query_pallet_tasks"), "code", 1, 100);
         assertIntegerBounds(schemas.get("query_pallet_tasks"), "size", 1, 50);
+        assertThat(schemas.get("preview_task_transition").path("properties").path("previewVersion").path("const").asInt()).isEqualTo(1);
+        assertThat(schemas.get("preview_task_transition").path("properties").path("palletCodes").path("maxItems").asInt()).isEqualTo(20);
         assertIntegerBounds(schemas.get("query_stock_documents"), "size", 1, 50);
     }
 
@@ -281,6 +285,7 @@ class WarehouseMcpApplicationTest {
                 Map.entry("query_in_process_materials", "{}"),
                 Map.entry("query_material_candidates", "{\"orderRef\":\"order_ref\"}"),
                 Map.entry("query_pallet_tasks", "{}"),
+                Map.entry("preview_task_transition", "{\"previewVersion\":1,\"transition\":\"CONFIRM_FINISH_INBOUND\",\"palletCodes\":[\"BT0019N1\"]}"),
                 Map.entry("query_stock_documents", "{\"documentType\":\"INBOUND\"}"),
                 Map.entry("query_auto_inbound_batches", "{}"),
                 Map.entry("get_auto_inbound_batch_detail", "{\"batchRef\":\"" + autoInboundRef + "\"}"),

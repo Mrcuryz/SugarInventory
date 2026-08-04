@@ -1014,6 +1014,7 @@ delete_any_record
 | `query_in_process_materials` | 已实现 | Agent v1 production-05 | L1 | 是 | 已确认领用、已扣减库存且仍关联未完成生产订单的半成品记录分页查询 |
 | `query_material_candidates` | 已实现 | Agent v1 production-05 | L1 | 是 | 受控生产订单的当前半成品库存候选查询 |
 | `query_pallet_tasks` | 已实现 | Agent v1 logistics-01 | L1 | 是 | 当前轮次托盘任务安全分页查询；`task:view` |
+| `preview_task_transition` | 已实现 | Agent v2 L2 preview-01 | L2 | 是 | 对 1～20 个已选成品入库待处理任务重新读取并生成短期预览；`task:view + task:confirm`；不执行写入 |
 | `query_stock_documents` | 已实现 | Agent v1 logistics-02 | L1 | 是 | 明确来源的入库、出库或半成品单据查询；`record:query` |
 | `query_auto_inbound_batches` | 已实现 | Agent v1 logistics-03 | L1 | 是 | 当前用户 Redis 中未过期的近期智能报数批次；不确认入库 |
 | `get_auto_inbound_batch_detail` | 已实现 | Agent v1 logistics-03 | L1 | 是 | 通过用户绑定受控引用读取安全详情；不返回原始文本和内部 ID |
@@ -1177,7 +1178,7 @@ M1.2 完成时只有以下 6 个已实现业务工具：
 * `get_pallet_status`
 * `get_assay_status`
 
-M1.3/M1.4、Agent v1 全模块查询及首个登记报表完成后，当前白名单为 52 个只读/登记报表工具。在原 6 个基础工具之外，新增：
+M1.3/M1.4、Agent v1 全模块查询、登记报表及首个正式 L2 预览完成后，当前白名单为 53 个无业务写入工具：52 个 L1 只读/登记报表工具和 1 个 L2 预览工具。在原 6 个基础工具之外，新增：
 
 * `get_inventory_distribution`
 * `query_assay_records`
@@ -1202,6 +1203,7 @@ M1.3/M1.4、Agent v1 全模块查询及首个登记报表完成后，当前白�
 * `query_in_process_materials`
 * `query_material_candidates`
 * `query_pallet_tasks`
+* `preview_task_transition`
 * `query_stock_documents`
 * `query_auto_inbound_batches`
 * `get_auto_inbound_batch_detail`
@@ -1229,7 +1231,7 @@ M1.3/M1.4、Agent v1 全模块查询及首个登记报表完成后，当前白�
 仍禁止：
 
 * login MCP Tool；
-* `preview_*`；
+* 除已登记 `preview_task_transition` 之外的其他 `preview_*`；
 * `execute_*`；
 * 任意 SQL 工具；
 * 任意 HTTP 代理工具；
@@ -1304,7 +1306,7 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 * 单一板件规格输出 `normalizedPallets` / `normalizedLoosePieces`；跨规格汇总不虚构统一板数，改用 `totalEquivalentPieces`、总重量和“跨规格”展示文本；
 * 普通回答、SSE 和卡片只接收 safe adapter 白名单字段，不显示内部 ID、工具名或原始 JSON。
 
-当前 internal agent gateway 白名单已有 52 个只读/登记报表工具。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC、审计、当前库存质量筛选，以及首个版本化生产日报运行工具；旧备料池查询已下线，仍未增加 login、`preview_*`、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
+当前 internal agent gateway 白名单已有 53 个无业务写入工具，其中 52 个为 L1 只读/登记报表工具，1 个为 L2 `preview_task_transition`。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC、审计、当前库存质量筛选、登记报表和首个成品入库任务处理预览；旧备料池查询已下线，仍未增加 login、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
 
 仍不支持：库区范围、任意状态字段、库龄分桶、明细下钻和报表导出。这些能力需要独立工具或后续规格评审，不扩展为任意 SQL/HTTP 能力。
 
@@ -1320,7 +1322,7 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 
 ## 18. M1.4 后续模块工具设计索引
 
-状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、当前库存质量筛选、主数据、员工/RBAC、审计、库存补充和登记报表工具均已实现并加入当前 52 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
+状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、当前库存质量筛选、主数据、员工/RBAC、审计、库存补充、登记报表和首个 L2 任务预览工具均已实现并加入当前 53 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
 
 详细设计见 `docs/mcp-analysis/m14-module-tool-design.md`。该文档基于已完成的审计、HITL、LLM Wiki Lite、Answer Review 和 `get_inventory_distribution` 链路，拆分 M1.4b-f 后续只读分析工具。
 
@@ -1533,19 +1535,23 @@ Python Agent Runtime 已加入第一版主 Agent / 专家 Agent handoff 骨架�
 * `administration_expert`：员工、角色与权限摘要；
 * `audit_expert`：业务日志、Agent 工具审计和回答 Review 摘要。
 * `analytics_expert`：只运行已经登记且版本固定的报表，不直接访问领域原始工具。
-* `knowledge_expert`：只调用 Python 进程内 L0 `search_approved_knowledge`，用于已审核现行资料；它不是仓储 MCP Tool，也不进入 Java Gateway 的 52 工具白名单。
+* `knowledge_expert`：只调用 Python 进程内 L0 `search_approved_knowledge`，用于已审核现行资料；它不是仓储 MCP Tool，也不进入 Java Gateway 的 53 工具白名单。
 
 每个专家只接收自己的 context pack 和工具 schema。规划完成后及调用 Java Internal Agent Gateway 前都会校验专家工具白名单；Python 专家白名单不替代 Java 最终权限和只读白名单。
 
 当前专家运行在同一 Python 进程内，默认共享现有模型客户端；已预留按专家注入不同 `ModelClient` 和参数策略的扩展点。详细设计见 `docs/agent/modular-agent-architecture.md`。
 
-生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、52 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。10 个业务专家的 Gateway 白名单和主 Agent 空工具集必须由确定性测试锁定；Python Runtime 另有 1 个纯进程内知识专家，capability snapshot 必须过滤该 profile，避免把本地能力伪装成 Java/MCP 能力。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
+生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、53 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。10 个业务专家的 Gateway 白名单和主 Agent 空工具集必须由确定性测试锁定；Python Runtime 另有 1 个纯进程内知识专家，capability snapshot 必须过滤该 profile，避免把本地能力伪装成 Java/MCP 能力。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
 
 RAG-03C 的 Java 接入不改变上述 registry：`knowledge_expert` 的回答只通过既有 Agent chat/stream
 协议返回，知识卡片由 Java 显式白名单重建；内部 `reviewTrace.knowledgeAudit` 只用于生成
 `agent_handoff` 和 `knowledge_search` 安全审计摘要，`knowledge_search` 是审计标签而不是 MCP
 Tool。非流式与流式链路均不得把 query、evidence、文件路径、内部 ID、检索分数或凭据写入
 用户响应和审计。
+
+待处理任务的首个 UI 安全跳转仍保留：Runtime 对“处理/确认当前待处理入库、出库或调拨任务”先委派 `logistics_expert` 调用 L1 `query_pallet_tasks` 并强制 `status=PENDING`。在此基础上，成品入库分组已经接入正式 L2 `preview_task_transition`：用户明确选择 1～20 个托盘后，主模型再次理解预览请求，物流专家使用固定 `previewVersion=1` 和 `transition=CONFIRM_FINISH_INBOUND` 调用工具；Java 使用当前用户同时校验 `task:view`、`task:confirm`，重新读取 `FINISH_IN + PENDING` 当前轮次任务。
+
+预览只有在全部所选任务仍存在且状态一致时才返回“可继续”和 5 分钟有效的内部签名引用；任一任务变化则整批返回冲突，不生成引用，也不允许打开业务弹窗。普通回答和卡片只展示用户可读状态、托盘、产品、日期、重量、预设位置和待确认字段，不展示签名引用、状态摘要、原始 `PENDING` 或内部任务 ID。签名引用不是 `executionToken`，当前没有任何工具消费它；最终提交仍由现有成品入库业务弹窗重新查询、校验并调用原业务接口。其他任务类型暂时保持原 UI 跳转，所有 `execute_*` 和普通写入指令继续 fail-closed。
 
 ---
 

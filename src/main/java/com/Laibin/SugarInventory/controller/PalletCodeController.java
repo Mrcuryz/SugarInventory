@@ -152,6 +152,7 @@ public class PalletCodeController {
 
     @Operation(summary = "托盘入库任务列表", description = "托盘任务分页查询接口")
     @PostMapping("/tasks/list")
+    @PreAuthorize("hasAuthority('task:view')")
     public Result<PageResult<PalletTaskPageVO>> pageTasks(@RequestBody PalletTaskQueryDTO queryDTO) {
         try {
             PageResult<PalletTaskPageVO> page = palletCodeService.pagePalletTasks(queryDTO);
@@ -202,6 +203,7 @@ public class PalletCodeController {
     // 批量确认托盘入库，内部按任务类型自动分支
     @Operation(summary = "托盘任务确认入库", description = "批量确认托盘入库任务")
     @PostMapping("/tasks/confirm")
+    @PreAuthorize("hasAuthority('task:confirm')")
     public Result<List<InVO>> confirmTasks(@RequestBody @Valid ConfirmPalletInBatchDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {
         try {
@@ -246,6 +248,7 @@ public class PalletCodeController {
 
     @Operation(summary = "批量取消入库任务", description = "按托盘码取消当前轮次待处理入库任务，并释放托盘回 FREE")
     @PostMapping("/tasks/cancel")
+    @PreAuthorize("hasAuthority('task:cancel')")
     public Result<Void> cancelTasks(@RequestBody @Valid CancelPalletBatchDTO dto,
                                     @AuthenticationPrincipal LoginUser loginUser) {
         try {
@@ -394,6 +397,7 @@ public class PalletCodeController {
 
     @Operation(summary = "创建半成品普通出库任务", description = "扫码一个或多个半成品托盘码，创建普通出库任务")
     @PostMapping("/semi/out/create")
+    @PreAuthorize("hasAuthority('task:create')")
     public Result<Void> createSemiOutTasks(@RequestBody @Valid CreateSemiOutTaskDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {
         try {
@@ -406,6 +410,7 @@ public class PalletCodeController {
 
     @Operation(summary = "确认半成品普通出库", description = "批量确认半成品普通出库任务")
     @PostMapping("/semi/out/confirm")
+    @PreAuthorize("hasAuthority('task:confirm')")
     public Result<Void> confirmSemiOutTasks(@RequestBody @Valid ConfirmSemiOutBatchDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser) {
         try {
@@ -454,6 +459,7 @@ public class PalletCodeController {
 
     @Operation(summary = "创建成品出库任务", description = "扫码一个或多个成品托盘码，创建成品出库任务")
     @PostMapping("/finish/out/create")
+    @PreAuthorize("hasAuthority('task:create')")
     public Result<Void> createFinishOutTasks(@RequestBody @Valid CreateFinishOutTaskDTO dto,
                                              @AuthenticationPrincipal LoginUser loginUser) {
         try {
@@ -466,6 +472,7 @@ public class PalletCodeController {
 
     @Operation(summary = "确认成品出库", description = "批量确认成品出库任务")
     @PostMapping("/finish/out/confirm")
+    @PreAuthorize("hasAuthority('task:confirm')")
     public Result<Void> confirmFinishOutTasks(@RequestBody @Valid ConfirmFinishOutBatchDTO dto,
                                               @AuthenticationPrincipal LoginUser loginUser) {
         try {
@@ -478,6 +485,7 @@ public class PalletCodeController {
 
     @Operation(summary = "创建托盘调拨任务", description = "扫码一个或多个在库托盘码，创建托盘级调拨任务")
     @PostMapping("/transfer/create")
+    @PreAuthorize("hasAuthority('task:create')")
     public Result<Void> createTransferTasks(@RequestBody @Valid CreateTransferTaskDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser) {
         try {
@@ -490,6 +498,7 @@ public class PalletCodeController {
 
     @Operation(summary = "确认托盘调拨", description = "批量确认托盘级调拨任务")
     @PostMapping("/transfer/confirm")
+    @PreAuthorize("hasAuthority('task:confirm')")
     public Result<Void> confirmTransferTasks(@RequestBody @Valid ConfirmTransferBatchDTO dto,
                                              @AuthenticationPrincipal LoginUser loginUser) {
         try {

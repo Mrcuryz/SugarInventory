@@ -1,6 +1,6 @@
 # RAG 源码版本库集成交付清单
 
-状态：`IN_PROGRESS / A_B_STAGED / SHARED_HUNKS_PENDING`
+状态：`COMPLETED / SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED`
 日期：2026-08-03
 基线 Git HEAD：`c9e2274`
 配套计划：`rag-source-integration-plan-2026-08-03.md`
@@ -184,7 +184,7 @@ webpage/dist/**
 仓库中其他库存历史、生产、登记报表、MCP 扩展和 UAT 文档，即使文本中出现 `storage`、
 `average` 或测试用的版本词，也不因此归入 RAG。
 
-## 7. 当前提交门禁
+## 7. 集成前提交门禁（历史）
 
 在 44 个 C 类文件的必要 hunk 尚未拆出前：
 
@@ -214,3 +214,13 @@ webpage/dist/**
 第一次 cached check 发现 10 个 Python 文件末尾多余空行和 Markdown 行尾空格；已做纯机械清理，
 保持 UTF-8 无 BOM，复查通过。第一次并行测试命令因 PowerShell 未给 Maven 的逗号参数加引号而
 解析失败；修正命令后 Python、Web、Java 三组验证均通过。
+
+## 9. 最终集成结果
+
+- 本清单中的 RAG 专属目录、独立依赖和共享集成点已进入 `4150e6d`；
+- 提交由共享工作区中的其他任务创建并推送，本清单执行线程没有创建或推送提交；
+- `4150e6d` 同时收录 analytics/reporting 基线，无法再以独立 RAG staged diff 表达最终边界；
+- 当前提交回归：Python `454 passed, 5 skipped`，RAG `119 passed, 5 skipped`，Java
+  `316 passed`，Web `67 passed`，Vite build 通过；
+- `agent-service/build/**`、`deploy/simple/artifacts/**`、真实 env、模型、密钥和运行日志仍未进入 Git；
+- 源码集成门禁已关闭，后续门禁转为真实 env、只读模型目录和当前在线实例验收。

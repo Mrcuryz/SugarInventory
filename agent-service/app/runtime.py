@@ -50,6 +50,8 @@ from app.schemas import (
     SafeInventoryResult,
     SafePalletTaskRecord,
     SafePalletTaskResult,
+    SafeTaskTransitionPreview,
+    SafeTaskTransitionPreviewTask,
     SafePalletLifecycleEvent,
     SafePalletFlowRecords,
     SafePalletStatus,
@@ -140,6 +142,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "query_in_process_materials": "在制物料查询",
     "query_material_candidates": "生产原料候选查询",
     "query_pallet_tasks": "托盘任务查询",
+    "preview_task_transition": "成品入库任务处理预览",
     "query_stock_documents": "库存单据查询",
     "query_auto_inbound_batches": "自动报数入库批次查询",
     "get_auto_inbound_batch_detail": "自动报数入库批次详情查询",
@@ -1647,6 +1650,13 @@ class WarehouseAgentRuntime:
                     tool_name,
                     result.model_dump(exclude_none=True),
                 )
+            elif tool_name == "preview_task_transition":
+                result = SafeTaskTransitionPreview.model_validate(data)
+                answer = self._format_task_transition_preview_answer(result)
+                suggestions = self.next_action_policy.suggestions(
+                    tool_name,
+                    result.model_dump(exclude_none=True),
+                )
             elif tool_name == "query_production_order_progress":
                 result = SafeProductionOrderProgress.model_validate(data)
                 answer = self._format_production_order_progress_answer(result)
@@ -3099,6 +3109,11 @@ class WarehouseAgentRuntime:
             state.last_pallet_task_filters = dict(arguments)
             if adapted_tasks.records:
                 cards = [self._pallet_tasks_card(adapted_tasks)]
+        elif tool_name == "preview_task_transition":
+            adapted_preview = self._adapt_task_transition_preview(result)
+            safe_data = adapted_preview.model_dump(exclude_none=True)
+            state.last_task_transition_preview = dict(safe_data)
+            cards = [self._task_transition_preview_card(adapted_preview)]
         elif tool_name == "query_production_order_progress":
             adapted_progress = self._adapt_production_order_progress(result)
             safe_data = adapted_progress.model_dump(exclude_none=True)
@@ -3594,6 +3609,25 @@ class WarehouseAgentRuntime:
                 agentSessionId=request.agentSessionId,
                 answer=self._format_pallet_tasks_answer(adapted),
                 cards=cards,
+                suggestions=self.next_action_policy.suggestions(plan.toolName, safe_data),
+            )
+        if plan.toolName == "preview_task_transition":
+            result = self._call_tool(request, plan.toolName, plan.arguments)
+            self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
+            adapted = self._adapt_task_transition_preview(result)
+            safe_data = adapted.model_dump(exclude_none=True)
+            state.last_task_transition_preview = dict(safe_data)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                safe_data=safe_data,
+            )
+            self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_task_transition_preview_answer(adapted),
+                cards=[self._task_transition_preview_card(adapted)],
                 suggestions=self.next_action_policy.suggestions(plan.toolName, safe_data),
             )
         if plan.toolName == "query_stock_documents":
@@ -7473,6 +7507,16 @@ class WarehouseAgentRuntime:
             return {"dataScope": self._safe_text(source.get("dataScope")),
                     "total": self._first_scalar([source], "total"),
                     "recordCount": len(source.get("records") or [])}
+        if tool_name == "preview_task_transition":
+            source = result if isinstance(result, dict) else {}
+            return {
+                "dataScope": self._safe_text(source.get("dataScope")),
+                "previewVersion": self._first_scalar([source], "previewVersion"),
+                "previewStatus": self._safe_text(source.get("previewStatus")),
+                "requestedTaskCount": self._first_scalar([source], "requestedTaskCount"),
+                "eligibleTaskCount": self._first_scalar([source], "eligibleTaskCount"),
+                "canOpenBusinessDialog": bool(source.get("canOpenBusinessDialog")),
+            }
         if tool_name == "query_stock_documents":
             source = result if isinstance(result, dict) else {}
             return {"dataScope": self._safe_text(source.get("dataScope")),
@@ -9819,6 +9863,57 @@ class WarehouseAgentRuntime:
             limitations=["此次仅查询任务记录，未确认、取消或执行任何入库、出库和调拨。"],
         )
 
+    def _adapt_task_transition_preview(
+        self,
+        result: dict[str, Any],
+    ) -> SafeTaskTransitionPreview:
+        source = result if isinstance(result, dict) else {}
+        tasks: list[SafeTaskTransitionPreviewTask] = []
+        raw_tasks = source.get("tasks") if isinstance(source.get("tasks"), list) else []
+        for raw_task in raw_tasks[:20]:
+            item = self._dict_value(raw_task)
+            product_name = self._safe_text(item.get("productName"))
+            product_type = self._safe_text(item.get("productType"))
+            weight = self._safe_text(item.get("totalWeight"))
+            if weight and not weight.lower().endswith("kg"):
+                weight = f"{weight} kg"
+            warehouse = self._safe_text(item.get("presetWarehouseName"))
+            side = self._controlled_task_label("warehouse_side", item.get("presetSide"), "")
+            tasks.append(SafeTaskTransitionPreviewTask(
+                palletCode=self._safe_text(item.get("palletCode")) or "托盘未标明",
+                currentTaskStatusLabel=self._controlled_task_label(
+                    "task_status", item.get("currentTaskStatus"), "状态未标明"
+                ),
+                productLabel=product_name or product_type or "产品未标明",
+                productionDate=self._safe_text(item.get("productionDate")),
+                totalWeightText=weight,
+                presetLocationLabel=" ".join(value for value in (warehouse, side) if value) or None,
+                quantityRuleLabel=(
+                    "按生产订单登记数量，业务弹窗中不可修改"
+                    if item.get("quantityLockedByProductionOutput") is True
+                    else "在业务弹窗中确认单位和数量"
+                ),
+            ))
+        preview_status = self._safe_text(source.get("previewStatus")) or "CONFLICT"
+        return SafeTaskTransitionPreview(
+            previewVersion=int(self._first_scalar([source], "previewVersion") or 1),
+            previewStatusLabel="可继续" if preview_status == "READY" else "需要重新选择",
+            previewedAt=self._safe_text(source.get("previewedAt")),
+            expiresAt=self._safe_text(source.get("expiresAt")),
+            transitionLabel=self._safe_text(source.get("transitionLabel")) or "确认成品入库",
+            canOpenBusinessDialog=bool(source.get("canOpenBusinessDialog")),
+            requestedTaskCount=int(self._first_scalar([source], "requestedTaskCount") or 0),
+            eligibleTaskCount=int(self._first_scalar([source], "eligibleTaskCount") or 0),
+            tasks=tasks,
+            requiredUserInputs=self._safe_text_list(source.get("requiredUserInputs"), limit=10),
+            blockingIssues=self._safe_text_list(source.get("blockingIssues"), limit=20),
+            warnings=self._safe_text_list(source.get("warnings"), limit=20),
+            limitations=[
+                "本次预览只进行检查，不会确认任务或修改库存。",
+                "最终提交仍需由当前用户在业务弹窗中完成。",
+            ],
+        )
+
     def _pallet_task_filter_labels(self, arguments: dict[str, Any]) -> list[str]:
         labels: list[str] = []
         status = self._controlled_task_label("task_status", arguments.get("status"), "")
@@ -10663,6 +10758,40 @@ class WarehouseAgentRuntime:
             fields=fields,
         )
 
+    def _task_transition_preview_card(self, result: SafeTaskTransitionPreview) -> BusinessCard:
+        pallet_codes = [task.palletCode for task in result.tasks if task.palletCode != "托盘未标明"]
+        fields: list[dict[str, Any]] = [{
+            "kind": "task_transition_preview_summary",
+            "label": result.transitionLabel,
+            "value": result.previewStatusLabel,
+            "previewVersion": result.previewVersion,
+            "previewStatusLabel": result.previewStatusLabel,
+            "previewedAt": result.previewedAt,
+            "expiresAt": result.expiresAt,
+            "canOpenBusinessDialog": result.canOpenBusinessDialog,
+            "requestedTaskCount": result.requestedTaskCount,
+            "eligibleTaskCount": result.eligibleTaskCount,
+            "requiredUserInputs": result.requiredUserInputs,
+            "blockingIssues": result.blockingIssues,
+            "warnings": result.warnings,
+            "batchAction": "confirmIn",
+            "taskGroupLabel": "成品入库",
+            "palletCodes": pallet_codes,
+        }]
+        for index, task in enumerate(result.tasks, start=1):
+            field = task.model_dump(exclude_none=True)
+            field.update({
+                "kind": "task_transition_preview_task",
+                "label": f"{index}. 托盘 {task.palletCode}",
+                "value": task.productLabel,
+            })
+            fields.append(field)
+        return BusinessCard(
+            cardType="task_transition_preview",
+            title=f"成品入库任务处理预览 · {result.previewStatusLabel}",
+            fields=fields,
+        )
+
     def _pallet_task_detail_card(self, record: SafePalletTaskRecord, index: int) -> BusinessCard:
         field = record.model_dump(exclude_none=True)
         field.update(
@@ -11317,6 +11446,21 @@ class WarehouseAgentRuntime:
             limitation,
         ]
         return "\n".join(lines)
+
+    def _format_task_transition_preview_answer(self, result: SafeTaskTransitionPreview) -> str:
+        if not result.canOpenBusinessDialog:
+            issues = "\n".join(f"- {item}" for item in result.blockingIssues) or "- 所选任务状态已变化。"
+            return (
+                "这次成品入库任务预览无法继续。\n\n"
+                f"{issues}\n\n"
+                "请重新查询当前待处理任务后再选择；本次没有修改任何业务数据。"
+            )
+        return (
+            f"已完成 {result.eligibleTaskCount} 条成品入库任务的实时预览，当前都仍可进入业务弹窗。\n\n"
+            "打开弹窗后，请确认入库库位、日期、存放侧、单位与数量等业务字段；"
+            "弹窗和最终提交仍会重新检查任务状态。\n\n"
+            "本次只生成预览，没有确认任务，也没有修改库存。"
+        )
 
     def _format_stock_documents_answer(self, result: dict[str, Any]) -> str:
         source = result if isinstance(result, dict) else {}

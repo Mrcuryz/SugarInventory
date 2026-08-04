@@ -67,6 +67,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             "/api/production/agent-read/orders/material-candidates/query",
             "/api/analytics/agent-read/reports/run",
             "/api/logistics/agent-read/pallet-tasks/query",
+            "/api/logistics/agent-read/pallet-tasks/transition/preview",
             "/api/logistics/agent-read/stock-documents/query",
             "/api/logistics/agent-read/auto-inbound/batches/query",
             "/api/logistics/agent-read/auto-inbound/batches/detail/query",

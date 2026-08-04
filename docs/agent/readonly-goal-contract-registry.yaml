@@ -1,9 +1,9 @@
-version: "1.1"
-updated_at: "2026-08-03"
-scope: "第一阶段 L1 只读工具、第二阶段登记报表及 RAG-03B L0 进程内知识目标归属"
-current_contract_count: 51
+version: "1.2"
+updated_at: "2026-08-04"
+scope: "第一阶段 L1 只读工具、第二阶段登记报表、首个 L2 无写入预览及 RAG-03B L0 进程内知识目标归属"
+current_contract_count: 52
 planned_contract_count: 0
-classified_tool_count: 52
+classified_tool_count: 53
 classified_internal_knowledge_tool_count: 1
 
 principles:
@@ -13,7 +13,7 @@ principles:
   - "CURRENT 表示已进入 Runtime GoalContract、FactEnvelope 和 CompletionEvaluator。"
   - "PLANNED 表示工具已经可用但目标合同尚未进入 Runtime；当前 planned_goals 为空。"
   - "同一工具可以在一个目标中作为主查询工具，在另一个目标中作为支撑工具。"
-  - "search_approved_knowledge 是 Python 进程内 L0 能力，不计入 52 个仓储 MCP/登记报表工具。"
+  - "search_approved_knowledge 是 Python 进程内 L0 能力，不计入 52 个 L1 仓储 MCP/登记报表工具与 1 个 L2 预览工具。"
 
 current_goals:
   CURRENT_PRODUCT_INVENTORY:
@@ -32,6 +32,10 @@ current_goals:
     owner_expert: logistics_expert
     primary_tools: [query_pallet_tasks]
     supporting_tools: []
+  FINISH_INBOUND_TASK_TRANSITION_PREVIEW:
+    owner_expert: logistics_expert
+    primary_tools: [preview_task_transition]
+    supporting_tools: [query_pallet_tasks]
   BOILING_BATCH_TRACE:
     owner_expert: production_expert
     primary_tools: [query_boiling_batch_trace]

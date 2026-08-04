@@ -112,6 +112,7 @@ EXPECTED_EXPERT_TOOLS = {
     "logistics_expert": frozenset(
         {
             "query_pallet_tasks",
+            "preview_task_transition",
             "query_stock_documents",
             "query_auto_inbound_batches",
             "get_auto_inbound_batch_detail",
@@ -451,6 +452,13 @@ def test_openai_compatible_main_agent_returns_strict_llm_route_decision() -> Non
         assert "不是跨域配方" in request_text
         assert "‘备料池’或‘备料池余额’是已经停用流程的旧称" in request_text
         assert "必须理解为 IN_PROCESS_MATERIALS，委派 production_expert" in request_text
+        assert "生产登记产出日报时，属于 DAILY_PRODUCTION_ANALYSIS" in request_text
+        assert "不得退回仅支持生产订单进度的旧能力说明" in request_text
+        assert "已登记的 INVENTORY_LEVEL_TREND_ANALYSIS" in request_text
+        assert "成品产品目录或半成品产品目录" in request_text
+        assert "不得委派 inventory_expert" in request_text
+        assert "‘库存情况’、‘有什么库存’或‘库存分布’" in request_text
+        assert "属于 WAREHOUSE_INVENTORY_DISTRIBUTION" in request_text
         model_request = json.loads(model_server.last_body["messages"][1]["content"])
         assert list(model_request)[:4] == [
             "schema",
@@ -551,7 +559,7 @@ def test_openai_compatible_expert_returns_one_strict_tool_action() -> None:
         model_server.stop()
 
 
-def test_openai_compatible_expert_repairs_one_invalid_schema_response_without_logging_content() -> None:
+def test_openai_compatible_expert_recovers_on_third_bounded_format_attempt() -> None:
     invalid = {
         "schemaVersion": "1.0",
         "action": "CALL_TOOL",
@@ -568,6 +576,7 @@ def test_openai_compatible_expert_repairs_one_invalid_schema_response_without_lo
         [],
         direct_answers=[
             json.dumps(invalid, ensure_ascii=False),
+            "not-json",
             json.dumps(valid, ensure_ascii=False),
         ],
     )
@@ -602,16 +611,23 @@ def test_openai_compatible_expert_repairs_one_invalid_schema_response_without_lo
         assert decision is not None
         assert decision.action == "CALL_TOOL"
         assert model_server.last_body["model"] == "expert-result-test-model"
-        assert model_server.non_stream_request_count == 2
-        assert [item["outcome"] for item in diagnostics] == ["SCHEMA_INVALID", "VALID"]
+        assert model_server.non_stream_request_count == 3
+        assert [item["outcome"] for item in diagnostics] == [
+            "SCHEMA_INVALID",
+            "JSON_INVALID",
+            "VALID",
+        ]
         assert "reasoning" in diagnostics[0]["validationPaths"]
         assert "sensitive-model-output" not in json.dumps(diagnostics, ensure_ascii=False)
     finally:
         model_server.stop()
 
 
-def test_openai_compatible_expert_surfaces_typed_failure_after_one_format_repair() -> None:
-    model_server = FakeModelStreamServer([], direct_answers=["not-json", "still-not-json"])
+def test_openai_compatible_expert_surfaces_typed_failure_after_bounded_format_repairs() -> None:
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answers=["not-json", "still-not-json", "still-not-json-after-second-repair"],
+    )
     model_server.start()
     try:
         model = OpenAICompatibleModelClient(
@@ -640,8 +656,14 @@ def test_openai_compatible_expert_surfaces_typed_failure_after_one_format_repair
 
         diagnostics = take_model_decision_diagnostics()
         assert exc_info.value.code == "MODEL_ACTION_INVALID"
-        assert model_server.non_stream_request_count == 2
-        assert [item["outcome"] for item in diagnostics] == ["JSON_INVALID", "JSON_INVALID"]
+        assert exc_info.value.message == "我暂时没能完成这次查询，请重试一次。本次没有执行任何业务变更。"
+        assert "结构化动作" not in exc_info.value.message
+        assert model_server.non_stream_request_count == 3
+        assert [item["outcome"] for item in diagnostics] == [
+            "JSON_INVALID",
+            "JSON_INVALID",
+            "JSON_INVALID",
+        ]
     finally:
         model_server.stop()
 
@@ -1198,7 +1220,7 @@ def test_compound_plan_with_more_than_four_steps_is_rejected() -> None:
         plan.validate(AgentHandoffRouter())
 
 
-def test_expert_agent_tool_scopes_cover_only_current_readonly_allowlist() -> None:
+def test_expert_agent_tool_scopes_cover_only_current_no_write_allowlist() -> None:
     router = AgentHandoffRouter()
     business_profiles = {
         name: profile.allowed_tools
@@ -1213,9 +1235,13 @@ def test_expert_agent_tool_scopes_cover_only_current_readonly_allowlist() -> Non
     assert len(business_profiles) == 11
     assert all(tools for tools in business_profiles.values())
     assert expert_tools == ALLOWED_TOOLS | set(INTERNAL_KNOWLEDGE_TOOLS)
-    assert len(expert_tools) == 53
+    assert len(expert_tools) == 54
     assert router.profile(MAIN_AGENT).allowed_tools == frozenset()
-    assert not any(tool.startswith(("execute_", "preview_")) for tool in expert_tools)
+    assert not any(
+        tool.startswith("execute_")
+        or (tool.startswith("preview_") and tool != "preview_task_transition")
+        for tool in expert_tools
+    )
     assert "query_assay_records" not in router.profile("inventory_expert").allowed_tools
     assert "get_inventory_overview" not in router.profile("assay_expert").allowed_tools
 
@@ -1248,7 +1274,7 @@ def test_tool_allowlists_match_java_gateway_and_warehouse_mcp_registration() -> 
     assert mcp_tools == ALLOWED_TOOLS
 
 
-def test_runtime_tool_profiles_match_capability_registry_and_all_tools_are_l1() -> None:
+def test_runtime_tool_profiles_match_capability_registry_with_one_l2_preview() -> None:
     repository = Path(__file__).resolve().parents[2]
     registry = (repository / "docs/agent/tool-capability-registry.yaml").read_text(encoding="utf-8")
     architecture, tools_section = registry.split("\ntools:\n", maxsplit=1)
@@ -1261,8 +1287,16 @@ def test_runtime_tool_profiles_match_capability_registry_and_all_tools_are_l1() 
             flags=re.DOTALL | re.MULTILINE,
         )
     )
-    assert registered_l1_tools == ALLOWED_TOOLS
+    registered_l2_tools = set(
+        re.findall(
+            r'^  ([a-z][a-z0-9_]*):\n(?:(?!^  [a-z][a-z0-9_]*:).)*?^    risk_level: "L2"$',
+            tools_section,
+            flags=re.DOTALL | re.MULTILINE,
+        )
+    )
+    assert registered_l1_tools | registered_l2_tools == ALLOWED_TOOLS
     assert len(registered_l1_tools) == 52
+    assert registered_l2_tools == {"preview_task_transition"}
 
     for expert_name, expected_tools in EXPECTED_EXPERT_TOOLS.items():
         profile = re.search(
@@ -1380,7 +1414,7 @@ def test_capability_endpoint_returns_registry_hashes_and_counts() -> None:
     body = response.json()
     assert body["runtimeVersion"] == "0.2.0"
     assert body["protocolVersion"] == "1.0"
-    assert body["toolCount"] == 52
+    assert body["toolCount"] == 53
     assert body["recipeCount"] == 1
     assert len(body["toolRegistryHash"]) == 64
     assert len(body["recipeRegistryHash"]) == 64
@@ -4322,6 +4356,29 @@ def test_pending_outbound_tasks_route_to_logistics_expert_without_execution() ->
     assert response.json()["cards"][0]["fields"][0]["taskStatusLabel"] == "待处理"
     assert "OUT" not in response.json()["answer"]
     assert "PENDING" not in response.json()["answer"]
+
+
+def test_task_processing_request_returns_pending_task_ui_handoff_without_execution() -> None:
+    tool_client = MockToolClient({"query_pallet_tasks": {
+        "dataScope": "CURRENT_PALLET_TASKS", "total": 1, "page": 1, "size": 20,
+        "records": [{"taskType": "OUT", "taskStatus": "PENDING", "code": "P001", "productName": "冰糖"}],
+    }})
+    checkpointer = InMemoryCheckpointer()
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=checkpointer)
+
+    response = TestClient(app).post("/internal/agent/chat", json=chat_payload("帮我处理当前出库任务"))
+
+    assert response.status_code == 200
+    assert tool_client.calls[0]["toolName"] == "query_pallet_tasks"
+    assert tool_client.calls[0]["expertAgent"] == "logistics_expert"
+    assert tool_client.calls[0]["arguments"]["taskType"] == "OUT"
+    assert tool_client.calls[0]["arguments"]["status"] == "PENDING"
+    assert "未确认、取消或执行" in response.json()["answer"]
+    assert response.json()["cards"][0]["cardType"] == "pallet_tasks"
+    planner = next(message for message in checkpointer.get("agt_test").messages if message.get("role") == "planner")
+    assert planner["intentRouter"]["intent_type"] == "data_query"
+    assert planner["intentRouter"]["intent_subtype"] == "pallet_task_processing_preview"
+    assert planner["intentRouter"]["planned_tools"] == ["query_pallet_tasks"]
 
 
 def test_outbound_documents_route_to_logistics_expert_and_one_source() -> None:

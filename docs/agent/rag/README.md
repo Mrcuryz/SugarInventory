@@ -1,7 +1,7 @@
 # 智能仓储 RAG 文档索引
 
-状态：`WORKTREE_ENGINEERING_VALIDATED / V1_ARTIFACT_VALIDATED / SOURCE_INTEGRATION_PENDING / ONLINE_DEPLOYMENT_UNVERIFIED`
-基线日期：2026-08-02
+状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`
+基线日期：2026-08-03
 适用范围：来宾智能仓储 Web Agent 的静态知识检索
 
 ## 1. 目标
@@ -33,11 +33,13 @@ D:\Users\Mrcury\Desktop\laibin RAG
 | [java-gateway-knowledge-mapping-and-audit-design.md](java-gateway-knowledge-mapping-and-audit-design.md) | RAG-03C Java 安全映射、流式事件、知识审计和错误语义 | 已实施并通过工程验证 |
 | [web-knowledge-citation-and-uat-design.md](web-knowledge-citation-and-uat-design.md) | RAG-04 Web 引用、状态、安全过滤和真实浏览器 UAT | 已完成，10 项 UAT 全部通过 |
 | [web-knowledge-uat-record-2026-08-01.md](web-knowledge-uat-record-2026-08-01.md) | RAG-04 十项真实浏览器场景、缺陷和环境门禁记录 | 10 项通过，故障注入已撤销并恢复普通 RAG |
-| [release-switch-and-rollback-design.md](release-switch-and-rollback-design.md) | RAG-05 预检、不可变发布、原子指针、回滚和首次上线验收口径 | 工作区实现和 v1 artifact 已验证，交付集成待完成 |
+| [release-switch-and-rollback-design.md](release-switch-and-rollback-design.md) | RAG-05 预检、不可变发布、原子指针、回滚和首次上线验收口径 | 源码和 v1 artifact 已验证，当前在线部署待验证 |
 | [rag05-release-record-2026-08-02.md](rag05-release-record-2026-08-02.md) | 2026-08-02 v1 发布与隔离运行实例验证的历史事实记录 | 历史验证通过；不代表当前在线状态 |
 | [rag-current-state-audit-2026-08-03.md](rag-current-state-audit-2026-08-03.md) | 重新核对 Git、artifact、进程、测试、部署和文档后的真实状态 | 当前权威状态基线 |
-| [rag-source-integration-plan-2026-08-03.md](rag-source-integration-plan-2026-08-03.md) | 将 dirty worktree 中的 RAG 实现安全纳入版本控制 | 实施中；禁止宽泛暂存 |
-| [rag-source-integration-manifest-2026-08-03.md](rag-source-integration-manifest-2026-08-03.md) | RAG 专属文件、外围依赖、共享 hunk 和禁止纳入项清单 | 87 个 A/B 类已暂存；44 个共享文件待拆分 |
+| [rag-controlled-runtime-validation-2026-08-03.md](rag-controlled-runtime-validation-2026-08-03.md) | 当前提交在 28091 的认证、RAG、权限和安全验收记录 | 隔离 Python 运行态通过；后续 Web 结果见下一记录 |
+| [rag-controlled-web-runtime-validation-2026-08-03.md](rag-controlled-web-runtime-validation-2026-08-03.md) | 当前提交在 5174→28080→28091 的真实浏览器、数值、无证据、混合路由和角色门禁记录 | 隔离 Web 全链路通过；当前部署未切换 |
+| [rag-source-integration-plan-2026-08-03.md](rag-source-integration-plan-2026-08-03.md) | 将 dirty worktree 中的 RAG 实现安全纳入版本控制 | 已集成到 `4150e6d`，工程回归通过 |
+| [rag-source-integration-manifest-2026-08-03.md](rag-source-integration-manifest-2026-08-03.md) | RAG 专属文件、外围依赖、共享 hunk 和禁止纳入项清单 | 集成清单已收口；部署 artifact 继续排除在 Git 外 |
 | [evaluation-plan.md](evaluation-plan.md) | 检索、回答、权限和回归评测方案 | extraction/document/index golden 与固定检索评测已建立 |
 | [development-log.md](development-log.md) | RAG 设计与开发的追加式事实日志 | 已建立 |
 

@@ -25,6 +25,8 @@ class AgentReadPermissionMatrixTest {
         assertPermission(WarehouseAgentReadController.class, "queryRecentOperations", "hasAuthority('warehouse:view')");
         assertPermission(WarehouseAgentReadController.class, "queryMixedStorageFacts", "hasAuthority('warehouse:view')");
         assertPermission(LogisticsAgentReadController.class, "queryPalletTasks", "hasAuthority('task:view')");
+        assertPermission(LogisticsAgentReadController.class, "previewTaskTransition",
+                "hasAuthority('task:view') and hasAuthority('task:confirm')");
         assertPermission(LogisticsAgentReadController.class, "queryStockDocuments", "hasAuthority('document:view')");
         assertPermission(LogisticsAgentReadController.class, "queryAutoInboundBatches", "hasAuthority('task:view')");
         assertPermission(LogisticsAgentReadController.class, "getAutoInboundBatchDetail", "hasAuthority('task:view')");
@@ -53,6 +55,20 @@ class AgentReadPermissionMatrixTest {
                 "queryQrBatchInboundCompletion", "getAssay", "getInventory"}) {
             assertPermission(PalletCodeController.class, method, "hasAuthority('qrcode:view')");
         }
+    }
+
+    @Test
+    void taskProcessingPathsUseDedicatedTaskAuthorities() {
+        assertPermission(PalletCodeController.class, "pageTasks", "hasAuthority('task:view')");
+        for (String method : new String[]{
+                "createSemiOutTasks", "createFinishOutTasks", "createTransferTasks"}) {
+            assertPermission(PalletCodeController.class, method, "hasAuthority('task:create')");
+        }
+        for (String method : new String[]{
+                "confirmTasks", "confirmSemiOutTasks", "confirmFinishOutTasks", "confirmTransferTasks"}) {
+            assertPermission(PalletCodeController.class, method, "hasAuthority('task:confirm')");
+        }
+        assertPermission(PalletCodeController.class, "cancelTasks", "hasAuthority('task:cancel')");
     }
 
     private void assertPermission(Class<?> controller, String methodName, String expression) {

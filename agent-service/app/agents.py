@@ -154,12 +154,13 @@ def _profiles() -> dict[str, ExpertAgentProfile]:
             business_name="任务单据物流专家 Agent",
             domains=frozenset({"logistics", "task", "document", "auto_inbound"}),
             allowed_tools=frozenset({
-                "query_pallet_tasks", "query_stock_documents",
+                "query_pallet_tasks", "preview_task_transition", "query_stock_documents",
                 "query_auto_inbound_batches", "get_auto_inbound_batch_detail",
             }),
             instructions=(
-                "只处理托盘任务、出入库单据和自动报数批次的只读查询。",
+                "只处理托盘任务、出入库单据、自动报数批次查询，以及已登记的无写入任务处理预览。",
                 "任务查询不得解释为任务已执行，也不得确认、取消、入库、出库或调拨。",
+                "preview_task_transition 首版只接受已明确选择的成品入库待处理托盘码；它只生成短期预览，不是 executionToken，也不得据此宣称已经入库。",
                 "不得暴露内部任务、产品、库位、化验或托盘数据库 ID。",
                 "用户说‘只看、筛选、换成’时应沿用上一轮任务查询中未被明确替换的过滤条件。",
                 "上一轮任务卡片已包含安全详情时，可基于受控会话上下文回答‘第一条详情’，不得猜测缺失字段。",

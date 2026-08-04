@@ -205,7 +205,7 @@ class InternalAgentToolGatewayServiceTest {
     }
 
     @Test
-    void whitelistContainsExactlyFiftyThreeReadOnlyToolsAndNeverDispatchesWriteToolNames() {
+    void whitelistContainsExactlyFiftyThreeNoWriteToolsAndNeverDispatchesUnknownPreviewOrWriteToolNames() {
         Set<String> expected = Set.of(
                 "resolve_products",
                 "resolve_warehouses",
@@ -233,6 +233,7 @@ class InternalAgentToolGatewayServiceTest {
                 "query_in_process_materials",
                 "query_material_candidates",
                 "query_pallet_tasks",
+                "preview_task_transition",
                 "query_stock_documents",
                 "query_auto_inbound_batches",
                 "get_auto_inbound_batch_detail",
@@ -283,7 +284,7 @@ class InternalAgentToolGatewayServiceTest {
         assertThat(callCaptor.getAllValues())
                 .extracting(McpToolCall::toolName)
                 .containsExactlyInAnyOrderElementsOf(expected)
-                .noneMatch(name -> name.startsWith("preview_")
+                .noneMatch(name -> (name.startsWith("preview_") && !"preview_task_transition".equals(name))
                         || name.startsWith("execute_")
                         || name.contains("sql")
                         || name.contains("http"));

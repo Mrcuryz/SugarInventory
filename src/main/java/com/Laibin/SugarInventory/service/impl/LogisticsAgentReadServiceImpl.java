@@ -28,13 +28,25 @@ import com.Laibin.SugarInventory.domain.redis.AutoInboundTask;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchOptionVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchDetailAgentVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchesAgentVO;
+import com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO;
+import com.Laibin.SugarInventory.domain.vo.TaskTransitionPreviewVO;
+import com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +63,12 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
     private final SemiProductRecordService semiProductRecordService;
     private final AutoInboundParseService autoInboundParseService;
     private final AutoInboundBatchRefCodec autoInboundBatchRefCodec;
+    private final TaskTransitionPreviewRefCodec taskTransitionPreviewRefCodec;
+
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final int TASK_PREVIEW_VERSION = 1;
+    private static final int TASK_PREVIEW_TTL_MINUTES = 5;
+    private static final String FINISH_INBOUND_TRANSITION = "CONFIRM_FINISH_INBOUND";
 
     @Override
     public PalletTasksAgentVO queryPalletTasks(PalletTaskAgentQueryDTO query) {
@@ -215,6 +233,115 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                 .limitations(List.of("详情不包含原始报数文本、内部批次 ID、任务 ID、产品 ID 或库位 ID。",
                         "解析结果和风险提示不等同于入库确认、质量放行或库存事实。"))
                 .build();
+    }
+
+    @Override
+    public TaskTransitionPreviewVO previewTaskTransition(TaskTransitionPreviewDTO request, User user) {
+        requireUser(user);
+        if (request == null || !Integer.valueOf(TASK_PREVIEW_VERSION).equals(request.getPreviewVersion())) {
+            throw new BusinessException(400, "当前仅支持第 1 版任务预览协议");
+        }
+        if (!FINISH_INBOUND_TRANSITION.equals(request.getTransition())) {
+            throw new BusinessException(400, "当前仅支持成品入库任务预览");
+        }
+        List<String> requestedCodes = normalizePreviewCodes(request.getPalletCodes());
+
+        PalletTaskQueryDTO query = new PalletTaskQueryDTO();
+        query.setCodes(String.join(",", requestedCodes));
+        query.setTaskType("FINISH_IN");
+        query.setStatus("PENDING");
+        query.setPageNum(1L);
+        query.setPageSize((long) requestedCodes.size());
+        PageResult<PalletTaskPageVO> current = palletCodeService.pagePalletTasks(query);
+
+        Map<String, PalletTaskPageVO> rowsByCode = new LinkedHashMap<>();
+        for (PalletTaskPageVO row : safe(current.getRecords())) {
+            String code = row.getCode() == null ? null : row.getCode().trim().toUpperCase(Locale.ROOT);
+            if (code != null && requestedCodes.contains(code)) rowsByCode.putIfAbsent(code, row);
+        }
+        List<String> blockingIssues = requestedCodes.stream()
+                .filter(code -> !rowsByCode.containsKey(code))
+                .map(code -> "托盘 " + code + " 的成品入库任务已不存在、状态已变化或不在当前轮次。")
+                .toList();
+        boolean ready = blockingIssues.isEmpty() && rowsByCode.size() == requestedCodes.size();
+        List<PalletTaskPageVO> orderedRows = requestedCodes.stream()
+                .map(rowsByCode::get).filter(java.util.Objects::nonNull).toList();
+        String stateDigest = digestTaskState(orderedRows, request.getTransition());
+        LocalDateTime previewedAt = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime expiresAt = previewedAt.plusMinutes(TASK_PREVIEW_TTL_MINUTES);
+        String previewRef = ready
+                ? taskTransitionPreviewRefCodec.encode(user.getId(), stateDigest, expiresAt)
+                : null;
+        List<String> warnings = new ArrayList<>();
+        if (orderedRows.stream().anyMatch(row -> row.getTargetWarehouseName() == null || row.getTargetWarehouseName().isBlank())) {
+            warnings.add("部分任务尚未预设入库库位，需要在业务弹窗中选择。");
+        }
+        warnings.add("业务弹窗打开和最终提交时都会重新检查任务状态；任务变化后需要重新预览。");
+
+        return TaskTransitionPreviewVO.builder()
+                .dataScope("CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW")
+                .previewVersion(TASK_PREVIEW_VERSION)
+                .previewStatus(ready ? "READY" : "CONFLICT")
+                .previewRef(previewRef)
+                .stateDigest(stateDigest)
+                .previewedAt(previewedAt)
+                .expiresAt(expiresAt)
+                .transition(FINISH_INBOUND_TRANSITION)
+                .transitionLabel("确认成品入库")
+                .canOpenBusinessDialog(ready)
+                .requestedTaskCount(requestedCodes.size())
+                .eligibleTaskCount(orderedRows.size())
+                .tasks(orderedRows.stream().map(row -> TaskTransitionPreviewVO.Task.builder()
+                        .palletCode(row.getCode())
+                        .currentTaskStatus(row.getTaskStatus())
+                        .productName(row.getProductName())
+                        .productType(row.getProductType())
+                        .productionDate(row.getProductionDate())
+                        .totalWeight(row.getTotalWeight())
+                        .presetWarehouseName(row.getTargetWarehouseName())
+                        .presetSide(row.getTargetSide())
+                        .quantityLockedByProductionOutput(row.getProductionOutputCodeId() != null)
+                        .build()).toList())
+                .requiredUserInputs(List.of("入库库位", "入库日期", "存放侧", "单位与数量", "可选备注"))
+                .blockingIssues(blockingIssues)
+                .warnings(warnings)
+                .limitations(List.of(
+                        "本预览只读取当前成品入库待处理任务，不修改任务、库存、二维码或业务单据。",
+                        "本次预览不能直接执行任何业务写入。",
+                        "最终提交仍由当前登录用户在既有业务弹窗中完成并接受原接口权限、校验、事务和审计。"))
+                .build();
+    }
+
+    private List<String> normalizePreviewCodes(List<String> codes) {
+        if (codes == null || codes.isEmpty() || codes.size() > 20) {
+            throw new BusinessException(400, "托盘码数量必须在 1 到 20 之间");
+        }
+        LinkedHashMap<String, Boolean> unique = new LinkedHashMap<>();
+        for (String value : codes) {
+            String code = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+            if (code.isEmpty() || code.length() > 100 || !code.matches("[A-Z0-9-]+")) {
+                throw new BusinessException(400, "托盘码格式不正确");
+            }
+            unique.put(code, Boolean.TRUE);
+        }
+        return List.copyOf(unique.keySet());
+    }
+
+    private String digestTaskState(List<PalletTaskPageVO> rows, String transition) {
+        try {
+            StringBuilder canonical = new StringBuilder("v1|").append(transition);
+            rows.stream().sorted(Comparator.comparing(PalletTaskPageVO::getCode)).forEach(row -> canonical
+                    .append('|').append(row.getTaskId())
+                    .append('|').append(row.getCode())
+                    .append('|').append(row.getTaskType())
+                    .append('|').append(row.getTaskStatus())
+                    .append('|').append(row.getCreatedAt()));
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to create task transition state digest", e);
+        }
     }
 
     private AutoInboundBatchesAgentVO.Row safeBatchRow(AutoInboundBatchOptionVO item, int userId) {

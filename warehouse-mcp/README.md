@@ -28,6 +28,7 @@
 | `query_in_process_materials` | Read current registered in-process semi-finished material records with controlled filters and pagination. | `POST /api/production/agent-read/materials/in-process/query` |
 | `query_material_candidates` | Read current semi-finished inventory candidates for a controlled production order without making a pick recommendation. | `POST /api/production/agent-read/orders/material-candidates/query` |
 | `query_pallet_tasks` | Read current pallet tasks with controlled filters, explicit task permission, and no task mutation. | `POST /api/logistics/agent-read/pallet-tasks/query` |
+| `preview_task_transition` | Re-read selected pending finished-product inbound tasks and create a short-lived, signed no-write preview. | `POST /api/logistics/agent-read/pallet-tasks/transition/preview` |
 | `query_stock_documents` | Read one explicit inbound, outbound, or semi-product document source without merging it into a fabricated global ledger. | `POST /api/logistics/agent-read/stock-documents/query` |
 | `query_auto_inbound_batches` | Read the current user's recent non-expired intelligent reporting batches without confirming inbound. | `POST /api/logistics/agent-read/auto-inbound/batches/query` |
 | `get_auto_inbound_batch_detail` | Read a selected current-user batch through an opaque user-bound reference, omitting raw text and internal IDs. | `POST /api/logistics/agent-read/auto-inbound/batches/detail/query` |

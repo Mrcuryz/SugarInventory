@@ -63,6 +63,10 @@ def classify_knowledge_query(text: str) -> str | None:
         and any(marker in normalized for marker in ("多久", "多长时间", "时间", "温度", "参数", "要求"))
     ):
         return "knowledge_process"
+    if any(marker in normalized for marker in ("金属检测", "金属控制", "金属探测")) and any(
+        marker in normalized for marker in ("限值", "阈值", "参数", "要求", "标准", "控制点")
+    ):
+        return "knowledge_process"
     process_markers = (
         "工艺流程",
         "生产工艺",
@@ -131,7 +135,7 @@ def explicit_knowledge_product_queries(text: str) -> tuple[str, ...]:
 
     normalized = "".join((text or "").split())
     match = re.match(
-        r"^(.{1,50}?)(?:的)?(?:完整)?(?:工艺流程|生产工艺|自然结晶|企业认证|公司认证)",
+        r"^(.{1,50}?)(?:的)?(?:完整)?(?:工艺流程|生产工艺|自然结晶|金属检测|金属控制|金属探测|企业认证|公司认证)",
         normalized,
     )
     if match is None:
@@ -522,6 +526,33 @@ class IntentRouter:
                 support_status="supported",
                 next_action="answer_directly",
                 answer=self._capability_answer(),
+            )
+        preview_codes = self._finish_inbound_preview_codes(normalized)
+        if preview_codes:
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="finish_inbound_task_transition_preview",
+                business_domain="logistics",
+                business_objects=self._business_objects(normalized),
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["preview_task_transition"],
+                answer="我会重新核对这些成品入库待处理任务并生成短期预览，本轮不会修改业务数据。",
+            )
+        if self._is_task_processing_preview(normalized):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="pallet_task_processing_preview",
+                business_domain="logistics",
+                business_objects=self._business_objects(normalized),
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["query_pallet_tasks"],
+                answer=(
+                    "我会先查询仍处于待处理状态且类型匹配的任务。"
+                    "你可以在结果卡片中选择任务并打开现有业务处理弹窗；"
+                    "本轮查询不会确认、取消或执行任何任务。"
+                ),
             )
         if self._is_write_operation(normalized):
             return IntentRoute(
@@ -1361,6 +1392,27 @@ class IntentRouter:
                 "修改生产订单",
             ]
         ) or "能出库吗" in text
+
+    def _is_task_processing_preview(self, text: str) -> bool:
+        if "任务" not in text or "取消" in text:
+            return False
+        if not any(word in text for word in ("处理", "确认", "办理")):
+            return False
+        return any(word in text for word in ("待处理", "待确认", "入库", "出库", "调拨"))
+
+    def _finish_inbound_preview_codes(self, text: str) -> list[str]:
+        if "预览" not in text or "成品入库" not in text:
+            return []
+        values = re.findall(
+            r"(?<![A-Za-z0-9-])([A-Za-z]{2,}[A-Za-z0-9-]*\d[A-Za-z0-9-]*)(?![A-Za-z0-9-])",
+            text,
+        )
+        result: list[str] = []
+        for value in values:
+            code = value.upper()
+            if code not in result:
+                result.append(code)
+        return result[:20]
 
     def _write_subtype(self, text: str) -> str:
         if "出库" in text:

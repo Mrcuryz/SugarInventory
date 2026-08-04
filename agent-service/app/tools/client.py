@@ -39,6 +39,7 @@ ALLOWED_TOOLS = {
     "query_in_process_materials",
     "query_material_candidates",
     "query_pallet_tasks",
+    "preview_task_transition",
     "query_stock_documents",
     "query_auto_inbound_batches",
     "get_auto_inbound_batch_detail",

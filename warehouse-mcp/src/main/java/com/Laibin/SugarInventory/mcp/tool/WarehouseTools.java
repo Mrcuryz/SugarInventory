@@ -58,6 +58,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidat
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidatesResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesRequest;
@@ -529,6 +531,19 @@ public class WarehouseTools {
         } catch (RuntimeException e) {
             log.warn("query_pallet_tasks failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
             return PalletTasksResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public TaskTransitionPreviewResponse previewTaskTransition(TaskTransitionPreviewRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName(
+                    "preview_task_transition", () -> readService.previewTaskTransition(request));
+        } catch (WarehouseApiException e) {
+            return TaskTransitionPreviewResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            log.warn("preview_task_transition failed; errorType={}, message={}",
+                    e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
+            return TaskTransitionPreviewResponse.error(ErrorMapper.unexpected());
         }
     }
 

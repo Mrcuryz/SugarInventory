@@ -744,6 +744,8 @@ class OpenAICompatibleModelClient(BasicModelClient):
                 "registeredGoals.businessResult 是面向业务的目标说明；不能只根据英文枚举名称猜测目标。"
                 "‘备料池’或‘备料池余额’是已经停用流程的旧称；这类只读问题必须理解为 IN_PROCESS_MATERIALS，委派 production_expert，"
                 "查询已确认领用、已完成库存扣减且订单未完成的在制半成品；不得委派 inventory_expert 或 warehouse_expert，也不得回答旧池余额。"
+                "用户询问某日或某段日期的产量、生产产出、生产日报、产量日报或生产登记产出日报时，属于 DAILY_PRODUCTION_ANALYSIS，"
+                "必须委派 analytics_expert；不得要求用户补充生产订单号，也不得退回仅支持生产订单进度的旧能力说明。"
                 "实时库存、库位、化验、托盘任务等业务事实必须委派专家，禁止凭记忆直接回答。"
                 "工艺步骤、设备、原辅料、控制点以及企业介绍、宣传产品、认证荣誉、销售网络等现行资料问题，"
                 "必须使用对应知识目标委派 knowledge_expert；不得由主模型凭记忆直接回答。"
@@ -768,8 +770,17 @@ class OpenAICompatibleModelClient(BasicModelClient):
                 "只有查询标准目录、化验组目录或单项基础资料时才属于 ASSAY_REFERENCE_DATA。"
                 "用户指定某个库位并询问其最近操作时属于 WAREHOUSE_RECENT_OPERATIONS，应委派 warehouse_expert；"
                 "只有未绑定具体库位、按模块/操作人等查询全局审计日志时才属于 BUSINESS_OPERATION_LOGS。"
+                "用户询问产品目录、产品主数据、成品产品目录或半成品产品目录时属于 PRODUCT_MASTER_DATA，"
+                "必须委派 master_data_expert；这里的‘成品/半成品’是目录范围，不代表当前库存，不得委派 inventory_expert。"
+                "用户指定库位并询问‘库存情况’、‘有什么库存’或‘库存分布’时属于 WAREHOUSE_INVENTORY_DISTRIBUTION，"
+                "必须委派 inventory_expert；只有询问库位容量、占用率、剩余容量或库位状态时才委派 warehouse_expert。"
+                "用户明确要求处理或确认当前待处理的入库、出库或调拨任务，但尚未给出已选择托盘码时，"
+                "必须使用 CURRENT_PENDING_TASKS 委派 logistics_expert，先查询待处理任务并让用户在卡片中选择。"
+                "当 currentMessage 明确要求预览一个或多个已选择的成品入库托盘码时，必须使用 FINISH_INBOUND_TASK_TRANSITION_PREVIEW 委派 logistics_expert；"
+                "该目标只生成短期状态摘要并允许打开既有业务弹窗，不是执行。普通‘帮我出库/入库/调拨’仍是未开放写操作，必须拒绝。"
                 "禁止输出工具名、SQL、HTTP、数据库表列、内部 ID、权限范围或执行步骤。"
-                "写操作、任意 SQL、任意 HTTP、历史库存趋势和未登记跨域分析必须明确拒绝。"
+                "写操作、任意 SQL、任意 HTTP、未登记的历史趋势和未登记跨域分析必须明确拒绝；"
+                "已登记的 INVENTORY_LEVEL_TREND_ANALYSIS 仍必须委派 analytics_expert，并遵守可信快照或本地模拟标识。"
                 "输出必须严格符合 JSON Schema，不要 Markdown，不要解释。"
             ),
             user_payload={
@@ -830,6 +841,11 @@ class OpenAICompatibleModelClient(BasicModelClient):
                 "这属于已登记的只读目标，不得回答不支持，也不得改查全局业务日志。"
                 "分页查询已经返回权威 total、summary 或其他完整汇总时，除非用户明确要求‘全部明细/完整列表’，"
                 "不得仅为逐条穷举剩余记录继续翻页；应使用汇总和当前页代表性明细完成回答，并说明列表为当前页。"
+                "ACTIVE_GOAL 为 CURRENT_PENDING_TASKS 且用户表达处理或确认任务时，只能查询 status=PENDING 的匹配任务，"
+                "回答应说明用户可在任务卡片中选择；不得调用写接口，也不得声称任务已处理。"
+                "ACTIVE_GOAL 为 FINISH_INBOUND_TASK_TRANSITION_PREVIEW 时，必须调用 preview_task_transition，"
+                "固定 previewVersion=1、transition=CONFIRM_FINISH_INBOUND，并只使用 currentMessage 明确给出的托盘码。"
+                "不得把 previewRef 说成 executionToken，不得声称已经确认任务或修改库存。"
                 "对于当前库存质量筛选：明确不合格、符合指定化验标准、原始指标数值条件都是本质量专家内的直接工具能力，"
                 "不得以缺少跨域配方为由拒绝。用户说‘哪些库存/哪些产品符合某标准’且未另行限定产品时，产品范围是全部；"
                 "紧邻‘标准’的名称和版本属于标准身份，不得先按产品名解析。原始指标数值条件应直接调用对应受控筛选工具。"
@@ -934,7 +950,7 @@ class OpenAICompatibleModelClient(BasicModelClient):
         if token is not None:
             token.raise_if_cancelled()
         repair_issue: dict[str, Any] | None = None
-        for attempt in (1, 2):
+        for attempt in (1, 2, 3):
             messages: list[dict[str, str]] = [
                 {"role": "system", "content": system_prompt},
                 {
@@ -1072,10 +1088,10 @@ class OpenAICompatibleModelClient(BasicModelClient):
                         )
                         return decision
 
-            if attempt == 2:
+            if attempt == 3:
                 raise ModelDecisionError(
                     "MODEL_ACTION_INVALID",
-                    "模型连续两次未返回符合契约的结构化动作。",
+                    "我暂时没能完成这次查询，请重试一次。本次没有执行任何业务变更。",
                     retryable=True,
                 )
         raise AssertionError("unreachable")

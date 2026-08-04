@@ -554,6 +554,19 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "size": {"type": "integer", "minimum": 1, "maximum": 50},
         },
     },
+    "preview_task_transition": {
+        "type": "object", "additionalProperties": False,
+        "required": ["previewVersion", "transition", "palletCodes"],
+        "properties": {
+            "previewVersion": {"type": "integer", "const": 1},
+            "transition": {"type": "string", "const": "CONFIRM_FINISH_INBOUND"},
+            "palletCodes": {
+                "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": True,
+                "items": {"type": "string", "minLength": 1, "maxLength": 100,
+                          "pattern": "^[A-Za-z0-9-]+$"},
+            },
+        },
+    },
     "query_stock_documents": {
         "type": "object", "additionalProperties": False, "required": ["documentType"],
         "properties": {
@@ -730,6 +743,7 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_qr_batch_inbound_completion": "查询二维码批次的入库完成情况；不确认或补录入库。",
     "query_fixed_product_qr_pool": "查询固定产品二维码池当前状态；不打印、启用、作废或恢复二维码。",
     "query_pallet_tasks": "查询当前托盘任务记录；用户问待处理任务时使用 status=PENDING。只读返回分类和状态，不执行确认、取消、入库、出库或调拨。",
+    "preview_task_transition": "对用户已明确选择的成品入库待处理托盘码生成第 1 版短期预览。必须传 previewVersion=1、transition=CONFIRM_FINISH_INBOUND 和 1~20 个 palletCodes。预览不执行任务、不修改库存，previewRef 不是 executionToken。",
     "query_stock_documents": "查询指定类型和日期范围的入库单、出库单或半成品单据；相对日期以 BUSINESS_TIME 为准。",
     "query_auto_inbound_batches": "查询最近登记的自动报数入库批次；无须先提供产品或批次。返回空 records 或 count=0 时就是权威无数据结果，应引用该次观察直接回答。",
     "get_auto_inbound_batch_detail": "使用上一查询返回的受控批次引用查询自动报数入库批次详情；不得猜测内部引用。",
@@ -1670,10 +1684,10 @@ class ToolArgumentBuilder:
                 arguments=self._validate("query_in_process_materials", arguments),
                 intent="in_process_materials", responseMode="in_process_materials", routeSnapshot=snapshot,
             )
-        if route.intent_subtype == "pallet_tasks":
+        if route.intent_subtype in {"pallet_tasks", "pallet_task_processing_preview"}:
             args: dict[str, Any] = {"page": 1, "size": 20}
             text = user_message or ""
-            if "待处理" in text or "待确认" in text: args["status"] = "PENDING"
+            if route.intent_subtype == "pallet_task_processing_preview" or "待处理" in text or "待确认" in text: args["status"] = "PENDING"
             elif "已确认" in text: args["status"] = "CONFIRMED"
             elif "已取消" in text: args["status"] = "CANCELED"
             if "调拨" in text: args["taskType"] = "TRANSFER"
@@ -1684,7 +1698,32 @@ class ToolArgumentBuilder:
             if objects.pallet: args["code"] = objects.pallet
             return ModelPlanDecision(action="call_tool", toolName="query_pallet_tasks",
                                      arguments=self._validate("query_pallet_tasks", args),
-                                     intent="pallet_tasks", responseMode="pallet_tasks", routeSnapshot=snapshot)
+                                     intent=route.intent_subtype, responseMode="pallet_tasks", routeSnapshot=snapshot)
+        if route.intent_subtype == "finish_inbound_task_transition_preview":
+            codes = re.findall(
+                r"(?<![A-Za-z0-9-])([A-Za-z]{2,}[A-Za-z0-9-]*\d[A-Za-z0-9-]*)(?![A-Za-z0-9-])",
+                user_message or "",
+            )
+            if not codes:
+                return ModelPlanDecision(
+                    action="ask_user",
+                    prompt="请先在待处理任务卡片中选择成品入库托盘。",
+                    intent=route.intent_subtype,
+                    responseMode="task_transition_preview",
+                    routeSnapshot=snapshot,
+                )
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="preview_task_transition",
+                arguments=self._validate("preview_task_transition", {
+                    "previewVersion": 1,
+                    "transition": "CONFIRM_FINISH_INBOUND",
+                    "palletCodes": codes,
+                }),
+                intent=route.intent_subtype,
+                responseMode="task_transition_preview",
+                routeSnapshot=snapshot,
+            )
         if route.intent_subtype == "stock_documents":
             text = user_message or ""
             doc_type = "SEMI_PRODUCT" if "半成品" in text else "OUTBOUND" if "出库" in text else "INBOUND" if "入库" in text else None
@@ -2753,6 +2792,26 @@ class ToolArgumentBuilder:
             if page < 1 or not 1 <= size <= 50: raise ValueError("invalid pagination")
             result.update({"page": page, "size": size})
             return result
+        if tool_name == "preview_task_transition":
+            if arguments.get("previewVersion") != 1:
+                raise ValueError("previewVersion must be 1")
+            if arguments.get("transition") != "CONFIRM_FINISH_INBOUND":
+                raise ValueError("unsupported task transition")
+            raw_codes = arguments.get("palletCodes")
+            if not isinstance(raw_codes, list) or not 1 <= len(raw_codes) <= 20:
+                raise ValueError("palletCodes must contain 1 to 20 codes")
+            codes: list[str] = []
+            for raw_code in raw_codes:
+                code = self._required_text(raw_code, 100).upper()
+                if not re.fullmatch(r"[A-Z0-9-]+", code):
+                    raise ValueError("invalid pallet code")
+                if code not in codes:
+                    codes.append(code)
+            return {
+                "previewVersion": 1,
+                "transition": "CONFIRM_FINISH_INBOUND",
+                "palletCodes": codes,
+            }
         if tool_name == "query_stock_documents":
             doc_type = arguments.get("documentType")
             if doc_type not in {"INBOUND", "OUTBOUND", "SEMI_PRODUCT"}: raise ValueError("unsupported documentType")

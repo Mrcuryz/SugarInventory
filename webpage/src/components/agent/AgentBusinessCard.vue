@@ -1,5 +1,6 @@
 <script setup>
 import { computed, defineAsyncComponent, ref } from 'vue'
+import { formatDateTime } from '@/utils/dateTime'
 import { distributionRiskSummary, distributionRows, isDistributionCard } from './agentDisplay'
 import {
   assayHistoryRecords,
@@ -20,6 +21,12 @@ import {
   taskGroups,
   taskStatusTone
 } from './taskCardPresentation.mjs'
+import {
+  isTaskTransitionPreviewCard,
+  taskTransitionPreviewDialogAction,
+  taskTransitionPreviewSummary as resolveTaskTransitionPreviewSummary,
+  taskTransitionPreviewTasks as resolveTaskTransitionPreviewTasks
+} from './taskTransitionPreviewPresentation.mjs'
 import {
   boilingBatchSummary,
   boilingBatchUsages,
@@ -155,6 +162,9 @@ const reportMetrics = computed(() => assayMetrics(props.card))
 const reportNotes = computed(() => assayNotes(props.card))
 const historyRecords = computed(() => assayHistoryRecords(props.card))
 const isTask = computed(() => isTaskCard(props.card))
+const isTaskTransitionPreview = computed(() => isTaskTransitionPreviewCard(props.card))
+const taskTransitionPreviewSummary = computed(() => resolveTaskTransitionPreviewSummary(props.card))
+const taskTransitionPreviewTasks = computed(() => resolveTaskTransitionPreviewTasks(props.card))
 const isTaskDetail = computed(() => isTaskDetailCard(props.card))
 const groupedTasks = computed(() => taskGroups(props.card))
 const taskSummary = computed(() => taskCardStatusSummary(props.card))
@@ -300,11 +310,16 @@ const openTaskBatch = (group) => {
   const selected = selectedGroupRecords(group)
   if (!group.batchAction || !selected.length) return
   emit('card-action', {
-    actionKind: 'open_task_batch',
+    actionKind: group.key === 'finish_in' ? 'request_task_transition_preview' : 'open_task_batch',
     batchAction: group.batchAction,
     taskGroupLabel: group.label,
     palletCodes: selected.map(record => record.palletCode).filter(Boolean)
   })
+}
+
+const openTaskTransitionPreviewDialog = () => {
+  const action = taskTransitionPreviewDialogAction(props.card)
+  if (action) emit('card-action', action)
 }
 
 const inferActionProductName = (field) => {
@@ -335,7 +350,7 @@ const exportRegisteredReport = () => {
 </script>
 
 <template>
-  <div class="business-card" :class="{ 'knowledge-card': isKnowledge, 'distribution-card': isDistribution, 'assay-card': isAssay, 'task-card': isTask, 'production-card': isProduction, 'today-operations-overview-card': isTodayOperationsOverview, 'daily-production-report-card': isDailyProductionReport, 'inventory-level-trend-card': isInventoryLevelTrend, 'quality-assay-trend-card': isQualityAssayTrend, 'quality-metric-trend-card': isQualityMetricTrend, 'production-input-output-flow-card': isProductionInputOutputFlow, 'pallet-task-cycle-report-card': isPalletTaskCycleReport, 'pallet-card': isPallet, 'inventory-quality-card': isInventoryQuality }">
+  <div class="business-card" :class="{ 'knowledge-card': isKnowledge, 'distribution-card': isDistribution, 'assay-card': isAssay, 'task-card': isTask || isTaskTransitionPreview, 'production-card': isProduction, 'today-operations-overview-card': isTodayOperationsOverview, 'daily-production-report-card': isDailyProductionReport, 'inventory-level-trend-card': isInventoryLevelTrend, 'quality-assay-trend-card': isQualityAssayTrend, 'quality-metric-trend-card': isQualityMetricTrend, 'production-input-output-flow-card': isProductionInputOutputFlow, 'pallet-task-cycle-report-card': isPalletTaskCycleReport, 'pallet-card': isPallet, 'inventory-quality-card': isInventoryQuality }">
     <div class="business-card-head" :class="{ 'task-card-head': isTask && !isTaskDetail }">
       <span class="business-card-icon">
         <el-icon><DataAnalysis /></el-icon>
@@ -361,7 +376,7 @@ const exportRegisteredReport = () => {
         导出
       </button>
       <button
-        v-if="isAssay || isTask || isProduction || isTodayOperationsOverview || isDailyProductionReport || isInventoryLevelTrend || isQualityAssayTrend || isQualityMetricTrend || isProductionInputOutputFlow || isPalletTaskCycleReport || isPallet || isInventoryQuality"
+        v-if="isAssay || isTask || isTaskTransitionPreview || isProduction || isTodayOperationsOverview || isDailyProductionReport || isInventoryLevelTrend || isQualityAssayTrend || isQualityMetricTrend || isProductionInputOutputFlow || isPalletTaskCycleReport || isPallet || isInventoryQuality"
         type="button"
         class="business-card-toggle"
         :aria-expanded="expanded"
@@ -468,6 +483,58 @@ const exportRegisteredReport = () => {
         </div>
       </template>
     </div>
+    <div v-else-if="isTaskTransitionPreview" class="task-card-body task-transition-preview-body">
+      <div v-if="expanded && taskTransitionPreviewSummary" class="task-list">
+        <section class="task-group">
+          <div class="task-group-head">
+            <div class="task-group-title">
+              <strong>{{ taskTransitionPreviewSummary.label }}</strong>
+              <span>协议 v{{ taskTransitionPreviewSummary.previewVersion }}</span>
+            </div>
+            <span class="task-status" :class="taskTransitionPreviewSummary.canOpenBusinessDialog ? 'task-status-success' : 'task-status-pending'">
+              {{ taskTransitionPreviewSummary.previewStatusLabel }}
+            </span>
+          </div>
+          <div class="task-group-records">
+            <article v-for="task in taskTransitionPreviewTasks" :key="task.palletCode" class="task-row">
+              <div class="task-row-head">
+                <div class="task-row-copy">
+                  <strong>{{ task.label }}</strong>
+                  <span>{{ task.productLabel }}</span>
+                </div>
+                <span class="task-status task-status-pending">{{ task.currentTaskStatusLabel }}</span>
+              </div>
+              <div class="task-meta">
+                <span v-if="task.productionDate">生产日期：{{ task.productionDate }}</span>
+                <span v-if="task.totalWeightText">重量：{{ task.totalWeightText }}</span>
+                <span v-if="task.presetLocationLabel">预设位置：{{ task.presetLocationLabel }}</span>
+                <span v-if="task.quantityRuleLabel">{{ task.quantityRuleLabel }}</span>
+              </div>
+            </article>
+          </div>
+          <div v-if="taskTransitionPreviewSummary.requiredUserInputs?.length" class="task-preview-note">
+            弹窗中需要确认：{{ taskTransitionPreviewSummary.requiredUserInputs.join('、') }}
+          </div>
+          <div v-for="issue in taskTransitionPreviewSummary.blockingIssues || []" :key="issue" class="task-preview-issue">
+            {{ issue }}
+          </div>
+          <div v-for="warning in taskTransitionPreviewSummary.warnings || []" :key="warning" class="task-preview-note">
+            {{ warning }}
+          </div>
+          <div class="task-group-footer">
+            <span>预览有效至 {{ taskTransitionPreviewSummary.expiresAt ? formatDateTime(taskTransitionPreviewSummary.expiresAt) : '短期有效' }}</span>
+            <el-button
+              type="primary"
+              size="small"
+              :disabled="!taskTransitionPreviewSummary.canOpenBusinessDialog"
+              @click="openTaskTransitionPreviewDialog"
+            >
+              打开成品入库业务弹窗
+            </el-button>
+          </div>
+        </section>
+      </div>
+    </div>
     <div v-else-if="isTask" class="task-card-body">
       <div v-if="expanded" class="task-list">
         <section
@@ -560,7 +627,9 @@ const exportRegisteredReport = () => {
               :disabled="!selectedGroupRecords(group).length"
               @click="openTaskBatch(group)"
             >
-              {{ selectedGroupRecords(group).length ? `处理所选 ${selectedGroupRecords(group).length} 条` : '选择任务后处理' }}
+              {{ selectedGroupRecords(group).length
+                ? `${group.key === 'finish_in' ? '预览所选' : '处理所选'} ${selectedGroupRecords(group).length} 条`
+                : `${group.key === 'finish_in' ? '选择任务后预览' : '选择任务后处理'}` }}
             </el-button>
           </div>
         </section>
@@ -3369,6 +3438,25 @@ const exportRegisteredReport = () => {
 .pallet-status-muted {
   background: #f1f5f9;
   color: #64748b;
+}
+
+.task-preview-note,
+.task-preview-issue {
+  margin: 8px 10px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.task-preview-note {
+  background: #f3f7ff;
+  color: #52637a;
+}
+
+.task-preview-issue {
+  background: #fff4e8;
+  color: #b45309;
 }
 
 @media (max-width: 520px) {

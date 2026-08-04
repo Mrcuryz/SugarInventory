@@ -1,6 +1,6 @@
 # 智能仓储 RAG 离线构建手册
 
-状态：`WORKTREE_ENGINEERING_VALIDATED / V1_ARTIFACT_VALIDATED / SOURCE_INTEGRATION_PENDING / ONLINE_DEPLOYMENT_UNVERIFIED`
+状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / CURRENT_WEB_DEPLOYMENT_UNVERIFIED`
 日期：2026-08-02
 适用范围：离线构建机，不适用于 Agent 运行时容器
 
@@ -647,9 +647,12 @@ version 等于目标版本后，才将发布窗口标记成功。
 ### 13.7 2026-08-03 当前状态
 
 - 正式 v1 artifact、pointer 和审计再次校验通过；
-- 28091 隔离验证实例已停止，当前 8091 无法使用已知验收密钥认证，在线 RAG 状态未验证；
-- 真实 `deploy/simple/.env` 和部署模型目录尚不存在；
-- RAG 源码、测试和文档尚未纳入 Git；
-- 在完成源码集成、部署配置和当前实例验收前，不得把“历史首次激活通过”写成“当前已上线”。
+- RAG 源码、测试和文档已进入 `4150e6d`，集成后全量回归通过；
+- 部署模型目录已准备为 7 个只读文件，逐文件哈希一致；
+- 28091 已从当前提交、正式 v1 根目录和部署模型启动，认证 health 为 `UP`、RAG 为 `READY`；
+- 管理员成功/无证据、STAFF 拒绝、静态与实时混合问题拆分及日志安全检查均通过；
+- 真实 `deploy/simple/.env` 仍未准备，当前 8080/8091 未停止或重配；
+- 当前 Web/Java 到 28091 的完整链路尚未验收，不得把隔离 Python 通过写成现有 Web 已上线。
 
-完整复核见 `rag-current-state-audit-2026-08-03.md`。
+完整复核见 `rag-current-state-audit-2026-08-03.md` 和
+`rag-controlled-runtime-validation-2026-08-03.md`。

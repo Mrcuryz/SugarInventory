@@ -24,7 +24,8 @@ class LogisticsAgentReadServiceImplTest {
         when(palletCodeService.pagePalletTasks(any())).thenReturn(new PageResult<>(1L, List.of(row)));
         LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
                 palletCodeService, mock(InStockService.class), mock(OutStockService.class), mock(SemiProductRecordService.class),
-                mock(AutoInboundParseService.class), new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec("12345678901234567890123456789012"));
+                mock(AutoInboundParseService.class), new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET),
+                new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
         PalletTaskAgentQueryDTO query = new PalletTaskAgentQueryDTO();
         query.setTaskType("OUT"); query.setStatus("PENDING");
 
@@ -45,7 +46,8 @@ class LogisticsAgentReadServiceImplTest {
         when(outStockService.searchOutRecords(any(), any())).thenReturn(new PageResult<>(1L, List.of(row)));
         LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
                 mock(PalletCodeService.class), mock(InStockService.class), outStockService, mock(SemiProductRecordService.class),
-                mock(AutoInboundParseService.class), new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec("12345678901234567890123456789012"));
+                mock(AutoInboundParseService.class), new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET),
+                new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
         com.Laibin.SugarInventory.domain.dto.StockDocumentAgentQueryDTO query =
                 new com.Laibin.SugarInventory.domain.dto.StockDocumentAgentQueryDTO();
         query.setDocumentType("OUTBOUND");
@@ -72,7 +74,8 @@ class LogisticsAgentReadServiceImplTest {
         var codec = new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET);
         LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
                 mock(PalletCodeService.class), mock(InStockService.class), mock(OutStockService.class),
-                mock(SemiProductRecordService.class), parseService, codec);
+                mock(SemiProductRecordService.class), parseService, codec,
+                new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
         var user = new com.Laibin.SugarInventory.domain.po.User(); user.setId(7);
 
         var batches = service.queryAutoInboundBatches(null, user);
@@ -88,5 +91,62 @@ class LogisticsAgentReadServiceImplTest {
         var otherUser = new com.Laibin.SugarInventory.domain.po.User(); otherUser.setId(8);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.getAutoInboundBatchDetail(query, otherUser))
                 .isInstanceOf(com.Laibin.SugarInventory.common.BusinessException.class);
+    }
+
+    @Test
+    void previewsSelectedPendingFinishInboundTasksWithoutExecutingAnything() {
+        PalletCodeService palletCodeService = mock(PalletCodeService.class);
+        PalletTaskPageVO row = new PalletTaskPageVO();
+        row.setTaskId(101); row.setTaskType("FINISH_IN"); row.setTaskStatus("PENDING");
+        row.setCode("BT0019N1"); row.setProductName("黄冰糖（袋）");
+        row.setProductionDate(java.time.LocalDate.of(2026, 5, 22));
+        row.setCreatedAt(java.time.LocalDateTime.of(2026, 5, 22, 8, 0));
+        when(palletCodeService.pagePalletTasks(any())).thenReturn(new PageResult<>(1L, List.of(row)));
+        LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
+                palletCodeService, mock(InStockService.class), mock(OutStockService.class),
+                mock(SemiProductRecordService.class), mock(AutoInboundParseService.class),
+                new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET),
+                new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
+        var request = new com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO();
+        request.setPreviewVersion(1); request.setTransition("CONFIRM_FINISH_INBOUND");
+        request.setPalletCodes(List.of("bt0019n1"));
+        var user = new com.Laibin.SugarInventory.domain.po.User(); user.setId(7);
+
+        var result = service.previewTaskTransition(request, user);
+
+        assertThat(result.getPreviewStatus()).isEqualTo("READY");
+        assertThat(result.isCanOpenBusinessDialog()).isTrue();
+        assertThat(result.getPreviewRef()).startsWith("tpr1_");
+        assertThat(result.getStateDigest()).hasSize(64);
+        assertThat(result.getExpiresAt()).isAfter(result.getPreviewedAt());
+        assertThat(result.getTasks()).singleElement().satisfies(task -> {
+            assertThat(task.getPalletCode()).isEqualTo("BT0019N1");
+            assertThat(task.getCurrentTaskStatus()).isEqualTo("PENDING");
+        });
+        assertThat(result.getLimitations())
+                .anyMatch(value -> value.contains("不能直接执行任何业务写入"))
+                .noneMatch(value -> value.contains("previewRef") || value.contains("executionToken"));
+    }
+
+    @Test
+    void previewFailsClosedWhenAnySelectedTaskIsNoLongerEligible() {
+        PalletCodeService palletCodeService = mock(PalletCodeService.class);
+        when(palletCodeService.pagePalletTasks(any())).thenReturn(new PageResult<>(0L, List.of()));
+        LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
+                palletCodeService, mock(InStockService.class), mock(OutStockService.class),
+                mock(SemiProductRecordService.class), mock(AutoInboundParseService.class),
+                new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET),
+                new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
+        var request = new com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO();
+        request.setPreviewVersion(1); request.setTransition("CONFIRM_FINISH_INBOUND");
+        request.setPalletCodes(List.of("BT0019N1"));
+        var user = new com.Laibin.SugarInventory.domain.po.User(); user.setId(7);
+
+        var result = service.previewTaskTransition(request, user);
+
+        assertThat(result.getPreviewStatus()).isEqualTo("CONFLICT");
+        assertThat(result.isCanOpenBusinessDialog()).isFalse();
+        assertThat(result.getPreviewRef()).isNull();
+        assertThat(result.getBlockingIssues()).singleElement().asString().contains("状态已变化");
     }
 }

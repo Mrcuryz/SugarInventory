@@ -521,6 +521,40 @@ class SafePalletTaskResult(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+class SafeTaskTransitionPreviewTask(BaseModel):
+    """One display-safe task included in a no-write transition preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    palletCode: str
+    currentTaskStatusLabel: str
+    productLabel: str
+    productionDate: str | None = None
+    totalWeightText: str | None = None
+    presetLocationLabel: str | None = None
+    quantityRuleLabel: str | None = None
+
+
+class SafeTaskTransitionPreview(BaseModel):
+    """Display-safe L2 preview; signatures and state digests never reach ordinary UI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    previewVersion: int
+    previewStatusLabel: str
+    previewedAt: str | None = None
+    expiresAt: str | None = None
+    transitionLabel: str
+    canOpenBusinessDialog: bool
+    requestedTaskCount: int
+    eligibleTaskCount: int
+    tasks: list[SafeTaskTransitionPreviewTask] = Field(default_factory=list)
+    requiredUserInputs: list[str] = Field(default_factory=list)
+    blockingIssues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
 class SafePalletLifecycleEvent(BaseModel):
     """One display-safe pallet event; raw event enums and internal IDs are excluded."""
 

@@ -1,6 +1,6 @@
 # RAG 源码版本库集成计划
 
-状态：`IN_PROGRESS / A_B_STAGED / SHARED_HUNK_EXTRACTION_PENDING`
+状态：`COMPLETED / SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED`
 日期：2026-08-03
 基线 Git HEAD：`c9e2274`
 适用范围：来宾智能仓储 RAG 源码、测试、文档、Agent/Java/Web 集成和部署示例
@@ -118,3 +118,13 @@ webpage/dist/**
 - 不提交或推送；
 - 不修改正式 v1 artifact；
 - 不创建额外业务材料版本。
+
+## 7. 执行结果
+
+- RAG 源码、测试、文档及 Agent/Java/Web/Deploy 集成点已进入提交 `4150e6d`；
+- 该提交由共享工作区中的其他任务创建并推送，本计划执行线程未创建、改写或回退提交；
+- 提交同时包含 analytics/reporting 基线，因此提交标题没有单独体现 RAG；
+- 集成后的回归结果为：Python `454 passed, 5 skipped`、RAG `119 passed, 5 skipped`、
+  Java `316 passed`、Web `67 passed`，Vite 生产构建通过；
+- 正式 v1 artifact、模型和真实 env 继续按设计排除在 Git 外；
+- 当前在线部署仍未验证，本计划完成不等于 RAG 已上线。

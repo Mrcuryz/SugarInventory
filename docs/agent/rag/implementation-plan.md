@@ -1,6 +1,6 @@
 # 智能仓储 RAG 完整实施计划
 
-状态：`WORKTREE_ENGINEERING_VALIDATED / V1_ARTIFACT_VALIDATED / SOURCE_INTEGRATION_PENDING / ONLINE_DEPLOYMENT_UNVERIFIED`
+状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`
 基线日期：2026-08-02
 适用系统：来宾智能仓储 Web Agent
 风险等级：`L0 静态知识只读`
@@ -978,7 +978,7 @@ Python 433、Java 304、Web 65 项全量测试及 Web 构建。详见
 
 ### 9.15 `RAG-05` — 发布、切换、回滚和更新演练
 
-状态：`WORKTREE_ENGINEERING_VALIDATED / V1_ARTIFACT_VALIDATED / SOURCE_INTEGRATION_PENDING / ONLINE_DEPLOYMENT_UNVERIFIED`。
+状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`。
 
 目标：证明知识库可以安全更新和恢复。
 
@@ -1005,9 +1005,11 @@ Python 433、Java 304、Web 65 项全量测试及 Web 构建。详见
 `current.json` 选中；2026-08-02 的隔离 Agent 实例曾在 28091 端口以 `UP/READY` 加载该版本。
 真实候选的指针替换前中断与续跑、正式根目录的同版本回滚失败闭锁均已通过。自动化使用内容相同、
 版本标识不同的完整测试 release 验证 pointer 切换和回滚协议，仅证明发布机制，不代表存在第二套
-甲方材料。2026-08-03 复核时 28091 已停止，当前 8091 无法用已知验收密钥认证；RAG 源码、测试
-和文档尚未进入 Git 跟踪。因此 artifact 发布事实成立，但源代码集成和当前在线部署门禁尚未关闭。
-详见 `rag-current-state-audit-2026-08-03.md`。
+甲方材料。2026-08-03 已确认 RAG 源码、测试和文档进入 `4150e6d`，全量工程回归、28091 隔离
+Python 和 5174→28080→28091 隔离 Web 全链路均通过；28080/5174 验收后已停止，28091 保持运行。
+现有 Web/Java/8091 没有切换，持久化真实部署 env 仍待准备，因此当前部署门禁尚未关闭。详见
+`rag-current-state-audit-2026-08-03.md` 和
+`rag-controlled-web-runtime-validation-2026-08-03.md`。
 
 ## 10. 测试矩阵
 

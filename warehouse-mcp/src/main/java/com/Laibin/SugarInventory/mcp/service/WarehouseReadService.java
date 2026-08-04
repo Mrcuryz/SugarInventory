@@ -60,6 +60,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidat
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionMaterialCandidatesResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesRequest;
@@ -143,22 +145,27 @@ public class WarehouseReadService {
         if (validation != null) {
             return ProductResolutionResponse.error(validation);
         }
+        String productQuery = normalizeProductNameQuery(request.query());
+        if (productQuery.isBlank()) {
+            return ProductResolutionResponse.error(
+                    ErrorMapper.invalid("query", "Product query must include a product name or id."));
+        }
         int limit = defaultLimit(request.limit());
         List<ProductCandidate> candidates = new ArrayList<>();
-        if (isPositiveInteger(request.query())) {
-            JsonNode product = apiClient.getData("/api/products/" + request.query().trim());
+        if (isPositiveInteger(productQuery)) {
+            JsonNode product = apiClient.getData("/api/products/" + productQuery);
             if (isObject(product)) {
                 candidates.add(productCandidate(product, MatchType.EXACT_ID, 100));
             }
         }
         Map<String, Object> query = new LinkedHashMap<>();
-        query.put("name", request.query().trim());
+        query.put("name", productQuery);
         query.put("type", blankToNull(request.productType()));
         query.put("status", blankToNull(request.productStatus()));
         JsonNode data = apiClient.getData("/api/products/product", query);
         for (JsonNode item : asArray(data)) {
-            ProductCandidate candidate = productCandidate(item, matchType(request.query(), text(item, "productName"), false),
-                    matchScore(request.query(), text(item, "productName"), false));
+            ProductCandidate candidate = productCandidate(item, matchType(productQuery, text(item, "productName"), false),
+                    matchScore(productQuery, text(item, "productName"), false));
             if (candidates.stream().noneMatch(existing -> sameId(existing.productId(), candidate.productId()))) {
                 candidates.add(candidate);
             }
@@ -168,7 +175,21 @@ public class WarehouseReadService {
                         .thenComparing(ProductCandidate::productId, Comparator.nullsLast(Integer::compareTo)))
                 .limit(limit)
                 .toList();
-        return productResolution(request.query(), candidates);
+        return productResolution(productQuery, candidates);
+    }
+
+    private String normalizeProductNameQuery(String query) {
+        String normalized = query == null ? "" : query.trim();
+        for (String suffix : List.of("当前库存总览", "库存总览", "当前库存概览", "库存概览", "总览", "概览")) {
+            if (normalized.endsWith(suffix) && normalized.length() > suffix.length()) {
+                normalized = normalized.substring(0, normalized.length() - suffix.length()).trim();
+                break;
+            }
+        }
+        if (normalized.endsWith("的") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        return normalized;
     }
 
     public WarehouseResolutionResponse resolveWarehouses(ResolveWarehousesRequest request) {
@@ -572,6 +593,21 @@ public class WarehouseReadService {
                 new PalletTasksRequest(source.code(), source.taskType(), source.bizScene(), source.status(),
                         source.productName(), source.productType(), source.productStatus(), source.targetWarehouseName(),
                         source.productionDateStart(), source.productionDateEnd(), page, size), PalletTasksResponse.class);
+    }
+
+    public TaskTransitionPreviewResponse previewTaskTransition(TaskTransitionPreviewRequest request) {
+        if (request == null || request.previewVersion() == null || request.transition() == null
+                || request.palletCodes() == null || request.palletCodes().isEmpty()) {
+            throw new IllegalArgumentException("previewVersion, transition and palletCodes are required");
+        }
+        if (request.previewVersion() != 1 || !"CONFIRM_FINISH_INBOUND".equals(request.transition())) {
+            throw new IllegalArgumentException("unsupported task transition preview");
+        }
+        if (request.palletCodes().size() > 20) {
+            throw new IllegalArgumentException("too many pallet codes");
+        }
+        return apiClient.postData("/api/logistics/agent-read/pallet-tasks/transition/preview",
+                request, TaskTransitionPreviewResponse.class);
     }
 
     public StockDocumentsResponse queryStockDocuments(StockDocumentsRequest request) {

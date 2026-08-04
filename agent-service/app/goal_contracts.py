@@ -15,6 +15,7 @@ CoreGoalTypeV1 = Literal[
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
     "CURRENT_PENDING_TASKS",
+    "FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
     "BOILING_BATCH_TRACE",
     "PRODUCTION_ORDER_PROGRESS",
     "PRODUCTION_MATERIAL_TRACE",
@@ -68,6 +69,7 @@ CoreFactTypeV1 = Literal[
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
     "CURRENT_PENDING_TASKS",
+    "FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
     "BOILING_BATCH_TRACE",
     "PRODUCTION_ORDER_PROGRESS",
     "PRODUCTION_MATERIAL_TRACE",
@@ -262,6 +264,26 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
             noDataWhenEmptyList="records",
         ),
         limitations=("任务查询只展示当前任务记录，不代表任务已执行。",),
+    ),
+    "FINISH_INBOUND_TASK_TRANSITION_PREVIEW": GoalContractV1(
+        goalType="FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+        ownerExpert="logistics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("FINISH_INBOUND_TASK_TRANSITION_PREVIEW",),
+        allowedTools=("query_pallet_tasks", "preview_task_transition"),
+        evidenceTools=("preview_task_transition",),
+        factValidation=FactValidationRuleV1(
+            factLabel="成品入库任务处理预览",
+            requiredFields=(
+                "previewVersion", "previewStatusLabel", "canOpenBusinessDialog",
+                "requestedTaskCount", "eligibleTaskCount", "tasks", "blockingIssues",
+            ),
+            listFields=("tasks", "blockingIssues"),
+        ),
+        limitations=(
+            "预览只重查当前成品入库待处理任务并生成短期摘要，不执行入库或任务确认。",
+            "previewRef 不是 executionToken，最终提交仍在既有业务弹窗中完成。",
+        ),
     ),
     "BOILING_BATCH_TRACE": GoalContractV1(
         goalType="BOILING_BATCH_TRACE",
@@ -1280,6 +1302,8 @@ def registered_goal_for_plan(
             return "PRODUCT_INVENTORY_DISTRIBUTION"
     if tool_name == "query_pallet_tasks" and str(arguments.get("status") or "").upper() == "PENDING":
         return "CURRENT_PENDING_TASKS"
+    if tool_name == "preview_task_transition":
+        return "FINISH_INBOUND_TASK_TRANSITION_PREVIEW"
     if tool_name == "resolve_production_entities":
         entity_type = str(arguments.get("entityType") or "").upper()
         if entity_type == "BOILING_BATCH":

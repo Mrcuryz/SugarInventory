@@ -1,4 +1,4 @@
-version: m1.5r-k02
+version: m1.5r-l2-preview01
 scope: "Agent Runtime Playbook + Tool Capability Registry + LLM Wiki Lite"
 principles:
   - "本 registry 描述业务能力和工具选择边界，不替代 MCP schema。"
@@ -10,7 +10,7 @@ principles:
 agent_v1_reaudit:
   status: "DESIGN_ONLY"
   source: "前端菜单/路由 + webpage API + 后端 Controller；docs/openapi.json 当前缺失。"
-  finding: "当前 52 个只读/登记报表工具已完成已登记专家的运行时规划集；run_registered_report 目前受控运行七个版本化确定性报表定义，不接受模型创建任意报表。"
+  finding: "当前 52 个只读/登记报表工具与 1 个无写入 L2 任务预览工具已完成已登记专家的运行时规划集；run_registered_report 目前受控运行七个版本化确定性报表定义，不接受模型创建任意报表。"
   target_expert_domains:
     - inventory
     - warehouse
@@ -34,7 +34,7 @@ expert_tool_roadmap:
   recipe_roadmap: "docs/agent/cross-expert-recipe-roadmap-registry.yaml"
   data_semantic_roadmap: "docs/agent/data-semantic-roadmap-registry.yaml"
   business_rule_roadmap: "docs/agent/business-rule-roadmap-registry.yaml"
-  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 52 个只读/登记报表工具、专家白名单或配方注册表。"
+  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 52 个 L1 只读/登记报表工具、1 个 L2 任务预览工具、专家白名单或配方注册表。"
 
 agent_architecture:
   main_agent:
@@ -102,7 +102,7 @@ agent_architecture:
       model_policy_key: "master_data"
     logistics_expert:
       domains: ["logistics", "task", "document", "auto_inbound"]
-      allowed_tools: ["query_pallet_tasks", "query_stock_documents", "query_auto_inbound_batches", "get_auto_inbound_batch_detail"]
+      allowed_tools: ["query_pallet_tasks", "preview_task_transition", "query_stock_documents", "query_auto_inbound_batches", "get_auto_inbound_batch_detail"]
       model_policy_key: "logistics"
     administration_expert:
       domains: ["administration", "employee", "rbac"]
@@ -458,6 +458,20 @@ tools:
     required_slots: []
     permission: "task:view"
     data_scope: "CURRENT_PALLET_TASKS"
+
+  preview_task_transition:
+    business_name: "成品入库任务处理预览"
+    risk_level: "L2"
+    owner_expert: "logistics_expert"
+    can_answer:
+      - "重查 1 到 20 个已明确选择的成品入库待处理托盘，生成短期、签名、不可变状态摘要。"
+      - "说明哪些字段仍需用户在既有业务弹窗中确认。"
+    cannot_answer:
+      - "不能确认任务、写入库存、创建单据或改变二维码状态。"
+      - "previewRef 不是 executionToken，不能用于任何 execute 操作。"
+    required_slots: ["preview_version", "transition", "pallet_codes"]
+    permission: "task:view + task:confirm"
+    data_scope: "CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW"
 
   query_stock_documents:
     business_name: "库存单据查询"
