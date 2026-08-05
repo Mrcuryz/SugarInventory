@@ -111,6 +111,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -132,6 +133,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
 
     private static final Logger log = LoggerFactory.getLogger(PalletCodeServiceImpl.class);
     private static final int MAX_BATCH_SIZE = 100;
+    private static final int MAX_TASK_TRANSITION_BATCH_SIZE = 20;
     private static final int MAX_LOCATION_RETRY = 3;
     private static final int FLOW_RETENTION_DAYS = 180;
     private static final String LEFT_SIDE = "左";
@@ -279,12 +281,19 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     }
 
     private PalletCode parseAndFindForUpdate(String rawCode) {
+        return parseAndFindForUpdate(rawCode, null);
+    }
+
+    private PalletCode parseAndFindForUpdate(String rawCode, Integer expectedPalletCodeId) {
         PalletCode palletCode = parseAndFind(rawCode);
-        return this.baseMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<PalletCode>()
-                        .eq("id", palletCode.getId())
-                        .last("limit 1 for update")
-        );
+        if (expectedPalletCodeId != null && !Objects.equals(expectedPalletCodeId, palletCode.getId())) {
+            throw new BusinessException("托盘码关联已变化，请刷新后重试");
+        }
+        PalletCode locked = this.baseMapper.selectByIdForUpdate(palletCode.getId());
+        if (locked == null) {
+            throw new BusinessException(ErrorCode.PALLET_CODE_NOT_FOUND);
+        }
+        return locked;
     }
 
     // 托盘码解析 + 关联信息补全
@@ -898,8 +907,13 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     @Override
     @Transactional
     public InVO confirmSingleFinishedTaskIn(ConfirmPalletInItemDTO dto, Integer operatorId) {
+        return confirmSingleFinishedTaskIn(dto, operatorId, null);
+    }
+
+    private InVO confirmSingleFinishedTaskIn(ConfirmPalletInItemDTO dto, Integer operatorId,
+                                             Integer expectedPalletCodeId) {
         // 1) 解析托盘码并校验当前状态
-        PalletCode palletCode = parseAndFindForUpdate(dto.getCode());
+        PalletCode palletCode = parseAndFindForUpdate(dto.getCode(), expectedPalletCodeId);
         if ("ORDER_RESERVED".equalsIgnoreCase(palletCode.getStatus())) {
             throw new BusinessException("该码是订单预打印标签，需先由生产管理确认生产结束后再入库");
         }
@@ -986,10 +1000,11 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (dto == null || dto.getItems() == null || dto.getItems().isEmpty()) {
             throw new BusinessException("入库列表不能为空");
         }
-        // 逐条确认；如中途失败触发事务回滚
-        List<InVO> results = new ArrayList<>();
-        for (ConfirmPalletInItemDTO item : dto.getItems()) {
-            results.add(confirmSingleFinishedTaskIn(item, operatorId));
+        List<ResolvedInboundBatchItem> items = resolveAndSortInboundBatchItems(dto.getItems());
+        // 预校验完成后按托盘主键固定顺序确认；任一项失败由外层事务整批回滚。
+        List<InVO> results = new ArrayList<>(items.size());
+        for (ResolvedInboundBatchItem item : items) {
+            results.add(confirmSingleFinishedTaskIn(item.request(), operatorId, item.palletCodeId()));
         }
         return results;
     }
@@ -1542,6 +1557,71 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             normalized.add(code);
         }
         return normalized;
+    }
+
+    List<ResolvedInboundBatchItem> resolveAndSortInboundBatchItems(List<ConfirmPalletInItemDTO> rawItems) {
+        validateTaskTransitionBatchSize(rawItems.size());
+        List<ResolvedInboundBatchItem> resolved = new ArrayList<>(rawItems.size());
+        Set<String> seenInputs = new LinkedHashSet<>();
+        Set<Integer> seenPalletIds = new LinkedHashSet<>();
+        for (ConfirmPalletInItemDTO item : rawItems) {
+            if (item == null) {
+                throw new BusinessException("入库项不能为空");
+            }
+            String code = normalizeCode(item.getCode());
+            if (!seenInputs.add(code)) {
+                throw new BusinessException("同一请求中不允许重复扫码同一托盘");
+            }
+            PalletCode palletCode = parseAndFind(code);
+            if (palletCode.getId() == null) {
+                throw new BusinessException("托盘数据异常");
+            }
+            if (!seenPalletIds.add(palletCode.getId())) {
+                throw new BusinessException("同一请求中不允许重复扫码同一托盘");
+            }
+            item.setCode(code);
+            resolved.add(new ResolvedInboundBatchItem(palletCode.getId(), item));
+        }
+        resolved.sort(Comparator.comparing(ResolvedInboundBatchItem::palletCodeId));
+        return resolved;
+    }
+
+    private List<ResolvedPalletCode> resolveAndSortTaskCodes(List<String> rawCodes) {
+        if (rawCodes == null || rawCodes.isEmpty()) {
+            throw new BusinessException("托盘码列表不能为空");
+        }
+        validateTaskTransitionBatchSize(rawCodes.size());
+        List<ResolvedPalletCode> resolved = new ArrayList<>(rawCodes.size());
+        Set<String> seenInputs = new LinkedHashSet<>();
+        Set<Integer> seenPalletIds = new LinkedHashSet<>();
+        for (String rawCode : rawCodes) {
+            String code = normalizeCode(rawCode);
+            if (!seenInputs.add(code)) {
+                throw new BusinessException("同一请求中不允许重复扫码同一托盘");
+            }
+            PalletCode palletCode = parseAndFind(code);
+            if (palletCode.getId() == null) {
+                throw new BusinessException("托盘数据异常");
+            }
+            if (!seenPalletIds.add(palletCode.getId())) {
+                throw new BusinessException("同一请求中不允许重复扫码同一托盘");
+            }
+            resolved.add(new ResolvedPalletCode(palletCode.getId(), code));
+        }
+        resolved.sort(Comparator.comparing(ResolvedPalletCode::palletCodeId));
+        return resolved;
+    }
+
+    private void validateTaskTransitionBatchSize(int size) {
+        if (size > MAX_TASK_TRANSITION_BATCH_SIZE) {
+            throw new BusinessException("单次最多处理20个托盘");
+        }
+    }
+
+    record ResolvedInboundBatchItem(Integer palletCodeId, ConfirmPalletInItemDTO request) {
+    }
+
+    private record ResolvedPalletCode(Integer palletCodeId, String normalizedInput) {
     }
 
     private String normalizeCode(String rawCode) {
@@ -2751,8 +2831,9 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         if (dto == null || dto.getCodes() == null || dto.getCodes().isEmpty()) {
             throw new BusinessException("托盘码列表不能为空");
         }
-        for (String rawCode : dto.getCodes()) {
-            PalletCode palletCode = parseAndFind(rawCode);
+        List<ResolvedPalletCode> codes = resolveAndSortTaskCodes(dto.getCodes());
+        for (ResolvedPalletCode code : codes) {
+            PalletCode palletCode = parseAndFindForUpdate(code.normalizedInput(), code.palletCodeId());
             cancelTasksForPallet(palletCode, operatorId, dto.getRemark());
         }
     }

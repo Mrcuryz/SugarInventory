@@ -574,6 +574,8 @@
 
 ## 变更日志
 
+- 2026-08-06：完成首个 L3 候选的 S0 代码级业务加固，但没有新增或开放 Agent 写工具。既有人工成品入库批量入口增加最多 20 条的 DTO 与服务双层限制；整批在任何业务写入前完成托盘码规范化、不同标签同托盘去重和解析，以托盘主键固定排序；确认与取消统一调用显式托盘行锁，真正加锁前再次验证标签关联没有变化。新增 10 项托盘服务单元合同，覆盖入库/取消上限、入库/取消别名重复、确认顺序、取消锁顺序、统一行锁及其 `FOR UPDATE` SQL、标签关联变化和整批事务注解边界；定向测试通过。Mockito 证据不能替代真实 MySQL 锁等待和事务回滚，下一步仍需隔离数据库双事务复验，因此结论为 `S0_CODE_AND_UNIT_CONTRACT_GO / S0_ISOLATED_DATABASE_UAT_REQUIRED / AGENT_L3_EXECUTION_NO_GO / PRODUCTION_NOT_RELEASED`。
+
 - 2026-08-05：完成首个 L3 候选“成品入库确认”的专项代码审计与准入协议冻结，但没有新增业务写工具。审计确认现有 `preview_task_transition` 只绑定 transition 和托盘码，不能充当精确执行计划；现有人工确认还缺批量上限、去重与固定顺序，且取消路径未采用与确认一致的托盘锁策略。首个候选因此收窄为未来的 `preview_finish_inbound_execution → 受控按钮确认 → 服务端 executionToken/idempotencyKey → execute_finish_inbound_task`，半成品入库、出库、调拨和主动触发均不在范围。新增机器可读 `finish-inbound-l3-gate.yaml` 和 4 项 Java 防漂移合同测试；定向测试与 Java 全量测试均通过，`git diff --check` 通过。当前结论为 `FINISH_INBOUND_L3_DESIGN_READY / BUSINESS_HARDENING_NO_GO / EXECUTION_IMPLEMENTATION_NO_GO / AGENT_L3_EXECUTION_NO_GO / PRODUCTION_NOT_RELEASED`。设计见 `finish-inbound-l3-readiness-design-2026-08-05.md`。
 
 - 2026-08-05：完成第三个正式 L2 工程切片，将调拨任务接入独立 `TRANSFER_TASK_TRANSITION_PREVIEW` GoalContract，并继续复用唯一 `preview_task_transition`。Java 按 `TRANSFER + PENDING`、当前库存和既有库位堆叠规则在内存中模拟整批目标位置；前端 READY 结果只允许跳转到现有 `transferConfirm` 弹窗，冲突结果保持禁用，没有新增 execute 工具或修改调拨事务。真实浏览器验收发现并修复工具说明、专家说明、Python schema 和确定性意图路由仍漏登记调拨的问题。最终回归为 Python `465 passed, 5 skipped`、Java 根项目和 warehouse-mcp 全量通过、前端任务预览相关 `12 passed` 且生产构建通过。隔离链路完成 `BT9999ZZ` 冲突阻断、禁用业务弹窗、直接写入请求拒绝、任务仍为 6 条和工具审计无 execute 调用；本地无待处理调拨数据，因此未伪造正向业务数据，结论为 `L2_PREVIEW_ENGINEERING_GO / LOCAL_NEGATIVE_UAT_PASS / POSITIVE_TRANSFER_FIXTURE_NOT_AVAILABLE / AGENT_L3_EXECUTION_NO_GO / PRODUCTION_NOT_RELEASED`。记录见 `transfer-task-transition-preview-2026-08-05.md`。

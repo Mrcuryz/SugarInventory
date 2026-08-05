@@ -45,16 +45,18 @@ class FinishInboundL3ReadinessContractTest {
     }
 
     @Test
-    void recordsMissingBatchMaximumAsAnExplicitReadinessBlocker() throws Exception {
+    void recognizesClosedBatchLimitContractWithoutOpeningL3Execution() throws Exception {
         Field items = ConfirmPalletInBatchDTO.class.getDeclaredField("items");
-        assertThat(items.getAnnotation(Size.class)).isNull();
+        assertThat(items.getAnnotation(Size.class)).isNotNull();
+        assertThat(items.getAnnotation(Size.class).max()).isEqualTo(20);
 
         String gate = Files.readString(Path.of(
                 "docs", "agent", "finish-inbound-l3-gate.yaml"), StandardCharsets.UTF_8);
         assertThat(gate).contains(
+                "business_hardening_status: PARTIAL",
                 "batch_limit_dedup_sort:",
-                "status: NO_GO",
-                "batch_over_20_is_rejected");
+                "batch_over_20_is_rejected: PASS",
+                "execution_implementation_status: NO_GO");
     }
 
     @Test

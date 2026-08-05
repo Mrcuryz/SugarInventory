@@ -1,6 +1,9 @@
 package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.domain.dto.CancelPalletBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInBatchDTO;
+import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInItemDTO;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.Inventory;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
@@ -12,11 +15,15 @@ import com.Laibin.SugarInventory.mapper.PalletCodeMapper;
 import com.Laibin.SugarInventory.mapper.PalletTaskMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
+import org.apache.ibatis.annotations.Select;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -99,6 +106,193 @@ class PalletCodeServiceImplTest {
         verify(inventoryMapper, never()).updateLocation(anyInt(), anyInt(), any(), anyInt(), anyInt());
         verify(taskMapper, never()).insert(any());
         verify(warehouseMapper, never()).updateCurCapacity(anyInt(), anyInt());
+    }
+
+    @Test
+    void rejectsInboundBatchOverTwentyBeforeResolvingAnyPallet() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        ConfirmPalletInBatchDTO dto = new ConfirmPalletInBatchDTO();
+        dto.setItems(IntStream.rangeClosed(1, 21)
+                .mapToObj(index -> inboundItem("BT" + index))
+                .toList());
+
+        assertThatThrownBy(() -> service.confirmFinishedTaskInBatch(dto, 7))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("单次最多处理20个托盘");
+
+        verify(service, never()).parseAndFind(any());
+    }
+
+    @Test
+    void rejectsDifferentInputsResolvingToSamePalletBeforeBusinessWrites() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        PalletCode pallet = pallet(10, "BT000001", "PENDING");
+        doReturn(pallet).when(service).parseAndFind("BT000001");
+        doReturn(pallet).when(service).parseAndFind("LB|ORDER-LABEL");
+
+        ConfirmPalletInBatchDTO dto = inboundBatch(
+                inboundItem("BT000001"),
+                inboundItem("LB|order-label"));
+
+        assertThatThrownBy(() -> service.confirmFinishedTaskInBatch(dto, 7))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不允许重复扫码同一托盘");
+
+    }
+
+    @Test
+    void confirmsInboundBatchInStablePalletIdOrder() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        doReturn(pallet(20, "BT000002", "PENDING")).when(service).parseAndFind("BT000002");
+        doReturn(pallet(10, "BT000001", "PENDING")).when(service).parseAndFind("BT000001");
+        ConfirmPalletInBatchDTO dto = inboundBatch(
+                inboundItem("bt000002"),
+                inboundItem(" BT000001 "));
+
+        var resolved = service.resolveAndSortInboundBatchItems(dto.getItems());
+
+        assertThat(resolved).extracting(PalletCodeServiceImpl.ResolvedInboundBatchItem::palletCodeId)
+                .containsExactly(10, 20);
+        assertThat(resolved).extracting(item -> item.request().getCode())
+                .containsExactly("BT000001", "BT000002");
+    }
+
+    @Test
+    void rejectsChangedLabelAssociationBeforeAcquiringAnUnexpectedLock() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        PalletCodeMapper palletMapper = mock(PalletCodeMapper.class);
+        ReflectionTestUtils.setField(service, "baseMapper", palletMapper);
+        doReturn(pallet(10, "BT000001", "PENDING"), pallet(11, "BT000011", "PENDING"))
+                .when(service).parseAndFind("LB|ORDER-LABEL");
+
+        ConfirmPalletInBatchDTO dto = inboundBatch(inboundItem("LB|order-label"));
+
+        assertThatThrownBy(() -> service.confirmFinishedTaskInBatch(dto, 7))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("托盘码关联已变化");
+        verify(palletMapper, never()).selectByIdForUpdate(anyInt());
+    }
+
+    @Test
+    void keepsWholeInboundBatchOnOneTransactionalBoundary() throws Exception {
+        Method batchMethod = PalletCodeServiceImpl.class.getMethod(
+                "confirmFinishedTaskInBatch", ConfirmPalletInBatchDTO.class, Integer.class);
+        assertThat(batchMethod.getAnnotation(Transactional.class)).isNotNull();
+    }
+
+    @Test
+    void confirmAndCancelBothAcquireTheSamePalletRowLock() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        PalletCodeMapper palletMapper = mock(PalletCodeMapper.class);
+        PalletTaskMapper taskMapper = mock(PalletTaskMapper.class);
+        ReflectionTestUtils.setField(service, "baseMapper", palletMapper);
+        ReflectionTestUtils.setField(service, "palletTaskMapper", taskMapper);
+
+        PalletCode unresolved = pallet(10, "BT000001", "PENDING");
+        PalletCode lockedForConfirm = pallet(10, "BT000001", "FREE");
+        PalletCode lockedForCancel = pallet(10, "BT000001", "PENDING");
+        doReturn(unresolved).when(service).parseAndFind("BT000001");
+        when(palletMapper.selectByIdForUpdate(10)).thenReturn(lockedForConfirm, lockedForCancel);
+
+        ConfirmPalletInItemDTO confirm = inboundItem("BT000001");
+        assertThatThrownBy(() -> service.confirmSingleFinishedTaskIn(confirm, 7))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("状态不支持入库确认");
+
+        when(taskMapper.selectList(any())).thenReturn(List.of());
+        CancelPalletBatchDTO cancel = new CancelPalletBatchDTO();
+        cancel.setCodes(List.of("bt000001"));
+        service.cancelTasksByCodes(cancel, 7);
+
+        verify(palletMapper, times(2)).selectByIdForUpdate(10);
+        verify(taskMapper).selectList(any());
+    }
+
+    @Test
+    void palletLockMapperUsesDatabaseForUpdateClause() throws Exception {
+        Method lockMethod = PalletCodeMapper.class.getMethod("selectByIdForUpdate", Integer.class);
+        Select select = lockMethod.getAnnotation(Select.class);
+
+        assertThat(select).isNotNull();
+        assertThat(String.join(" ", select.value())).containsIgnoringCase("FOR UPDATE");
+    }
+
+    @Test
+    void cancelsBatchInStablePalletIdLockOrder() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        PalletCodeMapper palletMapper = mock(PalletCodeMapper.class);
+        PalletTaskMapper taskMapper = mock(PalletTaskMapper.class);
+        ReflectionTestUtils.setField(service, "baseMapper", palletMapper);
+        ReflectionTestUtils.setField(service, "palletTaskMapper", taskMapper);
+
+        PalletCode first = pallet(10, "BT000001", "PENDING");
+        PalletCode second = pallet(20, "BT000002", "PENDING");
+        doReturn(first).when(service).parseAndFind("BT000001");
+        doReturn(second).when(service).parseAndFind("BT000002");
+        when(palletMapper.selectByIdForUpdate(10)).thenReturn(first);
+        when(palletMapper.selectByIdForUpdate(20)).thenReturn(second);
+        when(taskMapper.selectList(any())).thenReturn(List.of());
+
+        CancelPalletBatchDTO dto = new CancelPalletBatchDTO();
+        dto.setCodes(List.of("BT000002", "BT000001"));
+        service.cancelTasksByCodes(dto, 7);
+
+        var lockOrder = inOrder(palletMapper);
+        lockOrder.verify(palletMapper).selectByIdForUpdate(10);
+        lockOrder.verify(palletMapper).selectByIdForUpdate(20);
+    }
+
+    @Test
+    void rejectsCancelBatchOverTwentyBeforeResolvingAnyPallet() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        CancelPalletBatchDTO dto = new CancelPalletBatchDTO();
+        dto.setCodes(IntStream.rangeClosed(1, 21)
+                .mapToObj(index -> "BT" + index)
+                .toList());
+
+        assertThatThrownBy(() -> service.cancelTasksByCodes(dto, 7))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("单次最多处理20个托盘");
+        verify(service, never()).parseAndFind(any());
+    }
+
+    @Test
+    void rejectsCancelAliasesResolvingToSamePalletBeforeAcquiringLocks() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        PalletCodeMapper palletMapper = mock(PalletCodeMapper.class);
+        ReflectionTestUtils.setField(service, "baseMapper", palletMapper);
+        PalletCode pallet = pallet(10, "BT000001", "PENDING");
+        doReturn(pallet).when(service).parseAndFind("BT000001");
+        doReturn(pallet).when(service).parseAndFind("LB|ORDER-LABEL");
+        CancelPalletBatchDTO dto = new CancelPalletBatchDTO();
+        dto.setCodes(List.of("BT000001", "LB|order-label"));
+
+        assertThatThrownBy(() -> service.cancelTasksByCodes(dto, 7))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不允许重复扫码同一托盘");
+        verify(palletMapper, never()).selectByIdForUpdate(anyInt());
+    }
+
+    private static ConfirmPalletInBatchDTO inboundBatch(ConfirmPalletInItemDTO... items) {
+        ConfirmPalletInBatchDTO dto = new ConfirmPalletInBatchDTO();
+        dto.setItems(List.of(items));
+        return dto;
+    }
+
+    private static ConfirmPalletInItemDTO inboundItem(String code) {
+        ConfirmPalletInItemDTO item = new ConfirmPalletInItemDTO();
+        item.setCode(code);
+        item.setWarehouseName("1");
+        return item;
+    }
+
+    private static PalletCode pallet(int id, String code, String status) {
+        PalletCode pallet = new PalletCode();
+        pallet.setId(id);
+        pallet.setCode(code);
+        pallet.setStatus(status);
+        pallet.setCurrentCycleNo(1);
+        return pallet;
     }
 
     private static PalletCode transferPallet(int id, String code) {
