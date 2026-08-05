@@ -101,12 +101,12 @@ experts:
       - analyze_auto_inbound_reconciliation
     v2_previews:
       - preview_auto_inbound_report
-      - preview_inbound_plan
+      - preview_finish_inbound_execution
       - preview_outbound_plan
       - preview_transfer_plan
       - preview_task_transition
     v2_write_pairs:
-      - [preview_inbound_plan, execute_inbound_plan]
+      - [preview_finish_inbound_execution, execute_finish_inbound_task]
       - [preview_outbound_plan, execute_outbound_plan]
       - [preview_transfer_plan, execute_transfer_plan]
       - [preview_auto_inbound_report, execute_auto_inbound_batch]

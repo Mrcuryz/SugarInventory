@@ -1,0 +1,101 @@
+version: 1
+as_of: 2026-08-05
+candidate: FINISH_INBOUND
+overall_status: NO_GO
+design_status: READY
+business_hardening_status: NO_GO
+execution_implementation_status: NO_GO
+production_status: NOT_RELEASED
+
+scope:
+  task_type: FINISH_IN
+  task_status: PENDING
+  batch_min: 1
+  batch_max: 20
+  includes: [finish_inbound_confirmation]
+  excludes: [semi_inbound, finish_outbound, transfer, automatic_trigger]
+
+planned_tools:
+  exact_preview:
+    name: preview_finish_inbound_execution
+    risk: L2
+    registered: false
+    implemented: false
+    enabled: false
+  execute:
+    name: execute_finish_inbound_task
+    risk: L3
+    registered: false
+    implemented: false
+    enabled: false
+
+current_handoff_preview:
+  name: preview_task_transition
+  role: TASK_ELIGIBILITY_AND_UI_HANDOFF_ONLY
+  execution_authority: false
+  bound_fields: [previewVersion, transition, palletCodes]
+  missing_execution_fields: [warehouseName, entryDate, side, quantity, unit, remark]
+
+exact_preview_input:
+  allowed: [code, warehouseName, entryDate, side, quantity, unit, remark]
+  first_slice_forbidden: [rowNumber, layer, productId, warehouseId, taskId, inventoryId]
+  server_authoritative_when_present: [productionOutputQuantity, productionOutputUnit]
+
+confirmation:
+  first_release_channel: CONTROLLED_UI_BUTTON
+  model_generated_confirmation: FORBIDDEN
+  server_generated_execution_token: REQUIRED
+  server_generated_idempotency_key: REQUIRED
+  token_one_time_consumption: REQUIRED
+  raw_business_dto_at_execute: FORBIDDEN
+
+gates:
+  preview_execute_separation:
+    status: GO
+    evidence: src/main/java/com/Laibin/SugarInventory/agent/internal/service/impl/McpInternalAgentToolGatewayService.java
+  exact_execution_preview:
+    status: NO_GO
+    evidence: src/main/java/com/Laibin/SugarInventory/domain/dto/TaskTransitionPreviewDTO.java
+  confirmation_binding:
+    status: PARTIAL
+    evidence: migrations/2026-08-05-add-agent-task-transition-preview.sql
+  confirm_cancel_lock_order:
+    status: NO_GO
+    evidence: src/main/java/com/Laibin/SugarInventory/service/impl/PalletCodeServiceImpl.java
+  batch_limit_dedup_sort:
+    status: NO_GO
+    evidence: src/main/java/com/Laibin/SugarInventory/domain/dto/ConfirmPalletInBatchDTO.java
+  idempotency_lifecycle:
+    status: NO_GO
+  atomic_execution_audit:
+    status: NO_GO
+  dedicated_execute_permission:
+    status: NO_GO
+    planned_permission: agent:finish-inbound:execute
+  structured_write_errors:
+    status: NO_GO
+  concurrency_and_recovery_tests:
+    status: NO_GO
+  isolated_role_uat:
+    status: NO_GO
+
+required_tests_before_execute_registration:
+  - concurrent_confirm_vs_cancel_has_one_deterministic_winner
+  - duplicate_code_is_rejected_before_business_writes
+  - batch_over_20_is_rejected
+  - batch_failure_rolls_back_all_business_changes
+  - changed_task_or_pallet_state_invalidates_confirmation
+  - expired_revoked_or_cross_user_token_is_rejected
+  - same_idempotency_key_returns_same_committed_result
+  - different_payload_with_same_idempotency_key_is_rejected
+  - retry_after_disconnect_does_not_repeat_business_write
+  - audit_unavailable_fails_closed_before_business_write
+  - business_failure_does_not_consume_token
+  - internal_enums_and_ids_are_not_exposed_to_user
+
+implementation_order:
+  - S0_BUSINESS_CONCURRENCY_AND_BATCH_HARDENING
+  - S1_EXACT_L2_EXECUTION_PREVIEW
+  - S2_CONFIRMATION_IDEMPOTENCY_AND_AUDIT_INFRASTRUCTURE
+  - S3_SINGLE_FINISH_INBOUND_EXECUTE_BEHIND_DISABLED_FLAG
+  - S4_ISOLATED_UAT_AND_SEPARATE_RELEASE_DECISION

@@ -78,3 +78,15 @@ Python 新增任务预览能力族的单一受控定义，统一维护：
 上述顺序以现有数据库字段、权限、业务接口和事务为准，不引入系统中不存在的审批、库存规则或业务状态。
 
 不可变预览归档的实现与边界见 `docs/agent/task-transition-preview-persistence-2026-08-05.md`。
+
+## 6. 首个 L3 候选专项审计补充
+
+首个候选已按第 5 节顺序收窄为成品入库确认，但专项代码审计后仍为 `NO-GO`：
+
+- 现有 `preview_task_transition` 只绑定 transition 和托盘码，不能绑定最终仓库、日期、侧、数量、单位和备注；
+- 现有人工批量确认入口没有 20 条上限、去重和固定锁顺序；
+- 确认路径锁定托盘，取消路径当前未采用相同锁策略，确认/取消竞争必须先在既有业务层整改；
+- 现有工具审计不是可与业务写入一起提交的执行审计，也没有 confirmation、execution token 或 idempotency 生命周期；
+- 当前只有人工业务权限 `task:confirm`，没有独立 Agent 成品入库执行权限。
+
+因此下一工程切片从既有业务并发与批量边界加固开始，不直接新增 execute。精确协议、门禁和测试矩阵见 `finish-inbound-l3-readiness-design-2026-08-05.md` 与 `finish-inbound-l3-gate.yaml`。

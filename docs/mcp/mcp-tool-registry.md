@@ -629,55 +629,24 @@ M2 工具只做 dry-run，不修改库存主数据。
 
 ---
 
-### 7.2 `preview_inbound_plan`
+### 7.2 `preview_finish_inbound_execution`
 
-状态：未实现，阻塞于后端 dry-run
+状态：协议设计完成，业务加固和工程实现均 `NO-GO`，未登记
 风险：L2
-用途：预览入库会占用哪些库位、是否容量不足、是否缺化验或筛网。
+用途：未来在用户完成既有成品入库表单后，对 `FINISH_IN + PENDING` 任务生成精确、不可变、可确认的执行预览。
 
-建议后端接口：
+输入只允许现有表单中的用户可理解字段：托盘码、仓库名称、入库日期、左/右侧、数量、单位和备注。首版不接受 `productId`、`warehouseId`、`taskId`、`inventoryId`、`rowNumber` 或 `layer`；有关联生产产出码时，最终数量和单位以后端记录为准。
 
-```text
-POST /api/agent/inbound/preview
-```
-
-输入建议：
-
-```json
-{
-  "items": [
-    {
-      "productId": 84,
-      "productStatus": "成品",
-      "productionDate": "2026-06-13",
-      "quantity": 1,
-      "unit": "PALLET",
-      "warehouseId": 2,
-      "side": "LEFT"
-    }
-  ],
-  "mode": "traditional"
-}
-```
-
-输出建议：
-
-* `planId`
-* `resolvedItems`
-* `targetLocations`
-* `capacityCheck`
-* `requiredAssays`
-* `blockingIssues`
-* `warnings`
-* `riskLevel`
+输出必须包含用户可读的规范化摘要、阻断问题和警告。内部实体版本、状态摘要和哈希只在服务端保存，用于执行时重检，不进入模型普通回答。
 
 禁止行为：
 
-* 不得写 `inventory`；
-* 不得写 `in_stock`；
-* 不得写 `semi_product_record`；
-* 不得写 `pallet_task`；
-* 不得改变托盘码状态。
+* 不得写库存、入库单、托盘、任务、流转、化验、生产进度或历史用料余额；
+* 不得签发可执行权，只有用户在受控界面确认后服务端才能生成一次性 token；
+* 不得复用现有 `preview_task_transition` 冒充精确执行预览；
+* 不得扩大到半成品入库、出库或调拨。
+
+完整门禁见 `docs/agent/finish-inbound-l3-gate.yaml`。
 
 ---
 
@@ -763,19 +732,20 @@ POST /api/agent/transfer/preview
 
 ---
 
-### 8.2 `execute_inbound_plan`
+### 8.2 `execute_finish_inbound_task`（收窄原 `execute_inbound_plan` 占位）
 
-状态：未实现，未来 M4
+状态：设计就绪、工程与启用均 `NO-GO`，未登记、未实现
 风险：L3
-用途：执行已预览且经用户确认的入库。
+用途：未来仅执行已完成精确预览且由用户显式确认的成品入库任务。首个候选不包含半成品入库、出库或调拨。
+
+现有 `preview_task_transition` 只有任务资格预览和既有弹窗交接作用，缺少仓库、日期、侧、数量、单位和备注等最终表单值，不能作为本工具的执行计划。未来必须先新增独立 L2 `preview_finish_inbound_execution`，并关闭 `docs/agent/finish-inbound-l3-gate.yaml` 的全部门禁。
 
 输入建议：
 
 ```json
 {
   "executionToken": "token",
-  "idempotencyKey": "uuid",
-  "confirmationText": "确认将黄冰糖1板入库到2号库位"
+  "idempotencyKey": "server-generated-key"
 }
 ```
 
@@ -784,6 +754,11 @@ POST /api/agent/transfer/preview
 * 不得直接接收完整入库 DTO 并执行；
 * 不得绕过 preview；
 * 不得接受 Agent 临时改写后的 productId、warehouseId、quantity。
+* 不得用模型生成的 `confirmationText` 代替用户在受控界面的明确确认；
+* 不得在首次实现中接收 `rowNumber`、`layer` 或任意完整业务 DTO；
+* 不得在确认/取消并发、批量上限与排序、幂等、专用权限和原子审计门禁未关闭时登记或启用。
+
+完整准入设计见 `docs/agent/finish-inbound-l3-readiness-design-2026-08-05.md`。
 
 ---
 
@@ -1040,10 +1015,10 @@ delete_any_record
 | `analyze_assay_records`       | 计划            |     M2/M5 | L2 | 否     | 化验统计分析        |
 | `export_assay_report`         | 计划            |        M5 | L2 | 否     | 化验报表导出        |
 | `preview_auto_inbound_report` | 计划            |        M2 | L2 | 否     | 自然语言报数预览      |
-| `preview_inbound_plan`        | 阻塞于后端 dry-run |        M2 | L2 | 否     | 入库预览          |
+| `preview_finish_inbound_execution` | 设计完成、工程门禁未关闭 | M3 | L2 | 否 | 首个候选的精确成品入库执行预览；不同于现有任务资格预览 |
 | `preview_outbound_plan`       | 阻塞于后端 dry-run |        M2 | L2 | 否     | 出库预览          |
 | `preview_transfer_plan`       | 阻塞于后端 dry-run |        M2 | L2 | 否     | 调拨预览          |
-| `execute_inbound_plan`        | 未来            |        M4 | L3 | 否     | 入库执行          |
+| `execute_finish_inbound_task` | 设计完成、工程与启用均 NO-GO | M4 | L3 | 否 | 首个候选仅限成品入库确认 |
 | `execute_outbound_plan`       | 未来            |        M4 | L3 | 否     | 出库执行          |
 | `execute_transfer_plan`       | 未来            |        M4 | L3 | 否     | 调拨执行          |
 | `manage_reference_data`       | 不建议作为单一工具     |        未来 | L4 | 否     | 应拆分为多个强权限工具   |
@@ -1092,7 +1067,7 @@ delete_any_record
 计划：
 
 * `preview_auto_inbound_report`
-* `preview_inbound_plan`
+* 首个候选 `preview_finish_inbound_execution`（当前 `NO-GO`）
 * `preview_outbound_plan`
 * `preview_transfer_plan`
 
@@ -1115,7 +1090,7 @@ delete_any_record
 
 计划：
 
-* `execute_inbound_plan`
+* 首个候选 `execute_finish_inbound_task`（当前 `NO-GO`）
 * `execute_outbound_plan`
 * `execute_transfer_plan`
 
