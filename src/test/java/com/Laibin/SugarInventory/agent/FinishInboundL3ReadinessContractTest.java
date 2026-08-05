@@ -45,7 +45,7 @@ class FinishInboundL3ReadinessContractTest {
     }
 
     @Test
-    void recognizesClosedBatchLimitContractWithoutOpeningL3Execution() throws Exception {
+    void recognizesCompletedS0BusinessHardeningWithoutOpeningL3Execution() throws Exception {
         Field items = ConfirmPalletInBatchDTO.class.getDeclaredField("items");
         assertThat(items.getAnnotation(Size.class)).isNotNull();
         assertThat(items.getAnnotation(Size.class).max()).isEqualTo(20);
@@ -53,9 +53,12 @@ class FinishInboundL3ReadinessContractTest {
         String gate = Files.readString(Path.of(
                 "docs", "agent", "finish-inbound-l3-gate.yaml"), StandardCharsets.UTF_8);
         assertThat(gate).contains(
-                "business_hardening_status: PARTIAL",
+                "business_hardening_status: GO",
                 "batch_limit_dedup_sort:",
                 "batch_over_20_is_rejected: PASS",
+                "concurrent_confirm_vs_cancel_has_one_deterministic_winner: PASS_LOCAL_MYSQL_5_ROUNDS",
+                "batch_failure_rolls_back_all_business_changes: PASS_LOCAL_MYSQL",
+                "status: LOCAL_MYSQL_UAT_GO",
                 "execution_implementation_status: NO_GO");
     }
 

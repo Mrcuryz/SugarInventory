@@ -199,13 +199,13 @@ class PalletCodeServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("状态不支持入库确认");
 
-        when(taskMapper.selectList(any())).thenReturn(List.of());
+        when(taskMapper.selectPendingInboundByCycleForUpdate(10, 1)).thenReturn(List.of());
         CancelPalletBatchDTO cancel = new CancelPalletBatchDTO();
         cancel.setCodes(List.of("bt000001"));
         service.cancelTasksByCodes(cancel, 7);
 
         verify(palletMapper, times(2)).selectByIdForUpdate(10);
-        verify(taskMapper).selectList(any());
+        verify(taskMapper).selectPendingInboundByCycleForUpdate(10, 1);
     }
 
     @Test
@@ -215,6 +215,35 @@ class PalletCodeServiceImplTest {
 
         assertThat(select).isNotNull();
         assertThat(String.join(" ", select.value())).containsIgnoringCase("FOR UPDATE");
+    }
+
+    @Test
+    void pendingInboundTaskLockMapperUsesCurrentReadForUpdateClause() throws Exception {
+        Method lockMethod = PalletTaskMapper.class.getMethod(
+                "selectPendingInboundByCycleForUpdate", Integer.class, Integer.class);
+        Select select = lockMethod.getAnnotation(Select.class);
+
+        assertThat(select).isNotNull();
+        assertThat(String.join(" ", select.value())).containsIgnoringCase("FOR UPDATE");
+    }
+
+    @Test
+    void doesNotCancelStalePendingTaskAfterLockedPalletWasConfirmed() {
+        PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
+        PalletCodeMapper palletMapper = mock(PalletCodeMapper.class);
+        PalletTaskMapper taskMapper = mock(PalletTaskMapper.class);
+        ReflectionTestUtils.setField(service, "baseMapper", palletMapper);
+        ReflectionTestUtils.setField(service, "palletTaskMapper", taskMapper);
+
+        doReturn(pallet(10, "BT000001", "PENDING")).when(service).parseAndFind("BT000001");
+        when(palletMapper.selectByIdForUpdate(10)).thenReturn(pallet(10, "BT000001", "INSTOCK"));
+        CancelPalletBatchDTO dto = new CancelPalletBatchDTO();
+        dto.setCodes(List.of("BT000001"));
+
+        service.cancelTasksByCodes(dto, 7);
+
+        verify(taskMapper, never()).selectPendingInboundByCycleForUpdate(anyInt(), anyInt());
+        verify(taskMapper, never()).updateById(any());
     }
 
     @Test
@@ -231,7 +260,7 @@ class PalletCodeServiceImplTest {
         doReturn(second).when(service).parseAndFind("BT000002");
         when(palletMapper.selectByIdForUpdate(10)).thenReturn(first);
         when(palletMapper.selectByIdForUpdate(20)).thenReturn(second);
-        when(taskMapper.selectList(any())).thenReturn(List.of());
+        when(taskMapper.selectPendingInboundByCycleForUpdate(anyInt(), anyInt())).thenReturn(List.of());
 
         CancelPalletBatchDTO dto = new CancelPalletBatchDTO();
         dto.setCodes(List.of("BT000002", "BT000001"));

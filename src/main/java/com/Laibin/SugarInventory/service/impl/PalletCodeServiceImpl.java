@@ -2839,12 +2839,13 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     }
 
     private void cancelTasksForPallet(PalletCode palletCode, Integer operatorId, String remark) {
-        List<PalletTask> tasks = palletTaskMapper.selectList(
-                new LambdaQueryWrapper<PalletTask>()
-                        .eq(PalletTask::getPalletCodeId, palletCode.getId())
-                        .eq(PalletTask::getStatus, "PENDING")
-                        .eq(PalletTask::getCycleNo, getCurrentCycleNo(palletCode))
-        );
+        // The pallet lock is a current read. If confirmation committed while this
+        // transaction was waiting, do not use the earlier snapshot to cancel its task.
+        if (!"PENDING".equalsIgnoreCase(palletCode.getStatus())) {
+            return;
+        }
+        List<PalletTask> tasks = palletTaskMapper.selectPendingInboundByCycleForUpdate(
+                palletCode.getId(), getCurrentCycleNo(palletCode));
         if (tasks.isEmpty()) {
             return;
         }
@@ -2866,9 +2867,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             flow.setRemark(remark);
             palletFlowRecordMapper.insert(flow);
         }
-        if ("PENDING".equalsIgnoreCase(palletCode.getStatus())) {
-            releasePalletToFree(palletCode, operatorId);
-        }
+        releasePalletToFree(palletCode, operatorId);
     }
 
     private void cancelPreviousCyclePendingTasks(PalletCode palletCode, Integer operatorId, String remark) {

@@ -1,9 +1,9 @@
 version: 1
-as_of: 2026-08-05
+as_of: 2026-08-06
 candidate: FINISH_INBOUND
 overall_status: NO_GO
 design_status: READY
-business_hardening_status: PARTIAL
+business_hardening_status: GO
 execution_implementation_status: NO_GO
 production_status: NOT_RELEASED
 
@@ -63,8 +63,10 @@ gates:
     status: GO
     evidence:
       - src/main/java/com/Laibin/SugarInventory/mapper/PalletCodeMapper.java
+      - src/main/java/com/Laibin/SugarInventory/mapper/PalletTaskMapper.java
       - src/main/java/com/Laibin/SugarInventory/service/impl/PalletCodeServiceImpl.java
       - src/test/java/com/Laibin/SugarInventory/service/impl/PalletCodeServiceImplTest.java
+      - docs/agent/finish-inbound-s0-isolated-db-uat-2026-08-06.md
   batch_limit_dedup_sort:
     status: GO
     evidence:
@@ -81,9 +83,9 @@ gates:
   structured_write_errors:
     status: NO_GO
   concurrency_and_recovery_tests:
-    status: PARTIAL
-    completed: [service_lock_contract, stable_lock_order, inbound_and_cancel_duplicate_alias_rejection, inbound_and_cancel_batch_limit, changed_alias_rejection, transactional_boundary_contract]
-    pending: [isolated_database_concurrent_winner, isolated_database_full_batch_rollback]
+    status: GO
+    completed: [service_lock_contract, stable_lock_order, inbound_and_cancel_duplicate_alias_rejection, inbound_and_cancel_batch_limit, changed_alias_rejection, transactional_boundary_contract, isolated_database_concurrent_winner, isolated_database_full_batch_rollback]
+    pending: []
   isolated_role_uat:
     status: NO_GO
 
@@ -93,8 +95,8 @@ required_tests_before_execute_registration:
   batch_over_20_is_rejected: PASS
   label_association_change_is_rejected_before_unexpected_lock: PASS
   whole_batch_transactional_boundary_is_present: PASS
-  concurrent_confirm_vs_cancel_has_one_deterministic_winner: PENDING_ISOLATED_DATABASE
-  batch_failure_rolls_back_all_business_changes: PENDING_ISOLATED_DATABASE
+  concurrent_confirm_vs_cancel_has_one_deterministic_winner: PASS_LOCAL_MYSQL_5_ROUNDS
+  batch_failure_rolls_back_all_business_changes: PASS_LOCAL_MYSQL
   changed_task_or_pallet_state_invalidates_confirmation: PENDING_S1
   expired_revoked_or_cross_user_token_is_rejected: PENDING_S2
   same_idempotency_key_returns_same_committed_result: PENDING_S2
@@ -106,8 +108,9 @@ required_tests_before_execute_registration:
 
 completed_slices:
   S0_SERVICE_HARDENING:
-    status: CODE_AND_UNIT_CONTRACT_GO
-    isolated_database_uat: REQUIRED
+    status: LOCAL_MYSQL_UAT_GO
+    isolated_database_uat: PASS
+    evidence: docs/agent/finish-inbound-s0-isolated-db-uat-2026-08-06.md
 
 implementation_order:
   - S0_BUSINESS_CONCURRENCY_AND_BATCH_HARDENING

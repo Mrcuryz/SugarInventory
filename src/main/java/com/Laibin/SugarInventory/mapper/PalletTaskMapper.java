@@ -37,6 +37,15 @@ public interface PalletTaskMapper extends BaseMapper<PalletTask> {
     PalletTask selectPendingByCycle(@Param("palletCodeId") Integer palletCodeId,
                                     @Param("cycleNo") Integer cycleNo);
 
+    @Select("SELECT * FROM pallet_task " +
+            "WHERE pallet_code_id = #{palletCodeId} " +
+            "AND status = 'PENDING' " +
+            "AND task_type IN ('SEMI_IN','FINISH_IN') " +
+            "AND cycle_no = #{cycleNo} " +
+            "ORDER BY id ASC FOR UPDATE")
+    List<PalletTask> selectPendingInboundByCycleForUpdate(@Param("palletCodeId") Integer palletCodeId,
+                                                          @Param("cycleNo") Integer cycleNo);
+
     @Select("SELECT COUNT(*) FROM pallet_task " +
             "WHERE pallet_code_id = #{palletCodeId} " +
             "AND status = 'PENDING' " +
