@@ -91,6 +91,7 @@ from app.observability import (
 )
 from app.policies import FastCompletionPolicy, NextActionPolicy, SafeFallbackPolicy
 from app.progress import report_business_progress, report_tool_progress
+from app.task_transition_previews import TASK_TRANSITION_PREVIEW_BY_TRANSITION
 from app.rag.contracts import RetrievalStatus
 from app.rag.runtime.contracts import (
     INTERNAL_KNOWLEDGE_TOOLS,
@@ -9869,15 +9870,12 @@ class WarehouseAgentRuntime:
     ) -> SafeTaskTransitionPreview:
         source = result if isinstance(result, dict) else {}
         transition = self._safe_text(source.get("transition"))
-        transition_presentation = {
-            "CONFIRM_FINISH_INBOUND": ("confirmIn", "成品入库", "确认成品入库"),
-            "CONFIRM_FINISH_OUTBOUND": ("finishOutConfirm", "成品出库", "确认成品出库"),
-            "CONFIRM_TRANSFER": ("transferConfirm", "调拨", "确认调拨"),
-        }
-        recognized_transition = transition in transition_presentation
-        batch_action, task_group_label, fallback_transition_label = transition_presentation.get(
-            transition,
-            ("confirmIn", "成品入库", "不支持的任务预览"),
+        transition_definition = TASK_TRANSITION_PREVIEW_BY_TRANSITION.get(transition)
+        recognized_transition = transition_definition is not None
+        batch_action = transition_definition.batch_action if transition_definition else "confirmIn"
+        task_group_label = transition_definition.task_group_label if transition_definition else "成品入库"
+        fallback_transition_label = (
+            transition_definition.transition_label if transition_definition else "不支持的任务预览"
         )
         tasks: list[SafeTaskTransitionPreviewTask] = []
         raw_tasks = source.get("tasks") if isinstance(source.get("tasks"), list) else []

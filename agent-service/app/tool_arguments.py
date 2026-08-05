@@ -32,6 +32,11 @@ from app.model import (
 from app.orchestration import CompoundIntentPlanner, new_orchestration_state
 from app.tools.client import ALLOWED_TOOLS
 from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS, KNOWLEDGE_TOOL_NAME
+from app.task_transition_previews import (
+    TASK_TRANSITION_PREVIEW_BY_INTENT,
+    TASK_TRANSITION_PREVIEW_BY_TRANSITION,
+    TASK_TRANSITION_PREVIEW_TRANSITIONS,
+)
 
 
 PRODUCT_SCOPE_SCHEMA: dict[str, Any] = {
@@ -561,7 +566,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "previewVersion": {"type": "integer", "const": 1},
             "transition": {
                 "type": "string",
-                "enum": ["CONFIRM_FINISH_INBOUND", "CONFIRM_FINISH_OUTBOUND", "CONFIRM_TRANSFER"],
+                "enum": list(TASK_TRANSITION_PREVIEW_TRANSITIONS),
             },
             "palletCodes": {
                 "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": True,
@@ -1702,17 +1707,8 @@ class ToolArgumentBuilder:
             return ModelPlanDecision(action="call_tool", toolName="query_pallet_tasks",
                                      arguments=self._validate("query_pallet_tasks", args),
                                      intent=route.intent_subtype, responseMode="pallet_tasks", routeSnapshot=snapshot)
-        if route.intent_subtype in {
-            "finish_inbound_task_transition_preview",
-            "finish_outbound_task_transition_preview",
-            "transfer_task_transition_preview",
-        }:
-            transition_by_intent = {
-                "finish_inbound_task_transition_preview": ("成品入库", "CONFIRM_FINISH_INBOUND"),
-                "finish_outbound_task_transition_preview": ("成品出库", "CONFIRM_FINISH_OUTBOUND"),
-                "transfer_task_transition_preview": ("调拨", "CONFIRM_TRANSFER"),
-            }
-            task_group, transition = transition_by_intent[route.intent_subtype]
+        if route.intent_subtype in TASK_TRANSITION_PREVIEW_BY_INTENT:
+            transition_definition = TASK_TRANSITION_PREVIEW_BY_INTENT[route.intent_subtype]
             codes = re.findall(
                 r"(?<![A-Za-z0-9-])([A-Za-z]{2,}[A-Za-z0-9-]*\d[A-Za-z0-9-]*)(?![A-Za-z0-9-])",
                 user_message or "",
@@ -1720,7 +1716,7 @@ class ToolArgumentBuilder:
             if not codes:
                 return ModelPlanDecision(
                     action="ask_user",
-                    prompt=f"请先在待处理任务卡片中选择{task_group}托盘。",
+                    prompt=f"请先在待处理任务卡片中选择{transition_definition.task_group_label}托盘。",
                     intent=route.intent_subtype,
                     responseMode="task_transition_preview",
                     routeSnapshot=snapshot,
@@ -1730,7 +1726,7 @@ class ToolArgumentBuilder:
                 toolName="preview_task_transition",
                 arguments=self._validate("preview_task_transition", {
                     "previewVersion": 1,
-                    "transition": transition,
+                    "transition": transition_definition.transition,
                     "palletCodes": codes,
                 }),
                 intent=route.intent_subtype,
@@ -2807,7 +2803,7 @@ class ToolArgumentBuilder:
             if arguments.get("previewVersion") != 1:
                 raise ValueError("previewVersion must be 1")
             transition = arguments.get("transition")
-            if transition not in {"CONFIRM_FINISH_INBOUND", "CONFIRM_FINISH_OUTBOUND", "CONFIRM_TRANSFER"}:
+            if transition not in TASK_TRANSITION_PREVIEW_BY_TRANSITION:
                 raise ValueError("unsupported task transition")
             raw_codes = arguments.get("palletCodes")
             if not isinstance(raw_codes, list) or not 1 <= len(raw_codes) <= 20:

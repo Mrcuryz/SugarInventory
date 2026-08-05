@@ -8,6 +8,7 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.state_models import EntityContextV1
+from app.task_transition_previews import TASK_TRANSITION_PREVIEW_BY_TRANSITION
 
 
 CoreGoalTypeV1 = Literal[
@@ -1347,11 +1348,8 @@ def registered_goal_for_plan(
     if tool_name == "query_pallet_tasks" and str(arguments.get("status") or "").upper() == "PENDING":
         return "CURRENT_PENDING_TASKS"
     if tool_name == "preview_task_transition":
-        if arguments.get("transition") == "CONFIRM_FINISH_OUTBOUND":
-            return "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW"
-        if arguments.get("transition") == "CONFIRM_TRANSFER":
-            return "TRANSFER_TASK_TRANSITION_PREVIEW"
-        return "FINISH_INBOUND_TASK_TRANSITION_PREVIEW"
+        definition = TASK_TRANSITION_PREVIEW_BY_TRANSITION.get(str(arguments.get("transition") or ""))
+        return definition.goal_type if definition is not None else None
     if tool_name == "resolve_production_entities":
         entity_type = str(arguments.get("entityType") or "").upper()
         if entity_type == "BOILING_BATCH":
