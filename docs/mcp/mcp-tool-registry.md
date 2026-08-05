@@ -1549,9 +1549,9 @@ RAG-03C 的 Java 接入不改变上述 registry：`knowledge_expert` 的回答�
 Tool。非流式与流式链路均不得把 query、evidence、文件路径、内部 ID、检索分数或凭据写入
 用户响应和审计。
 
-待处理任务的 UI 安全跳转保持统一：Runtime 对“处理/确认当前待处理入库、出库或调拨任务”先委派 `logistics_expert` 调用 L1 `query_pallet_tasks` 并强制 `status=PENDING`。成品入库、成品出库和调拨分组均接入同一个正式 L2 `preview_task_transition`。用户明确选择 1～20 个托盘后，主模型再次理解预览请求，物流专家只能选择三个显式转换之一：`CONFIRM_FINISH_INBOUND`、`CONFIRM_FINISH_OUTBOUND` 或 `CONFIRM_TRANSFER`。Java 使用当前用户同时校验 `task:view`、`task:confirm`；入库重新读取 `FINISH_IN + PENDING` 当前轮次任务；出库重新读取 `OUT + FINISH_OUT + PENDING` 并核对托盘和库存；调拨重新读取 `TRANSFER + PENDING`，按既有左右侧、层数和产品可堆叠规则模拟整批目标位置。三种预览均不写库，最终提交仍由既有业务弹窗重新校验。
+待处理任务的 UI 安全跳转保持统一：Runtime 对“处理/确认当前待处理入库、出库或调拨任务”先委派 `logistics_expert` 调用 L1 `query_pallet_tasks` 并强制 `status=PENDING`。成品入库、成品出库和调拨分组均接入同一个正式 L2 `preview_task_transition`。用户明确选择 1～20 个托盘后，主模型再次理解预览请求，物流专家只能选择三个显式转换之一：`CONFIRM_FINISH_INBOUND`、`CONFIRM_FINISH_OUTBOUND` 或 `CONFIRM_TRANSFER`。Java 使用当前用户同时校验 `task:view`、`task:confirm`；入库重新读取 `FINISH_IN + PENDING` 当前轮次任务；出库重新读取 `OUT + FINISH_OUT + PENDING` 并核对托盘和库存；调拨重新读取 `TRANSFER + PENDING`，按既有左右侧、层数和产品可堆叠规则模拟整批目标位置。三种预览均不执行业务写入；只有 `READY` 结果会持久化技术性不可变快照，绑定当前用户、受信 Agent 会话、最小权限快照、实体引用、状态/请求/内容哈希和有效期，最终提交仍由既有业务弹窗重新校验。
 
-预览只有在全部所选任务仍满足对应条件时才返回“可继续”和 5 分钟有效的内部签名引用；任一任务变化则整批返回冲突，不生成引用，也不允许打开业务弹窗。普通回答和卡片只展示用户可读状态、托盘、产品、日期，以及该类型必要的预设位置或当前库存位置/数量，不展示签名引用、状态摘要、原始 `PENDING` 或内部任务 ID。当前没有任何 execute 工具消费预览引用；最终提交仍由对应的现有业务弹窗重新查询、校验并调用原业务接口。半成品入库、半成品出库等未登记的任务类型暂时保持原 UI 跳转，所有 `execute_*` 和普通写入指令继续 fail-closed。
+预览只有在全部所选任务仍满足对应条件时才返回“可继续”和 5 分钟有效的不透明内部引用；任一任务变化则整批返回冲突，不生成引用，也不写入预览归档。等价预览每次使用新的引用；有效期内即使服务重启，也必须从服务端记录按操作者、Agent 会话和当前最小权限重新验真。普通回答和卡片只展示用户可读状态、托盘、产品、日期，以及该类型必要的预设位置或当前库存位置/数量，不展示预览引用、状态摘要、哈希、原始 `PENDING` 或内部任务 ID。当前没有任何确认或 execute 工具消费预览引用；最终提交仍由对应的现有业务弹窗重新查询、校验并调用原业务接口。半成品入库、半成品出库等未登记的任务类型暂时保持原 UI 跳转，所有 `execute_*` 和普通写入指令继续 fail-closed。
 
 ---
 

@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.UUID;
 
 @Component
 public class TaskTransitionPreviewRefCodec {
@@ -26,7 +27,8 @@ public class TaskTransitionPreviewRefCodec {
             throw new BusinessException(400, "任务预览引用参数无效");
         }
         long expiry = expiresAt.toEpochSecond(ZoneOffset.ofHours(8));
-        byte[] signature = sign("v1|" + userId + "|" + stateDigest + "|" + expiry);
+        String nonce = UUID.randomUUID().toString().replace("-", "");
+        byte[] signature = sign("v1|" + userId + "|" + stateDigest + "|" + expiry + "|" + nonce);
         return "tpr1_" + ENCODER.encodeToString(signature);
     }
 

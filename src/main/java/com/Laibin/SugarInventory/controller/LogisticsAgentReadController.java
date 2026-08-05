@@ -13,6 +13,9 @@ import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchesAgentVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchDetailAgentVO;
 import com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO;
 import com.Laibin.SugarInventory.domain.vo.TaskTransitionPreviewVO;
+import com.Laibin.SugarInventory.agent.security.AgentSecurityContext;
+import com.Laibin.SugarInventory.agent.service.TaskTransitionPreviewArchiveService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -22,11 +25,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/logistics/agent-read")
 @RequiredArgsConstructor
 public class LogisticsAgentReadController {
     private final LogisticsAgentReadService service;
+    private final TaskTransitionPreviewArchiveService previewArchiveService;
 
     @PostMapping("/pallet-tasks/query")
     @PreAuthorize("hasAuthority('task:view')")
@@ -62,7 +69,18 @@ public class LogisticsAgentReadController {
     @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm')")
     public Result<TaskTransitionPreviewVO> previewTaskTransition(
             @RequestBody @Valid TaskTransitionPreviewDTO request,
-            @AuthenticationPrincipal LoginUser loginUser) {
-        return Result.success(service.previewTaskTransition(request, loginUser.getUser()));
+            @AuthenticationPrincipal LoginUser loginUser,
+            HttpServletRequest httpRequest) {
+        TaskTransitionPreviewVO preview = service.previewTaskTransition(request, loginUser.getUser());
+        Object sessionAttribute = httpRequest.getAttribute(AgentSecurityContext.ATTR_AGENT_SESSION_ID);
+        String agentSessionId = sessionAttribute == null ? null : String.valueOf(sessionAttribute);
+        Set<String> authorities = loginUser.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .collect(Collectors.toUnmodifiableSet());
+        return Result.success(previewArchiveService.persistReady(
+                preview,
+                loginUser.getUser().getId(),
+                agentSessionId,
+                authorities));
     }
 }
