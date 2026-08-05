@@ -527,6 +527,18 @@ class IntentRouter:
                 next_action="answer_directly",
                 answer=self._capability_answer(),
             )
+        transfer_preview_codes = self._transfer_preview_codes(normalized)
+        if transfer_preview_codes:
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="transfer_task_transition_preview",
+                business_domain="logistics",
+                business_objects=self._business_objects(normalized),
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["preview_task_transition"],
+                answer="我会重新核对这些调拨待处理任务、托盘库存和目标库位容量，本轮不会修改业务数据。",
+            )
         outbound_preview_codes = self._finish_outbound_preview_codes(normalized)
         if outbound_preview_codes:
             return IntentRoute(
@@ -1428,6 +1440,20 @@ class IntentRouter:
 
     def _finish_outbound_preview_codes(self, text: str) -> list[str]:
         if "预览" not in text or "成品出库" not in text:
+            return []
+        values = re.findall(
+            r"(?<![A-Za-z0-9-])([A-Za-z]{2,}[A-Za-z0-9-]*\d[A-Za-z0-9-]*)(?![A-Za-z0-9-])",
+            text,
+        )
+        result: list[str] = []
+        for value in values:
+            code = value.upper()
+            if code not in result:
+                result.append(code)
+        return result[:20]
+
+    def _transfer_preview_codes(self, text: str) -> list[str]:
+        if "预览" not in text or not any(word in text for word in ("调拨", "移库")):
             return []
         values = re.findall(
             r"(?<![A-Za-z0-9-])([A-Za-z]{2,}[A-Za-z0-9-]*\d[A-Za-z0-9-]*)(?![A-Za-z0-9-])",

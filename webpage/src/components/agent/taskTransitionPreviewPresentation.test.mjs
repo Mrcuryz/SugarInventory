@@ -60,6 +60,25 @@ test('ready finished-outbound preview opens only the matching existing dialog', 
   })
 })
 
+test('ready transfer preview opens only the matching existing transfer dialog', () => {
+  const transferCard = {
+    ...readyCard,
+    fields: [{
+      ...readyCard.fields[0],
+      batchAction: 'transferConfirm',
+      taskGroupLabel: '调拨',
+      palletCodes: ['bt0016lc']
+    }]
+  }
+
+  assert.deepEqual(taskTransitionPreviewDialogAction(transferCard), {
+    actionKind: 'open_task_batch',
+    batchAction: 'transferConfirm',
+    taskGroupLabel: '调拨',
+    palletCodes: ['BT0016LC']
+  })
+})
+
 test('preview cannot redirect to a mismatched or unknown business dialog', () => {
   assert.equal(taskTransitionPreviewDialogAction({
     ...readyCard,

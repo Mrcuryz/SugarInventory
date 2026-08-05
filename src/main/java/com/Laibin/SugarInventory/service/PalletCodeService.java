@@ -36,6 +36,7 @@ import com.Laibin.SugarInventory.domain.vo.PalletTaskPageVO;
 import com.Laibin.SugarInventory.domain.vo.TaskSemiItemVO;
 import com.Laibin.SugarInventory.domain.vo.FixedProductQrPoolVO;
 import com.Laibin.SugarInventory.domain.vo.WarehouseMapTaskCreateResultVO;
+import com.Laibin.SugarInventory.domain.vo.TransferTaskPreviewVO;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -124,6 +125,8 @@ public interface PalletCodeService extends IService<PalletCode> {
     void createTransferTasks(CreateTransferTaskDTO dto, Integer operatorId);
 
     void confirmTransferTasks(ConfirmTransferBatchDTO dto, Integer operatorId);
+
+    TransferTaskPreviewVO previewTransferTasks(List<String> codes);
 
     WarehouseMapTaskCreateResultVO createWarehouseMapTasks(WarehouseMapBatchOperationDTO dto, Integer operatorId);
 

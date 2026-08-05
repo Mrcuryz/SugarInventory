@@ -1,7 +1,7 @@
 version: "1.2"
 updated_at: "2026-08-05"
-scope: "第一阶段 L1 只读工具、第二阶段登记报表、两个 L2 无写入预览及 RAG-03B L0 进程内知识目标归属"
-current_contract_count: 53
+scope: "第一阶段 L1 只读工具、第二阶段登记报表、三个 L2 无写入预览及 RAG-03B L0 进程内知识目标归属"
+current_contract_count: 54
 planned_contract_count: 0
 classified_tool_count: 53
 classified_internal_knowledge_tool_count: 1
@@ -37,6 +37,10 @@ current_goals:
     primary_tools: [preview_task_transition]
     supporting_tools: [query_pallet_tasks]
   FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW:
+    owner_expert: logistics_expert
+    primary_tools: [preview_task_transition]
+    supporting_tools: [query_pallet_tasks]
+  TRANSFER_TASK_TRANSITION_PREVIEW:
     owner_expert: logistics_expert
     primary_tools: [preview_task_transition]
     supporting_tools: [query_pallet_tasks]

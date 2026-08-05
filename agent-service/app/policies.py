@@ -101,7 +101,7 @@ class NextActionPolicy:
             return ["只看入库任务", "只看出库任务", "查看第一条任务详情"]
         if tool_name == "preview_task_transition" and safe_data.get("canOpenBusinessDialog"):
             task_group = safe_data.get("taskGroupLabel")
-            if task_group in {"成品入库", "成品出库"}:
+            if task_group in {"成品入库", "成品出库", "调拨"}:
                 return [f"打开{task_group}业务弹窗"]
             return ["打开业务弹窗"]
         if tool_name == "query_boiling_batch_trace" and safe_data.get("usages"):

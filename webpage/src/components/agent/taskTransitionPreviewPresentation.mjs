@@ -12,7 +12,8 @@ export const taskTransitionPreviewDialogAction = card => {
   const summary = taskTransitionPreviewSummary(card)
   const supportedActions = {
     confirmIn: '成品入库',
-    finishOutConfirm: '成品出库'
+    finishOutConfirm: '成品出库',
+    transferConfirm: '调拨'
   }
   const expectedGroupLabel = supportedActions[summary?.batchAction]
   const palletCodes = [...new Set((summary?.palletCodes || []).map(

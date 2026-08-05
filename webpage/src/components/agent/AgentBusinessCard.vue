@@ -310,7 +310,7 @@ const openTaskBatch = (group) => {
   const selected = selectedGroupRecords(group)
   if (!group.batchAction || !selected.length) return
   emit('card-action', {
-    actionKind: ['finish_in', 'finish_out'].includes(group.key)
+    actionKind: ['finish_in', 'finish_out', 'transfer'].includes(group.key)
       ? 'request_task_transition_preview'
       : 'open_task_batch',
     batchAction: group.batchAction,
@@ -512,6 +512,7 @@ const exportRegisteredReport = () => {
                 <span v-if="task.presetLocationLabel">预设位置：{{ task.presetLocationLabel }}</span>
                 <span v-if="task.currentLocationLabel">当前位置：{{ task.currentLocationLabel }}</span>
                 <span v-if="task.currentInventoryQuantityText">当前库存：{{ task.currentInventoryQuantityText }}</span>
+                <span v-if="task.targetLocationLabel">预计目标位置：{{ task.targetLocationLabel }}</span>
                 <span v-if="task.quantityRuleLabel">{{ task.quantityRuleLabel }}</span>
               </div>
             </article>
@@ -632,8 +633,8 @@ const exportRegisteredReport = () => {
               @click="openTaskBatch(group)"
             >
               {{ selectedGroupRecords(group).length
-                ? `${['finish_in', 'finish_out'].includes(group.key) ? '预览所选' : '处理所选'} ${selectedGroupRecords(group).length} 条`
-                : `${['finish_in', 'finish_out'].includes(group.key) ? '选择任务后预览' : '选择任务后处理'}` }}
+                ? `${['finish_in', 'finish_out', 'transfer'].includes(group.key) ? '预览所选' : '处理所选'} ${selectedGroupRecords(group).length} 条`
+                : `${['finish_in', 'finish_out', 'transfer'].includes(group.key) ? '选择任务后预览' : '选择任务后处理'}` }}
             </el-button>
           </div>
         </section>

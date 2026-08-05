@@ -4358,6 +4358,36 @@ def test_pending_outbound_tasks_route_to_logistics_expert_without_execution() ->
     assert "PENDING" not in response.json()["answer"]
 
 
+def test_transfer_preview_routes_to_l2_preview_instead_of_task_list() -> None:
+    tool_client = MockToolClient({"preview_task_transition": {
+        "dataScope": "CURRENT_TRANSFER_TASK_TRANSITION_PREVIEW",
+        "previewVersion": 1,
+        "previewStatus": "CONFLICT",
+        "transition": "CONFIRM_TRANSFER",
+        "canOpenBusinessDialog": False,
+        "requestedTaskCount": 1,
+        "eligibleTaskCount": 0,
+        "tasks": [],
+        "blockingIssues": ["未找到仍处于待处理状态的调拨任务：BT9999ZZ"],
+    }})
+    app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
+
+    response = TestClient(app).post(
+        "/internal/agent/chat",
+        json=chat_payload("请预览以下调拨待处理任务：BT9999ZZ"),
+    )
+
+    assert response.status_code == 200
+    assert [call["toolName"] for call in tool_client.calls] == ["preview_task_transition"]
+    assert tool_client.calls[0]["arguments"] == {
+        "previewVersion": 1,
+        "transition": "CONFIRM_TRANSFER",
+        "palletCodes": ["BT9999ZZ"],
+    }
+    assert response.json()["cards"][0]["cardType"] == "task_transition_preview"
+    assert response.json()["cards"][0]["fields"][0]["canOpenBusinessDialog"] is False
+
+
 def test_task_processing_request_returns_pending_task_ui_handoff_without_execution() -> None:
     tool_client = MockToolClient({"query_pallet_tasks": {
         "dataScope": "CURRENT_PALLET_TASKS", "total": 1, "page": 1, "size": 20,

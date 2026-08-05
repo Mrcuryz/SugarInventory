@@ -73,6 +73,7 @@ const operations = {
 }
 
 const isInbound = computed(() => props.batchAction === 'confirmIn')
+const isTransfer = computed(() => props.batchAction === 'transferConfirm')
 const operation = computed(() => operations[props.batchAction])
 const dialogTitle = computed(() => {
   if (isInbound.value) return `批量确认${props.taskGroupLabel || '入库'}`
@@ -355,9 +356,11 @@ watch(() => props.modelValue, opened => {
         <el-table :data="rows" border max-height="360">
           <el-table-column prop="code" label="二维码" width="160"/>
           <el-table-column prop="productName" label="产品" min-width="150"/>
-          <el-table-column prop="bizScene" label="业务场景" width="150">
+          <el-table-column v-if="!isTransfer" prop="bizScene" label="业务场景" width="150">
             <template #default="{ row }">{{ getDictLabel(BIZ_SCENE_MAP, row.bizScene) }}</template>
           </el-table-column>
+          <el-table-column v-if="isTransfer" prop="targetWarehouseName" label="目标库位" min-width="150"/>
+          <el-table-column v-if="isTransfer" prop="targetSide" label="目标侧" width="100"/>
           <el-table-column prop="taskStatus" label="任务状态" width="120">
             <template #default="{ row }">{{ getDictLabel(TASK_STATUS_MAP, row.taskStatus) }}</template>
           </el-table-column>

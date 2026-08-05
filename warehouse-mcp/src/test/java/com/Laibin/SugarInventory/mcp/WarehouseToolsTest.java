@@ -1406,6 +1406,44 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void previewsTransferTasksThroughTheSameControlledNoWriteEndpoint() throws Exception {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"CURRENT_TRANSFER_TASK_TRANSITION_PREVIEW",
+                  "previewVersion":1,
+                  "previewStatus":"READY",
+                  "previewRef":"tpr1_signature",
+                  "stateDigest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "previewedAt":"2026-08-05T10:00:00",
+                  "expiresAt":"2026-08-05T10:05:00",
+                  "transition":"CONFIRM_TRANSFER",
+                  "transitionLabel":"确认调拨",
+                  "canOpenBusinessDialog":true,
+                  "requestedTaskCount":1,
+                  "eligibleTaskCount":1,
+                  "tasks":[{"palletCode":"BT0016LC","currentTaskStatus":"PENDING","currentWarehouseName":"2","targetWarehouseName":"3","targetSide":"右","plannedTargetRowNumber":1,"plannedTargetLayer":1}],
+                  "requiredUserInputs":["可选备注"],
+                  "blockingIssues":[],
+                  "warnings":[],
+                  "limitations":["不修改业务数据。"]
+                }
+                """)));
+
+        var response = tools.previewTaskTransition(new TaskTransitionPreviewRequest(
+                1, "CONFIRM_TRANSFER", List.of("BT0016LC")));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.canOpenBusinessDialog()).isTrue();
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/logistics/agent-read/pallet-tasks/transition/preview");
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"transition\":\"CONFIRM_TRANSFER\"")
+                .contains("\"palletCodes\":[\"BT0016LC\"]");
+        assertThat(recorded.getPath()).doesNotMatch(FORBIDDEN_WRITE_PATHS);
+    }
+
+    @Test
     void rejectsUnknownTaskTransitionBeforeCallingBackend() {
         var response = tools.previewTaskTransition(new TaskTransitionPreviewRequest(
                 1, "DELETE_TASK", List.of("BT00135D")));

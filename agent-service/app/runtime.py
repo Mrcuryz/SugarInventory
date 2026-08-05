@@ -142,7 +142,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "query_in_process_materials": "在制物料查询",
     "query_material_candidates": "生产原料候选查询",
     "query_pallet_tasks": "托盘任务查询",
-    "preview_task_transition": "成品入库任务处理预览",
+    "preview_task_transition": "托盘任务处理预览",
     "query_stock_documents": "库存单据查询",
     "query_auto_inbound_batches": "自动报数入库批次查询",
     "get_auto_inbound_batch_detail": "自动报数入库批次详情查询",
@@ -9872,6 +9872,7 @@ class WarehouseAgentRuntime:
         transition_presentation = {
             "CONFIRM_FINISH_INBOUND": ("confirmIn", "成品入库", "确认成品入库"),
             "CONFIRM_FINISH_OUTBOUND": ("finishOutConfirm", "成品出库", "确认成品出库"),
+            "CONFIRM_TRANSFER": ("transferConfirm", "调拨", "确认调拨"),
         }
         recognized_transition = transition in transition_presentation
         batch_action, task_group_label, fallback_transition_label = transition_presentation.get(
@@ -9903,6 +9904,18 @@ class WarehouseAgentRuntime:
             ]
             current_quantity = self._safe_text(item.get("currentInventoryQuantity"))
             current_unit = self._safe_text(item.get("currentInventoryUnit"))
+            target_warehouse = self._safe_text(item.get("targetWarehouseName"))
+            target_side = self._controlled_task_label("warehouse_side", item.get("targetSide"), "")
+            target_row = self._safe_text(item.get("plannedTargetRowNumber"))
+            target_layer = self._safe_text(item.get("plannedTargetLayer"))
+            target_location_parts = [
+                value for value in (
+                    f"{target_warehouse}号库位" if target_warehouse else None,
+                    target_side or None,
+                    f"第{target_row}行" if target_row else None,
+                    f"第{target_layer}层" if target_layer else None,
+                ) if value
+            ]
             tasks.append(SafeTaskTransitionPreviewTask(
                 palletCode=self._safe_text(item.get("palletCode")) or "托盘未标明",
                 currentTaskStatusLabel=self._controlled_task_label(
@@ -9924,6 +9937,7 @@ class WarehouseAgentRuntime:
                     f"{current_quantity} {current_unit or ''}".strip()
                     if current_quantity else None
                 ),
+                targetLocationLabel=" ".join(target_location_parts) or None,
             ))
         preview_status = self._safe_text(source.get("previewStatus")) or "CONFLICT"
         blocking_issues = self._safe_text_list(source.get("blockingIssues"), limit=20)
@@ -9996,7 +10010,7 @@ class WarehouseAgentRuntime:
                 "PREPARE_CONSUMED": "历史生产占用",
                 "FINISH_OUT": "成品出库",
             },
-            "warehouse_side": {"LEFT": "左侧", "RIGHT": "右侧"},
+            "warehouse_side": {"LEFT": "左侧", "RIGHT": "右侧", "左": "左侧", "右": "右侧"},
             "production_status": {
                 "PENDING": "待处理", "WAIT_MATERIAL": "待领料", "IN_PROGRESS": "进行中",
                 "PRODUCING": "生产中", "WAIT_INBOUND": "待入库", "COMPLETED": "已完成",

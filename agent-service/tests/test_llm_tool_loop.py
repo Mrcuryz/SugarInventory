@@ -19,7 +19,7 @@ from app.schemas import (
     MainAgentDecisionV1,
     ResumeRequest,
 )
-from app.tool_arguments import ToolArgumentBuilder
+from app.tool_arguments import LLM_TOOL_DESCRIPTIONS, TOOL_SCHEMAS, ToolArgumentBuilder
 from app.tools.client import MockToolClient, ToolGatewayError
 
 
@@ -46,6 +46,16 @@ class ScriptedLlmModel(BasicModelClient):
     def stream_answer_deltas(self, answer: str):
         self.stream_call_count += 1
         yield answer
+
+
+def test_transfer_preview_is_advertised_to_logistics_expert() -> None:
+    description = LLM_TOOL_DESCRIPTIONS["preview_task_transition"]
+    profile = AgentHandoffRouter().profile("logistics_expert")
+
+    assert "调拨" in description
+    assert "CONFIRM_TRANSFER" in description
+    assert "CONFIRM_TRANSFER" in TOOL_SCHEMAS["preview_task_transition"]["properties"]["transition"]["enum"]
+    assert any("调拨" in instruction for instruction in profile.instructions)
 
 
 def main_delegate(expert: str, goal_type: str | None = None) -> MainAgentDecisionV1:
@@ -4124,6 +4134,21 @@ def test_preview_task_transition_arguments_are_closed_and_controlled() -> None:
         "transition": "CONFIRM_FINISH_OUTBOUND",
         "palletCodes": ["BT00135D"],
     }
+    transfer_validated = builder.validate_llm_arguments(
+        tool_name="preview_task_transition",
+        arguments={
+            "previewVersion": 1,
+            "transition": "CONFIRM_TRANSFER",
+            "palletCodes": ["bt0016lc"],
+        },
+        state=WarehouseAgentState(),
+        user_message="请预览调拨任务 BT0016LC",
+    )
+    assert transfer_validated == {
+        "previewVersion": 1,
+        "transition": "CONFIRM_TRANSFER",
+        "palletCodes": ["BT0016LC"],
+    }
     with pytest.raises(ValueError):
         builder.validate_llm_arguments(
             tool_name="preview_task_transition",
@@ -4257,4 +4282,71 @@ def test_llm_finish_outbound_preview_uses_expert_tool_and_opens_only_controlled_
     assert "b" * 64 not in rendered
     state = store.get("agt_llm")
     assert state.active_goal_type == "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW"
+    assert state.last_goal_completion["status"] == "COMPLETE"
+
+
+def test_llm_transfer_preview_uses_logistics_expert_and_opens_transfer_dialog() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert", "TRANSFER_TASK_TRANSITION_PREVIEW")],
+        [
+            call("preview_task_transition", {
+                "previewVersion": 1,
+                "transition": "CONFIRM_TRANSFER",
+                "palletCodes": ["BT0016LC"],
+            }),
+            final("已完成 1 条调拨任务预览，可以打开业务弹窗继续核对。", "obs_1"),
+        ],
+    )
+    tools = MockToolClient({
+        "preview_task_transition": {
+            "dataScope": "CURRENT_TRANSFER_TASK_TRANSITION_PREVIEW",
+            "previewVersion": 1,
+            "previewStatus": "READY",
+            "previewRef": "tpr1_hidden_transfer_signature",
+            "stateDigest": "c" * 64,
+            "previewedAt": "2026-08-05T10:00:00",
+            "expiresAt": "2026-08-05T10:05:00",
+            "transition": "CONFIRM_TRANSFER",
+            "transitionLabel": "确认调拨",
+            "canOpenBusinessDialog": True,
+            "requestedTaskCount": 1,
+            "eligibleTaskCount": 1,
+            "tasks": [{
+                "palletCode": "BT0016LC",
+                "currentTaskStatus": "PENDING",
+                "productName": "黄冰糖（袋）",
+                "currentWarehouseName": "2",
+                "currentSide": "左",
+                "currentRowNumber": 3,
+                "currentLayer": 1,
+                "currentInventoryQuantity": 1,
+                "currentInventoryUnit": "板",
+                "targetWarehouseName": "3",
+                "targetSide": "右",
+                "plannedTargetRowNumber": 1,
+                "plannedTargetLayer": 1,
+            }],
+            "requiredUserInputs": ["可选备注"],
+            "blockingIssues": [],
+            "warnings": ["提交时会重新校验。"],
+            "limitations": ["本次没有执行调拨。"],
+        }
+    })
+    runtime, store = runtime_for(model, tools)
+
+    response = runtime.chat(chat_request("请预览以下调拨待处理任务：BT0016LC"))
+
+    assert response.error is None
+    assert tools.calls[0]["arguments"]["transition"] == "CONFIRM_TRANSFER"
+    summary = response.cards[0].fields[0]
+    task = response.cards[0].fields[1]
+    assert summary["batchAction"] == "transferConfirm"
+    assert summary["taskGroupLabel"] == "调拨"
+    assert task["currentLocationLabel"] == "2号库位 左侧 第3行 第1层"
+    assert task["targetLocationLabel"] == "3号库位 右侧 第1行 第1层"
+    rendered = json.dumps(response.cards[0].model_dump(), ensure_ascii=False)
+    assert "tpr1_hidden_transfer_signature" not in rendered
+    assert "c" * 64 not in rendered
+    state = store.get("agt_llm")
+    assert state.active_goal_type == "TRANSFER_TASK_TRANSITION_PREVIEW"
     assert state.last_goal_completion["status"] == "COMPLETE"

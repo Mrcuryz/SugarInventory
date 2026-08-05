@@ -349,7 +349,7 @@ public class ToolConfiguration {
 
     private static String taskTransitionPreviewSchema() {
         return """
-                {"type":"object","additionalProperties":false,"required":["previewVersion","transition","palletCodes"],"properties":{"previewVersion":{"type":"integer","const":1},"transition":{"type":"string","enum":["CONFIRM_FINISH_INBOUND","CONFIRM_FINISH_OUTBOUND"]},"palletCodes":{"type":"array","minItems":1,"maxItems":20,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":100,"pattern":"^[A-Za-z0-9-]+$"}}}}
+                {"type":"object","additionalProperties":false,"required":["previewVersion","transition","palletCodes"],"properties":{"previewVersion":{"type":"integer","const":1},"transition":{"type":"string","enum":["CONFIRM_FINISH_INBOUND","CONFIRM_FINISH_OUTBOUND","CONFIRM_TRANSFER"]},"palletCodes":{"type":"array","minItems":1,"maxItems":20,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":100,"pattern":"^[A-Za-z0-9-]+$"}}}}
                 """;
     }
 

@@ -47,5 +47,9 @@ public class TaskTransitionPreviewVO {
         Integer currentLayer;
         Integer currentInventoryQuantity;
         String currentInventoryUnit;
+        String targetWarehouseName;
+        String targetSide;
+        Integer plannedTargetRowNumber;
+        Integer plannedTargetLayer;
     }
 }

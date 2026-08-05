@@ -157,7 +157,7 @@ class ContextBuilder:
             triggerReason="message contains pallet task semantics",
             instructions=[
                 "任务查询使用 query_pallet_tasks，只允许读取当前任务记录。",
-                "成品入库任务处理预览使用 preview_task_transition，只接受用户已经明确选择的托盘码；预览不执行任何任务。",
+                "成品入库、成品出库和调拨任务处理预览使用 preview_task_transition，只接受用户已经明确选择的托盘码；预览不执行任何任务。",
                 "待处理、已确认、已取消必须映射为受控状态过滤，不能把查询解释为执行任务。",
                 "多个任务应先给摘要，再通过可展开卡片展示安全详情。",
             ],

@@ -32,6 +32,7 @@ import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchDetailAgentVO;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundBatchesAgentVO;
 import com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO;
 import com.Laibin.SugarInventory.domain.vo.TaskTransitionPreviewVO;
+import com.Laibin.SugarInventory.domain.vo.TransferTaskPreviewVO;
 import com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +73,7 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
     private static final int TASK_PREVIEW_TTL_MINUTES = 5;
     private static final String FINISH_INBOUND_TRANSITION = "CONFIRM_FINISH_INBOUND";
     private static final String FINISH_OUTBOUND_TRANSITION = "CONFIRM_FINISH_OUTBOUND";
+    private static final String TRANSFER_TRANSITION = "CONFIRM_TRANSFER";
 
     @Override
     public PalletTasksAgentVO queryPalletTasks(PalletTaskAgentQueryDTO query) {
@@ -247,8 +249,11 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
         if (FINISH_OUTBOUND_TRANSITION.equals(request.getTransition())) {
             return previewFinishOutboundTasks(request, user);
         }
+        if (TRANSFER_TRANSITION.equals(request.getTransition())) {
+            return previewTransferTasks(request, user);
+        }
         if (!FINISH_INBOUND_TRANSITION.equals(request.getTransition())) {
-            throw new BusinessException(400, "当前仅支持成品入库或成品出库任务预览");
+            throw new BusinessException(400, "当前仅支持成品入库、成品出库或调拨任务预览");
         }
         List<String> requestedCodes = normalizePreviewCodes(request.getPalletCodes());
 
@@ -412,6 +417,107 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                 .build();
     }
 
+    private TaskTransitionPreviewVO previewTransferTasks(TaskTransitionPreviewDTO request, User user) {
+        List<String> requestedCodes = normalizePreviewCodes(request.getPalletCodes());
+        PalletTaskQueryDTO query = new PalletTaskQueryDTO();
+        query.setCodes(String.join(",", requestedCodes));
+        query.setTaskType("TRANSFER");
+        query.setStatus("PENDING");
+        query.setPageNum(1L);
+        query.setPageSize((long) requestedCodes.size());
+        PageResult<PalletTaskPageVO> current = palletCodeService.pagePalletTasks(query);
+
+        Map<String, PalletTaskPageVO> rowsByCode = new LinkedHashMap<>();
+        for (PalletTaskPageVO row : safe(current.getRecords())) {
+            String code = row.getCode() == null ? null : row.getCode().trim().toUpperCase(Locale.ROOT);
+            if (code != null && requestedCodes.contains(code)) {
+                rowsByCode.putIfAbsent(code, row);
+            }
+        }
+
+        List<String> blockingIssues = new ArrayList<>();
+        List<String> currentCodes = new ArrayList<>();
+        for (String code : requestedCodes) {
+            if (rowsByCode.containsKey(code)) {
+                currentCodes.add(code);
+            } else {
+                blockingIssues.add("托盘 " + code + " 的调拨任务已不存在、状态已变化或不在当前轮次。");
+            }
+        }
+
+        TransferTaskPreviewVO eligibility = currentCodes.isEmpty()
+                ? TransferTaskPreviewVO.builder().items(List.of()).blockingIssues(List.of()).build()
+                : palletCodeService.previewTransferTasks(currentCodes);
+        blockingIssues.addAll(safe(eligibility.getBlockingIssues()));
+        Map<String, TransferTaskPreviewVO.Item> itemsByCode = new LinkedHashMap<>();
+        for (TransferTaskPreviewVO.Item item : safe(eligibility.getItems())) {
+            itemsByCode.put(item.getPalletCode(), item);
+        }
+
+        List<TaskTransitionPreviewVO.Task> eligibleTasks = new ArrayList<>();
+        List<PalletTaskPageVO> eligibleRows = new ArrayList<>();
+        for (String code : requestedCodes) {
+            PalletTaskPageVO row = rowsByCode.get(code);
+            TransferTaskPreviewVO.Item item = itemsByCode.get(code);
+            if (row == null || item == null) {
+                continue;
+            }
+            eligibleRows.add(row);
+            eligibleTasks.add(TaskTransitionPreviewVO.Task.builder()
+                    .palletCode(row.getCode())
+                    .currentTaskStatus(row.getTaskStatus())
+                    .productName(row.getProductName())
+                    .productType(row.getProductType())
+                    .productionDate(row.getProductionDate())
+                    .totalWeight(row.getTotalWeight())
+                    .quantityLockedByProductionOutput(false)
+                    .currentWarehouseName(item.getCurrentWarehouseName())
+                    .currentSide(item.getCurrentSide())
+                    .currentRowNumber(item.getCurrentRowNumber())
+                    .currentLayer(item.getCurrentLayer())
+                    .currentInventoryQuantity(item.getCurrentInventoryQuantity())
+                    .currentInventoryUnit(item.getCurrentInventoryUnit())
+                    .targetWarehouseName(item.getTargetWarehouseName())
+                    .targetSide(item.getTargetSide())
+                    .plannedTargetRowNumber(item.getPlannedTargetRowNumber())
+                    .plannedTargetLayer(item.getPlannedTargetLayer())
+                    .build());
+        }
+
+        boolean ready = blockingIssues.isEmpty() && eligibleTasks.size() == requestedCodes.size();
+        String stateDigest = digestTaskState(eligibleRows, request.getTransition(), eligibleTasks);
+        LocalDateTime previewedAt = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime expiresAt = previewedAt.plusMinutes(TASK_PREVIEW_TTL_MINUTES);
+        String previewRef = ready
+                ? taskTransitionPreviewRefCodec.encode(user.getId(), stateDigest, expiresAt)
+                : null;
+
+        return TaskTransitionPreviewVO.builder()
+                .dataScope("CURRENT_TRANSFER_TASK_TRANSITION_PREVIEW")
+                .previewVersion(TASK_PREVIEW_VERSION)
+                .previewStatus(ready ? "READY" : "CONFLICT")
+                .previewRef(previewRef)
+                .stateDigest(stateDigest)
+                .previewedAt(previewedAt)
+                .expiresAt(expiresAt)
+                .transition(TRANSFER_TRANSITION)
+                .transitionLabel("确认调拨")
+                .canOpenBusinessDialog(ready)
+                .requestedTaskCount(requestedCodes.size())
+                .eligibleTaskCount(eligibleTasks.size())
+                .tasks(List.copyOf(eligibleTasks))
+                .requiredUserInputs(List.of("可选备注"))
+                .blockingIssues(List.copyOf(blockingIssues))
+                .warnings(List.of(
+                        "预览中的目标排号和层数按当前库存占用情况模拟；业务弹窗提交时会重新分配并校验。",
+                        "任务或库存变化后，原预览可能失效，需要重新预览。"))
+                .limitations(List.of(
+                        "本预览只读取当前调拨待处理任务、托盘、库存和目标仓库容量，不修改任何业务数据。",
+                        "本次预览不能直接执行调拨。",
+                        "最终提交仍由当前登录用户在既有业务弹窗中完成并接受原接口权限、校验、事务和审计。"))
+                .build();
+    }
+
     private List<String> normalizePreviewCodes(List<String> codes) {
         if (codes == null || codes.isEmpty() || codes.size() > 20) {
             throw new BusinessException(400, "托盘码数量必须在 1 到 20 之间");
@@ -452,7 +558,11 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                             .append('|').append(task.getCurrentRowNumber())
                             .append('|').append(task.getCurrentLayer())
                             .append('|').append(task.getCurrentInventoryQuantity())
-                            .append('|').append(task.getCurrentInventoryUnit()));
+                            .append('|').append(task.getCurrentInventoryUnit())
+                            .append('|').append(task.getTargetWarehouseName())
+                            .append('|').append(task.getTargetSide())
+                            .append('|').append(task.getPlannedTargetRowNumber())
+                            .append('|').append(task.getPlannedTargetLayer()));
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(digest);

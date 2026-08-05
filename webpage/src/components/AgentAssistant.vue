@@ -626,7 +626,8 @@ const handleCardAction = async (action) => {
     const palletCodes = [...new Set((action.palletCodes || []).map(code => String(code || '').trim().toUpperCase()).filter(Boolean))]
     const previewGroups = {
       confirmIn: '成品入库',
-      finishOutConfirm: '成品出库'
+      finishOutConfirm: '成品出库',
+      transferConfirm: '调拨'
     }
     const expectedGroup = previewGroups[action.batchAction]
     if (!expectedGroup || action.taskGroupLabel !== expectedGroup || !palletCodes.length) {
