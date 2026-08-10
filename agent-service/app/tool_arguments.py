@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import Any
 from collections.abc import Iterator
 from datetime import date
+import json
 import re
 import time
 
@@ -546,6 +547,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "type": "object", "additionalProperties": False,
         "properties": {
             "code": {"type": "string", "minLength": 1, "maxLength": 100},
+            "productId": {"type": "integer", "minimum": 1},
             "taskType": {"type": "string", "enum": ["IN", "SEMI_IN", "FINISH_IN", "OUT", "TRANSFER"]},
             "bizScene": {"type": "string", "enum": ["DIRECT_OUT", "PREPARE_CONSUMED", "FINISH_OUT"]},
             "status": {"type": "string", "enum": ["PENDING", "CONFIRMED", "CANCELED"]},
@@ -572,6 +574,30 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1, "maxLength": 100,
                           "pattern": "^[A-Za-z0-9-]+$"},
+            },
+        },
+    },
+    "preview_finish_inbound_execution": {
+        "type": "object", "additionalProperties": False,
+        "required": ["previewVersion", "items"],
+        "properties": {
+            "previewVersion": {"type": "integer", "const": 1},
+            "items": {
+                "type": "array", "minItems": 1, "maxItems": 20,
+                "items": {
+                    "type": "object", "additionalProperties": False,
+                    "required": ["code", "warehouseName"],
+                    "properties": {
+                        "code": {"type": "string", "minLength": 1, "maxLength": 100,
+                                 "pattern": "^[A-Za-z0-9-]+$"},
+                        "warehouseName": {"type": "string", "minLength": 1, "maxLength": 100},
+                        "entryDate": {"type": "string", "format": "date"},
+                        "side": {"type": "string", "enum": ["左", "右"]},
+                        "quantity": {"type": "integer", "minimum": 1},
+                        "unit": {"type": "string", "enum": ["0", "1"]},
+                        "remark": {"type": "string", "maxLength": 255},
+                    },
+                },
             },
         },
     },
@@ -750,8 +776,9 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_pallet_flow_records": "分页查询明确托盘或受控范围的已登记流转记录；不是完整操作日志。",
     "query_qr_batch_inbound_completion": "查询二维码批次的入库完成情况；不确认或补录入库。",
     "query_fixed_product_qr_pool": "查询固定产品二维码池当前状态；不打印、启用、作废或恢复二维码。",
-    "query_pallet_tasks": "查询当前托盘任务记录；用户问待处理任务时使用 status=PENDING。只读返回分类和状态，不执行确认、取消、入库、出库或调拨。",
+    "query_pallet_tasks": "查询当前托盘任务记录；用户问待处理任务时使用 status=PENDING。入库引导目标中的具体产品范围由 Runtime 从已确认产品注入。只读返回分类和状态，不执行确认、取消、入库、出库或调拨。",
     "preview_task_transition": "对用户已明确选择的成品入库、成品出库或调拨待处理托盘码生成第 1 版短期预览。transition 只能是 CONFIRM_FINISH_INBOUND、CONFIRM_FINISH_OUTBOUND 或 CONFIRM_TRANSFER，且必须传 1~20 个 palletCodes。预览不执行任务、不修改库存。",
+    "preview_finish_inbound_execution": "对用户已经填写完成的成品入库表单生成第 1 版精确短期预览。每项只允许 code、warehouseName、entryDate、side、quantity、unit、remark；禁止内部 ID、排号和层数。有关联生产产出码时最终数量和单位以后端为准。预览不执行入库、不确认任务、不修改库存，也不签发执行令牌。",
     "query_stock_documents": "查询指定类型和日期范围的入库单、出库单或半成品单据；相对日期以 BUSINESS_TIME 为准。",
     "query_auto_inbound_batches": "查询最近登记的自动报数入库批次；无须先提供产品或批次。返回空 records 或 count=0 时就是权威无数据结果，应引用该次观察直接回答。",
     "get_auto_inbound_batch_detail": "使用上一查询返回的受控批次引用查询自动报数入库批次详情；不得猜测内部引用。",
@@ -835,6 +862,11 @@ class ToolArgumentBuilder:
                         "const": "CURRENT_BOILING_BATCH",
                         "description": "Runtime 绑定的当前已确认煮糖批次；真实短期引用不提供给模型。",
                     }
+            if tool_name == "query_pallet_tasks":
+                properties = model_schema.get("properties")
+                if isinstance(properties, dict):
+                    # productId 只允许 Runtime 从 CURRENT_PRODUCT 注入，模型既看不到也不能提交。
+                    properties.pop("productId", None)
             description = LLM_TOOL_DESCRIPTIONS.get(tool_name)
             if description:
                 model_schema["description"] = description
@@ -892,6 +924,53 @@ class ToolArgumentBuilder:
                 state,
                 user_message,
             )
+        if tool_name == "query_fixed_product_qr_pool" and state.active_goal_type == "FINISH_INBOUND_FIXED_QR_PREPARATION":
+            context = (
+                state.finish_inbound_guided_context
+                if isinstance(state.finish_inbound_guided_context, dict)
+                else {}
+            )
+            selected_product = state.selected_product
+            canonical_name = (
+                str(selected_product.metadata.get("productName") or "").strip()
+                if selected_product is not None
+                else ""
+            )
+            if (
+                context.get("operationMode") != "FIXED_QR_NEW_TASK"
+                or not context.get("productResolved")
+                or not context.get("warehouseResolved")
+                or selected_product is None
+                or selected_product.internal_id is None
+                or not canonical_name
+                or state.selected_warehouse is None
+            ):
+                raise ValueError("fixed QR finish inbound requires resolved product, warehouse and operation mode")
+            materialized = {
+                "productName": canonical_name,
+                "freeOnly": True,
+                "page": 1,
+                "size": 50,
+            }
+        guided_context = (
+            state.finish_inbound_guided_context
+            if isinstance(state.finish_inbound_guided_context, dict)
+            else None
+        )
+        if guided_context is not None and tool_name == "preview_task_transition":
+            requested_count = int(guided_context.get("requestedPalletCount") or 0)
+            pallet_codes = materialized.get("palletCodes")
+            if (
+                materialized.get("transition") != "CONFIRM_FINISH_INBOUND"
+                or not isinstance(pallet_codes, list)
+                or len(set(pallet_codes)) != requested_count
+            ):
+                raise ValueError("guided finish inbound requires the exact requested pallet count")
+        if guided_context is not None and tool_name == "preview_finish_inbound_execution":
+            requested_count = int(guided_context.get("requestedPalletCount") or 0)
+            items = materialized.get("items")
+            if not isinstance(items, list) or len(items) != requested_count:
+                raise ValueError("guided finish inbound preview item count changed")
         materialized = self.business_clock.normalize_tool_arguments(
             tool_name,
             materialized,
@@ -1707,6 +1786,27 @@ class ToolArgumentBuilder:
             return ModelPlanDecision(action="call_tool", toolName="query_pallet_tasks",
                                      arguments=self._validate("query_pallet_tasks", args),
                                      intent=route.intent_subtype, responseMode="pallet_tasks", routeSnapshot=snapshot)
+        if route.intent_subtype == "finish_inbound_execution_preview":
+            items = self._finish_inbound_execution_items_from_message(user_message or "")
+            if not items:
+                return ModelPlanDecision(
+                    action="ask_user",
+                    prompt="请先在成品入库弹窗中填写库位、日期、存放侧、数量和单位，再生成精确预览。",
+                    intent=route.intent_subtype,
+                    responseMode="finish_inbound_execution_preview",
+                    routeSnapshot=snapshot,
+                )
+            return ModelPlanDecision(
+                action="call_tool",
+                toolName="preview_finish_inbound_execution",
+                arguments=self._validate("preview_finish_inbound_execution", {
+                    "previewVersion": 1,
+                    "items": items,
+                }),
+                intent=route.intent_subtype,
+                responseMode="finish_inbound_execution_preview",
+                routeSnapshot=snapshot,
+            )
         if route.intent_subtype in TASK_TRANSITION_PREVIEW_BY_INTENT:
             transition_definition = TASK_TRANSITION_PREVIEW_BY_INTENT[route.intent_subtype]
             codes = re.findall(
@@ -2781,6 +2881,11 @@ class ToolArgumentBuilder:
             return {"orderRef": order_ref, "page": page, "size": size}
         if tool_name == "query_pallet_tasks":
             result: dict[str, Any] = {}
+            if arguments.get("productId") is not None:
+                product_id = int(arguments.get("productId") or 0)
+                if product_id <= 0:
+                    raise ValueError("invalid productId")
+                result["productId"] = product_id
             for key, limit in (("code", 100), ("productName", 100), ("productType", 50), ("targetWarehouseName", 100)):
                 if arguments.get(key) is not None: result[key] = self._required_text(arguments.get(key), limit)
             for key, allowed in (("taskType", {"IN", "SEMI_IN", "FINISH_IN", "OUT", "TRANSFER"}),
@@ -2820,6 +2925,53 @@ class ToolArgumentBuilder:
                 "transition": transition,
                 "palletCodes": codes,
             }
+        if tool_name == "preview_finish_inbound_execution":
+            if arguments.get("previewVersion") != 1:
+                raise ValueError("previewVersion must be 1")
+            raw_items = arguments.get("items")
+            if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 20:
+                raise ValueError("items must contain 1 to 20 entries")
+            clean_items: list[dict[str, Any]] = []
+            seen_codes: set[str] = set()
+            for raw_item in raw_items:
+                if not isinstance(raw_item, dict):
+                    raise ValueError("invalid finish inbound preview item")
+                allowed_keys = {"code", "warehouseName", "entryDate", "side", "quantity", "unit", "remark"}
+                if set(raw_item) - allowed_keys:
+                    raise ValueError("unsupported finish inbound preview field")
+                code = self._required_text(raw_item.get("code"), 100).upper()
+                if not re.fullmatch(r"[A-Z0-9-]+", code) or code in seen_codes:
+                    raise ValueError("invalid or duplicate pallet code")
+                seen_codes.add(code)
+                item: dict[str, Any] = {
+                    "code": code,
+                    "warehouseName": self._required_text(raw_item.get("warehouseName"), 100),
+                }
+                if raw_item.get("entryDate") is not None:
+                    entry_date = self._optional_date(raw_item.get("entryDate"))
+                    if entry_date is None:
+                        raise ValueError("invalid entry date")
+                    item["entryDate"] = entry_date
+                side = raw_item.get("side", "左")
+                if side not in {"左", "右"}:
+                    raise ValueError("unsupported side")
+                item["side"] = side
+                quantity = int(raw_item.get("quantity", 1))
+                if quantity < 1:
+                    raise ValueError("quantity must be positive")
+                item["quantity"] = quantity
+                unit = str(raw_item.get("unit", "0"))
+                if unit not in {"0", "1"}:
+                    raise ValueError("unsupported unit")
+                item["unit"] = unit
+                if raw_item.get("remark") is not None:
+                    remark = str(raw_item.get("remark") or "").strip()
+                    if len(remark) > 255:
+                        raise ValueError("remark is too long")
+                    if remark:
+                        item["remark"] = remark
+                clean_items.append(item)
+            return {"previewVersion": 1, "items": clean_items}
         if tool_name == "query_stock_documents":
             doc_type = arguments.get("documentType")
             if doc_type not in {"INBOUND", "OUTBOUND", "SEMI_PRODUCT"}: raise ValueError("unsupported documentType")
@@ -3084,6 +3236,34 @@ class ToolArgumentBuilder:
     ) -> dict[str, Any]:
         result = dict(arguments)
         text = re.sub(r"\s+", "", user_message or "")
+        if state.active_goal_type == "FINISH_INBOUND_PENDING_TASK_PREPARATION":
+            context = (
+                state.finish_inbound_guided_context
+                if isinstance(state.finish_inbound_guided_context, dict)
+                else {}
+            )
+            if context.get("operationMode") != "PENDING_TASK":
+                raise ValueError("pending-task finish inbound requires the pending-task operation mode")
+            selected_product = state.selected_product
+            if (
+                not context.get("productResolved")
+                or not context.get("warehouseResolved")
+                or selected_product is None
+                or selected_product.internal_id is None
+                or state.selected_warehouse is None
+            ):
+                raise ValueError("guided finish inbound requires resolved product and warehouse")
+            scope_type = str(selected_product.metadata.get("scopeType") or "SINGLE_PRODUCT")
+            if scope_type != "SINGLE_PRODUCT":
+                raise ValueError("guided finish inbound requires one concrete product")
+            return {
+                "productId": selected_product.internal_id,
+                "status": "PENDING",
+                "taskType": "FINISH_IN",
+                "productStatus": "成品",
+                "page": 1,
+                "size": 50,
+            }
         reset_scope = any(marker in text for marker in ("全部任务", "所有任务", "不限状态", "清除筛选"))
         is_followup = text.startswith(("只看", "仅看", "只查", "仅查", "筛选", "其中", "这些", "再看", "再查", "换成", "改看"))
         previous = state.last_pallet_task_filters if isinstance(state.last_pallet_task_filters, dict) else {}
@@ -3790,6 +3970,44 @@ class ToolArgumentBuilder:
                         if report_ref.startswith("assay_report_"):
                             return report_ref
         return None
+
+    def _finish_inbound_execution_items_from_message(self, message: str) -> list[dict[str, Any]]:
+        fenced = re.search(r"```json\s*(\{.*?\})\s*```", message or "", flags=re.IGNORECASE | re.DOTALL)
+        if fenced:
+            try:
+                payload = json.loads(fenced.group(1))
+            except (TypeError, ValueError):
+                payload = None
+            if isinstance(payload, dict) and isinstance(payload.get("items"), list):
+                return [item for item in payload["items"][:20] if isinstance(item, dict)]
+        blocks = re.findall(r"\[([^\[\]]+)\]", message or "")
+        items: list[dict[str, Any]] = []
+        for block in blocks[:20]:
+            values: dict[str, str] = {}
+            for part in re.split(r"[;；]", block):
+                pair = re.split(r"[=:：]", part, maxsplit=1)
+                if len(pair) == 2:
+                    values[pair[0].strip()] = pair[1].strip()
+            code = values.get("托盘") or values.get("code")
+            warehouse = values.get("库位") or values.get("warehouseName")
+            if not code or not warehouse:
+                continue
+            item: dict[str, Any] = {"code": code, "warehouseName": warehouse}
+            entry_date = values.get("日期") or values.get("entryDate")
+            if entry_date:
+                item["entryDate"] = entry_date
+            if values.get("侧") or values.get("side"):
+                item["side"] = values.get("侧") or values.get("side")
+            if values.get("数量") or values.get("quantity"):
+                item["quantity"] = int(values.get("数量") or values.get("quantity") or 1)
+            unit = values.get("单位") or values.get("unit")
+            if unit:
+                item["unit"] = {"板": "0", "件": "1"}.get(unit, unit)
+            remark = values.get("备注") or values.get("remark")
+            if remark:
+                item["remark"] = remark
+            items.append(item)
+        return items
 
     def _optional_date(self, value: Any) -> str | None:
         if value is None or value == "":

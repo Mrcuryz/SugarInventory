@@ -1270,7 +1270,7 @@ public final class ToolModels {
 
     public record PalletTasksRequest(
             String code, String taskType, String bizScene, String status,
-            String productName, String productType, String productStatus, String targetWarehouseName,
+            Integer productId, String productName, String productType, String productStatus, String targetWarehouseName,
             String productionDateStart, String productionDateEnd, Integer page, Integer size
     ) {
     }
@@ -1301,6 +1301,31 @@ public final class ToolModels {
             return new TaskTransitionPreviewResponse(
                     null, 0, null, null, null, null, null, null, null,
                     false, 0, 0, List.of(), List.of(), List.of(), List.of(), List.of(), error);
+        }
+    }
+
+    public record FinishInboundExecutionPreviewItem(
+            String code, String warehouseName, String entryDate, String side,
+            Integer quantity, String unit, String remark
+    ) {
+    }
+
+    public record FinishInboundExecutionPreviewRequest(
+            Integer previewVersion, List<FinishInboundExecutionPreviewItem> items
+    ) {
+    }
+
+    public record FinishInboundExecutionPreviewResponse(
+            String dataScope, int previewVersion, String previewStatus, String previewRef,
+            String stateDigest, String previewedAt, String expiresAt,
+            boolean readyForUserConfirmation, int requestedItemCount, int eligibleItemCount,
+            List<JsonNode> items, List<String> blockingIssues, List<String> warnings,
+            List<String> limitations, ToolError error
+    ) {
+        public static FinishInboundExecutionPreviewResponse error(ToolError error) {
+            return new FinishInboundExecutionPreviewResponse(
+                    null, 0, null, null, null, null, null,
+                    false, 0, 0, List.of(), List.of(), List.of(), List.of(), error);
         }
     }
 

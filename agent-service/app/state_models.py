@@ -88,7 +88,9 @@ class WarehouseAgentState:
     last_pallet_result: dict[str, Any] | None = None
     last_pallet_tasks: dict[str, Any] | None = None
     last_pallet_task_filters: dict[str, Any] | None = None
+    finish_inbound_guided_context: dict[str, Any] | None = None
     last_task_transition_preview: dict[str, Any] | None = None
+    last_finish_inbound_execution_preview: dict[str, Any] | None = None
     last_production_order_progress: dict[str, Any] | None = None
     last_production_material_trace: dict[str, Any] | None = None
     last_boiling_batch_trace: dict[str, Any] | None = None

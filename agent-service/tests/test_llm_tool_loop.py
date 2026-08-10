@@ -3244,6 +3244,383 @@ def test_llm_loop_resolves_product_then_uses_runtime_bound_product() -> None:
     assert "25kg/件" not in json.dumps(second_request.selectedContext, ensure_ascii=False)
 
 
+def test_guided_finish_inbound_resolves_scope_and_requires_exact_qr_selection() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert", "FINISH_INBOUND_GUIDED_PREPARATION")],
+        [
+            call("resolve_products", {"query": "黄冰糖", "limit": 10}),
+            call("resolve_warehouses", {"query": "3号库位", "limit": 10}),
+            call("query_pallet_tasks", {}),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    }
+                ],
+            },
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [
+                    {"warehouseId": 3, "warehouseName": "3", "displayLabel": "3号库位"}
+                ],
+            },
+            "query_pallet_tasks": {
+                "dataScope": "CURRENT_PALLET_TASKS",
+                "total": 3,
+                "page": 1,
+                "size": 50,
+                "records": [
+                    {
+                        "taskType": "FINISH_IN",
+                        "taskStatus": "PENDING",
+                        "code": "BT001A",
+                        "productName": "黄冰糖（袋） 25kg/件 40件/板",
+                        "productStatus": "成品",
+                        "totalWeight": 1000,
+                        "productionDate": "2026-08-10",
+                    },
+                    {
+                        "taskType": "FINISH_IN",
+                        "taskStatus": "PENDING",
+                        "code": "BT001B",
+                        "productName": "黄冰糖（袋） 25kg/件 40件/板",
+                        "productStatus": "成品",
+                        "totalWeight": 1000,
+                        "productionDate": "2026-08-10",
+                    },
+                    {
+                        "taskType": "FINISH_IN",
+                        "taskStatus": "PENDING",
+                        "code": "BT001C",
+                        "productName": "黄冰糖（袋） 25kg/件 40件/板",
+                        "productStatus": "成品",
+                        "totalWeight": 1000,
+                        "productionDate": "2026-08-10",
+                    },
+                ],
+            },
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+
+    response = runtime.chat(chat_request("3号库位处理已有待入库任务：入库2板黄冰糖"))
+
+    assert response.error is None
+    assert [item["toolName"] for item in tools.calls] == [
+        "resolve_products",
+        "resolve_warehouses",
+        "query_pallet_tasks",
+    ]
+    assert tools.calls[2]["arguments"] == {
+        "productId": 84,
+        "status": "PENDING",
+        "taskType": "FINISH_IN",
+        "productStatus": "成品",
+        "page": 1,
+        "size": 50,
+    }
+    assert "productId" not in json.dumps(model.expert_requests[2].toolSchemas, ensure_ascii=False)
+    assert "恰好选择 2 个" in response.answer
+    assert "二维码" in response.answer
+    assert response.cards[0].cardType == "pallet_tasks"
+    selection = response.cards[0].fields[0]
+    assert selection["kind"] == "finish_inbound_guided_selection"
+    assert selection["requestedPalletCount"] == 2
+    assert selection["availablePalletCount"] == 3
+    assert selection["productLabel"] == "黄冰糖（袋） 25kg/件 40件/板"
+    assert selection["warehouseName"] == "3号库位"
+    assert selection["defaultSide"] == "左"
+    assert selection["taskGroupKey"] == "finish_in"
+    assert selection["canSelectRequestedCount"] is True
+    state = store.get("agt_llm")
+    assert state.active_goal_type == "FINISH_INBOUND_PENDING_TASK_PREPARATION"
+    assert state.last_goal_completion["status"] == "COMPLETE"
+    assert state.finish_inbound_guided_context["requestedPalletCount"] == 2
+
+
+def test_guided_finish_inbound_resumes_after_product_choice_without_losing_scope() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert", "FINISH_INBOUND_GUIDED_PREPARATION")],
+        [
+            call("resolve_products", {"query": "黄冰糖", "limit": 10}),
+            call("resolve_warehouses", {"query": "3号库位", "limit": 10}),
+            call("query_pallet_tasks", {}),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "AMBIGUOUS",
+                "needsUserSelection": True,
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    },
+                    {
+                        "productId": 85,
+                        "productName": "黄冰糖小颗粒（袋）",
+                        "displayLabel": "黄冰糖小颗粒（袋） 25kg/件 40件/板",
+                    },
+                ],
+            },
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [
+                    {"warehouseId": 3, "warehouseName": "3", "displayLabel": "3号库位"}
+                ],
+            },
+            "query_pallet_tasks": {
+                "dataScope": "CURRENT_PALLET_TASKS",
+                "total": 2,
+                "page": 1,
+                "size": 50,
+                "records": [
+                    {
+                        "taskType": "FINISH_IN",
+                        "taskStatus": "PENDING",
+                        "code": code,
+                        "productName": "黄冰糖（袋） 25kg/件 40件/板",
+                        "productStatus": "成品",
+                    }
+                    for code in ("BT001A", "BT001B")
+                ],
+            },
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+
+    interrupted = runtime.chat(chat_request("3号库位入库2板黄冰糖"))
+    pending = store.get("agt_llm").pending_clarification
+
+    assert interrupted.needsUserSelection is True
+    assert interrupted.cards[0].cardType == "candidate_selection"
+    assert pending is not None
+
+    resumed = runtime.resume(
+        ResumeRequest.model_validate(
+            {
+                "agentSessionId": "agt_llm",
+                "messageId": "msg_002",
+                "resumeToken": pending.resume_token,
+                "event": {
+                    "type": "candidate_selected",
+                    "interruptId": pending.interrupt_id,
+                    "action": "SELECT_OPTION",
+                    "selection": {"optionId": pending.options[0]["optionId"]},
+                    "clientRequestId": "resume_guided_inbound_001",
+                },
+                "client": {"traceId": "trace_002", "requestId": "req_002", "debug": True},
+            }
+        )
+    )
+
+    assert resumed.error is None
+    assert resumed.needsUserSelection is True
+    mode_pending = store.get("agt_llm").pending_clarification
+    assert mode_pending is not None
+    assert mode_pending.kind == "finish_inbound_mode"
+    assert [option["displayLabel"] for option in mode_pending.options] == [
+        "处理已有待入库任务",
+        "使用空闲固定二维码新建任务",
+    ]
+    assert len(model.expert_requests) == 2
+
+    resumed = runtime.resume(
+        ResumeRequest.model_validate(
+            {
+                "agentSessionId": "agt_llm",
+                "messageId": "msg_003",
+                "resumeToken": mode_pending.resume_token,
+                "event": {
+                    "type": "candidate_selected",
+                    "interruptId": mode_pending.interrupt_id,
+                    "action": "SELECT_OPTION",
+                    "selection": {"optionId": "mode_pending_task"},
+                    "clientRequestId": "resume_guided_inbound_mode_001",
+                },
+                "client": {"traceId": "trace_003", "requestId": "req_003", "debug": True},
+            }
+        )
+    )
+
+    assert resumed.error is None
+    assert resumed.needsUserSelection is False
+    assert [item["toolName"] for item in tools.calls] == [
+        "resolve_products",
+        "resolve_warehouses",
+        "query_pallet_tasks",
+    ]
+    assert tools.calls[-1]["arguments"]["productId"] == 84
+    assert resumed.cards[0].fields[0]["requestedPalletCount"] == 2
+    assert resumed.cards[0].fields[0]["warehouseName"] == "3号库位"
+    state = store.get("agt_llm")
+    assert state.selected_product.internal_id == 84
+    assert state.finish_inbound_guided_context["productResolved"] is True
+    assert state.finish_inbound_guided_context["warehouseResolved"] is True
+    assert state.finish_inbound_guided_context["operationMode"] == "PENDING_TASK"
+    assert state.active_goal_type == "FINISH_INBOUND_PENDING_TASK_PREPARATION"
+    assert len(model.expert_requests) == 3
+
+
+def test_guided_finish_inbound_tool_arguments_are_runtime_bounded() -> None:
+    builder = ToolArgumentBuilder(business_clock=fixed_test_clock())
+    state = WarehouseAgentState(
+        active_goal_type="FINISH_INBOUND_PENDING_TASK_PREPARATION",
+        finish_inbound_guided_context={
+            "requestedPalletCount": 2,
+            "productResolved": True,
+            "warehouseResolved": True,
+            "productLabel": "黄冰糖（袋） 25kg/件 40件/板",
+            "warehouseName": "3号库位",
+            "defaultSide": "左",
+            "operationMode": "PENDING_TASK",
+        },
+    )
+    state.selected_product = SelectedEntity(
+        84,
+        "黄冰糖（袋） 25kg/件 40件/板",
+        "resolver",
+        {"productName": "黄冰糖（袋）", "scopeType": "SINGLE_PRODUCT"},
+    )
+    state.selected_warehouse = SelectedEntity(3, "3号库位", "resolver")
+
+    query = builder.validate_llm_arguments(
+        tool_name="query_pallet_tasks",
+        arguments={"status": "CONFIRMED", "size": 1},
+        state=state,
+        user_message="3号库位入库2板黄冰糖",
+    )
+
+    assert query == {
+        "productId": 84,
+        "status": "PENDING",
+        "taskType": "FINISH_IN",
+        "productStatus": "成品",
+        "page": 1,
+        "size": 50,
+    }
+    with pytest.raises(ValueError, match="exact requested pallet count"):
+        builder.validate_llm_arguments(
+            tool_name="preview_task_transition",
+            arguments={
+                "previewVersion": 1,
+                "transition": "CONFIRM_FINISH_INBOUND",
+                "palletCodes": ["BT001A"],
+            },
+            state=state,
+            user_message="选择二维码 BT001A",
+        )
+    assert WarehouseAgentRuntime._finish_inbound_requested_pallet_count("入库两板") == 2
+    assert WarehouseAgentRuntime._finish_inbound_requested_pallet_count("入库十二板") == 12
+
+
+def test_guided_finish_inbound_fixed_qr_mode_uses_only_exact_free_fixed_codes() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert", "FINISH_INBOUND_FIXED_QR_PREPARATION")],
+        [
+            call("resolve_products", {"query": "黄冰糖", "limit": 10}),
+            call("resolve_warehouses", {"query": "3号库位", "limit": 10}),
+            call("query_fixed_product_qr_pool", {"status": "PENDING", "size": 1}),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{
+                    "productId": 84,
+                    "productName": "黄冰糖（袋）",
+                    "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                }],
+            },
+            "resolve_warehouses": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [{"warehouseId": 3, "warehouseName": "3", "displayLabel": "3号库位"}],
+            },
+            "query_fixed_product_qr_pool": {
+                "dataScope": "CURRENT_FIXED_PRODUCT_QR_POOL",
+                "total": 4,
+                "page": 1,
+                "size": 50,
+                "poolAsOf": "2026-08-10T11:30:00",
+                "records": [
+                    {"code": "QR001", "fixedProductName": "黄冰糖（袋）", "status": "FREE", "fixedModeEnabled": True},
+                    {"code": "QR002", "fixedProductName": "黄冰糖（袋）", "status": "FREE", "fixedModeEnabled": True},
+                    {"code": "QR003", "fixedProductName": "黄冰糖小颗粒（袋）", "status": "FREE", "fixedModeEnabled": True},
+                    {"code": "QR004", "fixedProductName": "黄冰糖（袋）", "status": "PENDING", "fixedModeEnabled": True},
+                ],
+            },
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+
+    response = runtime.chat(chat_request("使用空闲固定二维码在3号库位入库2板黄冰糖"))
+
+    assert response.error is None
+    assert [item["toolName"] for item in tools.calls] == [
+        "resolve_products",
+        "resolve_warehouses",
+        "query_fixed_product_qr_pool",
+    ]
+    assert tools.calls[-1]["arguments"] == {
+        "productName": "黄冰糖（袋）",
+        "freeOnly": True,
+        "page": 1,
+        "size": 50,
+    }
+    assert response.cards[0].cardType == "fixed_qr_inbound_selection"
+    assert [field["code"] for field in response.cards[0].fields[1:]] == ["QR001", "QR002"]
+    assert "FREE" not in json.dumps(response.model_dump(), ensure_ascii=False)
+    assert "PENDING" not in json.dumps(response.model_dump(), ensure_ascii=False)
+    state = store.get("agt_llm")
+    assert state.active_goal_type == "FINISH_INBOUND_FIXED_QR_PREPARATION"
+    assert state.finish_inbound_guided_context["operationMode"] == "FIXED_QR_NEW_TASK"
+    assert state.last_goal_completion["status"] == "COMPLETE"
+
+
+def test_guided_finish_inbound_wrong_qr_count_returns_user_readable_guidance() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("logistics_expert", "FINISH_INBOUND_TASK_TRANSITION_PREVIEW")],
+        [
+            call(
+                "preview_task_transition",
+                {
+                    "previewVersion": 1,
+                    "transition": "CONFIRM_FINISH_INBOUND",
+                    "palletCodes": ["BT0019N1", "BT001A0F", "BT0013IQ"],
+                },
+            )
+        ],
+    )
+    runtime, store = runtime_for(model, MockToolClient())
+    state = store.get("agt_llm")
+    state.finish_inbound_guided_context = {
+        "requestedPalletCount": 2,
+        "productResolved": True,
+        "warehouseResolved": True,
+        "productLabel": "黄冰糖（袋） 25kg/件 40件/板",
+        "warehouseName": "3号库位",
+        "defaultSide": "左",
+    }
+
+    response = runtime.chat(
+        chat_request("请预览成品入库任务：BT0019N1、BT001A0F、BT0013IQ")
+    )
+
+    assert response.error is None
+    assert "恰好选择 2 个二维码" in response.answer
+    assert "没有修改库存" in response.answer
+
+
 def test_expert_timeout_safely_falls_back_to_registered_inventory_query() -> None:
     class TimeoutExpertModel(ScriptedLlmModel):
         def decide_expert_action(self, request: ExpertLoopRequest) -> ExpertLoopDecisionV1 | None:

@@ -35,10 +35,18 @@ const props = defineProps({
   palletCodes: {
     type: Array,
     default: () => []
+  },
+  defaultWarehouseName: {
+    type: String,
+    default: ''
+  },
+  defaultSide: {
+    type: String,
+    default: ''
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'completed'])
+const emit = defineEmits(['update:modelValue', 'completed', 'preview-requested'])
 
 const visible = computed({
   get: () => props.modelValue,
@@ -73,6 +81,7 @@ const operations = {
 }
 
 const isInbound = computed(() => props.batchAction === 'confirmIn')
+const canGenerateExactPreview = computed(() => isInbound.value && props.taskGroupLabel === '成品入库')
 const isTransfer = computed(() => props.batchAction === 'transferConfirm')
 const operation = computed(() => operations[props.batchAction])
 const dialogTitle = computed(() => {
@@ -133,9 +142,9 @@ const toInboundRow = row => {
     code: row.code,
     productId: row.productId,
     productName: row.productName,
-    warehouseName: row.targetWarehouseName || '',
+    warehouseName: String(props.defaultWarehouseName || '').trim() || row.targetWarehouseName || '',
     entryDate: row.productionDate || dayjs().format('YYYY-MM-DD'),
-    side: row.targetSide || '左',
+    side: ['左', '右'].includes(props.defaultSide) ? props.defaultSide : (row.targetSide || '左'),
     quantity: quantityLocked ? productionOutputQuantity(row) : 1,
     unit: quantityLocked ? productionOutputUnit(row) : '0',
     quantityLocked,
@@ -278,6 +287,24 @@ const submit = async () => {
   }
 }
 
+const requestExactPreview = () => {
+  if (!canGenerateExactPreview.value || !rows.value.length) return
+  if (!validateInboundRows()) return
+  emit('preview-requested', {
+    previewVersion: 1,
+    items: rows.value.map(row => ({
+      code: row.code,
+      warehouseName: row.warehouseName,
+      entryDate: row.entryDate,
+      side: row.side,
+      quantity: row.quantity,
+      unit: row.unit,
+      ...(String(row.remark || '').trim() ? { remark: String(row.remark).trim() } : {})
+    }))
+  })
+  close()
+}
+
 watch(() => props.modelValue, opened => {
   if (opened) prepareDialog()
 })
@@ -373,7 +400,18 @@ watch(() => props.modelValue, opened => {
 
     <template #footer>
       <el-button :disabled="submitting" @click="close">取消</el-button>
-      <el-button type="primary" :loading="submitting" :disabled="loading || !rows.length" @click="submit">提交</el-button>
+      <el-button
+        v-if="canGenerateExactPreview"
+        type="primary"
+        plain
+        :disabled="loading || submitting || !rows.length"
+        @click="requestExactPreview"
+      >
+        生成安全预览
+      </el-button>
+      <el-button type="primary" :loading="submitting" :disabled="loading || !rows.length" @click="submit">
+        {{ canGenerateExactPreview ? '直接提交（人工流程）' : '提交' }}
+      </el-button>
     </template>
   </el-dialog>
 </template>

@@ -34,7 +34,7 @@ from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS
 
 
 def test_priority_readonly_goal_contracts_are_registered() -> None:
-    assert len(GOAL_CONTRACTS) == 54
+    assert len(GOAL_CONTRACTS) == 58
     assert {
         "CURRENT_INVENTORY_LEDGER",
         "WAREHOUSE_STATUS",
@@ -53,6 +53,9 @@ def test_priority_readonly_goal_contracts_are_registered() -> None:
         "PROCESS_KNOWLEDGE_QUERY",
         "ENTERPRISE_KNOWLEDGE_QUERY",
         "TODAY_OPERATIONS_OVERVIEW",
+        "FINISH_INBOUND_GUIDED_PREPARATION",
+        "FINISH_INBOUND_PENDING_TASK_PREPARATION",
+        "FINISH_INBOUND_FIXED_QR_PREPARATION",
     }.issubset(GOAL_CONTRACTS)
     assert all(
         contract.evidenceTools
@@ -72,8 +75,8 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
     current = registry["current_goals"]
     planned = registry["planned_goals"]
 
-    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 54
-    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 53
+    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 58
+    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 54
     assert registry["classified_internal_knowledge_tool_count"] == len(INTERNAL_KNOWLEDGE_TOOLS) == 1
     assert set(current) == set(GOAL_CONTRACTS)
     for goal_type, contract in GOAL_CONTRACTS.items():
@@ -103,8 +106,8 @@ def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:
     corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
     cases = corpus["cases"]
 
-    assert len(cases) == len(GOAL_CONTRACTS) == 54
-    assert len({case["id"] for case in cases}) == 54
+    assert len(cases) == len(GOAL_CONTRACTS) == 58
+    assert len({case["id"] for case in cases}) == 58
     assert {case["goalType"] for case in cases} == set(GOAL_CONTRACTS)
     assert all(str(case["input"]).strip() for case in cases)
 

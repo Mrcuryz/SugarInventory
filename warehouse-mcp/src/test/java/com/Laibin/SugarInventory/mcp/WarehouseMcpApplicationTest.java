@@ -30,7 +30,7 @@ class WarehouseMcpApplicationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void startsAndListsFiftyThreeTools() {
+    void startsAndListsFiftyFourTools() {
         List<String> names = toolSchemas().keySet().stream().sorted().toList();
 
         assertThat(names).containsExactly(
@@ -44,6 +44,7 @@ class WarehouseMcpApplicationTest {
                 "get_quality_standard_detail",
                 "get_role_permission_summary",
                 "get_warehouse_status",
+                "preview_finish_inbound_execution",
                 "preview_task_transition",
                 "query_agent_answer_reviews",
                 "query_agent_tool_audit",
@@ -124,6 +125,7 @@ class WarehouseMcpApplicationTest {
         assertObjectClosed(schemas.get("query_material_candidates"));
         assertObjectClosed(schemas.get("query_pallet_tasks"));
         assertObjectClosed(schemas.get("preview_task_transition"));
+        assertObjectClosed(schemas.get("preview_finish_inbound_execution"));
         assertObjectClosed(schemas.get("query_stock_documents"));
         assertObjectClosed(schemas.get("query_auto_inbound_batches"));
         assertObjectClosed(schemas.get("get_auto_inbound_batch_detail"));
@@ -235,11 +237,24 @@ class WarehouseMcpApplicationTest {
         assertIntegerBounds(schemas.get("query_pallet_tasks"), "size", 1, 50);
         assertThat(schemas.get("preview_task_transition").path("properties").path("previewVersion").path("const").asInt()).isEqualTo(1);
         assertThat(schemas.get("preview_task_transition").path("properties").path("palletCodes").path("maxItems").asInt()).isEqualTo(20);
+        JsonNode finishInboundPreviewSchema = schemas.get("preview_finish_inbound_execution");
+        assertThat(finishInboundPreviewSchema.path("properties").path("previewVersion").path("const").asInt()).isEqualTo(1);
+        JsonNode finishInboundItems = finishInboundPreviewSchema.path("properties").path("items");
+        assertThat(finishInboundItems.path("maxItems").asInt()).isEqualTo(20);
+        assertObjectClosed(finishInboundItems.path("items"));
+        List<String> finishInboundItemFields = new java.util.ArrayList<>();
+        finishInboundItems.path("items").path("properties").fieldNames()
+                .forEachRemaining(finishInboundItemFields::add);
+        assertThat(finishInboundItemFields)
+                .containsExactlyInAnyOrder(
+                        "code", "warehouseName", "entryDate", "side", "quantity", "unit", "remark");
+        assertThat(finishInboundItemFields)
+                .doesNotContain("taskId", "palletCodeId", "productId", "warehouseId", "rowNumber", "layer");
         assertIntegerBounds(schemas.get("query_stock_documents"), "size", 1, 50);
     }
 
     @Test
-    void bindsAndInvokesAllFiftyThreeToolCallbacks() {
+    void bindsAndInvokesAllFiftyFourToolCallbacks() {
         Map<String, ToolCallback> callbacks = providers.stream()
                 .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
                 .collect(Collectors.toMap(
@@ -286,6 +301,7 @@ class WarehouseMcpApplicationTest {
                 Map.entry("query_material_candidates", "{\"orderRef\":\"order_ref\"}"),
                 Map.entry("query_pallet_tasks", "{}"),
                 Map.entry("preview_task_transition", "{\"previewVersion\":1,\"transition\":\"CONFIRM_FINISH_INBOUND\",\"palletCodes\":[\"BT0019N1\"]}"),
+                Map.entry("preview_finish_inbound_execution", "{\"previewVersion\":1,\"items\":[{\"code\":\"BT0019N1\",\"warehouseName\":\"1号库位\",\"entryDate\":\"2026-08-09\",\"side\":\"左\",\"quantity\":1,\"unit\":\"0\",\"remark\":\"验收预览\"}]}"),
                 Map.entry("query_stock_documents", "{\"documentType\":\"INBOUND\"}"),
                 Map.entry("query_auto_inbound_batches", "{}"),
                 Map.entry("get_auto_inbound_batch_detail", "{\"batchRef\":\"" + autoInboundRef + "\"}"),

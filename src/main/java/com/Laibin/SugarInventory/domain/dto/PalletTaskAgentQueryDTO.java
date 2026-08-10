@@ -10,6 +10,7 @@ public class PalletTaskAgentQueryDTO {
     private String taskType;
     private String bizScene;
     private String status;
+    private Integer productId;
     private String productName;
     private String productType;
     private String productStatus;

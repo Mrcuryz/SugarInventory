@@ -16,6 +16,16 @@ export const recordAgentMessageReview = (agentSessionId, data) =>
 export const submitAgentMessageReviewFeedback = (agentSessionId, messageId, data) =>
   request.post(`/agent/sessions/${agentSessionId}/message-reviews/${messageId}/feedback`, data)
 
+export const getPendingFinishInboundExecutionPreview = (agentSessionId, palletCodes) =>
+  request.post(`/agent/sessions/${agentSessionId}/finish-inbound-execution/s3/pending-preview`, {
+    palletCodes
+  })
+
+export const confirmAndExecuteFinishInbound = (agentSessionId, previewRef) =>
+  request.post(
+    `/agent/sessions/${agentSessionId}/finish-inbound-execution/s3/previews/${previewRef}/confirm-and-execute`
+  )
+
 export const pageAgentMessageReviews = (params = {}) => request.get('/agent/reviews', { params })
 
 export const getAgentMessageReviewDetail = id => request.get(`/agent/reviews/${id}`)

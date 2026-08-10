@@ -15,6 +15,10 @@ import com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO;
 import com.Laibin.SugarInventory.domain.vo.TaskTransitionPreviewVO;
 import com.Laibin.SugarInventory.agent.security.AgentSecurityContext;
 import com.Laibin.SugarInventory.agent.service.TaskTransitionPreviewArchiveService;
+import com.Laibin.SugarInventory.agent.service.FinishInboundExecutionPreviewArchiveService;
+import com.Laibin.SugarInventory.agent.service.FinishInboundExecutionPreviewService;
+import com.Laibin.SugarInventory.domain.dto.FinishInboundExecutionPreviewDTO;
+import com.Laibin.SugarInventory.domain.vo.FinishInboundExecutionPreviewVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,6 +38,8 @@ import java.util.stream.Collectors;
 public class LogisticsAgentReadController {
     private final LogisticsAgentReadService service;
     private final TaskTransitionPreviewArchiveService previewArchiveService;
+    private final FinishInboundExecutionPreviewService finishInboundExecutionPreviewService;
+    private final FinishInboundExecutionPreviewArchiveService finishInboundExecutionPreviewArchiveService;
 
     @PostMapping("/pallet-tasks/query")
     @PreAuthorize("hasAuthority('task:view')")
@@ -78,6 +84,26 @@ public class LogisticsAgentReadController {
                 .map(authority -> authority.getAuthority())
                 .collect(Collectors.toUnmodifiableSet());
         return Result.success(previewArchiveService.persistReady(
+                preview,
+                loginUser.getUser().getId(),
+                agentSessionId,
+                authorities));
+    }
+
+    @PostMapping("/pallet-tasks/finish-inbound/execution/preview")
+    @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm')")
+    public Result<FinishInboundExecutionPreviewVO> previewFinishInboundExecution(
+            @RequestBody @Valid FinishInboundExecutionPreviewDTO request,
+            @AuthenticationPrincipal LoginUser loginUser,
+            HttpServletRequest httpRequest) {
+        FinishInboundExecutionPreviewVO preview = finishInboundExecutionPreviewService.preview(
+                request, loginUser.getUser());
+        Object sessionAttribute = httpRequest.getAttribute(AgentSecurityContext.ATTR_AGENT_SESSION_ID);
+        String agentSessionId = sessionAttribute == null ? null : String.valueOf(sessionAttribute);
+        Set<String> authorities = loginUser.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .collect(Collectors.toUnmodifiableSet());
+        return Result.success(finishInboundExecutionPreviewArchiveService.persistReady(
                 preview,
                 loginUser.getUser().getId(),
                 agentSessionId,

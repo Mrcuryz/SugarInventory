@@ -1,0 +1,120 @@
+- generic [ref=f4e93]:
+  - complementary [ref=f4e94]:
+    - generic [ref=f4e95]:
+      - img "数字仓储平台" [ref=f4e96]
+      - generic [ref=f4e97]: 数字仓储平台
+    - menubar [ref=f4e98]:
+      - menuitem "首页" [ref=f4e99] [cursor=pointer]
+      - menuitem "操作日志" [ref=f4e104] [cursor=pointer]
+      - menuitem "AI Review Lite" [ref=f4e109] [cursor=pointer]
+      - menuitem "产品管理" [ref=f4e114] [cursor=pointer]
+      - menuitem "仓库管理" [ref=f4e119]
+      - menuitem "二维码中心" [ref=f4e130]
+      - menuitem "任务中心" [ref=f4e139]
+      - menuitem "生产管理" [ref=f4e148]
+      - menuitem "筛网管理" [ref=f4e157] [cursor=pointer]
+      - menuitem "化验中心" [ref=f4e162]
+      - menuitem "单据中心" [ref=f4e172]
+      - menuitem "员工管理" [ref=f4e181]
+  - generic [ref=f4e190]:
+    - generic [ref=f4e191]:
+      - banner [ref=f4e192]:
+        - navigation "面包屑" [ref=f4e197]:
+          - link "首页" [ref=f4e199]
+        - generic [ref=f4e200]:
+          - button "AI 助手" [ref=f4e201] [cursor=pointer]
+          - button "用户 陈思聪" [ref=f4e209] [cursor=pointer]:
+            - img "用户" [ref=f4e210]
+            - generic [ref=f4e211]: 陈思聪
+      - generic [ref=f4e215]:
+        - button "首页" [ref=f4e217] [cursor=pointer]
+        - button [ref=f4e223] [cursor=pointer]
+    - main [ref=f4e228]:
+      - generic [ref=f4e229]:
+        - generic [ref=f4e231]:
+          - generic [ref=f4e232]:
+            - generic [ref=f4e233]: 仓储管理工作台
+            - generic [ref=f4e234]: 欢迎回来，今天是 2026-08-04 周二
+            - generic [ref=f4e235]: 聚合库位状态、库存概览和常用业务入口，快速进入二维码、任务和化验流程。
+          - generic [ref=f4e236]: 03:54:34
+        - generic [ref=f4e237]:
+          - generic [ref=f4e239]:
+            - generic [ref=f4e240]: 库位总数
+            - generic [ref=f4e241]: "0"
+            - generic [ref=f4e242]: 当前纳入统计的库位
+          - generic [ref=f4e244]:
+            - generic [ref=f4e245]: 正常库位
+            - generic [ref=f4e246]: "0"
+            - generic [ref=f4e247]: 正在正常使用中
+          - generic [ref=f4e249]:
+            - generic [ref=f4e250]: 临期预警
+            - generic [ref=f4e251]: "0"
+            - generic [ref=f4e252]: 需要优先关注
+          - generic [ref=f4e254]:
+            - generic [ref=f4e255]: 满仓库位
+            - generic [ref=f4e256]: "0"
+            - generic [ref=f4e257]: 容量已达到上限
+        - generic [ref=f4e259]:
+          - generic [ref=f4e260]: 快捷入口
+          - generic [ref=f4e261]:
+            - generic [ref=f4e262] [cursor=pointer]:
+              - generic [ref=f4e263]: 二维码管理
+              - generic [ref=f4e264]: 生成、查看和追溯二维码
+            - generic [ref=f4e265] [cursor=pointer]:
+              - generic [ref=f4e266]: 半成品入库任务
+              - generic [ref=f4e267]: 处理半成品入库确认
+            - generic [ref=f4e268] [cursor=pointer]:
+              - generic [ref=f4e269]: 成品入库任务
+              - generic [ref=f4e270]: 确认成品二维码入库，追溯走生产订单
+            - generic [ref=f4e271] [cursor=pointer]:
+              - generic [ref=f4e272]: 半成品出库任务
+              - generic [ref=f4e273]: 处理半成品普通出库
+            - generic [ref=f4e274] [cursor=pointer]:
+              - generic [ref=f4e275]: 成品出库任务
+              - generic [ref=f4e276]: 创建并确认成品出库
+            - generic [ref=f4e277] [cursor=pointer]:
+              - generic [ref=f4e278]: 调拨任务
+              - generic [ref=f4e279]: 创建与确认库位调拨
+            - generic [ref=f4e280] [cursor=pointer]:
+              - generic [ref=f4e281]: 仓库平面图
+              - generic [ref=f4e282]: 查看仓区分布与库位状态
+            - generic [ref=f4e283] [cursor=pointer]:
+              - generic [ref=f4e284]: 化验管理
+              - generic [ref=f4e285]: 维护产品化验记录
+        - generic [ref=f4e287]:
+          - generic [ref=f4e289]:
+            - generic [ref=f4e290]: 库位占用概览
+            - generic [ref=f4e291]: 按库位状态和容量查看当前仓储概况，点击库位进入仓库平面图定位。
+          - generic [ref=f4e292]:
+            - generic [ref=f4e293]:
+              - generic [ref=f4e294]: 正常
+              - generic [ref=f4e296]: "0"
+            - generic [ref=f4e297]:
+              - generic [ref=f4e298]: 空置
+              - generic [ref=f4e300]: "0"
+            - generic [ref=f4e301]:
+              - generic [ref=f4e302]: 临期预警
+              - generic [ref=f4e304]: "0"
+            - generic [ref=f4e305]:
+              - generic [ref=f4e306]: 满仓
+              - generic [ref=f4e308]: "0"
+            - generic [ref=f4e309]:
+              - generic [ref=f4e310]: 维护
+              - generic [ref=f4e312]: "0"
+          - generic [ref=f4e314]:
+            - table [ref=f4e316]:
+              - rowgroup [ref=f4e324]:
+                - row [ref=f4e325]:
+                  - columnheader "库位名称" [ref=f4e326]
+                  - columnheader "状态" [ref=f4e328]
+                  - columnheader "当前容量" [ref=f4e330]
+                  - columnheader "最大容量" [ref=f4e332]
+                  - columnheader "占用率" [ref=f4e334]
+                  - columnheader "操作" [ref=f4e336]
+            - generic [ref=f4e341]:
+              - table:
+                - rowgroup
+              - generic [ref=f4e342]: 暂无数据
+    - contentinfo [ref=f4e344]:
+      - link "桂 ICP 备 2025058642 号-2" [ref=f4e345] [cursor=pointer]:
+        - /url: https://beian.miit.gov.cn/

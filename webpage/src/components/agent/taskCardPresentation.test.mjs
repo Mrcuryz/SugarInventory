@@ -13,6 +13,7 @@ import {
   taskGroupStatusSummary,
   taskGroups,
   taskRecords,
+  taskSelectionRequirement,
   taskStatusTone
 } from './taskCardPresentation.mjs'
 
@@ -165,4 +166,31 @@ test('marks completed batch rows confirmed and removes them from selectable task
     [true]
   ])
   assert.equal(original.fields[0].taskStatusLabel, '待处理')
+})
+
+test('reads a bounded guided finish-inbound QR selection requirement', () => {
+  assert.deepEqual(taskSelectionRequirement({
+    fields: [{
+      kind: 'finish_inbound_guided_selection',
+      requestedPalletCount: 2,
+      availablePalletCount: 3,
+      productLabel: '黄冰糖（袋）25kg/件 40件/板',
+      warehouseName: '3号库位',
+      defaultSide: '左',
+      taskGroupKey: 'finish_in',
+      canSelectRequestedCount: true
+    }]
+  }), {
+    requestedPalletCount: 2,
+    availablePalletCount: 3,
+    productLabel: '黄冰糖（袋）25kg/件 40件/板',
+    warehouseName: '3号库位',
+    defaultSide: '左',
+    taskGroupKey: 'finish_in',
+    canSelectRequestedCount: true
+  })
+  assert.equal(taskSelectionRequirement({ fields: [{
+    kind: 'finish_inbound_guided_selection',
+    requestedPalletCount: 21
+  }] }), null)
 })

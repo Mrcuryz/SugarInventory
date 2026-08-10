@@ -521,6 +521,32 @@ class SafePalletTaskResult(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+class SafeFixedProductQrRecord(BaseModel):
+    """One display-safe fixed-product QR candidate for a controlled inbound flow."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    fixedProductName: str
+    statusLabel: str
+    selectable: bool = False
+    updatedAt: str | None = None
+
+
+class SafeFixedProductQrResult(BaseModel):
+    """Display-safe fixed-product QR page with raw statuses and internal IDs removed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataScope: str
+    total: int
+    page: int
+    size: int
+    poolAsOf: str | None = None
+    records: list[SafeFixedProductQrRecord] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
 class SafeTaskTransitionPreviewTask(BaseModel):
     """One display-safe task included in a no-write transition preview."""
 
@@ -555,6 +581,40 @@ class SafeTaskTransitionPreview(BaseModel):
     eligibleTaskCount: int
     tasks: list[SafeTaskTransitionPreviewTask] = Field(default_factory=list)
     requiredUserInputs: list[str] = Field(default_factory=list)
+    blockingIssues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class SafeFinishInboundExecutionPreviewItem(BaseModel):
+    """One display-safe item from an exact no-write finished-product inbound preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    palletCode: str
+    productLabel: str
+    productionDate: str | None = None
+    warehouseLabel: str
+    entryDate: str
+    sideLabel: str
+    quantityText: str
+    remark: str | None = None
+    quantityRuleLabel: str
+
+
+class SafeFinishInboundExecutionPreview(BaseModel):
+    """Exact L2 form preview; server references, hashes and internal state stay hidden."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    previewVersion: int
+    previewStatusLabel: str
+    previewedAt: str | None = None
+    expiresAt: str | None = None
+    readyForUserConfirmation: bool
+    requestedItemCount: int
+    eligibleItemCount: int
+    items: list[SafeFinishInboundExecutionPreviewItem] = Field(default_factory=list)
     blockingIssues: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

@@ -17,10 +17,19 @@ import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
 import RegisteredReportHistoryDialog from '@/components/agent/RegisteredReportHistoryDialog.vue'
 import { isAgentAdminRole } from '@/components/agent/agentAccess.mjs'
 import PalletTaskBatchDialog from '@/components/agent/PalletTaskBatchDialog.vue'
+import FinishInboundExecutionConfirmDialog from '@/components/agent/FinishInboundExecutionConfirmDialog.vue'
+import FixedQrTaskCreationDialog from '@/components/agent/FixedQrTaskCreationDialog.vue'
 import { cleanOptionLabel } from '@/components/agent/agentDisplay'
 import { appendProcessStep } from '@/components/agent/agentProcessTrace.mjs'
+import { isSelectionResumeConsumed } from '@/components/agent/agentSelectionState.mjs'
 import { safeReviewAnswerSummary, safeReviewAnswerText } from '@/components/agent/reviewPayload.mjs'
 import { applyTaskBatchCompletion } from '@/components/agent/taskCardPresentation.mjs'
+import { createFinishInboundExecutionPreviewRequest } from '@/components/agent/finishInboundExecutionPreviewRequest.mjs'
+import { applyFinishInboundExecutionCompletion } from '@/components/agent/finishInboundExecutionPreviewPresentation.mjs'
+import {
+  applyFixedQrTaskCreation,
+  fixedQrCreatedTaskPreviewRequest
+} from '@/components/agent/fixedQrInboundPresentation.mjs'
 
 const visible = ref(false)
 const router = useRouter()
@@ -41,7 +50,20 @@ const taskBatchDialog = reactive({
   visible: false,
   batchAction: '',
   taskGroupLabel: '',
+  palletCodes: [],
+  defaultWarehouseName: '',
+  defaultSide: ''
+})
+const finishInboundExecutionDialog = reactive({
+  visible: false,
   palletCodes: []
+})
+const fixedQrTaskCreationDialog = reactive({
+  visible: false,
+  palletCodes: [],
+  productLabel: '',
+  defaultWarehouseName: '',
+  defaultSide: '左'
 })
 let activeStreamController = null
 let activeAssistantMessage = null
@@ -62,6 +84,9 @@ const sessionStatusClass = computed(() => ({
   inactive: sessionStatus.value !== 'ACTIVE'
 }))
 const isAdmin = computed(() => isAgentAdminRole(session.value?.roleCode || authStore.roleCode))
+const canExecuteFinishInbound = computed(() =>
+  authStore.permissionCodes.includes('agent:finish-inbound:execute')
+)
 const currentUserName = computed(() => session.value?.name || authStore.name || authStore.employeeId || '当前用户')
 const assistantName = computed(() => '智能仓储助手')
 const userAvatarText = computed(() => avatarText(currentUserName.value, '用'))
@@ -483,11 +508,12 @@ const chooseOption = async (option, sourceMessage) => {
     allowWhileSending: true
   })
   if (sourceMessage) {
+    const selectionConsumed = isSelectionResumeConsumed(finishReason)
     sourceMessage.optionSubmitting = false
-    sourceMessage.selectionCompleted = finishReason === 'completed'
-    sourceMessage.needsUserSelection = finishReason !== 'completed'
+    sourceMessage.selectionCompleted = selectionConsumed
+    sourceMessage.needsUserSelection = !selectionConsumed
     sourceMessage.progress = ''
-    if (finishReason !== 'completed') {
+    if (!selectionConsumed) {
       sourceMessage.selectedOption = null
     }
   }
@@ -634,7 +660,10 @@ const handleCardAction = async (action) => {
       ElMessage.warning('当前选择不能生成任务预览，请重新选择任务')
       return
     }
-    await send({ message: `请预览以下${expectedGroup}待处理任务：${palletCodes.join('、')}` })
+    const target = String(action.defaultWarehouseName || '').trim()
+    await send({
+      message: `请预览以下${expectedGroup}待处理任务：${palletCodes.join('、')}${target ? `。本次目标入库库位：${target}` : ''}`
+    })
     return
   }
   if (action?.actionKind === 'open_task_batch') {
@@ -647,7 +676,44 @@ const handleCardAction = async (action) => {
     taskBatchDialog.batchAction = action.batchAction
     taskBatchDialog.taskGroupLabel = action.taskGroupLabel || '任务'
     taskBatchDialog.palletCodes = palletCodes
+    taskBatchDialog.defaultWarehouseName = String(action.defaultWarehouseName || '').trim()
+    taskBatchDialog.defaultSide = ['左', '右'].includes(action.defaultSide) ? action.defaultSide : ''
     taskBatchDialog.visible = true
+    return
+  }
+  if (action?.actionKind === 'open_fixed_qr_task_creation') {
+    if (!authStore.permissionCodes.includes('qrcode:activate')) {
+      ElMessage.warning('当前账号没有启用固定二维码并创建入库任务的权限')
+      return
+    }
+    const palletCodes = [...new Set((action.palletCodes || [])
+      .map(code => String(code || '').trim().toUpperCase())
+      .filter(Boolean))]
+    if (!palletCodes.length || palletCodes.length > 20 || palletCodes.length !== Number(action.requestedPalletCount || 0)) {
+      ElMessage.warning('当前固定二维码选择无效，请重新选择')
+      return
+    }
+    fixedQrTaskCreationDialog.palletCodes = palletCodes
+    fixedQrTaskCreationDialog.productLabel = String(action.productLabel || '').trim()
+    fixedQrTaskCreationDialog.defaultWarehouseName = String(action.defaultWarehouseName || '').trim()
+    fixedQrTaskCreationDialog.defaultSide = ['左', '右'].includes(action.defaultSide) ? action.defaultSide : '左'
+    fixedQrTaskCreationDialog.visible = true
+    return
+  }
+  if (action?.actionKind === 'open_finish_inbound_execution_control') {
+    if (!canExecuteFinishInbound.value) {
+      ElMessage.warning('当前账号没有受控 AI 成品入库执行权限')
+      return
+    }
+    const palletCodes = [...new Set((action.palletCodes || [])
+      .map(code => String(code || '').trim().toUpperCase())
+      .filter(Boolean))]
+    if (!palletCodes.length || palletCodes.length > 20) {
+      ElMessage.warning('当前安全预览的托盘范围无效，请重新生成')
+      return
+    }
+    finishInboundExecutionDialog.palletCodes = palletCodes
+    finishInboundExecutionDialog.visible = true
   }
 }
 
@@ -656,6 +722,39 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
     if (!Array.isArray(message.cards)) return
     message.cards = message.cards.map(card => applyTaskBatchCompletion(card, palletCodes).card)
   })
+}
+
+const handleFixedQrTasksCreated = async ({ palletCodes = [], defaultWarehouseName = '' } = {}) => {
+  messages.value.forEach(message => {
+    if (!Array.isArray(message.cards)) return
+    message.cards = message.cards.map(card => applyFixedQrTaskCreation(card, palletCodes).card)
+  })
+  const previewRequest = fixedQrCreatedTaskPreviewRequest({
+    palletCodes,
+    warehouseName: defaultWarehouseName
+  })
+  if (!previewRequest) {
+    ElMessage.warning('待入库任务已经创建，但当前范围无法生成资格预览，请重新查询任务')
+    return
+  }
+  await send(previewRequest)
+}
+
+const handleFinishInboundExecutionCompleted = ({ palletCodes = [], completedAt = '' } = {}) => {
+  messages.value.forEach(message => {
+    if (!Array.isArray(message.cards)) return
+    message.cards = message.cards.map(card =>
+      applyFinishInboundExecutionCompletion(card, palletCodes, completedAt).card)
+  })
+}
+
+const handleFinishInboundPreviewRequested = async ({ previewVersion = 1, items = [] } = {}) => {
+  const request = createFinishInboundExecutionPreviewRequest({ previewVersion, items })
+  if (!request) {
+    ElMessage.warning('成品入库表单不完整，无法生成安全预览')
+    return
+  }
+  await send({ message: request.message })
 }
 
 const formatSnapshotTime = value => String(value || '')
@@ -731,6 +830,7 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
               :debug-mode="debugMode"
               :shadow-compare-mode="shadowCompareMode"
               :sending="sending"
+              :can-execute-finish-inbound="canExecuteFinishInbound"
               @choose-option="chooseOption($event, item)"
               @feedback="submitMessageFeedback"
               @card-action="handleCardAction"
@@ -786,7 +886,24 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
     :batch-action="taskBatchDialog.batchAction"
     :task-group-label="taskBatchDialog.taskGroupLabel"
     :pallet-codes="taskBatchDialog.palletCodes"
+    :default-warehouse-name="taskBatchDialog.defaultWarehouseName"
+    :default-side="taskBatchDialog.defaultSide"
     @completed="handleTaskBatchCompleted"
+    @preview-requested="handleFinishInboundPreviewRequested"
+  />
+  <FinishInboundExecutionConfirmDialog
+    v-model="finishInboundExecutionDialog.visible"
+    :agent-session-id="session?.agentSessionId || ''"
+    :pallet-codes="finishInboundExecutionDialog.palletCodes"
+    @completed="handleFinishInboundExecutionCompleted"
+  />
+  <FixedQrTaskCreationDialog
+    v-model="fixedQrTaskCreationDialog.visible"
+    :pallet-codes="fixedQrTaskCreationDialog.palletCodes"
+    :product-label="fixedQrTaskCreationDialog.productLabel"
+    :default-warehouse-name="fixedQrTaskCreationDialog.defaultWarehouseName"
+    :default-side="fixedQrTaskCreationDialog.defaultSide"
+    @created="handleFixedQrTasksCreated"
   />
   <RegisteredReportHistoryDialog
     v-model="reportHistoryVisible"

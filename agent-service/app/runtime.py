@@ -48,10 +48,14 @@ from app.schemas import (
     SafeInventoryDistributionResult,
     SafeInventoryLocation,
     SafeInventoryResult,
+    SafeFixedProductQrRecord,
+    SafeFixedProductQrResult,
     SafePalletTaskRecord,
     SafePalletTaskResult,
     SafeTaskTransitionPreview,
     SafeTaskTransitionPreviewTask,
+    SafeFinishInboundExecutionPreview,
+    SafeFinishInboundExecutionPreviewItem,
     SafePalletLifecycleEvent,
     SafePalletFlowRecords,
     SafePalletStatus,
@@ -144,6 +148,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "query_material_candidates": "生产原料候选查询",
     "query_pallet_tasks": "托盘任务查询",
     "preview_task_transition": "托盘任务处理预览",
+    "preview_finish_inbound_execution": "成品入库精确执行预览",
     "query_stock_documents": "库存单据查询",
     "query_auto_inbound_batches": "自动报数入库批次查询",
     "get_auto_inbound_batch_detail": "自动报数入库批次详情查询",
@@ -372,7 +377,26 @@ class WarehouseAgentRuntime:
         pending.status = "RESUMED"
         self.metrics.increment("hitl_resumed_total")
         state.interrupt_status[pending.interrupt_id] = pending.status
-        if pending.kind == "product":
+        if pending.kind == "finish_inbound_mode":
+            operation_mode = self._safe_text(internal.get("operationMode"))
+            context = (
+                state.finish_inbound_guided_context
+                if isinstance(state.finish_inbound_guided_context, dict)
+                else None
+            )
+            if operation_mode not in {"PENDING_TASK", "FIXED_QR_NEW_TASK"} or context is None:
+                response = ChatResponse(
+                    agentSessionId=request.agentSessionId,
+                    answer="本次入库模式已失效，请重新发起入库需求。",
+                )
+                self._raise_if_cancelled()
+                self.checkpointer.save(request.agentSessionId, state)
+                return response
+            context["operationMode"] = operation_mode
+            self._begin_registered_goal(state, self._finish_inbound_preparation_goal(operation_mode))
+            state.pending_clarification = None
+            response = self._resume_llm_tool_loop(request, state, pending, "INBOUND_MODE")
+        elif pending.kind == "product":
             option_type = str(option.get("optionType") or "SINGLE_PRODUCT")
             product_id = self._int_value(internal, "productId")
             if option_type == "SINGLE_PRODUCT" and product_id is None:
@@ -657,8 +681,107 @@ class WarehouseAgentRuntime:
         state.active_goal_type = goal_type
         state.fact_envelopes = []
         state.last_goal_completion = None
+        if goal_type is not None and goal_type not in {
+            "FINISH_INBOUND_GUIDED_PREPARATION",
+            "FINISH_INBOUND_PENDING_TASK_PREPARATION",
+            "FINISH_INBOUND_FIXED_QR_PREPARATION",
+            "FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+            "FINISH_INBOUND_EXECUTION_PREVIEW",
+        }:
+            state.finish_inbound_guided_context = None
         if goal_type in {"PROCESS_KNOWLEDGE_QUERY", "ENTERPRISE_KNOWLEDGE_QUERY"}:
             state.last_knowledge_result = None
+
+    def _initialize_finish_inbound_guided_context(
+        self,
+        state: WarehouseAgentState,
+        user_message: str,
+    ) -> str | None:
+        requested_count = self._finish_inbound_requested_pallet_count(user_message)
+        if requested_count is None:
+            return "请补充本次需要入库多少板（当前一次支持 1 到 20 板）。"
+        if not 1 <= requested_count <= 20:
+            return "一次受控成品入库最多支持 20 板，请把本次数量调整为 1 到 20 板。"
+        state.finish_inbound_guided_context = {
+            "requestedPalletCount": requested_count,
+            "productResolved": False,
+            "warehouseResolved": False,
+            "defaultSide": "左",
+        }
+        operation_mode = self._finish_inbound_operation_mode(user_message)
+        if operation_mode is not None:
+            state.finish_inbound_guided_context["operationMode"] = operation_mode
+            state.active_goal_type = self._finish_inbound_preparation_goal(operation_mode)
+        return None
+
+    @staticmethod
+    def _finish_inbound_operation_mode(user_message: str) -> str | None:
+        text = re.sub(r"\s+", "", user_message or "")
+        fixed_markers = (
+            "固定二维码", "固定产品二维码", "空闲二维码", "空闲固定码",
+            "新建入库任务", "创建入库任务", "新建任务", "创建任务",
+        )
+        pending_markers = (
+            "待入库任务", "已有入库任务", "已有待入库", "处理已有任务",
+            "已绑定待入库", "已绑定二维码", "待处理二维码",
+        )
+        fixed = any(marker in text for marker in fixed_markers)
+        pending = any(marker in text for marker in pending_markers)
+        if fixed == pending:
+            return None
+        return "FIXED_QR_NEW_TASK" if fixed else "PENDING_TASK"
+
+    @staticmethod
+    def _finish_inbound_preparation_goal(operation_mode: str) -> str:
+        if operation_mode == "PENDING_TASK":
+            return "FINISH_INBOUND_PENDING_TASK_PREPARATION"
+        if operation_mode == "FIXED_QR_NEW_TASK":
+            return "FINISH_INBOUND_FIXED_QR_PREPARATION"
+        raise ValueError("unsupported finish inbound operation mode")
+
+    @staticmethod
+    def _finish_inbound_requested_pallet_count(user_message: str) -> int | None:
+        match = re.search(r"([0-9]{1,3}|[零〇一二两三四五六七八九十百]{1,4})\s*板", user_message or "")
+        if match is None:
+            return None
+        raw = match.group(1)
+        if raw.isdigit():
+            return int(raw)
+        digits = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+                  "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+        if raw == "十":
+            return 10
+        if "百" in raw:
+            left, _, right = raw.partition("百")
+            return digits.get(left or "一", 1) * 100 + (WarehouseAgentRuntime._chinese_under_hundred(right, digits) if right else 0)
+        return WarehouseAgentRuntime._chinese_under_hundred(raw, digits)
+
+    @staticmethod
+    def _chinese_under_hundred(raw: str, digits: dict[str, int]) -> int | None:
+        if not raw:
+            return 0
+        if "十" in raw:
+            left, _, right = raw.partition("十")
+            tens = digits.get(left, 1) if left else 1
+            units = digits.get(right, 0) if right else 0
+            return tens * 10 + units
+        return digits.get(raw)
+
+    def _mark_finish_inbound_guided_entity(
+        self,
+        state: WarehouseAgentState,
+        entity_type: str,
+    ) -> None:
+        context = state.finish_inbound_guided_context
+        if not isinstance(context, dict):
+            return
+        if entity_type == "PRODUCT" and state.selected_product is not None:
+            scope_type = str(state.selected_product.metadata.get("scopeType") or "SINGLE_PRODUCT")
+            context["productResolved"] = scope_type == "SINGLE_PRODUCT" and state.selected_product.internal_id is not None
+            context["productLabel"] = self._safe_display_label(state.selected_product.display_label)
+        elif entity_type == "WAREHOUSE" and state.selected_warehouse is not None:
+            context["warehouseResolved"] = state.selected_warehouse.internal_id is not None
+            context["warehouseName"] = self._warehouse_display_name(state.selected_warehouse.display_label)
 
     def _goal_entity_contexts(self, state: WarehouseAgentState) -> dict[str, SelectedEntity]:
         contexts: dict[str, SelectedEntity] = {}
@@ -878,7 +1001,14 @@ class WarehouseAgentRuntime:
             "planningMode": "llm",
             "executionInfluence": True,
         }
-        fast_followup_expert = self._llm_context_followup_expert(state, text)
+        guided_transition_message = (
+            isinstance(state.finish_inbound_guided_context, dict)
+            and "预览" in text
+            and "成品入库" in text
+        )
+        fast_followup_expert = (
+            None if guided_transition_message else self._llm_context_followup_expert(state, text)
+        )
         decision: MainAgentDecisionV1 | None = None
         if fast_followup_expert is not None:
             decision = MainAgentDecisionV1(
@@ -1048,6 +1178,26 @@ class WarehouseAgentRuntime:
                     "主模型提出的目标与专家权限边界不一致。",
                 )
             self._begin_registered_goal(state, decision.goalType)
+            if decision.goalType in {
+                "FINISH_INBOUND_GUIDED_PREPARATION",
+                "FINISH_INBOUND_PENDING_TASK_PREPARATION",
+                "FINISH_INBOUND_FIXED_QR_PREPARATION",
+            }:
+                clarification = self._initialize_finish_inbound_guided_context(state, text)
+                if clarification is not None:
+                    response = ChatResponse(
+                        agentSessionId=request.agentSessionId,
+                        answer=clarification,
+                        needsUserSelection=True,
+                    )
+                    response.reviewTrace = trace
+                    return response
+                if decision.goalType == "FINISH_INBOUND_PENDING_TASK_PREPARATION":
+                    state.finish_inbound_guided_context["operationMode"] = "PENDING_TASK"
+                    state.active_goal_type = decision.goalType
+                elif decision.goalType == "FINISH_INBOUND_FIXED_QR_PREPARATION":
+                    state.finish_inbound_guided_context["operationMode"] = "FIXED_QR_NEW_TASK"
+                    state.active_goal_type = decision.goalType
         handoff = self.agent_router.handoff_for_agent(decision.expertAgent, mode="llm_delegate")
         state.active_agent = handoff.target_agent
         state.last_agent_handoff = handoff.to_snapshot()
@@ -1131,6 +1281,18 @@ class WarehouseAgentRuntime:
 
         while True:
             self._raise_if_cancelled()
+            structured = self._llm_structured_expert_clarification(
+                request=request,
+                state=state,
+                user_message=user_message,
+                expert_agent=expert_agent,
+                observations=observations,
+                tool_call_count=tool_call_count,
+                retry_count=retry_count,
+                trace=trace,
+            )
+            if structured is not None:
+                return self._finish_llm_response(structured, trace, request)
             report_business_progress("expert_planning")
             reset_model_decision_diagnostics()
             try:
@@ -1180,18 +1342,6 @@ class WarehouseAgentRuntime:
                 return self._finish_llm_response(response, trace, request)
             loop_trace["events"].append(self._safe_expert_decision_trace(decision))
 
-            structured = self._llm_structured_expert_clarification(
-                request=request,
-                state=state,
-                user_message=user_message,
-                expert_agent=expert_agent,
-                observations=observations,
-                tool_call_count=tool_call_count,
-                retry_count=retry_count,
-                trace=trace,
-            )
-            if structured is not None:
-                return self._finish_llm_response(structured, trace, request)
             if decision.action == "ASK_CLARIFICATION":
                 response = ChatResponse(
                     agentSessionId=request.agentSessionId,
@@ -1376,6 +1526,7 @@ class WarehouseAgentRuntime:
                 validation_answer = self._tool_argument_validation_answer(
                     decision.toolName,
                     exc,
+                    state,
                 )
                 if validation_answer is not None:
                     return self._finish_llm_response(
@@ -1646,11 +1797,23 @@ class WarehouseAgentRuntime:
                 answer = self._format_inventory_quality_answer(data)
             elif tool_name == "query_pallet_tasks":
                 result = SafePalletTaskResult.model_validate(data)
-                answer = self._format_pallet_tasks_answer(result)
+                answer = self._format_pallet_tasks_answer(result, state)
                 suggestions = self.next_action_policy.suggestions(
                     tool_name,
                     result.model_dump(exclude_none=True),
                 )
+            elif tool_name == "query_fixed_product_qr_pool":
+                result = SafeFixedProductQrResult.model_validate(data)
+                if state.active_goal_type == "FINISH_INBOUND_FIXED_QR_PREPARATION":
+                    answer = self._format_fixed_product_qr_selection_answer(result, state)
+                else:
+                    lines = [f"固定产品二维码池共匹配 {result.total} 个码："]
+                    lines.extend(
+                        f"{record.code}，固定产品 {record.fixedProductName}，状态为{record.statusLabel}。"
+                        for record in result.records[:20]
+                    )
+                    lines.append("本次只查询当前码池，没有打印、启用、创建任务或修改库存。")
+                    answer = "\n".join(lines)
             elif tool_name == "preview_task_transition":
                 result = SafeTaskTransitionPreview.model_validate(data)
                 answer = self._format_task_transition_preview_answer(result)
@@ -1658,6 +1821,9 @@ class WarehouseAgentRuntime:
                     tool_name,
                     result.model_dump(exclude_none=True),
                 )
+            elif tool_name == "preview_finish_inbound_execution":
+                result = SafeFinishInboundExecutionPreview.model_validate(data)
+                answer = self._format_finish_inbound_execution_preview_answer(result)
             elif tool_name == "query_production_order_progress":
                 result = SafeProductionOrderProgress.model_validate(data)
                 answer = self._format_production_order_progress_answer(result)
@@ -1840,6 +2006,7 @@ class WarehouseAgentRuntime:
                     "canonicalName": self._safe_text(state.selected_product.metadata.get("productName")),
                 }
             )
+            self._mark_finish_inbound_guided_entity(state, "PRODUCT")
         if entity_type == "WAREHOUSE" and state.selected_warehouse is not None:
             selected.update(
                 {
@@ -1847,6 +2014,7 @@ class WarehouseAgentRuntime:
                     "canonicalName": self._safe_display_label(state.selected_warehouse.display_label),
                 }
             )
+            self._mark_finish_inbound_guided_entity(state, "WAREHOUSE")
         if entity_type == "PRODUCTION_ORDER" and state.selected_production_order is not None:
             selected.update(
                 {
@@ -1859,6 +2027,19 @@ class WarehouseAgentRuntime:
                 {
                     "stateRef": "CURRENT_BOILING_BATCH",
                     "canonicalName": self._safe_display_label(state.selected_boiling_batch.display_label),
+                }
+            )
+        if entity_type == "INBOUND_MODE" and isinstance(state.finish_inbound_guided_context, dict):
+            operation_mode = self._safe_text(state.finish_inbound_guided_context.get("operationMode"))
+            selected.update(
+                {
+                    "stateRef": "CURRENT_FINISH_INBOUND_MODE",
+                    "operationMode": operation_mode,
+                    "displayLabel": (
+                        "处理已有待入库任务"
+                        if operation_mode == "PENDING_TASK"
+                        else "使用空闲固定二维码新建任务"
+                    ),
                 }
             )
         safe_observations.append(
@@ -2224,6 +2405,17 @@ class WarehouseAgentRuntime:
                 "evidenceTools": list(active_goal.evidenceTools),
                 "limitations": list(active_goal.limitations),
             }
+        if isinstance(state.finish_inbound_guided_context, dict):
+            guided = state.finish_inbound_guided_context
+            context["FINISH_INBOUND_GUIDED"] = {
+                "requestedPalletCount": self._bounded_int(
+                    guided.get("requestedPalletCount"), default=0, minimum=0, maximum=20
+                ),
+                "productLabel": self._safe_display_label(guided.get("productLabel")),
+                "warehouseName": self._safe_display_label(guided.get("warehouseName")),
+                "defaultSide": self._safe_text(guided.get("defaultSide")) or "左",
+                "operationMode": self._safe_text(guided.get("operationMode")),
+            }
         if state.selected_product is not None:
             canonical_name = self._safe_text(state.selected_product.metadata.get("productName"))
             context["PRODUCT"] = {
@@ -2572,7 +2764,37 @@ class WarehouseAgentRuntime:
         self,
         tool_name: str,
         error: Exception,
+        state: WarehouseAgentState | None = None,
     ) -> str | None:
+        guided_context = (
+            state.finish_inbound_guided_context
+            if state is not None and isinstance(state.finish_inbound_guided_context, dict)
+            else None
+        )
+        requested_count = self._bounded_int(
+            guided_context.get("requestedPalletCount") if guided_context else None,
+            default=0,
+            minimum=0,
+            maximum=20,
+        )
+        if (
+            tool_name == "preview_task_transition"
+            and str(error) == "guided finish inbound requires the exact requested pallet count"
+            and requested_count > 0
+        ):
+            return (
+                f"本次入库需要恰好选择 {requested_count} 个二维码。"
+                "请重新勾选后再继续；当前没有确认任务，也没有修改库存。"
+            )
+        if (
+            tool_name == "preview_finish_inbound_execution"
+            and str(error) == "guided finish inbound preview item count changed"
+            and requested_count > 0
+        ):
+            return (
+                f"入库表单中的项目数量必须与已选择的 {requested_count} 个二维码一致。"
+                "请返回任务卡片重新选择，本次没有执行入库。"
+            )
         if (
             tool_name == "run_registered_report"
             and str(error) == "registered report range must not exceed 31 days"
@@ -2677,6 +2899,45 @@ class WarehouseAgentRuntime:
         retry_count: int,
         trace: dict[str, Any],
     ) -> ChatResponse | None:
+        guided = (
+            state.finish_inbound_guided_context
+            if isinstance(state.finish_inbound_guided_context, dict)
+            else None
+        )
+        if (
+            expert_agent == "logistics_expert"
+            and state.active_goal_type == "FINISH_INBOUND_GUIDED_PREPARATION"
+            and guided is not None
+            and guided.get("productResolved") is True
+            and guided.get("warehouseResolved") is True
+            and not guided.get("operationMode")
+        ):
+            pending = self._finish_inbound_mode_clarification(
+                request=request,
+                continuation={
+                    "planningMode": "llm",
+                    "userMessage": user_message,
+                    "expertAgent": expert_agent,
+                    "observations": list(observations),
+                    "toolCallCount": tool_call_count,
+                    "retryCount": retry_count,
+                    "trace": trace,
+                },
+            )
+            state.pending_clarification = pending
+            state.interrupt_status[pending.interrupt_id] = pending.status
+            trace.setdefault("expertLoop", {}).setdefault("events", []).append(
+                {
+                    "action": "STRUCTURED_CLARIFICATION",
+                    "status": "FINISH_INBOUND_OPERATION_MODE_REQUIRED",
+                }
+            )
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=pending.prompt,
+                needsUserSelection=True,
+                cards=[self._clarification_card(pending)],
+            )
         explicit_batch_order_scope = (
             self._production_order_ordinal(user_message) is not None
             or self._requests_all_linked_production_orders(user_message)
@@ -2998,10 +3259,12 @@ class WarehouseAgentRuntime:
                 entity = self._single_product_entity(result)
                 if entity is not None:
                     state.selected_product = entity
+                    self._mark_finish_inbound_guided_entity(state, "PRODUCT")
             elif tool_name == "resolve_warehouses":
                 entity = self._single_warehouse_entity(result)
                 if entity is not None:
                     state.selected_warehouse = entity
+                    self._mark_finish_inbound_guided_entity(state, "WAREHOUSE")
             else:
                 self._remember_unique_production_resolution(state, result)
             return None
@@ -3109,12 +3372,22 @@ class WarehouseAgentRuntime:
             state.last_pallet_tasks = dict(safe_data)
             state.last_pallet_task_filters = dict(arguments)
             if adapted_tasks.records:
-                cards = [self._pallet_tasks_card(adapted_tasks)]
+                cards = [self._pallet_tasks_card(adapted_tasks, state)]
+        elif tool_name == "query_fixed_product_qr_pool":
+            adapted_fixed_qr = self._adapt_fixed_product_qr_pool(result, state)
+            safe_data = adapted_fixed_qr.model_dump(exclude_none=True)
+            if state.active_goal_type == "FINISH_INBOUND_FIXED_QR_PREPARATION" and adapted_fixed_qr.records:
+                cards = [self._fixed_product_qr_selection_card(adapted_fixed_qr, state)]
         elif tool_name == "preview_task_transition":
             adapted_preview = self._adapt_task_transition_preview(result)
             safe_data = adapted_preview.model_dump(exclude_none=True)
             state.last_task_transition_preview = dict(safe_data)
-            cards = [self._task_transition_preview_card(adapted_preview)]
+            cards = [self._task_transition_preview_card(adapted_preview, state)]
+        elif tool_name == "preview_finish_inbound_execution":
+            adapted_preview = self._adapt_finish_inbound_execution_preview(result)
+            safe_data = adapted_preview.model_dump(exclude_none=True)
+            state.last_finish_inbound_execution_preview = dict(safe_data)
+            cards = [self._finish_inbound_execution_preview_card(adapted_preview)]
         elif tool_name == "query_production_order_progress":
             adapted_progress = self._adapt_production_order_progress(result)
             safe_data = adapted_progress.model_dump(exclude_none=True)
@@ -3605,10 +3878,10 @@ class WarehouseAgentRuntime:
                 safe_data=safe_data,
             )
             self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
-            cards = [self._pallet_tasks_card(adapted)] if adapted.records else []
+            cards = [self._pallet_tasks_card(adapted, state)] if adapted.records else []
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
-                answer=self._format_pallet_tasks_answer(adapted),
+                answer=self._format_pallet_tasks_answer(adapted, state),
                 cards=cards,
                 suggestions=self.next_action_policy.suggestions(plan.toolName, safe_data),
             )
@@ -3628,8 +3901,26 @@ class WarehouseAgentRuntime:
             return ChatResponse(
                 agentSessionId=request.agentSessionId,
                 answer=self._format_task_transition_preview_answer(adapted),
-                cards=[self._task_transition_preview_card(adapted)],
+                cards=[self._task_transition_preview_card(adapted, state)],
                 suggestions=self.next_action_policy.suggestions(plan.toolName, safe_data),
+            )
+        if plan.toolName == "preview_finish_inbound_execution":
+            result = self._call_tool(request, plan.toolName, plan.arguments)
+            self._raise_if_cancelled(); self._raise_if_tool_error_payload(result)
+            adapted = self._adapt_finish_inbound_execution_preview(result)
+            safe_data = adapted.model_dump(exclude_none=True)
+            state.last_finish_inbound_execution_preview = dict(safe_data)
+            self._record_registered_goal_fact(
+                state=state,
+                tool_name=plan.toolName,
+                arguments=plan.arguments,
+                safe_data=safe_data,
+            )
+            self._record_tool_message(state, plan.toolName, self._safe_tool_summary(plan.toolName, result))
+            return ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer=self._format_finish_inbound_execution_preview_answer(adapted),
+                cards=[self._finish_inbound_execution_preview_card(adapted)],
             )
         if plan.toolName == "query_stock_documents":
             result = self._call_tool(request, plan.toolName, plan.arguments)
@@ -5406,6 +5697,46 @@ class WarehouseAgentRuntime:
             user_id=request.user.userId if request.user else None,
         )
 
+    def _finish_inbound_mode_clarification(
+        self,
+        request: ChatRequest | ResumeRequest,
+        continuation: dict[str, Any],
+    ) -> PendingClarification:
+        token = self._new_resume_token()
+        return PendingClarification(
+            kind="finish_inbound_mode",
+            intent="llm_tool_loop",
+            prompt=(
+                "请确认本次入库方式：是处理已经绑定二维码的待入库任务，"
+                "还是使用空闲固定产品二维码新建任务后再确认入库？"
+            ),
+            options=[
+                {
+                    "optionId": "mode_pending_task",
+                    "optionType": "FINISH_INBOUND_MODE",
+                    "displayLabel": "处理已有待入库任务",
+                    "description": "从已绑定且状态为待处理的成品入库任务中选择二维码，不创建新任务。",
+                    "supported": True,
+                    "_internal": {"operationMode": "PENDING_TASK"},
+                },
+                {
+                    "optionId": "mode_fixed_qr_new_task",
+                    "optionType": "FINISH_INBOUND_MODE",
+                    "displayLabel": "使用空闲固定二维码新建任务",
+                    "description": "从该产品的空闲固定二维码中选择；先明确创建待入库任务，创建成功后再重新核对任务资格和入库信息。",
+                    "supported": True,
+                    "_internal": {"operationMode": "FIXED_QR_NEW_TASK"},
+                },
+            ],
+            interrupt_id=self._new_interrupt_id(),
+            resume_token_hash=self._hash_resume_token(token),
+            resume_token=token,
+            expires_at=self._expires_at(),
+            **self._pending_agent_binding(),
+            continuation=continuation,
+            user_id=request.user.userId if request.user else None,
+        )
+
     def _warehouse_clarification(
         self,
         result: dict[str, Any],
@@ -5635,7 +5966,7 @@ class WarehouseAgentRuntime:
     def _clarification_card(self, pending: PendingClarification) -> BusinessCard:
         return BusinessCard(
             cardType="candidate_selection",
-            title="请选择查询范围",
+            title=("请选择本次入库方式" if pending.kind == "finish_inbound_mode" else "请选择查询范围"),
             prompt=pending.prompt,
             interruptId=pending.interrupt_id,
             interruptKind="CLARIFICATION",
@@ -7517,6 +7848,16 @@ class WarehouseAgentRuntime:
                 "requestedTaskCount": self._first_scalar([source], "requestedTaskCount"),
                 "eligibleTaskCount": self._first_scalar([source], "eligibleTaskCount"),
                 "canOpenBusinessDialog": bool(source.get("canOpenBusinessDialog")),
+            }
+        if tool_name == "preview_finish_inbound_execution":
+            source = result if isinstance(result, dict) else {}
+            return {
+                "dataScope": self._safe_text(source.get("dataScope")),
+                "previewVersion": self._first_scalar([source], "previewVersion"),
+                "previewStatus": self._safe_text(source.get("previewStatus")),
+                "requestedItemCount": self._first_scalar([source], "requestedItemCount"),
+                "eligibleItemCount": self._first_scalar([source], "eligibleItemCount"),
+                "readyForUserConfirmation": bool(source.get("readyForUserConfirmation")),
             }
         if tool_name == "query_stock_documents":
             source = result if isinstance(result, dict) else {}
@@ -9757,6 +10098,59 @@ class WarehouseAgentRuntime:
         lines.append("这些记录不代表已领用或已预留，返回顺序也不是 FIFO/FEFO 推荐或质量放行结论。")
         return "".join(lines)
 
+    def _adapt_fixed_product_qr_pool(
+        self,
+        result: dict[str, Any],
+        state: WarehouseAgentState,
+    ) -> SafeFixedProductQrResult:
+        source = result if isinstance(result, dict) else {}
+        raw_records = source.get("records") if isinstance(source.get("records"), list) else []
+        guided = state.active_goal_type == "FINISH_INBOUND_FIXED_QR_PREPARATION"
+        selected_name = ""
+        if guided and state.selected_product is not None:
+            selected_name = self._safe_text(state.selected_product.metadata.get("productName")) or ""
+        records: list[SafeFixedProductQrRecord] = []
+        for raw_record in raw_records[:50]:
+            item = self._dict_value(raw_record)
+            code = self._safe_text(item.get("code"))
+            product_name = self._safe_display_label(item.get("fixedProductName"))
+            raw_status = (self._safe_text(item.get("status")) or "").upper()
+            fixed_enabled = item.get("fixedModeEnabled") is True
+            exact_product = not selected_name or product_name == selected_name
+            selectable = guided and exact_product and fixed_enabled and raw_status == "FREE"
+            if guided and not selectable:
+                continue
+            if not code or not product_name:
+                continue
+            records.append(
+                SafeFixedProductQrRecord(
+                    code=code,
+                    fixedProductName=product_name,
+                    statusLabel=self._enum_label("qr_status", raw_status),
+                    selectable=selectable,
+                    updatedAt=self._safe_text(item.get("updatedAt")),
+                )
+            )
+        total = len(records) if guided else self._bounded_int(
+            source.get("total"), default=len(records), minimum=0, maximum=1_000_000
+        )
+        return SafeFixedProductQrResult(
+            dataScope=self._safe_text(source.get("dataScope")) or "CURRENT_FIXED_PRODUCT_QR_POOL",
+            total=total,
+            page=self._bounded_int(source.get("page"), default=1, minimum=1, maximum=1_000_000),
+            size=self._bounded_int(source.get("size"), default=50, minimum=1, maximum=50),
+            poolAsOf=self._safe_text(source.get("poolAsOf")),
+            records=records,
+            limitations=(
+                [
+                    "这里只列出与已确认产品精确匹配的空闲固定二维码。",
+                    "选择二维码本身不会创建任务或入库；后续先由用户明确确认创建待入库任务，再重新核对任务资格和入库信息。",
+                ]
+                if guided
+                else ["本次只查询固定产品二维码池，没有修改二维码或库存。"]
+            ),
+        )
+
     def _adapt_pallet_tasks(
         self,
         result: dict[str, Any],
@@ -9959,6 +10353,64 @@ class WarehouseAgentRuntime:
             limitations=[
                 "本次预览只进行检查，不会确认任务或修改库存。",
                 "最终提交仍需由当前用户在业务弹窗中完成。",
+            ],
+        )
+
+    def _adapt_finish_inbound_execution_preview(
+        self,
+        result: dict[str, Any],
+    ) -> SafeFinishInboundExecutionPreview:
+        source = result if isinstance(result, dict) else {}
+        raw_items = source.get("items") if isinstance(source.get("items"), list) else []
+        items: list[SafeFinishInboundExecutionPreviewItem] = []
+        for raw_item in raw_items[:20]:
+            item = self._dict_value(raw_item)
+            quantity = int(self._first_scalar([item], "quantity") or 0)
+            unit_label = self._safe_text(item.get("unitLabel"))
+            if unit_label not in {"板", "件"}:
+                unit_label = "单位未标明"
+            locked = item.get("quantityLockedByProductionOutput") is True
+            items.append(SafeFinishInboundExecutionPreviewItem(
+                palletCode=self._safe_text(item.get("palletCode")) or "托盘未标明",
+                productLabel=self._safe_text(item.get("productName")) or "产品未标明",
+                productionDate=self._safe_text(item.get("productionDate")),
+                warehouseLabel=self._safe_text(item.get("warehouseName")) or "库位未标明",
+                entryDate=self._safe_text(item.get("entryDate")) or "日期未标明",
+                sideLabel=self._controlled_task_label("warehouse_side", item.get("side"), "侧未标明"),
+                quantityText=f"{quantity} {unit_label}",
+                remark=self._safe_text(item.get("remark")),
+                quantityRuleLabel=(
+                    "数量和单位按生产订单登记值确定"
+                    if locked else "数量和单位来自本次已填写表单"
+                ),
+            ))
+        preview_status = self._safe_text(source.get("previewStatus")) or "CONFLICT"
+        requested = int(self._first_scalar([source], "requestedItemCount") or 0)
+        eligible = int(self._first_scalar([source], "eligibleItemCount") or 0)
+        ready = (
+            preview_status == "READY"
+            and bool(source.get("readyForUserConfirmation"))
+            and requested > 0
+            and requested == eligible == len(items)
+        )
+        blocking_issues = self._safe_text_list(source.get("blockingIssues"), limit=20)
+        if preview_status == "READY" and not ready:
+            blocking_issues.append("预览范围或状态不完整，请重新生成精确预览。")
+        return SafeFinishInboundExecutionPreview(
+            previewVersion=int(self._first_scalar([source], "previewVersion") or 1),
+            previewStatusLabel="可核对" if ready else "需要修改",
+            previewedAt=self._safe_text(source.get("previewedAt")),
+            expiresAt=self._safe_text(source.get("expiresAt")),
+            readyForUserConfirmation=ready,
+            requestedItemCount=requested,
+            eligibleItemCount=eligible,
+            items=items,
+            blockingIssues=blocking_issues,
+            warnings=self._safe_text_list(source.get("warnings"), limit=20),
+            limitations=[
+                "本次只生成成品入库精确预览，没有确认任务或修改库存。",
+                "内部预览引用、状态摘要和数据库标识不会展示给普通用户。",
+                "当前切片不签发执行令牌，不能通过此卡片执行入库。",
             ],
         )
 
@@ -10788,8 +11240,38 @@ class WarehouseAgentRuntime:
             fields=fields,
         )
 
-    def _pallet_tasks_card(self, result: SafePalletTaskResult) -> BusinessCard:
+    def _pallet_tasks_card(
+        self,
+        result: SafePalletTaskResult,
+        state: WarehouseAgentState | None = None,
+    ) -> BusinessCard:
         fields: list[dict[str, Any]] = []
+        guided = (
+            state.finish_inbound_guided_context
+            if state is not None and isinstance(state.finish_inbound_guided_context, dict)
+            else None
+        )
+        if guided is not None and state is not None and state.active_goal_type == "FINISH_INBOUND_PENDING_TASK_PREPARATION":
+            requested_count = self._bounded_int(
+                guided.get("requestedPalletCount"), default=0, minimum=0, maximum=20
+            )
+            fields.append({
+                "kind": "finish_inbound_guided_selection",
+                "label": "请选择本次入库二维码",
+                "value": f"需要选择 {requested_count} 个二维码",
+                "requestedPalletCount": requested_count,
+                "availablePalletCount": len(result.records),
+                "productLabel": guided.get("productLabel") or (
+                    state.selected_product.display_label if state.selected_product is not None else "具体产品已确认"
+                ),
+                "warehouseName": guided.get("warehouseName") or (
+                    self._warehouse_display_name(state.selected_warehouse.display_label)
+                    if state.selected_warehouse is not None else "目标库位已确认"
+                ),
+                "defaultSide": guided.get("defaultSide") or "左",
+                "taskGroupKey": "finish_in",
+                "canSelectRequestedCount": len(result.records) >= requested_count > 0,
+            })
         for index, record in enumerate(result.records, start=1):
             field = record.model_dump(exclude_none=True)
             field.update(
@@ -10806,7 +11288,54 @@ class WarehouseAgentRuntime:
             fields=fields,
         )
 
-    def _task_transition_preview_card(self, result: SafeTaskTransitionPreview) -> BusinessCard:
+    def _fixed_product_qr_selection_card(
+        self,
+        result: SafeFixedProductQrResult,
+        state: WarehouseAgentState,
+    ) -> BusinessCard:
+        guided = (
+            state.finish_inbound_guided_context
+            if isinstance(state.finish_inbound_guided_context, dict)
+            else {}
+        )
+        requested_count = self._bounded_int(
+            guided.get("requestedPalletCount"), default=0, minimum=0, maximum=20
+        )
+        fields: list[dict[str, Any]] = [{
+            "kind": "fixed_qr_inbound_selection_summary",
+            "label": "请选择空闲固定二维码",
+            "value": f"需要选择 {requested_count} 个二维码",
+            "requestedPalletCount": requested_count,
+            "availablePalletCount": len(result.records),
+            "productLabel": guided.get("productLabel") or (
+                state.selected_product.display_label if state.selected_product is not None else "具体产品已确认"
+            ),
+            "warehouseName": guided.get("warehouseName") or (
+                self._warehouse_display_name(state.selected_warehouse.display_label)
+                if state.selected_warehouse is not None else "目标库位已确认"
+            ),
+            "defaultSide": guided.get("defaultSide") or "左",
+            "canSelectRequestedCount": len(result.records) >= requested_count > 0,
+            "operationModeLabel": "使用空闲固定二维码新建任务",
+        }]
+        for index, record in enumerate(result.records, start=1):
+            fields.append({
+                "kind": "fixed_qr_inbound_candidate",
+                "label": f"{index}. 二维码 {record.code}",
+                "value": record.fixedProductName,
+                **record.model_dump(exclude_none=True),
+            })
+        return BusinessCard(
+            cardType="fixed_qr_inbound_selection",
+            title=f"空闲固定二维码 · 共 {len(result.records)} 个",
+            fields=fields,
+        )
+
+    def _task_transition_preview_card(
+        self,
+        result: SafeTaskTransitionPreview,
+        state: WarehouseAgentState | None = None,
+    ) -> BusinessCard:
         pallet_codes = [task.palletCode for task in result.tasks if task.palletCode != "托盘未标明"]
         fields: list[dict[str, Any]] = [{
             "kind": "task_transition_preview_summary",
@@ -10826,6 +11355,20 @@ class WarehouseAgentRuntime:
             "taskGroupLabel": result.taskGroupLabel,
             "palletCodes": pallet_codes,
         }]
+        guided = (
+            state.finish_inbound_guided_context
+            if state is not None and isinstance(state.finish_inbound_guided_context, dict)
+            else None
+        )
+        if guided is not None and result.taskGroupLabel == "成品入库":
+            fields[0].update({
+                "requestedPalletCount": self._bounded_int(
+                    guided.get("requestedPalletCount"), default=len(pallet_codes), minimum=1, maximum=20
+                ),
+                "defaultWarehouseName": guided.get("warehouseName"),
+                "defaultSide": guided.get("defaultSide") or "左",
+                "guidedProductLabel": guided.get("productLabel"),
+            })
         for index, task in enumerate(result.tasks, start=1):
             field = task.model_dump(exclude_none=True)
             field.update({
@@ -10837,6 +11380,38 @@ class WarehouseAgentRuntime:
         return BusinessCard(
             cardType="task_transition_preview",
             title=f"{result.taskGroupLabel}任务处理预览 · {result.previewStatusLabel}",
+            fields=fields,
+        )
+
+    def _finish_inbound_execution_preview_card(
+        self,
+        result: SafeFinishInboundExecutionPreview,
+    ) -> BusinessCard:
+        fields: list[dict[str, Any]] = [{
+            "kind": "finish_inbound_execution_preview_summary",
+            "label": "精确表单预览",
+            "value": result.previewStatusLabel,
+            "previewVersion": result.previewVersion,
+            "previewStatusLabel": result.previewStatusLabel,
+            "previewedAt": result.previewedAt,
+            "expiresAt": result.expiresAt,
+            "readyForUserConfirmation": result.readyForUserConfirmation,
+            "requestedItemCount": result.requestedItemCount,
+            "eligibleItemCount": result.eligibleItemCount,
+            "blockingIssues": result.blockingIssues,
+            "warnings": result.warnings,
+        }]
+        for index, item in enumerate(result.items, start=1):
+            field = item.model_dump(exclude_none=True)
+            field.update({
+                "kind": "finish_inbound_execution_preview_item",
+                "label": f"{index}. 托盘 {item.palletCode}",
+                "value": item.productLabel,
+            })
+            fields.append(field)
+        return BusinessCard(
+            cardType="finish_inbound_execution_preview",
+            title=f"成品入库精确预览 · {result.previewStatusLabel}",
             fields=fields,
         )
 
@@ -11470,7 +12045,46 @@ class WarehouseAgentRuntime:
         }
         return labels.get(value)
 
-    def _format_pallet_tasks_answer(self, result: SafePalletTaskResult) -> str:
+    def _format_pallet_tasks_answer(
+        self,
+        result: SafePalletTaskResult,
+        state: WarehouseAgentState | None = None,
+    ) -> str:
+        guided = (
+            state.finish_inbound_guided_context
+            if state is not None and isinstance(state.finish_inbound_guided_context, dict)
+            else None
+        )
+        if guided is not None and state is not None and state.active_goal_type == "FINISH_INBOUND_PENDING_TASK_PREPARATION":
+            requested_count = self._bounded_int(
+                guided.get("requestedPalletCount"), default=0, minimum=0, maximum=20
+            )
+            product_label = self._safe_display_label(
+                str(guided.get("productLabel") or (
+                    state.selected_product.display_label if state.selected_product is not None else "所选产品"
+                ))
+            )
+            warehouse_name = self._safe_display_label(
+                str(guided.get("warehouseName") or (
+                    self._warehouse_display_name(state.selected_warehouse.display_label)
+                    if state.selected_warehouse is not None else "所选库位"
+                ))
+            )
+            available_count = len(result.records)
+            if available_count < requested_count:
+                return (
+                    f"已确认本次要将 {requested_count} 板 {product_label} 入库到 {warehouse_name}。\n\n"
+                    f"当前只查询到 {available_count} 个可处理的成品入库二维码，不足 {requested_count} 个，"
+                    "暂时不能进入后续预览。请先补齐待处理二维码，或调整本次入库板数。\n\n"
+                    "本次只查询了待处理任务，没有执行入库。"
+                )
+            return (
+                f"已确认本次要将 {requested_count} 板 {product_label} 入库到 {warehouse_name}。\n\n"
+                f"下面是该具体产品当前可处理的成品入库二维码，请恰好选择 {requested_count} 个。"
+                "选择完成后，我会继续核对任务状态并打开入库信息弹窗；目标库位会自动带入，"
+                "日期、存放侧、单位和数量仍可在弹窗中核对。\n\n"
+                "本次只查询了待处理任务，没有执行入库。"
+            )
         filter_text = "；".join(result.filterLabels) if result.filterLabels else "无额外筛选"
         limitation = result.limitations[0] if result.limitations else "此次仅查询任务记录，没有执行或变更任务。"
         if not result.records:
@@ -11515,6 +12129,26 @@ class WarehouseAgentRuntime:
             "打开弹窗后，请确认入库库位、日期、存放侧、单位与数量等业务字段；"
             "弹窗和最终提交仍会重新检查任务状态。\n\n"
             "本次只生成预览，没有确认任务，也没有修改库存。"
+        )
+
+    def _format_finish_inbound_execution_preview_answer(
+        self,
+        result: SafeFinishInboundExecutionPreview,
+    ) -> str:
+        if not result.readyForUserConfirmation:
+            issues = "\n".join(f"- {item}" for item in result.blockingIssues)
+            if not issues:
+                issues = "- 表单内容或当前任务状态不完整。"
+            return (
+                "这次成品入库精确预览无法进入核对状态。\n\n"
+                f"{issues}\n\n"
+                "请修正表单或刷新任务后重新预览；本次没有确认任务，也没有修改库存。"
+            )
+        return (
+            f"已核对 {result.eligibleItemCount} 条成品入库表单，并生成短期精确预览。\n\n"
+            "托盘、产品、目标库位、入库日期、存放侧以及最终有效数量和单位见下方卡片。"
+            "有关联生产订单产出时，数量和单位已按后端登记值确定。\n\n"
+            "本次没有执行入库；当前切片也没有签发执行令牌。"
         )
 
     def _format_stock_documents_answer(self, result: dict[str, Any]) -> str:
@@ -11878,6 +12512,36 @@ class WarehouseAgentRuntime:
             if isinstance(item, dict): lines.append(f"{self._safe_text(item.get('code')) or '二维码未标明'}，固定产品 {self._safe_text(item.get('fixedProductName')) or '未标明'}，状态为{self._enum_label('qr_status', item.get('status'))}，{'当前可打印' if item.get('allowPrint') else '当前不可打印'}。")
         lines.append("可打印只表示当前码池状态条件满足，不表示标签已打印、码已启用或已创建入库任务；本次未执行绑定、打印、启用、作废、恢复或库存操作。")
         return "".join(lines)
+
+    def _format_fixed_product_qr_selection_answer(
+        self,
+        result: SafeFixedProductQrResult,
+        state: WarehouseAgentState,
+    ) -> str:
+        guided = (
+            state.finish_inbound_guided_context
+            if isinstance(state.finish_inbound_guided_context, dict)
+            else {}
+        )
+        requested_count = self._bounded_int(
+            guided.get("requestedPalletCount"), default=0, minimum=0, maximum=20
+        )
+        product_label = self._safe_display_label(guided.get("productLabel"))
+        if not result.records:
+            return (
+                f"{product_label}当前没有可用于新建入库任务的空闲固定二维码。\n\n"
+                "本次不会改用已有待入库任务，也没有创建任务或修改库存。"
+            )
+        if len(result.records) < requested_count:
+            return (
+                f"{product_label}当前只有 {len(result.records)} 个空闲固定二维码，"
+                f"不足本次需要的 {requested_count} 个。\n\n"
+                "本次不会改用已有待入库任务补足，也没有创建任务或修改库存。"
+            )
+        return (
+            f"已找到 {len(result.records)} 个与{product_label}精确匹配的空闲固定二维码。\n\n"
+            f"请在下方恰好选择 {requested_count} 个；后续会进入独立的新建任务并确认入库预览。"
+        )
 
     def _enum_label(self, category: str, value: Any) -> str:
         raw = self._safe_text(value)

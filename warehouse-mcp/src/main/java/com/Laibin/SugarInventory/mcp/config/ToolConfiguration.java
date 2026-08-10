@@ -15,6 +15,7 @@ import com.Laibin.SugarInventory.mcp.tool.PalletFlowRecordsToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.QrBatchInboundCompletionToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.PalletTasksToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.TaskTransitionPreviewToolCallback;
+import com.Laibin.SugarInventory.mcp.tool.FinishInboundExecutionPreviewToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.StockDocumentsToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AutoInboundBatchesToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AutoInboundBatchDetailToolCallback;
@@ -117,6 +118,8 @@ public class ToolConfiguration {
                         WarehouseTools.class.getMethod("queryMaterialCandidates", String.class, Integer.class, Integer.class)),
                 new PalletTasksToolCallback(warehouseTools, objectMapper, palletTasksSchema()),
                 new TaskTransitionPreviewToolCallback(warehouseTools, objectMapper, taskTransitionPreviewSchema()),
+                new FinishInboundExecutionPreviewToolCallback(
+                        warehouseTools, objectMapper, finishInboundExecutionPreviewSchema()),
                 new StockDocumentsToolCallback(warehouseTools, objectMapper, stockDocumentsSchema()),
                 new AutoInboundBatchesToolCallback(warehouseTools, objectMapper, autoInboundBatchesSchema()),
                 new AutoInboundBatchDetailToolCallback(warehouseTools, objectMapper, autoInboundBatchDetailSchema()),
@@ -350,6 +353,12 @@ public class ToolConfiguration {
     private static String taskTransitionPreviewSchema() {
         return """
                 {"type":"object","additionalProperties":false,"required":["previewVersion","transition","palletCodes"],"properties":{"previewVersion":{"type":"integer","const":1},"transition":{"type":"string","enum":["CONFIRM_FINISH_INBOUND","CONFIRM_FINISH_OUTBOUND","CONFIRM_TRANSFER"]},"palletCodes":{"type":"array","minItems":1,"maxItems":20,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":100,"pattern":"^[A-Za-z0-9-]+$"}}}}
+                """;
+    }
+
+    private static String finishInboundExecutionPreviewSchema() {
+        return """
+                {"type":"object","additionalProperties":false,"required":["previewVersion","items"],"properties":{"previewVersion":{"type":"integer","const":1},"items":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["code","warehouseName"],"properties":{"code":{"type":"string","minLength":1,"maxLength":100,"pattern":"^[A-Za-z0-9-]+$"},"warehouseName":{"type":"string","minLength":1,"maxLength":100},"entryDate":{"type":"string","format":"date"},"side":{"type":"string","enum":["左","右"],"default":"左"},"quantity":{"type":"integer","minimum":1,"default":1},"unit":{"type":"string","enum":["0","1"],"default":"0"},"remark":{"type":"string","maxLength":255}}}}}}
                 """;
     }
 

@@ -24,6 +24,7 @@ class FastCompletionPolicy:
                 "query_inventory_by_quality_standard": ("趋势", "分析", "原因", "对比", "同时", "并且", "以及"),
                 "query_inventory_by_assay_metrics": ("趋势", "分析", "原因", "对比", "同时", "并且", "以及"),
                 "query_pallet_tasks": ("趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
+                "query_fixed_product_qr_pool": ("趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
                 "query_production_order_progress": ("原料", "领料", "趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
                 "query_material_pick_trace": ("产出", "去向", "趋势", "效率", "原因", "对比", "同时", "并且", "以及"),
                 "query_boiling_batch_trace": ("原料", "产出", "趋势", "效率", "原因", "对比", "同时", "并且", "以及"),

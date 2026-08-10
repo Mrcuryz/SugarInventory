@@ -10,6 +10,23 @@ export const taskRecords = (card) => (card?.fields || []).filter(field =>
   ['pallet_task', 'pallet_task_detail'].includes(field?.kind)
 )
 
+export const taskSelectionRequirement = (card) => {
+  const field = (card?.fields || []).find(item => item?.kind === 'finish_inbound_guided_selection')
+  const requestedPalletCount = Number(field?.requestedPalletCount || 0)
+  if (!field || !Number.isInteger(requestedPalletCount) || requestedPalletCount < 1 || requestedPalletCount > 20) {
+    return null
+  }
+  return {
+    requestedPalletCount,
+    availablePalletCount: Math.max(0, Number(field.availablePalletCount || 0)),
+    productLabel: String(field.productLabel || '所选产品'),
+    warehouseName: String(field.warehouseName || '所选库位'),
+    defaultSide: ['左', '右'].includes(field.defaultSide) ? field.defaultSide : '左',
+    taskGroupKey: String(field.taskGroupKey || 'finish_in'),
+    canSelectRequestedCount: field.canSelectRequestedCount === true
+  }
+}
+
 const taskBatchDescriptor = (record) => {
   const taskType = String(record?.taskTypeLabel || '')
   const businessScene = String(record?.businessSceneLabel || '')

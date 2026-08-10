@@ -25,6 +25,10 @@ const props = defineProps({
   sending: {
     type: Boolean,
     default: false
+  },
+  canExecuteFinishInbound: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -128,6 +132,7 @@ const sendFeedback = (feedbackType) => {
         v-for="(card, cardIndex) in cards"
         :key="`${card.cardType || 'card'}-${card.title || cardIndex}`"
         :card="card"
+        :can-execute-finish-inbound="canExecuteFinishInbound"
         @card-action="emit('card-action', $event)"
       />
     </div>

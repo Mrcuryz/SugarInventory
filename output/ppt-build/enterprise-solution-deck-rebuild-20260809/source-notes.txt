@@ -1,0 +1,35 @@
+项目事实与素材来源
+
+真实界面截图：
+- output/playwright/solution-deck-20260809/03-warehouse-map.png
+- output/playwright/solution-deck-20260809/04-inventory-overview.png
+- output/playwright/solution-deck-20260809/05-production-orders.png
+- output/playwright/solution-deck-20260809/06-quality-assay.png
+- output/playwright/solution-deck-20260809/09-ai-assistant.png
+- output/playwright/solution-deck-20260809/10-api-documentation.png
+- output/playwright/solution-deck-20260809/11-boiling-batch-trace.png
+- docs/小程序上下文/登录页原型.png
+
+封面背景：
+- output/ppt-build/enterprise-solution-deck-rebuild-20260809/assets/warehouse-cover.png
+- 通过内置 ImageGen 生成，仅作通用工业仓储氛围背景，不代表项目现场或客户案例。
+
+工程事实：
+- 36 个 Java Controller 文件：扫描 src/main/java 下 *Controller.java。
+- 227 条 HTTP 映射：本地启动应用后从 Knife4j / OpenAPI 运行时页面统计。
+- 56 个数据对象：本地 laibin 开发库 information_schema 实测，54 BASE TABLE + 2 VIEW。
+- 35 个迁移脚本：git ls-files migrations/*.sql。
+- 145 个测试源文件：版本库内 Java、Python、Web 单元测试与 E2E 文件盘点；不代表当前全部通过。
+
+项目文档与代码：
+- docs/mcp/mcp-tool-registry.md
+- docs/agent/ai-assistant-product-goal.md
+- docker/docker-compose.yml
+- deploy/simple/docker-compose.yml
+- pom.xml
+- webpage/package.json
+- src/main/java/com/Laibin/SugarInventory/SpringSecurity/
+- src/main/java/com/Laibin/SugarInventory/aspect/OperationLogAspect.java
+- webpage/src/components/ProductionBoilingBatches.vue
+
+本次截图仅执行登录、查询和详情查看，不修改库存数据。

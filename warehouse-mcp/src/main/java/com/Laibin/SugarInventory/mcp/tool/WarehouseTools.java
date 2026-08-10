@@ -60,6 +60,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FinishInboundExecutionPreviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FinishInboundExecutionPreviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesRequest;
@@ -547,6 +549,24 @@ public class WarehouseTools {
             log.warn("preview_task_transition failed; errorType={}, message={}",
                     e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
             return TaskTransitionPreviewResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public FinishInboundExecutionPreviewResponse previewFinishInboundExecution(
+            FinishInboundExecutionPreviewRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName(
+                    "preview_finish_inbound_execution",
+                    () -> readService.previewFinishInboundExecution(request));
+        } catch (WarehouseApiException exception) {
+            return FinishInboundExecutionPreviewResponse.error(ErrorMapper.upstream(exception));
+        } catch (IllegalArgumentException exception) {
+            return FinishInboundExecutionPreviewResponse.error(
+                    ErrorMapper.invalid("items", "Unsupported finished-product inbound execution preview request"));
+        } catch (RuntimeException exception) {
+            log.warn("preview_finish_inbound_execution failed; errorType={}, message={}",
+                    exception.getClass().getSimpleName(), safeLogValue(exception.getMessage()));
+            return FinishInboundExecutionPreviewResponse.error(ErrorMapper.unexpected());
         }
     }
 

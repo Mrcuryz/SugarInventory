@@ -277,6 +277,7 @@ class AgentSessionServiceImplTest {
                 "/api/analytics/agent-read/reports/run",
                 "/api/logistics/agent-read/pallet-tasks/query",
                 "/api/logistics/agent-read/pallet-tasks/transition/preview",
+                "/api/logistics/agent-read/pallet-tasks/finish-inbound/execution/preview",
                 "/api/logistics/agent-read/stock-documents/query",
                 "/api/logistics/agent-read/auto-inbound/batches/query",
                 "/api/logistics/agent-read/auto-inbound/batches/detail/query",

@@ -1,0 +1,373 @@
+{"kind":"slide","id":"sl/k9e9um","slide":1,"title":"企业级软件解决方案","textShapes":4}
+{"kind":"shape","id":"sh/hs7ed8jq","slide":1,"bbox":[0,0,690,720]}
+{"kind":"shape","id":"sh/wryx43i5","slide":1,"bbox":[64,126,6,174]}
+{"kind":"textbox","id":"sh/ju9wfy1w","slide":1,"text":"企业级软件解决方案\n能力展示","textPreview":"企业级软件解决方案 | 能力展示","textChars":14,"textLines":2,"bbox":[96,122,574,174]}
+{"kind":"textbox","id":"sh/it0f6d0b","slide":1,"text":"以数字仓储平台为例","textPreview":"以数字仓储平台为例","textChars":9,"textLines":1,"bbox":[96,330,500,52]}
+{"kind":"shape","id":"sh/5wreh8jm","slide":1,"bbox":[96,420,110,0]}
+{"kind":"textbox","id":"sh/4vix83i1","slide":1,"text":"业务建模｜系统研发｜数据治理｜部署运维｜AI Agent","textPreview":"业务建模｜系统研发｜数据治理｜部署运维｜AI Agent","textChars":28,"textLines":1,"bbox":[96,448,574,48]}
+{"kind":"textbox","id":"sh/ry9wji1s","slide":1,"text":"REAL PROJECT  /  ENTERPRISE DELIVERY","textPreview":"REAL PROJECT  /  ENTERPRISE DELIVERY","textChars":36,"textLines":1,"bbox":[96,638,520,24]}
+{"kind":"image","id":"im/76pkzmdo","slide":1,"name":"","alt":"通用现代工业仓储场景，仅作封面氛围背景","bbox":[0,0,1280,720]}
+{"kind":"notes","id":"nt/k9e9um","slide":1,"text":"开场先说明：仓储平台是一个真实案例，用于展示团队从业务分析到软件交付和智能化演进的完整能力。封面背景为通用生成素材，不代表项目现场或客户案例。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\output\\ppt-build\\enterprise-solution-deck-rebuild-20260809\\assets\\warehouse-cover.png\n- D:\\Laibin\\LaibinSugarInventory\\output\\ppt-build\\enterprise-solution-deck-rebuild-20260809\\source-notes.txt"}
+{"kind":"slide","id":"sl/snmrb2","slide":2,"title":"BUSINESS CONTEXT","textShapes":18}
+{"kind":"textbox","id":"sh/c7mpo7at","slide":2,"text":"BUSINESS CONTEXT","textPreview":"BUSINESS CONTEXT","textChars":16,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/b6d8f298","slide":2,"text":"企业软件先解决哪些问题","textPreview":"企业软件先解决哪些问题","textChars":11,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/a547mxsn","slide":2,"text":"先让数据一致、流程可控、责任可追，再考虑更多功能。","textPreview":"先让数据一致、流程可控、责任可追，再考虑更多功能。","textChars":25,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/p4vqdsb2","slide":2,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/o3mpknah","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/nid8bitw","slide":2,"bbox":[64,188,480,418]}
+{"kind":"shape","id":"sh/2hk7ixsb","slide":2,"bbox":[736,188,480,418]}
+{"kind":"textbox","id":"sh/1gb69sb6","slide":2,"text":"现场常见状态","textPreview":"现场常见状态","textChars":6,"textLines":1,"bbox":[88,206,420,42]}
+{"kind":"textbox","id":"sh/0f2pgnal","slide":2,"text":"系统化处理","textPreview":"系统化处理","textChars":5,"textLines":1,"bbox":[760,206,420,42]}
+{"kind":"textbox","id":"sh/mxkjmd0n","slide":2,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[580,342,120,90]}
+{"kind":"textbox","id":"sh/7yt0vi18","slide":2,"text":"01  库存、生产和质量数据分散","textPreview":"01  库存、生产和质量数据分散","textChars":16,"textLines":1,"bbox":[88,268,420,38]}
+{"kind":"shape","id":"sh/8zm1onit","slide":2,"bbox":[88,313,420,0]}
+{"kind":"textbox","id":"sh/90vihsje","slide":2,"text":"产品、批次、托盘和库位统一记录","textPreview":"产品、批次、托盘和库位统一记录","textChars":15,"textLines":1,"bbox":[760,268,420,38]}
+{"kind":"shape","id":"sh/ytkjit0r","slide":2,"bbox":[760,313,420,0]}
+{"kind":"textbox","id":"sh/zut0ry1w","slide":2,"text":"02  入库、出库依赖人工协调","textPreview":"02  入库、出库依赖人工协调","textChars":15,"textLines":1,"bbox":[88,332,420,38]}
+{"kind":"shape","id":"sh/kv21k3ih","slide":2,"bbox":[88,377,420,0]}
+{"kind":"textbox","id":"sh/lwbit8j2","slide":2,"text":"任务与状态驱动现场操作","textPreview":"任务与状态驱动现场操作","textChars":11,"textLines":1,"bbox":[760,332,420,38]}
+{"kind":"shape","id":"sh/a50zetkf","slide":2,"bbox":[760,377,420,0]}
+{"kind":"textbox","id":"sh/b690ny10","slide":2,"text":"03  出现差异后靠人翻表","textPreview":"03  出现差异后靠人翻表","textChars":13,"textLines":1,"bbox":[88,396,420,38]}
+{"kind":"shape","id":"sh/fapgfuhs","slide":2,"bbox":[88,441,420,0]}
+{"kind":"textbox","id":"sh/e9gfmp07","slide":2,"text":"库存流水和操作日志保留责任链","textPreview":"库存流水和操作日志保留责任链","textChars":14,"textLines":1,"bbox":[760,396,420,38]}
+{"kind":"shape","id":"sh/1c7yh4zy","slide":2,"bbox":[760,441,420,0]}
+{"kind":"textbox","id":"sh/gbyxozyd","slide":2,"text":"04  功能上线后难维护和扩展","textPreview":"04  功能上线后难维护和扩展","textChars":15,"textLines":1,"bbox":[88,460,420,38]}
+{"kind":"shape","id":"sh/3ypgjuho","slide":2,"bbox":[88,505,420,0]}
+{"kind":"textbox","id":"sh/2dgfq9gj","slide":2,"text":"分层架构与迁移流程支持持续升级","textPreview":"分层架构与迁移流程支持持续升级","textChars":15,"textLines":1,"bbox":[760,460,420,38]}
+{"kind":"shape","id":"sh/p0ryl4zu","slide":2,"bbox":[760,505,420,0]}
+{"kind":"textbox","id":"sh/ozyxszy9","slide":2,"text":"05  AI 停留在通用问答","textPreview":"05  AI 停留在通用问答","textChars":14,"textLines":1,"bbox":[88,524,420,38]}
+{"kind":"shape","id":"sh/ji5w7ahk","slide":2,"bbox":[88,569,420,0]}
+{"kind":"textbox","id":"sh/ihwfe50z","slide":2,"text":"在权限边界内读取真实业务数据","textPreview":"在权限边界内读取真实业务数据","textChars":14,"textLines":1,"bbox":[760,524,420,38]}
+{"kind":"shape","id":"sh/8nadobyx","slide":2,"bbox":[760,569,420,0]}
+{"kind":"textbox","id":"sh/9ojuhgfi","slide":2,"text":"仓储是案例；真正交付的是业务方法、软件工程和长期维护能力。","textPreview":"仓储是案例；真正交付的是业务方法、软件工程和长期维护能力。","textChars":29,"textLines":1,"bbox":[170,626,940,38]}
+{"kind":"notes","id":"nt/snmrb2","slide":2,"text":"本页从客户视角建立问题背景。讲解时可以根据客户行业替换示例，但不要把问题描述成仓储行业独有。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\README.md\n- D:\\Laibin\\LaibinSugarInventory\\docs\\agent\\ai-assistant-product-goal.md"}
+{"kind":"slide","id":"sl/mqg04s","slide":3,"title":"SOLUTION OVERVIEW","textShapes":16}
+{"kind":"textbox","id":"sh/a587658z","slide":3,"text":"SOLUTION OVERVIEW","textPreview":"SOLUTION OVERVIEW","textChars":17,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/x8zq1krq","slide":3,"text":"多端入口连接同一套业务","textPreview":"多端入口连接同一套业务","textChars":11,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/w7qp8fq5","slide":3,"text":"管理人员、现场人员和自然语言用户共享同一套身份、规则与数据。","textPreview":"管理人员、现场人员和自然语言用户共享同一套身份、规则与数据。","textChars":30,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/jah83u9w","slide":3,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/i987ap8b","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/5wjq5krm","slide":3,"bbox":[194,244,892,0]}
+{"kind":"shape","id":"sh/kvqpcfqh","slide":3,"bbox":[214,282,0,54]}
+{"kind":"shape","id":"sh/zexorq9c","slide":3,"bbox":[640,282,0,54]}
+{"kind":"shape","id":"sh/edo7yl87","slide":3,"bbox":[1066,282,0,54]}
+{"kind":"shape","id":"sh/8vu98bu5","slide":3,"bbox":[640,398,0,48]}
+{"kind":"shape","id":"sh/tw3a1gvq","slide":3,"bbox":[640,512,0,42]}
+{"kind":"textbox","id":"sh/6tsr61cf","slide":3,"text":"管理人员","textPreview":"管理人员","textChars":4,"textLines":1,"bbox":[116,184,196,42]}
+{"kind":"textbox","id":"sh/7ulsz6d0","slide":3,"text":"现场人员","textPreview":"现场人员","textChars":4,"textLines":1,"bbox":[542,184,196,42]}
+{"kind":"textbox","id":"sh/gzu9cbuh","slide":3,"text":"业务用户","textPreview":"业务用户","textChars":4,"textLines":1,"bbox":[968,184,196,42]}
+{"kind":"shape","id":"sh/h03a5gv2","slide":3,"bbox":[116,336,196,62]}
+{"kind":"textbox","id":"sh/uxcralcb","slide":3,"text":"Web 管理端","textPreview":"Web 管理端","textChars":7,"textLines":1,"bbox":[116,336,196,62]}
+{"kind":"shape","id":"sh/vyls3qdw","slide":3,"bbox":[542,336,196,62]}
+{"kind":"textbox","id":"sh/w3a90red","slide":3,"text":"微信小程序","textPreview":"微信小程序","textChars":5,"textLines":1,"bbox":[542,336,196,62]}
+{"kind":"shape","id":"sh/x4jatwvi","slide":3,"bbox":[968,336,196,62]}
+{"kind":"textbox","id":"sh/doryhoja","slide":3,"text":"AI 助手","textPreview":"AI 助手","textChars":5,"textLines":1,"bbox":[968,336,196,62]}
+{"kind":"shape","id":"sh/snih8j2p","slide":3,"bbox":[116,446,1048,66]}
+{"kind":"textbox","id":"sh/rm9gfe14","slide":3,"text":"统一身份与业务 API","textPreview":"统一身份与业务 API","textChars":11,"textLines":1,"bbox":[116,446,1048,66]}
+{"kind":"textbox","id":"sh/qlgz69kj","slide":3,"text":"仓储运营","textPreview":"仓储运营","textChars":4,"textLines":1,"bbox":[116,554,238,44]}
+{"kind":"shape","id":"sh/1cryl8j6","slide":3,"bbox":[366,552,0,48]}
+{"kind":"textbox","id":"sh/0bihc321","slide":3,"text":"生产协同","textPreview":"生产协同","textChars":4,"textLines":1,"bbox":[378,554,238,44]}
+{"kind":"shape","id":"sh/fq9gjy1g","slide":3,"bbox":[628,552,0,48]}
+{"kind":"textbox","id":"sh/ep0zatkv","slide":3,"text":"质量管理","textPreview":"质量管理","textChars":4,"textLines":1,"bbox":[640,554,238,44]}
+{"kind":"shape","id":"sh/pgbyp8ji","slide":3,"bbox":[890,552,0,48]}
+{"kind":"textbox","id":"sh/of2hg32x","slide":3,"text":"权限与审计","textPreview":"权限与审计","textChars":5,"textLines":1,"bbox":[902,554,238,44]}
+{"kind":"textbox","id":"sh/6lcva50f","slide":3,"text":"MySQL 业务事实  ·  Redis 状态  ·  报表与只读 RAG 制品","textPreview":"MySQL 业务事实  ·  Redis 状态  ·  报表与只读 RAG 制品","textChars":40,"textLines":1,"bbox":[180,620,920,32]}
+{"kind":"notes","id":"nt/mqg04s","slide":3,"text":"强调多端入口共享同一套后端规则和数据，不是分别建设三套系统。AI 助手当前以查询、报表和预览为主。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\webpage\\src\n- D:\\Laibin\\LaibinSugarInventory\\src\\main\\java\n- D:\\Laibin\\LaibinSugarInventory\\docs\\agent\\ai-assistant-product-goal.md"}
+{"kind":"slide","id":"sl/5zjme3","slide":4,"title":"REAL BUSINESS FLOW","textShapes":4}
+{"kind":"textbox","id":"sh/crixkze9","slide":4,"text":"REAL BUSINESS FLOW","textPreview":"REAL BUSINESS FLOW","textChars":18,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/rqpwbuxo","slide":4,"text":"一条链路贯通生产与库存","textPreview":"一条链路贯通生产与库存","textChars":11,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/qpgfipw3","slide":4,"text":"煮糖批次详情按订单、二维码和库位关系实时组装，无需维护独立追溯台账。","textPreview":"煮糖批次详情按订单、二维码和库位关系实时组装，无需维护独立追溯台账。","textChars":34,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/1wreh4vq","slide":4,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/0vixoze5","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/zu9wfux0","slide":4,"bbox":[78,170,1124,492]}
+{"kind":"image","id":"im/zu5wzu5c","slide":4,"name":"","geometry":"roundRect","alt":"煮糖批次去向追溯真实系统界面","bbox":[80,172,1120,488]}
+{"kind":"notes","id":"nt/5zjme3","slide":4,"text":"这是项目真实运行界面。讲解链路：来源批次 → 半成品生产订单 → 实际产出 → 二维码批次 → 入库；系统还可继续关联库位、领用和下游生产。截图仅执行查询，没有修改库存。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\output\\playwright\\solution-deck-20260809\\11-boiling-batch-trace.png\n- D:\\Laibin\\LaibinSugarInventory\\webpage\\src\\components\\ProductionBoilingBatches.vue"}
+{"kind":"slide","id":"sl/zjid8f","slide":5,"title":"PRODUCT EVIDENCE","textShapes":7}
+{"kind":"textbox","id":"sh/valszqpc","slide":5,"text":"PRODUCT EVIDENCE","textPreview":"PRODUCT EVIDENCE","textChars":16,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/gbu9sv6x","slide":5,"text":"真实系统已经覆盖核心场景","textPreview":"真实系统已经覆盖核心场景","textChars":12,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/hc3a1gni","slide":5,"text":"库位、生产和质量管理由同一套业务数据驱动。","textPreview":"库位、生产和质量管理由同一套业务数据驱动。","textChars":21,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/ixcrulon","slide":5,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/3yls3q58","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/4zu9wv6t","slide":5,"bbox":[62,182,764,456]}
+{"kind":"shape","id":"sh/y18ri1oj","slide":5,"bbox":[850,182,368,214]}
+{"kind":"shape","id":"sh/ji1gj6pg","slide":5,"bbox":[850,424,368,214]}
+{"kind":"shape","id":"sh/5kjilw7m","slide":5,"bbox":[82,202,142,32]}
+{"kind":"textbox","id":"sh/4jahsr61","slide":5,"text":"库位管理","textPreview":"库位管理","textChars":4,"textLines":1,"bbox":[82,202,142,32]}
+{"kind":"shape","id":"sh/ve1gfmpk","slide":5,"bbox":[870,202,132,32]}
+{"kind":"textbox","id":"sh/ud8zmh8z","slide":5,"text":"生产订单","textPreview":"生产订单","textChars":4,"textLines":1,"bbox":[870,202,132,32]}
+{"kind":"shape","id":"sh/hgjyhw7a","slide":5,"bbox":[870,444,132,32]}
+{"kind":"textbox","id":"sh/wfahorq5","slide":5,"text":"质量管理","textPreview":"质量管理","textChars":4,"textLines":1,"bbox":[870,444,132,32]}
+{"kind":"image","id":"im/sbad43ap","slide":5,"name":"","geometry":"roundRect","alt":"仓库平面与库位状态真实界面","bbox":[64,184,760,452]}
+{"kind":"image","id":"im/mdobq9sf","slide":5,"name":"","geometry":"roundRect","alt":"生产订单真实界面","bbox":[852,184,364,210]}
+{"kind":"image","id":"im/d4r2p8ra","slide":5,"name":"","geometry":"roundRect","alt":"化验管理真实界面","bbox":[852,426,364,210]}
+{"kind":"notes","id":"nt/zjid8f","slide":5,"text":"这一页只展示真实项目截图。主截图用于说明库位空间与库存状态，右侧两张补充生产订单和质量记录。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\output\\playwright\\solution-deck-20260809\\03-warehouse-map.png\n- D:\\Laibin\\LaibinSugarInventory\\output\\playwright\\solution-deck-20260809\\05-production-orders.png\n- D:\\Laibin\\LaibinSugarInventory\\output\\playwright\\solution-deck-20260809\\06-quality-assay.png"}
+{"kind":"slide","id":"sl/wy0bxt","slide":6,"title":"ENGINEERING","textShapes":18}
+{"kind":"textbox","id":"sh/gra5cj6h","slide":6,"text":"ENGINEERING","textPreview":"ENGINEERING","textChars":11,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/fq1ojepw","slide":6,"text":"227 条接口背后的分层工程","textPreview":"227 条接口背后的分层工程","textChars":14,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/upsna9ob","slide":6,"text":"前端交互、业务规则、权限事务和数据访问分别承担清晰责任。","textPreview":"前端交互、业务规则、权限事务和数据访问分别承担清晰责任。","textChars":28,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/pg36pony","slide":6,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/4fa5gj6d","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"textbox","id":"sh/3e1one58","slide":6,"text":"227","textPreview":"227","textChars":3,"textLines":1,"bbox":[64,176,260,92]}
+{"kind":"textbox","id":"sh/2dsne9on","slide":6,"text":"运行时 HTTP 映射","textPreview":"运行时 HTTP 映射","textChars":11,"textLines":1,"bbox":[68,266,360,36]}
+{"kind":"textbox","id":"sh/5kzmd47u","slide":6,"text":"来自本地运行时 OpenAPI 统计","textPreview":"来自本地运行时 OpenAPI 统计","textChars":18,"textLines":1,"bbox":[68,304,360,30]}
+{"kind":"shape","id":"sh/kjq54z69","slide":6,"bbox":[268,393,0,18]}
+{"kind":"shape","id":"sh/2lofe18r","slide":6,"bbox":[68,350,400,46]}
+{"kind":"textbox","id":"sh/nmxw7mpc","slide":6,"text":"Web 管理端","textPreview":"Web 管理端","textChars":7,"textLines":1,"bbox":[86,350,170,46]}
+{"kind":"textbox","id":"sh/on6xgrqx","slide":6,"text":"Vue 3","textPreview":"Vue 3","textChars":5,"textLines":1,"bbox":[246,350,200,46]}
+{"kind":"shape","id":"sh/pofy9w7i","slide":6,"bbox":[268,450,0,18]}
+{"kind":"shape","id":"sh/ap8fi183","slide":6,"bbox":[68,407,400,46]}
+{"kind":"textbox","id":"sh/bqhgb6po","slide":6,"text":"Controller","textPreview":"Controller","textChars":10,"textLines":1,"bbox":[86,407,170,46]}
+{"kind":"textbox","id":"sh/crqxkbq9","slide":6,"text":"DTO / VO","textPreview":"DTO / VO","textChars":8,"textLines":1,"bbox":[246,407,200,46]}
+{"kind":"shape","id":"sh/xszydg7e","slide":6,"bbox":[268,507,0,18]}
+{"kind":"shape","id":"sh/yt8fml8z","slide":6,"bbox":[68,464,400,46]}
+{"kind":"textbox","id":"sh/zehgf6pk","slide":6,"text":"Service","textPreview":"Service","textChars":7,"textLines":1,"bbox":[86,464,170,46]}
+{"kind":"textbox","id":"sh/vi1w3q5s","slide":6,"text":"业务规则 / 事务","textPreview":"业务规则 / 事务","textChars":9,"textLines":1,"bbox":[246,464,200,46]}
+{"kind":"shape","id":"sh/uhsful47","slide":6,"bbox":[268,564,0,18]}
+{"kind":"shape","id":"sh/hkje5gny","slide":6,"bbox":[68,521,400,46]}
+{"kind":"textbox","id":"sh/wjaxwbmd","slide":6,"text":"Mapper","textPreview":"Mapper","textChars":6,"textLines":1,"bbox":[86,521,170,46]}
+{"kind":"textbox","id":"sh/7uhwz65w","slide":6,"text":"MyBatis-Plus","textPreview":"MyBatis-Plus","textChars":12,"textLines":1,"bbox":[246,521,200,46]}
+{"kind":"shape","id":"sh/mt8vq14b","slide":6,"bbox":[68,578,400,46]}
+{"kind":"textbox","id":"sh/9gje1gnm","slide":6,"text":"数据层","textPreview":"数据层","textChars":3,"textLines":1,"bbox":[86,578,170,46]}
+{"kind":"textbox","id":"sh/8fqdsbm1","slide":6,"text":"MySQL / Redis","textPreview":"MySQL / Redis","textChars":13,"textLines":1,"bbox":[246,578,200,46]}
+{"kind":"shape","id":"sh/zqhwv65k","slide":6,"bbox":[546,182,672,394]}
+{"kind":"textbox","id":"sh/ovmtw72x","slide":6,"text":"Vue 3  ·  Java 21  ·  Spring Boot 3  ·  Spring Security  ·  MyBatis-Plus  ·  Docker","textPreview":"Vue 3  ·  Java 21  ·  Spring Boot 3  ·  Spring Security  ·  MyBatis-Plus  ·  Docker","textChars":83,"textLines":1,"bbox":[548,596,668,42]}
+{"kind":"image","id":"im/h0v6t43e","slide":6,"name":"","geometry":"roundRect","alt":"Knife4j OpenAPI 运行时接口统计页面","bbox":[548,184,668,390]}
+{"kind":"notes","id":"nt/wy0bxt","slide":6,"text":"227 为本地运行时 Knife4j 页面统计的 HTTP 映射数量。技术栈只作为工程证明，重点说明分层责任：Controller 接收 DTO/VO，Service 承担业务规则与事务，Mapper 负责持久化。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\output\\playwright\\solution-deck-20260809\\10-api-documentation.png\n- D:\\Laibin\\LaibinSugarInventory\\pom.xml\n- D:\\Laibin\\LaibinSugarInventory\\webpage\\package.json\n- D:\\Laibin\\LaibinSugarInventory\\src\\main\\java"}
+{"kind":"slide","id":"sl/6y9uj1","slide":7,"title":"DATA GOVERNANCE","textShapes":20}
+{"kind":"textbox","id":"sh/sre9knat","slide":7,"text":"DATA GOVERNANCE","textPreview":"DATA GOVERNANCE","textChars":15,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/7q5sri98","slide":7,"text":"数据模型记录每一次变化","textPreview":"数据模型记录每一次变化","textChars":11,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/6pwrids3","slide":7,"text":"产品、批次、托盘、库位和任务构成可查询、可追溯的业务事实。","textPreview":"产品、批次、托盘、库位和任务构成可查询、可追溯的业务事实。","textChars":29,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/5o3ap8ri","slide":7,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/knu9gnax","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/jmlsni9c","slide":7,"bbox":[190,294,36,0]}
+{"kind":"shape","id":"sh/ylcredsr","slide":7,"bbox":[352,294,36,0]}
+{"kind":"shape","id":"sh/xk3al8r6","slide":7,"bbox":[514,294,36,0]}
+{"kind":"shape","id":"sh/wju9c3al","slide":7,"bbox":[676,294,36,0]}
+{"kind":"shape","id":"sh/6hoz6hon","slide":7,"bbox":[838,294,36,0]}
+{"kind":"shape","id":"sh/7ix0zmp8","slide":7,"bbox":[1000,294,36,0]}
+{"kind":"shape","id":"sh/s36h8r6d","slide":7,"bbox":[64,258,126,72]}
+{"kind":"textbox","id":"sh/t4fi1w7y","slide":7,"text":"产品","textPreview":"产品","textChars":2,"textLines":1,"bbox":[64,258,126,72]}
+{"kind":"shape","id":"sh/id4z2xob","slide":7,"bbox":[226,258,126,72]}
+{"kind":"textbox","id":"sh/jed0v2pw","slide":7,"text":"批次","textPreview":"批次","textChars":2,"textLines":1,"bbox":[226,258,126,72]}
+{"kind":"shape","id":"sh/kf6h476h","slide":7,"bbox":[388,258,126,72]}
+{"kind":"textbox","id":"sh/5gfixc72","slide":7,"text":"托盘","textPreview":"托盘","textChars":2,"textLines":1,"bbox":[388,258,126,72]}
+{"kind":"shape","id":"sh/a94zyx8f","slide":7,"bbox":[550,258,126,72]}
+{"kind":"textbox","id":"sh/badgr2p0","slide":7,"text":"库位","textPreview":"库位","textChars":2,"textLines":1,"bbox":[550,258,126,72]}
+{"kind":"shape","id":"sh/ze9wzy5s","slide":7,"bbox":[712,258,126,72]}
+{"kind":"textbox","id":"sh/et0fqt47","slide":7,"text":"任务","textPreview":"任务","textChars":2,"textLines":1,"bbox":[712,258,126,72]}
+{"kind":"shape","id":"sh/1gbe18ni","slide":7,"bbox":[874,258,126,72]}
+{"kind":"textbox","id":"sh/0fixs3md","slide":7,"text":"库存流水","textPreview":"库存流水","textChars":4,"textLines":1,"bbox":[874,258,126,72]}
+{"kind":"shape","id":"sh/nitw3y5o","slide":7,"bbox":[1036,258,126,72]}
+{"kind":"textbox","id":"sh/mhkfut43","slide":7,"text":"操作日志","textPreview":"操作日志","textChars":4,"textLines":1,"bbox":[1036,258,126,72]}
+{"kind":"textbox","id":"sh/9kbe58nu","slide":7,"text":"主数据","textPreview":"主数据","textChars":3,"textLines":1,"bbox":[64,222,612,28]}
+{"kind":"textbox","id":"sh/oj2xw3m9","slide":7,"text":"业务动作与历史事实","textPreview":"业务动作与历史事实","textChars":9,"textLines":1,"bbox":[712,222,450,28]}
+{"kind":"shape","id":"sh/3mpwre5k","slide":7,"bbox":[64,382,1152,0]}
+{"kind":"textbox","id":"sh/2lgvi9oz","slide":7,"text":"56","textPreview":"56","textChars":2,"textLines":1,"bbox":[64,410,150,86]}
+{"kind":"textbox","id":"sh/sretsfmx","slide":7,"text":"个数据对象","textPreview":"个数据对象","textChars":5,"textLines":1,"bbox":[202,430,180,34]}
+{"kind":"textbox","id":"sh/tsnu1k32","slide":7,"text":"54 张基础表 + 2 个视图","textPreview":"54 张基础表 + 2 个视图","textChars":15,"textLines":1,"bbox":[202,468,250,30]}
+{"kind":"textbox","id":"sh/6pwbq54r","slide":7,"text":"35","textPreview":"35","textChars":2,"textLines":1,"bbox":[536,410,150,86]}
+{"kind":"textbox","id":"sh/7q5czalc","slide":7,"text":"个迁移脚本","textPreview":"个迁移脚本","textChars":5,"textLines":1,"bbox":[674,430,180,34]}
+{"kind":"textbox","id":"sh/k3utovml","slide":7,"text":"按版本库口径统计","textPreview":"按版本库口径统计","textChars":8,"textLines":1,"bbox":[674,468,220,30]}
+{"kind":"textbox","id":"sh/5o3ux036","slide":7,"text":"每一次库存变化都能找到来源、操作人、时间和状态。","textPreview":"每一次库存变化都能找到来源、操作人、时间和状态。","textChars":24,"textLines":1,"bbox":[64,548,1152,56]}
+{"kind":"notes","id":"nt/6y9uj1","slide":7,"text":"数据对象口径来自本地开发库 information_schema：54 张 BASE TABLE、2 个 VIEW。35 个迁移脚本按版本库文件统计，不包含当前未纳入版本的工作区文件。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\output\\ppt-build\\enterprise-solution-deck-rebuild-20260809\\source-notes.txt\n- D:\\Laibin\\LaibinSugarInventory\\migrations\n- D:\\Laibin\\LaibinSugarInventory\\laibin.sql"}
+{"kind":"slide","id":"sl/wtugl1","slide":8,"title":"DEPLOYMENT","textShapes":15}
+{"kind":"textbox","id":"sh/etkritwf","slide":8,"text":"DEPLOYMENT","textPreview":"DEPLOYMENT","textChars":10,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/1wvqt8v6","slide":8,"text":"标准架构支持持续交付","textPreview":"标准架构支持持续交付","textChars":10,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/0vm9k3el","slide":8,"text":"容器化组件、环境配置和健康检查让系统可以部署、替换和排障。","textPreview":"容器化组件、环境配置和健康检查让系统可以部署、替换和排障。","textChars":29,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/nydsvidw","slide":8,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/mx4rmdwb","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/90vax8v2","slide":8,"bbox":[640,218,0,42]}
+{"kind":"shape","id":"sh/ozm9o3eh","slide":8,"bbox":[640,318,0,48]}
+{"kind":"shape","id":"sh/3298jeds","slide":8,"bbox":[230,366,820,0]}
+{"kind":"shape","id":"sh/210ra9w7","slide":8,"bbox":[230,366,0,46]}
+{"kind":"shape","id":"sh/0r2d4z6p","slide":8,"bbox":[640,366,0,46]}
+{"kind":"shape","id":"sh/1svedkna","slide":8,"bbox":[1050,366,0,46]}
+{"kind":"textbox","id":"sh/epkv2poj","slide":8,"text":"↙","textPreview":"↙","textChars":1,"textLines":1,"bbox":[800,462,72,52]}
+{"kind":"shape","id":"sh/fqtwbu54","slide":8,"bbox":[640,514,0,36]}
+{"kind":"shape","id":"sh/ovmd8z6l","slide":8,"bbox":[330,550,620,0]}
+{"kind":"shape","id":"sh/9wveh4n6","slide":8,"bbox":[330,550,0,44]}
+{"kind":"shape","id":"sh/2t4v6pof","slide":8,"bbox":[640,550,0,44]}
+{"kind":"shape","id":"sh/nudwfu50","slide":8,"bbox":[950,550,0,44]}
+{"kind":"shape","id":"sh/4zidwv6h","slide":8,"bbox":[535,176,210,50]}
+{"kind":"textbox","id":"sh/50bu50n2","slide":8,"text":"企业用户","textPreview":"企业用户","textChars":4,"textLines":1,"bbox":[535,176,210,50]}
+{"kind":"shape","id":"sh/lkj2dcbe","slide":8,"bbox":[430,260,420,58]}
+{"kind":"textbox","id":"sh/kja1k7ut","slide":8,"text":"Nginx 1.27  /  TLS  /  路由","textPreview":"Nginx 1.27  /  TLS  /  路由","textChars":25,"textLines":1,"bbox":[430,260,420,58]}
+{"kind":"shape","id":"sh/jihkb2to","slide":8,"bbox":[130,412,200,62]}
+{"kind":"textbox","id":"sh/yh8jixc3","slide":8,"text":"Web\nVue 3","textPreview":"Web | Vue 3","textChars":9,"textLines":2,"bbox":[130,412,200,62]}
+{"kind":"shape","id":"sh/t8j2hcbq","slide":8,"bbox":[540,412,200,62]}
+{"kind":"textbox","id":"sh/87alo7u5","slide":8,"text":"Java Backend\nSpring Boot 3","textPreview":"Java Backend | Spring Boot 3","textChars":26,"textLines":2,"bbox":[540,412,200,62]}
+{"kind":"shape","id":"sh/761kf2tk","slide":8,"bbox":[950,412,200,62]}
+{"kind":"textbox","id":"sh/6lsjmxcz","slide":8,"text":"Agent Runtime\nPython","textPreview":"Agent Runtime | Python","textChars":20,"textLines":2,"bbox":[950,412,200,62]}
+{"kind":"shape","id":"sh/hc32lwbm","slide":8,"bbox":[540,500,200,50]}
+{"kind":"textbox","id":"sh/gbulsru1","slide":8,"text":"MCP 受控工具","textPreview":"MCP 受控工具","textChars":8,"textLines":1,"bbox":[540,500,200,50]}
+{"kind":"shape","id":"sh/eh4zmtsj","slide":8,"bbox":[230,594,200,48]}
+{"kind":"textbox","id":"sh/fidgfe94","slide":8,"text":"MySQL 8","textPreview":"MySQL 8","textChars":7,"textLines":1,"bbox":[230,594,200,48]}
+{"kind":"shape","id":"sh/0jmhojap","slide":8,"bbox":[540,594,200,48]}
+{"kind":"textbox","id":"sh/1kfihora","slide":8,"text":"Redis 7","textPreview":"Redis 7","textChars":7,"textLines":1,"bbox":[540,594,200,48]}
+{"kind":"shape","id":"sh/mlozqtsv","slide":8,"bbox":[850,594,200,48]}
+{"kind":"textbox","id":"sh/nmx0jy9g","slide":8,"text":"只读 RAG 制品","textPreview":"只读 RAG 制品","textChars":9,"textLines":1,"bbox":[850,594,200,48]}
+{"kind":"textbox","id":"sh/on6hs3al","slide":8,"text":"Docker Compose  ·  环境变量注入  ·  健康检查  ·  独立日志  ·  只读挂载","textPreview":"Docker Compose  ·  环境变量注入  ·  健康检查  ·  独立日志  ·  只读挂载","textChars":52,"textLines":1,"bbox":[160,650,960,28]}
+{"kind":"notes","id":"nt/wtugl1","slide":8,"text":"部署架构来自项目 Docker Compose：Nginx、Java 后端、Python Agent、Redis 和外部 MySQL；RAG 运行时制品采用只读挂载。TLS、环境变量、健康检查和日志作为交付约束说明。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\docker\\docker-compose.yml\n- D:\\Laibin\\LaibinSugarInventory\\deploy\\simple\\docker-compose.yml\n- D:\\Laibin\\LaibinSugarInventory\\docs\\agent\\agent-production-deployment.md"}
+{"kind":"slide","id":"sl/u11fgb","slide":9,"title":"SECURITY & AUDIT","textShapes":18}
+{"kind":"textbox","id":"sh/ulk7qtgr","slide":9,"text":"SECURITY & AUDIT","textPreview":"SECURITY & AUDIT","textChars":16,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/hovqlozi","slide":9,"text":"每次请求都有安全链路","textPreview":"每次请求都有安全链路","textChars":10,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/wn2psjyx","slide":9,"text":"身份、角色、业务规则和工具权限在后端逐层校验。","textPreview":"身份、角色、业务规则和工具权限在后端逐层校验。","textChars":23,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/7itofehg","slide":9,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/mhk7m9gv","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/9kb6hoz6","slide":9,"bbox":[190,290,36,0]}
+{"kind":"shape","id":"sh/8j2pojy1","slide":9,"bbox":[64,248,126,84]}
+{"kind":"textbox","id":"sh/red8ryhk","slide":9,"text":"用户登录","textPreview":"用户登录","textChars":4,"textLines":1,"bbox":[64,248,126,84]}
+{"kind":"shape","id":"sh/6d47ydgz","slide":9,"bbox":[352,290,36,0]}
+{"kind":"shape","id":"sh/g3qpof61","slide":9,"bbox":[226,248,126,84]}
+{"kind":"textbox","id":"sh/h4z6hk76","slide":9,"text":"JWT","textPreview":"JWT","textChars":3,"textLines":1,"bbox":[226,248,126,84]}
+{"kind":"shape","id":"sh/u1o7mpov","slide":9,"bbox":[514,290,36,0]}
+{"kind":"shape","id":"sh/v2hofapg","slide":9,"bbox":[388,248,126,84]}
+{"kind":"textbox","id":"sh/8z6pkf6p","slide":9,"text":"Spring\nSecurity","textPreview":"Spring | Security","textChars":15,"textLines":2,"bbox":[388,248,126,84]}
+{"kind":"shape","id":"sh/t0f6dk7a","slide":9,"bbox":[676,290,36,0]}
+{"kind":"shape","id":"sh/6xo7i5oj","slide":9,"bbox":[550,248,126,84]}
+{"kind":"textbox","id":"sh/7yxobap4","slide":9,"text":"RBAC","textPreview":"RBAC","textChars":4,"textLines":1,"bbox":[550,248,126,84]}
+{"kind":"shape","id":"sh/kb65gv6t","slide":9,"bbox":[838,290,36,0]}
+{"kind":"shape","id":"sh/lwf6907y","slide":9,"bbox":[712,248,126,84]}
+{"kind":"textbox","id":"sh/1gnexsvq","slide":9,"text":"业务校验","textPreview":"业务校验","textChars":4,"textLines":1,"bbox":[712,248,126,84]}
+{"kind":"shape","id":"sh/0fedone5","slide":9,"bbox":[1000,290,36,0]}
+{"kind":"shape","id":"sh/ze5wv2dk","slide":9,"bbox":[874,248,126,84]}
+{"kind":"textbox","id":"sh/etcvmxwz","slide":9,"text":"Agent / Tool\n权限","textPreview":"Agent / Tool | 权限","textChars":15,"textLines":2,"bbox":[874,248,126,84]}
+{"kind":"shape","id":"sh/ds3utsvu","slide":9,"bbox":[1036,248,126,84]}
+{"kind":"textbox","id":"sh/crudkne9","slide":9,"text":"审计日志","textPreview":"审计日志","textChars":4,"textLines":1,"bbox":[1036,248,126,84]}
+{"kind":"textbox","id":"sh/rqlcrido","slide":9,"text":"权限由后端判断；Agent 调用与普通 API 走同一套规则。","textPreview":"权限由后端判断；Agent 调用与普通 API 走同一套规则。","textChars":31,"textLines":1,"bbox":[100,380,1080,62]}
+{"kind":"shape","id":"sh/qpcvidw3","slide":9,"bbox":[64,486,1152,110]}
+{"kind":"textbox","id":"sh/xo7e5cvy","slide":9,"text":"后端最终授权","textPreview":"后端最终授权","textChars":6,"textLines":1,"bbox":[88,504,320,32]}
+{"kind":"textbox","id":"sh/wnydwrud","slide":9,"text":"登录身份不能替代业务权限","textPreview":"登录身份不能替代业务权限","textChars":12,"textLines":1,"bbox":[88,542,320,34]}
+{"kind":"shape","id":"sh/ut8bq9cv","slide":9,"bbox":[428,504,0,72]}
+{"kind":"textbox","id":"sh/fuhszetg","slide":9,"text":"高风险操作确认","textPreview":"高风险操作确认","textChars":7,"textLines":1,"bbox":[464,504,320,32]}
+{"kind":"textbox","id":"sh/gvatsju1","slide":9,"text":"预览、确认和幂等控制分开","textPreview":"预览、确认和幂等控制分开","textChars":12,"textLines":1,"bbox":[464,542,320,34]}
+{"kind":"shape","id":"sh/hwja1obm","slide":9,"bbox":[804,504,0,72]}
+{"kind":"textbox","id":"sh/6p8rm9cz","slide":9,"text":"关键动作审计","textPreview":"关键动作审计","textChars":6,"textLines":1,"bbox":[840,504,320,32]}
+{"kind":"textbox","id":"sh/7qhsvet4","slide":9,"text":"操作日志与 Agent 调用可追溯","textPreview":"操作日志与 Agent 调用可追溯","textChars":17,"textLines":1,"bbox":[840,542,320,34]}
+{"kind":"notes","id":"nt/u11fgb","slide":9,"text":"安全链路覆盖 JWT、Spring Security、RBAC、业务参数校验和 AOP 操作日志。Agent 不直接获得数据库权限，也不能绕过后端事务和权限判断。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\src\\main\\java\\com\\Laibin\\SugarInventory\\SpringSecurity\n- D:\\Laibin\\LaibinSugarInventory\\src\\main\\java\\com\\Laibin\\SugarInventory\\aspect\\OperationLogAspect.java\n- D:\\Laibin\\LaibinSugarInventory\\docs\\mcp\\mcp-auth-design.md"}
+{"kind":"slide","id":"sl/9ztcik","slide":10,"title":"AGENT IN BUSINESS","textShapes":15}
+{"kind":"textbox","id":"sh/kjyx03ml","slide":10,"text":"AGENT IN BUSINESS","textPreview":"AGENT IN BUSINESS","textChars":17,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/ji5w7yl0","slide":10,"text":"自然语言直接查询业务数据","textPreview":"自然语言直接查询业务数据","textChars":12,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/yhwfyt4f","slide":10,"text":"用户不必在多个页面之间查找和拼接信息。","textPreview":"用户不必在多个页面之间查找和拼接信息。","textChars":19,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/t87yd832","slide":10,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/87yx4nmx","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"textbox","id":"sh/7mpgbilc","slide":10,"text":"“今天哪个仓库库存最高？”","textPreview":"“今天哪个仓库库存最高？”","textChars":13,"textLines":1,"bbox":[64,192,500,54]}
+{"kind":"shape","id":"sh/6lgf2d4r","slide":10,"bbox":[64,256,470,0]}
+{"kind":"textbox","id":"sh/9cne1o3y","slide":10,"text":"“最近 7 天库存变化怎么样？”","textPreview":"“最近 7 天库存变化怎么样？”","textChars":16,"textLines":1,"bbox":[64,280,500,54]}
+{"kind":"shape","id":"sh/orexsjmd","slide":10,"bbox":[64,344,470,0]}
+{"kind":"textbox","id":"sh/m1w3u9gr","slide":10,"text":"“哪些批次质量异常？”","textPreview":"“哪些批次质量异常？”","textChars":11,"textLines":1,"bbox":[64,368,500,54]}
+{"kind":"textbox","id":"sh/n25k3ehc","slide":10,"text":"问题","textPreview":"问题","textChars":2,"textLines":1,"bbox":[70,468,90,38]}
+{"kind":"textbox","id":"sh/83ylwjyx","slide":10,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[162,466,50,38]}
+{"kind":"textbox","id":"sh/9o725ozi","slide":10,"text":"受控工具","textPreview":"受控工具","textChars":4,"textLines":1,"bbox":[210,468,118,38]}
+{"kind":"textbox","id":"sh/apg3ytgn","slide":10,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[330,466,50,38]}
+{"kind":"textbox","id":"sh/vqpk7eh8","slide":10,"text":"业务数据","textPreview":"业务数据","textChars":4,"textLines":1,"bbox":[378,468,118,38]}
+{"kind":"textbox","id":"sh/wryl0jyt","slide":10,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[498,466,50,38]}
+{"kind":"textbox","id":"sh/xs729oze","slide":10,"text":"结果","textPreview":"结果","textChars":2,"textLines":1,"bbox":[548,468,70,38]}
+{"kind":"textbox","id":"sh/itg32tgz","slide":10,"text":"当前重点：只读查询、报表和业务预览","textPreview":"当前重点：只读查询、报表和业务预览","textChars":17,"textLines":1,"bbox":[64,552,500,50]}
+{"kind":"shape","id":"sh/jup4byhk","slide":10,"bbox":[648,166,570,484]}
+{"kind":"image","id":"im/szapcjq1","slide":10,"name":"","geometry":"roundRect","alt":"项目 AI 助手真实运行界面","bbox":[650,168,566,480]}
+{"kind":"notes","id":"nt/9ztcik","slide":10,"text":"用三个业务问题说明 Agent 的价值：理解自然语言、调用受控工具、读取真实业务数据并返回可解释结果。当前重点是只读查询、注册报表和部分业务预览，不描述为全自动写入。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\output\\playwright\\solution-deck-20260809\\09-ai-assistant.png\n- D:\\Laibin\\LaibinSugarInventory\\docs\\agent\\ai-assistant-product-goal.md\n- D:\\Laibin\\LaibinSugarInventory\\docs\\mcp\\mcp-tool-registry.md"}
+{"kind":"slide","id":"sl/40htgw","slide":11,"title":"AGENT GOVERNANCE","textShapes":16}
+{"kind":"textbox","id":"sh/kbe90ret","slide":11,"text":"AGENT GOVERNANCE","textPreview":"AGENT GOVERNANCE","textChars":16,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/ja587mx8","slide":11,"text":"模型理解，系统负责执行","textPreview":"模型理解，系统负责执行","textChars":11,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/y9wryhwn","slide":11,"text":"模型可以思考，但不能绕过系统规则。","textPreview":"模型可以思考，但不能绕过系统规则。","textChars":17,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/t07qdgva","slide":11,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/8fy94bep","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/7ep8b6x4","slide":11,"bbox":[214,294,40,0]}
+{"kind":"shape","id":"sh/6dgr21wj","slide":11,"bbox":[64,254,150,76]}
+{"kind":"textbox","id":"sh/94nq1cf6","slide":11,"text":"用户","textPreview":"用户","textChars":2,"textLines":1,"bbox":[64,254,150,76]}
+{"kind":"shape","id":"sh/oju9s7el","slide":11,"bbox":[404,294,40,0]}
+{"kind":"shape","id":"sh/qxgjq50f","slide":11,"bbox":[254,254,150,76]}
+{"kind":"textbox","id":"sh/bypkjahk","slide":11,"text":"主 Agent","textPreview":"主 Agent","textChars":7,"textLines":1,"bbox":[254,254,150,76]}
+{"kind":"shape","id":"sh/czy1sfy5","slide":11,"bbox":[594,294,40,0]}
+{"kind":"shape","id":"sh/d072lkzq","slide":11,"bbox":[444,254,150,76]}
+{"kind":"textbox","id":"sh/y1gjupgb","slide":11,"text":"领域 Agent","textPreview":"领域 Agent","textChars":8,"textLines":1,"bbox":[444,254,150,76]}
+{"kind":"shape","id":"sh/z29knahw","slide":11,"bbox":[784,294,40,0]}
+{"kind":"shape","id":"sh/03i1wfyh","slide":11,"bbox":[634,254,150,76]}
+{"kind":"textbox","id":"sh/l4r2pkz2","slide":11,"text":"MCP Tool","textPreview":"MCP Tool","textChars":8,"textLines":1,"bbox":[634,254,150,76]}
+{"kind":"shape","id":"sh/m50jypg7","slide":11,"bbox":[974,294,40,0]}
+{"kind":"shape","id":"sh/nq9kruhs","slide":11,"bbox":[824,254,150,76]}
+{"kind":"textbox","id":"sh/jut0fux0","slide":11,"text":"后端服务","textPreview":"后端服务","textChars":4,"textLines":1,"bbox":[824,254,150,76]}
+{"kind":"shape","id":"sh/it0jmpwf","slide":11,"bbox":[1014,254,150,76]}
+{"kind":"textbox","id":"sh/5wbih4f6","slide":11,"text":"数据库","textPreview":"数据库","textChars":3,"textLines":1,"bbox":[1014,254,150,76]}
+{"kind":"shape","id":"sh/kv21ozel","slide":11,"bbox":[64,392,552,128]}
+{"kind":"textbox","id":"sh/v690bux4","slide":11,"text":"模型负责","textPreview":"模型负责","textChars":4,"textLines":1,"bbox":[92,414,200,36]}
+{"kind":"textbox","id":"sh/a50jipwj","slide":11,"text":"理解  ·  分析  ·  规划","textPreview":"理解  ·  分析  ·  规划","textChars":16,"textLines":1,"bbox":[92,460,470,38]}
+{"kind":"shape","id":"sh/xsridkfu","slide":11,"bbox":[664,392,552,128]}
+{"kind":"textbox","id":"sh/wri1kfe9","slide":11,"text":"系统负责","textPreview":"系统负责","textChars":4,"textLines":1,"bbox":[692,414,200,36]}
+{"kind":"textbox","id":"sh/n2907axs","slide":11,"text":"权限  ·  参数  ·  事务  ·  审计  ·  执行","textPreview":"权限  ·  参数  ·  事务  ·  审计  ·  执行","textChars":30,"textLines":1,"bbox":[692,460,490,38]}
+{"kind":"shape","id":"sh/m1gze5w7","slide":11,"bbox":[64,558,1152,68]}
+{"kind":"textbox","id":"sh/c7ex8bu5","slide":11,"text":"当前重点：L0 / L1 与部分 L2","textPreview":"当前重点：L0 / L1 与部分 L2","textChars":19,"textLines":1,"bbox":[90,578,430,30]}
+{"kind":"textbox","id":"sh/d8nyhgvq","slide":11,"text":"L3 / L4 写操作需完成权限、确认、幂等、事务和审计验收后再开放","textPreview":"L3 / L4 写操作需完成权限、确认、幂等、事务和审计验收后再开放","textChars":34,"textLines":1,"bbox":[500,578,680,30]}
+{"kind":"notes","id":"nt/40htgw","slide":11,"text":"主 Agent 负责理解目标和编排，领域 Agent 只看到最小上下文与工具，MCP Tool 使用参数 Schema 和白名单，后端做最终权限、事务与审计。L3/L4 不描述为已上线。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\docs\\agent\\modular-agent-architecture.md\n- D:\\Laibin\\LaibinSugarInventory\\docs\\mcp\\mcp-tool-registry.md\n- D:\\Laibin\\LaibinSugarInventory\\docs\\agent\\ai-assistant-product-goal.md"}
+{"kind":"slide","id":"sl/j53ixw","slide":12,"title":"DELIVERY QUALITY","textShapes":19}
+{"kind":"textbox","id":"sh/ydgje94j","slide":12,"text":"DELIVERY QUALITY","textPreview":"DELIVERY QUALITY","textChars":16,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/lgr2po3a","slide":12,"text":"长期维护依赖工程闭环","textPreview":"长期维护依赖工程闭环","textChars":10,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/kfi1gjmp","slide":12,"text":"开发完成只是起点；测试、部署、观察、升级和回滚要一起设计。","textPreview":"开发完成只是起点；测试、部署、观察、升级和回滚要一起设计。","textChars":29,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/729krylg","slide":12,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/mh0jit4v","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/94r2to36","slide":12,"bbox":[156,286,88,0]}
+{"kind":"shape","id":"sh/83i1k3ml","slide":12,"bbox":[326,286,88,0]}
+{"kind":"shape","id":"sh/v6tkvylc","slide":12,"bbox":[496,286,88,0]}
+{"kind":"shape","id":"sh/u5kjmt4r","slide":12,"bbox":[666,286,88,0]}
+{"kind":"shape","id":"sh/on25cv61","slide":12,"bbox":[836,286,88,0]}
+{"kind":"shape","id":"sh/pob6lgn6","slide":12,"bbox":[1006,286,88,0]}
+{"kind":"shape","id":"sh/2l0nalov","slide":12,"bbox":[1135,332,0,70]}
+{"kind":"shape","id":"sh/3mtojq5g","slide":12,"bbox":[115,402,1020,0]}
+{"kind":"shape","id":"sh/cr25gv6x","slide":12,"bbox":[115,332,0,70]}
+{"kind":"textbox","id":"sh/xsb6p0ni","slide":12,"text":"↑","textPreview":"↑","textChars":1,"textLines":1,"bbox":[95,318,40,34]}
+{"kind":"shape","id":"sh/apknelor","slide":12,"bbox":[74,245,82,82]}
+{"kind":"textbox","id":"sh/bqtonq5c","slide":12,"text":"开发","textPreview":"开发","textChars":2,"textLines":1,"bbox":[74,245,82,82]}
+{"kind":"shape","id":"sh/kfm5kf6t","slide":12,"bbox":[244,245,82,82]}
+{"kind":"textbox","id":"sh/lgv6t0ne","slide":12,"text":"测试","textPreview":"测试","textChars":2,"textLines":1,"bbox":[244,245,82,82]}
+{"kind":"shape","id":"sh/907ehgbm","slide":12,"bbox":[414,245,82,82]}
+{"kind":"textbox","id":"sh/8zyxobu1","slide":12,"text":"部署","textPreview":"部署","textChars":2,"textLines":1,"bbox":[414,245,82,82]}
+{"kind":"shape","id":"sh/7ypwf6tg","slide":12,"bbox":[584,245,82,82]}
+{"kind":"textbox","id":"sh/mxgfm1cv","slide":12,"text":"监控","textPreview":"监控","textChars":2,"textLines":1,"bbox":[584,245,82,82]}
+{"kind":"shape","id":"sh/horelgbi","slide":12,"bbox":[754,245,82,82]}
+{"kind":"textbox","id":"sh/w3ixsbux","slide":12,"text":"定位","textPreview":"定位","textChars":2,"textLines":1,"bbox":[754,245,82,82]}
+{"kind":"shape","id":"sh/v2pwj6tc","slide":12,"bbox":[924,245,82,82]}
+{"kind":"textbox","id":"sh/u1gfqlc7","slide":12,"text":"升级","textPreview":"升级","textChars":2,"textLines":1,"bbox":[924,245,82,82]}
+{"kind":"shape","id":"sh/dsne9wbe","slide":12,"bbox":[1094,245,82,82]}
+{"kind":"textbox","id":"sh/c7edgrut","slide":12,"text":"回滚","textPreview":"回滚","textChars":2,"textLines":1,"bbox":[1094,245,82,82]}
+{"kind":"textbox","id":"sh/2dcbaxsr","slide":12,"text":"问题与版本经验返回下一轮开发","textPreview":"问题与版本经验返回下一轮开发","textChars":14,"textLines":1,"bbox":[374,416,532,32]}
+{"kind":"shape","id":"sh/3ylcj29c","slide":12,"bbox":[64,474,1152,0]}
+{"kind":"textbox","id":"sh/ozutcnah","slide":12,"text":"145","textPreview":"145","textChars":3,"textLines":1,"bbox":[64,500,190,86]}
+{"kind":"textbox","id":"sh/p03ulsr2","slide":12,"text":"个版本库测试源文件","textPreview":"个版本库测试源文件","textChars":9,"textLines":1,"bbox":[224,514,310,38]}
+{"kind":"textbox","id":"sh/q1cbexsn","slide":12,"text":"Java  ·  MCP  ·  Python  ·  Web  ·  E2E","textPreview":"Java  ·  MCP  ·  Python  ·  Web  ·  E2E","textChars":39,"textLines":1,"bbox":[224,558,400,30]}
+{"kind":"textbox","id":"sh/b2lcn298","slide":12,"text":"同时保留","textPreview":"同时保留","textChars":4,"textLines":1,"bbox":[698,514,160,34]}
+{"kind":"textbox","id":"sh/c3etg7at","slide":12,"text":"数据库迁移  ·  操作日志  ·  Agent 审计  ·  发布与回滚资料","textPreview":"数据库迁移  ·  操作日志  ·  Agent 审计  ·  发布与回滚资料","textChars":39,"textLines":1,"bbox":[698,556,500,42]}
+{"kind":"textbox","id":"sh/d4nupcre","slide":12,"text":"注：测试文件数量用于说明质量资产规模，不代表当前所有测试全部通过。","textPreview":"注：测试文件数量用于说明质量资产规模，不代表当前所有测试全部通过。","textChars":33,"textLines":1,"bbox":[64,630,1152,30]}
+{"kind":"notes","id":"nt/j53ixw","slide":12,"text":"145 为版本库内测试源文件盘点数量：Java、MCP、Python、Web 单元测试和 E2E。明确提醒客户：数量不等于当前全部通过。当前工作区正在开发的未纳入版本文件不计入。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\output\\ppt-build\\enterprise-solution-deck-rebuild-20260809\\source-notes.txt\n- D:\\Laibin\\LaibinSugarInventory\\src\\test\n- D:\\Laibin\\LaibinSugarInventory\\warehouse-mcp\\src\\test\n- D:\\Laibin\\LaibinSugarInventory\\agent-service\\tests\n- D:\\Laibin\\LaibinSugarInventory\\webpage"}
+{"kind":"slide","id":"sl/jwhca5","slide":13,"title":"REPLICABILITY","textShapes":17}
+{"kind":"textbox","id":"sh/y9k365wn","slide":13,"text":"REPLICABILITY","textPreview":"REPLICABILITY","textChars":13,"textLines":1,"bbox":[64,24,360,24]}
+{"kind":"textbox","id":"sh/lcv2h0fy","slide":13,"text":"方法可以复制到更多场景","textPreview":"方法可以复制到更多场景","textChars":11,"textLines":1,"bbox":[64,50,1120,64]}
+{"kind":"textbox","id":"sh/kbml8vet","slide":13,"text":"以一个高价值流程为起点，验证业务方法和工程体系，再按优先级扩展。","textPreview":"以一个高价值流程为起点，验证业务方法和工程体系，再按优先级扩展。","textChars":32,"textLines":1,"bbox":[64,118,1130,38]}
+{"kind":"shape","id":"sh/7ydkjax4","slide":13,"bbox":[64,684,1096,0]}
+{"kind":"textbox","id":"sh/6d43a5wj","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1170,674,46,24]}
+{"kind":"shape","id":"sh/t0vmlkfa","slide":13,"bbox":[640,220,0,96]}
+{"kind":"shape","id":"sh/8zmlcfep","slide":13,"bbox":[342,312,176,40]}
+{"kind":"shape","id":"sh/v2x4naxg","slide":13,"bbox":[762,312,176,40]}
+{"kind":"shape","id":"sh/u1o3epwv","slide":13,"bbox":[400,422,140,74]}
+{"kind":"shape","id":"sh/0valkvax","slide":13,"bbox":[740,422,140,74]}
+{"kind":"shape","id":"sh/lwj2d0ri","slide":13,"bbox":[500,316,280,124]}
+{"kind":"textbox","id":"sh/yts3ils7","slide":13,"text":"企业软件\n交付能力","textPreview":"企业软件 | 交付能力","textChars":9,"textLines":2,"bbox":[500,316,280,124]}
+{"kind":"shape","id":"sh/zu1kbq9c","slide":13,"bbox":[550,176,180,58]}
+{"kind":"textbox","id":"sh/8zulova9","slide":13,"text":"业务建模","textPreview":"业务建模","textChars":4,"textLines":1,"bbox":[550,176,180,58]}
+{"kind":"shape","id":"sh/9032h0ru","slide":13,"bbox":[190,276,180,58]}
+{"kind":"textbox","id":"sh/mxc3mls3","slide":13,"text":"软件研发","textPreview":"软件研发","textChars":4,"textLines":1,"bbox":[190,276,180,58]}
+{"kind":"shape","id":"sh/nylkfq9o","slide":13,"bbox":[910,276,180,58]}
+{"kind":"textbox","id":"sh/wnulsfq5","slide":13,"text":"数据治理","textPreview":"数据治理","textChars":4,"textLines":1,"bbox":[910,276,180,58]}
+{"kind":"shape","id":"sh/xonmlkrq","slide":13,"bbox":[310,474,180,58]}
+{"kind":"textbox","id":"sh/5kj250ju","slide":13,"text":"部署运维","textPreview":"部署运维","textChars":4,"textLines":1,"bbox":[310,474,180,58]}
+{"kind":"shape","id":"sh/4jalwvi9","slide":13,"bbox":[790,474,180,58]}
+{"kind":"textbox","id":"sh/jihk3a1o","slide":13,"text":"AI Agent","textPreview":"AI Agent","textChars":8,"textLines":1,"bbox":[790,474,180,58]}
+{"kind":"textbox","id":"sh/ih83a50j","slide":13,"text":"制造","textPreview":"制造","textChars":2,"textLines":1,"bbox":[74,198,100,34]}
+{"kind":"textbox","id":"sh/t8j29kj6","slide":13,"text":"仓储","textPreview":"仓储","textChars":2,"textLines":1,"bbox":[74,252,100,34]}
+{"kind":"textbox","id":"sh/s7al0fil","slide":13,"text":"供应链","textPreview":"供应链","textChars":3,"textLines":1,"bbox":[74,306,120,34]}
+{"kind":"textbox","id":"sh/rm1k7a10","slide":13,"text":"质量管理","textPreview":"质量管理","textChars":4,"textLines":1,"bbox":[1090,198,130,34]}
+{"kind":"textbox","id":"sh/6ls3y50f","slide":13,"text":"设备管理","textPreview":"设备管理","textChars":4,"textLines":1,"bbox":[1090,252,130,34]}
+{"kind":"textbox","id":"sh/9cz2xgjm","slide":13,"text":"运营分析","textPreview":"运营分析","textChars":4,"textLines":1,"bbox":[1090,306,130,34]}
+{"kind":"shape","id":"sh/8b614b21","slide":13,"bbox":[180,582,920,58]}
+{"kind":"textbox","id":"sh/ylkrixcn","slide":13,"text":"从一个高价值业务流程开始，先做试点，再逐步扩大。","textPreview":"从一个高价值业务流程开始，先做试点，再逐步扩大。","textChars":24,"textLines":1,"bbox":[180,582,920,58]}
+{"kind":"notes","id":"nt/jwhca5","slide":13,"text":"结束时回到核心定位：数字仓储只是证明样例，业务建模、软件研发、数据治理、部署运维和 Agent 治理方法可以复制。建议从一个有明确边界和验收标准的高价值流程开始。\n\n[Sources]\n- D:\\Laibin\\LaibinSugarInventory\\README.md\n- D:\\Laibin\\LaibinSugarInventory\\docs\\mcp-analysis\\system-capability-map.md"}

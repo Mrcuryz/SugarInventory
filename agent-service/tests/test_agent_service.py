@@ -38,8 +38,16 @@ from app.orchestration import CompoundExecutionPlan, OrchestrationStep
 from app.progress import registered_progress_tools
 from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS
 from app.runtime import AUDIT_CAPABILITY_LABELS, WarehouseAgentRuntime
-from app.schemas import AgentError, ChatRequest, ChatResponse, GoalDraftV1, ResultReasoningDraftV1
-from app.streaming import sse_for_request, sse_for_response
+from app.schemas import (
+    AgentError,
+    BusinessCard,
+    ChatRequest,
+    ChatResponse,
+    GoalDraftV1,
+    ResultReasoningDraftV1,
+    UserOption,
+)
+from app.streaming import StreamEventBuilder, events_for_response, sse_for_request, sse_for_response
 from app.tool_arguments import ToolArgumentBuilder
 from app.tools.client import ALLOWED_TOOLS, JavaGatewayToolClient, MockToolClient, ToolGatewayError
 
@@ -111,8 +119,12 @@ EXPECTED_EXPERT_TOOLS = {
     "analytics_expert": frozenset({"run_registered_report"}),
     "logistics_expert": frozenset(
         {
+            "resolve_products",
+            "resolve_warehouses",
             "query_pallet_tasks",
+            "query_fixed_product_qr_pool",
             "preview_task_transition",
+            "preview_finish_inbound_execution",
             "query_stock_documents",
             "query_auto_inbound_batches",
             "get_auto_inbound_batch_detail",
@@ -1235,11 +1247,14 @@ def test_expert_agent_tool_scopes_cover_only_current_no_write_allowlist() -> Non
     assert len(business_profiles) == 11
     assert all(tools for tools in business_profiles.values())
     assert expert_tools == ALLOWED_TOOLS | set(INTERNAL_KNOWLEDGE_TOOLS)
-    assert len(expert_tools) == 54
+    assert len(expert_tools) == 55
     assert router.profile(MAIN_AGENT).allowed_tools == frozenset()
     assert not any(
         tool.startswith("execute_")
-        or (tool.startswith("preview_") and tool != "preview_task_transition")
+        or (
+            tool.startswith("preview_")
+            and tool not in {"preview_task_transition", "preview_finish_inbound_execution"}
+        )
         for tool in expert_tools
     )
     assert "query_assay_records" not in router.profile("inventory_expert").allowed_tools
@@ -1274,7 +1289,7 @@ def test_tool_allowlists_match_java_gateway_and_warehouse_mcp_registration() -> 
     assert mcp_tools == ALLOWED_TOOLS
 
 
-def test_runtime_tool_profiles_match_capability_registry_with_one_l2_preview() -> None:
+def test_runtime_tool_profiles_match_capability_registry_with_two_l2_previews() -> None:
     repository = Path(__file__).resolve().parents[2]
     registry = (repository / "docs/agent/tool-capability-registry.yaml").read_text(encoding="utf-8")
     architecture, tools_section = registry.split("\ntools:\n", maxsplit=1)
@@ -1296,7 +1311,7 @@ def test_runtime_tool_profiles_match_capability_registry_with_one_l2_preview() -
     )
     assert registered_l1_tools | registered_l2_tools == ALLOWED_TOOLS
     assert len(registered_l1_tools) == 52
-    assert registered_l2_tools == {"preview_task_transition"}
+    assert registered_l2_tools == {"preview_task_transition", "preview_finish_inbound_execution"}
 
     for expert_name, expected_tools in EXPECTED_EXPERT_TOOLS.items():
         profile = re.search(
@@ -1414,7 +1429,7 @@ def test_capability_endpoint_returns_registry_hashes_and_counts() -> None:
     body = response.json()
     assert body["runtimeVersion"] == "0.2.0"
     assert body["protocolVersion"] == "1.0"
-    assert body["toolCount"] == 53
+    assert body["toolCount"] == 54
     assert body["recipeCount"] == 1
     assert len(body["toolRegistryHash"]) == 64
     assert len(body["recipeRegistryHash"]) == 64
@@ -2844,10 +2859,9 @@ def test_stream_clarification_ends_with_required_finish_reason() -> None:
         }
     )
     app = create_app(Settings(tool_mode="mock"), tool_client=tool_client, checkpointer=InMemoryCheckpointer())
-    response = TestClient(app).post(
-        "/internal/agent/chat/stream",
-        json=chat_payload("帮我查当前黄冰糖的库存情况"),
-    )
+    payload = chat_payload("帮我查当前黄冰糖的库存情况")
+    payload["client"]["debug"] = True
+    response = TestClient(app).post("/internal/agent/chat/stream", json=payload)
 
     events = parse_sse_events(response.text)
     assert tool_client.calls[0]["arguments"]["query"] == "黄冰糖"
@@ -2868,7 +2882,49 @@ def test_stream_clarification_ends_with_required_finish_reason() -> None:
     assert events[-1]["payload"]["finishReason"] == "interrupt_required"
     assert events[-1]["payload"]["interruptId"] == clarification["interruptId"]
     assert events[-1]["payload"]["interruptKind"] == "CLARIFICATION"
+    assert "reviewTrace" not in events[-1]["payload"]
+    assert next(event for event in events if event["type"] == "audit")["payload"]["intentRouter"]
     assert "productId" not in response.text
+
+
+def test_chained_clarification_terminal_uses_new_interrupt_id() -> None:
+    response = ChatResponse(
+        agentSessionId="agt_test",
+        answer="请确认下一步。",
+        needsUserSelection=True,
+        cards=[
+            BusinessCard(
+                cardType="candidate_selection",
+                title="请选择",
+                prompt="请确认下一步。",
+                interruptId="intr_new",
+                interruptKind="CLARIFICATION",
+                resumeToken="resume_new",
+                options=[
+                    UserOption(
+                        optionId="opt_new",
+                        optionType="INBOUND_SOURCE",
+                        displayLabel="处理已有待入库任务",
+                    )
+                ],
+            )
+        ],
+    )
+
+    events = parse_sse_events(
+        "".join(
+            events_for_response(
+                response,
+                StreamEventBuilder("agt_test", "msg_test"),
+                include_start=True,
+                terminal_context={"interruptId": "intr_previous"},
+            )
+        )
+    )
+
+    assert events[-2]["payload"]["interruptId"] == "intr_new"
+    assert events[-1]["payload"]["finishReason"] == "interrupt_required"
+    assert events[-1]["payload"]["interruptId"] == "intr_new"
 
 
 def test_business_progress_registry_covers_every_allowed_tool() -> None:

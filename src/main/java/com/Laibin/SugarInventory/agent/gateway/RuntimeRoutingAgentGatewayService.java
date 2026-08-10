@@ -196,8 +196,8 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
         PythonAgentChatRequestDTO pythonRequest = buildPythonRequest(loginUser, sessionVO, request, requestId, traceId);
         pythonRequest.setMessageId(messageId);
-        recordResumeRequestedIfNeeded(sessionVO, request);
-        ActiveStream activeStream = new ActiveStream(agentSessionId, messageId, emitter);
+        String resumedInterruptId = recordResumeRequestedIfNeeded(sessionVO, request);
+        ActiveStream activeStream = new ActiveStream(agentSessionId, messageId, emitter, resumedInterruptId);
         activeStreams.put(streamKey(agentSessionId, messageId), activeStream);
         emitter.onTimeout(() -> timeoutActiveStream(activeStream));
         CompletableFuture.runAsync(() -> streamPython(
@@ -718,19 +718,21 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
     }
 
-    private void recordResumeRequestedIfNeeded(AgentSessionVO session, AgentMessageRequestDTO request) {
+    private String recordResumeRequestedIfNeeded(AgentSessionVO session, AgentMessageRequestDTO request) {
         Map<String, Object> selectedOption = selectedOption(request.getPageContext());
         if (selectedOption == null) {
-            return;
+            return null;
         }
+        String interruptId = safeScalar(selectedOption.get("interruptId"));
         interruptStateService.recordResumeRequested(
                 session.getAgentSessionId(),
                 session.getUserId(),
-                safeScalar(selectedOption.get("interruptId")),
+                interruptId,
                 safeScalar(selectedOption.get("action")),
                 safeScalar(selectedOption.get("optionId")),
                 safeScalar(selectedOption.get("previewId")),
                 safeScalar(selectedOption.get("clientRequestId")));
+        return interruptId;
     }
 
     private void recordInterruptEvent(ActiveStream activeStream,
@@ -753,11 +755,14 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         if (!"message_end".equals(source.getType())) {
             return;
         }
-        String interruptId = safeScalar(payload.path("interruptId").asText(null));
+        String finishReason = safeScalar(payload.path("finishReason").asText(null));
+        String interruptId = activeStream.resumedInterruptId();
+        String status = "interrupt_required".equals(finishReason) && interruptId != null
+                ? "RESUMED"
+                : interruptStatusForFinishReason(finishReason);
         if (interruptId == null) {
-            return;
+            interruptId = safeScalar(payload.path("interruptId").asText(null));
         }
-        String status = interruptStatusForFinishReason(safeScalar(payload.path("finishReason").asText(null)));
         if (status == null) {
             return;
         }
@@ -1304,6 +1309,7 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         private final String agentSessionId;
         private final String messageId;
         private final SseEmitter emitter;
+        private final String resumedInterruptId;
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private final AtomicInteger sequence = new AtomicInteger(0);
@@ -1312,10 +1318,11 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         private volatile String agentHandoffSummary;
         private volatile KnowledgeAuditSnapshot knowledgeAuditSnapshot;
 
-        private ActiveStream(String agentSessionId, String messageId, SseEmitter emitter) {
+        private ActiveStream(String agentSessionId, String messageId, SseEmitter emitter, String resumedInterruptId) {
             this.agentSessionId = agentSessionId;
             this.messageId = messageId;
             this.emitter = emitter;
+            this.resumedInterruptId = resumedInterruptId;
         }
 
         private void observe(PythonAgentStreamEventDTO event) {
@@ -1392,6 +1399,10 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
 
         private boolean hasInterrupt(String interruptId) {
             return interruptIds.contains(interruptId);
+        }
+
+        private String resumedInterruptId() {
+            return resumedInterruptId;
         }
 
         private void close() {

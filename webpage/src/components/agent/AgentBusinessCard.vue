@@ -19,6 +19,7 @@ import {
   taskDetailEntries,
   taskGroupStatusSummary,
   taskGroups,
+  taskSelectionRequirement as resolveTaskSelectionRequirement,
   taskStatusTone
 } from './taskCardPresentation.mjs'
 import {
@@ -27,6 +28,18 @@ import {
   taskTransitionPreviewSummary as resolveTaskTransitionPreviewSummary,
   taskTransitionPreviewTasks as resolveTaskTransitionPreviewTasks
 } from './taskTransitionPreviewPresentation.mjs'
+import {
+  finishInboundExecutionControlAction,
+  finishInboundExecutionPreviewItems as resolveFinishInboundExecutionPreviewItems,
+  finishInboundExecutionPreviewSummary as resolveFinishInboundExecutionPreviewSummary,
+  isFinishInboundExecutionPreviewCard
+} from './finishInboundExecutionPreviewPresentation.mjs'
+import {
+  fixedQrInboundCandidates as resolveFixedQrInboundCandidates,
+  fixedQrInboundSummary as resolveFixedQrInboundSummary,
+  fixedQrTaskCreationAction,
+  isFixedQrInboundSelectionCard
+} from './fixedQrInboundPresentation.mjs'
 import {
   boilingBatchSummary,
   boilingBatchUsages,
@@ -145,6 +158,10 @@ const props = defineProps({
   card: {
     type: Object,
     required: true
+  },
+  canExecuteFinishInbound: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -163,8 +180,14 @@ const reportNotes = computed(() => assayNotes(props.card))
 const historyRecords = computed(() => assayHistoryRecords(props.card))
 const isTask = computed(() => isTaskCard(props.card))
 const isTaskTransitionPreview = computed(() => isTaskTransitionPreviewCard(props.card))
+const isFinishInboundExecutionPreview = computed(() => isFinishInboundExecutionPreviewCard(props.card))
+const isFixedQrInboundSelection = computed(() => isFixedQrInboundSelectionCard(props.card))
+const fixedQrInboundSummary = computed(() => resolveFixedQrInboundSummary(props.card))
+const fixedQrInboundCandidates = computed(() => resolveFixedQrInboundCandidates(props.card))
 const taskTransitionPreviewSummary = computed(() => resolveTaskTransitionPreviewSummary(props.card))
 const taskTransitionPreviewTasks = computed(() => resolveTaskTransitionPreviewTasks(props.card))
+const finishInboundExecutionPreviewSummary = computed(() => resolveFinishInboundExecutionPreviewSummary(props.card))
+const finishInboundExecutionPreviewItems = computed(() => resolveFinishInboundExecutionPreviewItems(props.card))
 const isTaskDetail = computed(() => isTaskDetailCard(props.card))
 const groupedTasks = computed(() => taskGroups(props.card))
 const taskSummary = computed(() => taskCardStatusSummary(props.card))
@@ -253,6 +276,33 @@ const reportRunId = computed(() => (
 const expanded = ref(true)
 const collapsedTaskGroups = ref(new Set(taskGroups(props.card).map(group => group.key)))
 const selectedTaskKeys = ref(new Set())
+const selectedFixedQrCodes = ref(new Set())
+const taskSelectionRequirement = computed(() => resolveTaskSelectionRequirement(props.card))
+const selectedTaskCount = computed(() => selectedTaskKeys.value.size)
+const selectedFixedQrCount = computed(() => selectedFixedQrCodes.value.size)
+
+const isFixedQrSelected = record => selectedFixedQrCodes.value.has(record.code)
+
+const isFixedQrSelectionDisabled = record => Boolean(
+  !record.selectable
+  || (
+    !isFixedQrSelected(record)
+    && selectedFixedQrCount.value >= (fixedQrInboundSummary.value?.requestedPalletCount || 0)
+  )
+)
+
+const toggleFixedQrSelection = (record, selected) => {
+  if (!record.selectable || (selected && isFixedQrSelectionDisabled(record))) return
+  const next = new Set(selectedFixedQrCodes.value)
+  if (selected) next.add(record.code)
+  else next.delete(record.code)
+  selectedFixedQrCodes.value = next
+}
+
+const openFixedQrTaskCreation = () => {
+  const action = fixedQrTaskCreationAction(props.card, [...selectedFixedQrCodes.value])
+  if (action) emit('card-action', action)
+}
 
 const isTaskGroupExpanded = (group) => !collapsedTaskGroups.value.has(group.key)
 
@@ -271,10 +321,20 @@ const selectedGroupRecords = (group) => group.records.filter(
 
 const isTaskSelected = (record) => selectedTaskKeys.value.has(record.selectionKey)
 
+const isTaskSelectionDisabled = (record) => {
+  const requirement = taskSelectionRequirement.value
+  return Boolean(
+    requirement
+    && record.selectable
+    && !isTaskSelected(record)
+    && selectedTaskCount.value >= requirement.requestedPalletCount
+  )
+}
+
 const taskGroupSummary = (group) => taskGroupStatusSummary(group)
 
 const toggleTaskSelection = (record, selected) => {
-  if (!record.selectable) return
+  if (!record.selectable || (selected && isTaskSelectionDisabled(record))) return
   const next = new Set(selectedTaskKeys.value)
   if (selected) next.add(record.selectionKey)
   else next.delete(record.selectionKey)
@@ -282,7 +342,7 @@ const toggleTaskSelection = (record, selected) => {
 }
 
 const toggleTaskRow = (record) => {
-  if (!record.selectable) return
+  if (!record.selectable || isTaskSelectionDisabled(record)) return
   toggleTaskSelection(record, !isTaskSelected(record))
 }
 
@@ -298,6 +358,7 @@ const isTaskGroupIndeterminate = (group) => {
 }
 
 const toggleTaskGroupSelection = (group, selected) => {
+  if (taskSelectionRequirement.value) return
   const next = new Set(selectedTaskKeys.value)
   selectableGroupRecords(group).forEach(record => {
     if (selected) next.add(record.selectionKey)
@@ -306,21 +367,46 @@ const toggleTaskGroupSelection = (group, selected) => {
   selectedTaskKeys.value = next
 }
 
+const isTaskBatchReady = (group) => {
+  const selectedCount = selectedGroupRecords(group).length
+  const requirement = taskSelectionRequirement.value
+  if (!requirement) return selectedCount > 0
+  return group.key === requirement.taskGroupKey && selectedCount === requirement.requestedPalletCount
+}
+
 const openTaskBatch = (group) => {
   const selected = selectedGroupRecords(group)
   if (!group.batchAction || !selected.length) return
+  const requirement = taskSelectionRequirement.value
+  if (
+    requirement
+    && (group.key !== requirement.taskGroupKey || selected.length !== requirement.requestedPalletCount)
+  ) return
   emit('card-action', {
     actionKind: ['finish_in', 'finish_out', 'transfer'].includes(group.key)
       ? 'request_task_transition_preview'
       : 'open_task_batch',
     batchAction: group.batchAction,
     taskGroupLabel: group.label,
-    palletCodes: selected.map(record => record.palletCode).filter(Boolean)
+    palletCodes: selected.map(record => record.palletCode).filter(Boolean),
+    ...(requirement
+      ? {
+          requestedPalletCount: requirement.requestedPalletCount,
+          defaultWarehouseName: requirement.warehouseName,
+          defaultSide: requirement.defaultSide,
+          guidedProductLabel: requirement.productLabel
+        }
+      : {})
   })
 }
 
 const openTaskTransitionPreviewDialog = () => {
   const action = taskTransitionPreviewDialogAction(props.card)
+  if (action) emit('card-action', action)
+}
+
+const openFinishInboundExecutionControl = () => {
+  const action = finishInboundExecutionControlAction(props.card, props.canExecuteFinishInbound)
   if (action) emit('card-action', action)
 }
 
@@ -352,7 +438,7 @@ const exportRegisteredReport = () => {
 </script>
 
 <template>
-  <div class="business-card" :class="{ 'knowledge-card': isKnowledge, 'distribution-card': isDistribution, 'assay-card': isAssay, 'task-card': isTask || isTaskTransitionPreview, 'production-card': isProduction, 'today-operations-overview-card': isTodayOperationsOverview, 'daily-production-report-card': isDailyProductionReport, 'inventory-level-trend-card': isInventoryLevelTrend, 'quality-assay-trend-card': isQualityAssayTrend, 'quality-metric-trend-card': isQualityMetricTrend, 'production-input-output-flow-card': isProductionInputOutputFlow, 'pallet-task-cycle-report-card': isPalletTaskCycleReport, 'pallet-card': isPallet, 'inventory-quality-card': isInventoryQuality }">
+  <div class="business-card" :class="{ 'knowledge-card': isKnowledge, 'distribution-card': isDistribution, 'assay-card': isAssay, 'task-card': isTask || isTaskTransitionPreview || isFinishInboundExecutionPreview || isFixedQrInboundSelection, 'production-card': isProduction, 'today-operations-overview-card': isTodayOperationsOverview, 'daily-production-report-card': isDailyProductionReport, 'inventory-level-trend-card': isInventoryLevelTrend, 'quality-assay-trend-card': isQualityAssayTrend, 'quality-metric-trend-card': isQualityMetricTrend, 'production-input-output-flow-card': isProductionInputOutputFlow, 'pallet-task-cycle-report-card': isPalletTaskCycleReport, 'pallet-card': isPallet, 'inventory-quality-card': isInventoryQuality }">
     <div class="business-card-head" :class="{ 'task-card-head': isTask && !isTaskDetail }">
       <span class="business-card-icon">
         <el-icon><DataAnalysis /></el-icon>
@@ -378,7 +464,7 @@ const exportRegisteredReport = () => {
         导出
       </button>
       <button
-        v-if="isAssay || isTask || isTaskTransitionPreview || isProduction || isTodayOperationsOverview || isDailyProductionReport || isInventoryLevelTrend || isQualityAssayTrend || isQualityMetricTrend || isProductionInputOutputFlow || isPalletTaskCycleReport || isPallet || isInventoryQuality"
+        v-if="isAssay || isTask || isTaskTransitionPreview || isFinishInboundExecutionPreview || isFixedQrInboundSelection || isProduction || isTodayOperationsOverview || isDailyProductionReport || isInventoryLevelTrend || isQualityAssayTrend || isQualityMetricTrend || isProductionInputOutputFlow || isPalletTaskCycleReport || isPallet || isInventoryQuality"
         type="button"
         class="business-card-toggle"
         :aria-expanded="expanded"
@@ -485,6 +571,137 @@ const exportRegisteredReport = () => {
         </div>
       </template>
     </div>
+    <div v-else-if="isFinishInboundExecutionPreview" class="task-card-body task-transition-preview-body">
+      <div v-if="expanded && finishInboundExecutionPreviewSummary" class="task-list">
+        <section class="task-group">
+          <div class="task-group-head">
+            <div class="task-group-title">
+              <strong>成品入库精确表单</strong>
+              <span>协议 v{{ finishInboundExecutionPreviewSummary.previewVersion }}</span>
+            </div>
+            <span
+              class="task-status"
+              :class="finishInboundExecutionPreviewSummary.readyForUserConfirmation ? 'task-status-success' : 'task-status-pending'"
+            >
+              {{ finishInboundExecutionPreviewSummary.previewStatusLabel }}
+            </span>
+          </div>
+          <div class="task-group-records">
+            <article v-for="item in finishInboundExecutionPreviewItems" :key="item.palletCode" class="task-row">
+              <div class="task-row-head">
+                <div class="task-row-copy">
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.productLabel }}</span>
+                </div>
+                <span class="task-status task-status-success">
+                  {{ item.executionStatusLabel || item.quantityText }}
+                </span>
+              </div>
+              <div class="task-meta">
+                <span>目标库位：{{ item.warehouseLabel }}</span>
+                <span>入库日期：{{ item.entryDate }}</span>
+                <span>存放侧：{{ item.sideLabel }}</span>
+                <span v-if="item.executionCompleted">数量：{{ item.quantityText }}</span>
+                <span v-if="item.productionDate">生产日期：{{ item.productionDate }}</span>
+                <span>{{ item.quantityRuleLabel }}</span>
+                <span v-if="item.remark">备注：{{ item.remark }}</span>
+              </div>
+            </article>
+          </div>
+          <div
+            v-for="issue in finishInboundExecutionPreviewSummary.blockingIssues || []"
+            :key="issue"
+            class="task-preview-issue"
+          >
+            {{ issue }}
+          </div>
+          <div
+            v-for="warning in finishInboundExecutionPreviewSummary.warnings || []"
+            :key="warning"
+            class="task-preview-note"
+          >
+            {{ warning }}
+          </div>
+          <div class="task-preview-note">
+            {{ finishInboundExecutionPreviewSummary.executionCompleted
+              ? '该批托盘已完成入库，不能再次确认。'
+              : (canExecuteFinishInbound ? '确认前会再次核对实时业务状态。' : '当前账号没有受控 AI 入库执行权限，可继续使用人工提交。') }}
+          </div>
+          <div class="task-group-footer">
+            <span v-if="finishInboundExecutionPreviewSummary.executionCompleted">
+              完成于 {{ finishInboundExecutionPreviewSummary.completedAt ? formatDateTime(finishInboundExecutionPreviewSummary.completedAt) : '本次操作' }}
+            </span>
+            <span v-else>预览有效至 {{ finishInboundExecutionPreviewSummary.expiresAt ? formatDateTime(finishInboundExecutionPreviewSummary.expiresAt) : '短期有效' }}</span>
+            <el-button
+              v-if="canExecuteFinishInbound && finishInboundExecutionPreviewSummary.readyForUserConfirmation"
+              type="danger"
+              size="small"
+              @click.stop="openFinishInboundExecutionControl"
+            >
+              核对并确认入库
+            </el-button>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div v-else-if="isFixedQrInboundSelection" class="task-card-body fixed-qr-selection-body">
+      <div v-if="expanded && fixedQrInboundSummary" class="task-list">
+        <div class="task-selection-requirement">
+          <strong>本次新建：{{ fixedQrInboundSummary.requestedPalletCount }} 板 {{ fixedQrInboundSummary.productLabel }}</strong>
+          <span>目标库位：{{ fixedQrInboundSummary.warehouseName }}</span>
+          <span>二维码来源：{{ fixedQrInboundSummary.operationModeLabel }}</span>
+          <span v-if="fixedQrInboundSummary.creationCompleted" class="task-status-success">
+            所选二维码已创建为待入库任务，请在入库弹窗继续核对
+          </span>
+          <span v-else-if="fixedQrInboundSummary.canSelectRequestedCount">
+            请恰好选择 {{ fixedQrInboundSummary.requestedPalletCount }} 个空闲固定二维码
+          </span>
+          <span v-else class="task-selection-shortage">
+            当前仅有 {{ fixedQrInboundSummary.availablePalletCount }} 个可用固定二维码，数量不足
+          </span>
+        </div>
+        <section class="task-group">
+          <div class="task-group-records">
+            <article
+              v-for="record in fixedQrInboundCandidates"
+              :key="record.code"
+              class="task-row fixed-qr-row"
+            >
+              <div class="task-row-head">
+                <el-checkbox
+                  :model-value="isFixedQrSelected(record)"
+                  :disabled="isFixedQrSelectionDisabled(record)"
+                  @change="toggleFixedQrSelection(record, $event)"
+                />
+                <div class="task-row-copy">
+                  <strong>{{ record.code }}</strong>
+                  <span>{{ record.productLabel }}</span>
+                </div>
+                <span class="task-status task-status-success">{{ record.statusLabel }}</span>
+              </div>
+              <div v-if="record.updatedAt" class="task-meta">
+                <span>最近更新：{{ formatDateTime(record.updatedAt) }}</span>
+              </div>
+            </article>
+          </div>
+          <div class="task-preview-note">
+            所选二维码当前还没有待入库任务；下一步会先明确创建任务的影响，再进入任务入库确认。
+          </div>
+          <div class="task-group-footer">
+            <span>已选择 {{ selectedFixedQrCount }} / {{ fixedQrInboundSummary.requestedPalletCount }} 个二维码</span>
+            <el-button
+              v-if="!fixedQrInboundSummary.creationCompleted"
+              type="primary"
+              size="small"
+              :disabled="selectedFixedQrCount !== fixedQrInboundSummary.requestedPalletCount"
+              @click="openFixedQrTaskCreation"
+            >
+              预览并创建待入库任务
+            </el-button>
+          </div>
+        </section>
+      </div>
+    </div>
     <div v-else-if="isTaskTransitionPreview" class="task-card-body task-transition-preview-body">
       <div v-if="expanded && taskTransitionPreviewSummary" class="task-list">
         <section class="task-group">
@@ -542,6 +759,16 @@ const exportRegisteredReport = () => {
     </div>
     <div v-else-if="isTask" class="task-card-body">
       <div v-if="expanded" class="task-list">
+        <div v-if="taskSelectionRequirement" class="task-selection-requirement">
+          <strong>本次入库：{{ taskSelectionRequirement.requestedPalletCount }} 板 {{ taskSelectionRequirement.productLabel }}</strong>
+          <span>目标库位：{{ taskSelectionRequirement.warehouseName }}</span>
+          <span v-if="taskSelectionRequirement.canSelectRequestedCount">
+            请恰好选择 {{ taskSelectionRequirement.requestedPalletCount }} 个二维码
+          </span>
+          <span v-else class="task-selection-shortage">
+            当前仅有 {{ taskSelectionRequirement.availablePalletCount }} 个可处理二维码，数量不足
+          </span>
+        </div>
         <section
           v-for="group in groupedTasks"
           :key="group.key"
@@ -566,7 +793,7 @@ const exportRegisteredReport = () => {
               </span>
               <el-icon><ArrowUp v-if="isTaskGroupExpanded(group)" /><ArrowDown v-else /></el-icon>
             </button>
-            <div v-if="selectableGroupRecords(group).length" class="task-group-actions" @click.stop>
+            <div v-if="selectableGroupRecords(group).length && !taskSelectionRequirement" class="task-group-actions" @click.stop>
               <el-checkbox
                 :model-value="isTaskGroupSelected(group)"
                 :indeterminate="isTaskGroupIndeterminate(group)"
@@ -595,6 +822,7 @@ const exportRegisteredReport = () => {
                   class="task-row-checkbox"
                   :aria-label="`选择托盘 ${task.palletCode}`"
                   :model-value="isTaskSelected(task)"
+                  :disabled="isTaskSelectionDisabled(task)"
                   @click.stop
                   @change="toggleTaskSelection(task, $event)"
                 />
@@ -625,16 +853,23 @@ const exportRegisteredReport = () => {
             v-if="!isTaskDetail && group.batchAction && selectableGroupRecords(group).length"
             class="task-group-footer"
           >
-            <span>已选择 {{ selectedGroupRecords(group).length }} / {{ selectableGroupRecords(group).length }} 条</span>
+            <span v-if="taskSelectionRequirement">
+              已选择 {{ selectedGroupRecords(group).length }} / {{ taskSelectionRequirement.requestedPalletCount }} 个二维码
+            </span>
+            <span v-else>已选择 {{ selectedGroupRecords(group).length }} / {{ selectableGroupRecords(group).length }} 条</span>
             <el-button
               type="primary"
               size="small"
-              :disabled="!selectedGroupRecords(group).length"
+              :disabled="!isTaskBatchReady(group)"
               @click="openTaskBatch(group)"
             >
-              {{ selectedGroupRecords(group).length
-                ? `${['finish_in', 'finish_out', 'transfer'].includes(group.key) ? '预览所选' : '处理所选'} ${selectedGroupRecords(group).length} 条`
-                : `${['finish_in', 'finish_out', 'transfer'].includes(group.key) ? '选择任务后预览' : '选择任务后处理'}` }}
+              {{ taskSelectionRequirement
+                ? (isTaskBatchReady(group)
+                    ? `预览所选 ${taskSelectionRequirement.requestedPalletCount} 个二维码`
+                    : `请选满 ${taskSelectionRequirement.requestedPalletCount} 个二维码`)
+                : (selectedGroupRecords(group).length
+                    ? `${['finish_in', 'finish_out', 'transfer'].includes(group.key) ? '预览所选' : '处理所选'} ${selectedGroupRecords(group).length} 条`
+                    : `${['finish_in', 'finish_out', 'transfer'].includes(group.key) ? '选择任务后预览' : '选择任务后处理'}`) }}
             </el-button>
           </div>
         </section>
@@ -2017,6 +2252,31 @@ const exportRegisteredReport = () => {
   display: grid;
   gap: 0;
   min-width: 0;
+}
+
+.task-selection-requirement {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 8px;
+  padding: 11px 12px;
+  border: 1px solid #cfe0ff;
+  border-radius: 9px;
+  background: #f5f9ff;
+  color: #475467;
+  font-size: 12px;
+
+  strong {
+    color: #1d2939;
+    font-size: 13px;
+  }
+}
+
+.task-selection-shortage {
+  color: #b45309;
+}
+
+.task-selection-requirement + .task-group {
+  border-top: 0;
 }
 
 .task-group {

@@ -26,6 +26,9 @@ public class PalletTaskQueryDTO {
     @Schema(description = "产品名称（模糊）")
     private String productName;
 
+    @Schema(description = "产品ID（精确，仅由受控服务注入）")
+    private Integer productId;
+
     @Schema(description = "产品名称（精确）")
     private String productNameExact;
 

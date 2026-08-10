@@ -60,6 +60,7 @@ class AgentReadPermissionMatrixTest {
     @Test
     void taskProcessingPathsUseDedicatedTaskAuthorities() {
         assertPermission(PalletCodeController.class, "pageTasks", "hasAuthority('task:view')");
+        assertPermission(PalletCodeController.class, "activateFixedProductQrCodes", "hasAuthority('qrcode:activate')");
         for (String method : new String[]{
                 "createSemiOutTasks", "createFinishOutTasks", "createTransferTasks"}) {
             assertPermission(PalletCodeController.class, method, "hasAuthority('task:create')");

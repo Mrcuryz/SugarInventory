@@ -62,6 +62,9 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FinishInboundExecutionPreviewItem;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FinishInboundExecutionPreviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FinishInboundExecutionPreviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.StockDocumentsResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AutoInboundBatchesRequest;
@@ -584,14 +587,14 @@ public class WarehouseReadService {
 
     public PalletTasksResponse queryPalletTasks(PalletTasksRequest request) {
         PalletTasksRequest source = request == null
-                ? new PalletTasksRequest(null, null, null, null, null, null, null, null, null, null, 1, 20)
+                ? new PalletTasksRequest(null, null, null, null, null, null, null, null, null, null, null, 1, 20)
                 : request;
         int page = source.page() == null ? 1 : source.page();
         int size = source.size() == null ? 20 : source.size();
         if (page < 1 || size < 1 || size > 50) throw new IllegalArgumentException("invalid pagination");
         return apiClient.postData("/api/logistics/agent-read/pallet-tasks/query",
                 new PalletTasksRequest(source.code(), source.taskType(), source.bizScene(), source.status(),
-                        source.productName(), source.productType(), source.productStatus(), source.targetWarehouseName(),
+                        source.productId(), source.productName(), source.productType(), source.productStatus(), source.targetWarehouseName(),
                         source.productionDateStart(), source.productionDateEnd(), page, size), PalletTasksResponse.class);
     }
 
@@ -609,6 +612,47 @@ public class WarehouseReadService {
         }
         return apiClient.postData("/api/logistics/agent-read/pallet-tasks/transition/preview",
                 request, TaskTransitionPreviewResponse.class);
+    }
+
+    public FinishInboundExecutionPreviewResponse previewFinishInboundExecution(
+            FinishInboundExecutionPreviewRequest request) {
+        if (request == null || request.previewVersion() == null || request.previewVersion() != 1
+                || request.items() == null || request.items().isEmpty() || request.items().size() > 20) {
+            throw new IllegalArgumentException("previewVersion=1 and 1-20 items are required");
+        }
+        Set<String> codes = new java.util.LinkedHashSet<>();
+        for (FinishInboundExecutionPreviewItem item : request.items()) {
+            if (item == null || item.code() == null || item.code().isBlank()
+                    || item.code().length() > 100 || item.warehouseName() == null
+                    || item.warehouseName().isBlank() || item.warehouseName().length() > 100) {
+                throw new IllegalArgumentException("code and warehouseName are required");
+            }
+            String normalizedCode = item.code().trim().toUpperCase(java.util.Locale.ROOT);
+            if (!normalizedCode.matches("[A-Z0-9-]+") || !codes.add(normalizedCode)) {
+                throw new IllegalArgumentException("pallet codes must be unique and controlled");
+            }
+            if (item.side() != null && !item.side().isBlank()
+                    && !Set.of("左", "右").contains(item.side().trim())) {
+                throw new IllegalArgumentException("unsupported side");
+            }
+            if (item.unit() != null && !item.unit().isBlank()
+                    && !Set.of("0", "1").contains(item.unit().trim())) {
+                throw new IllegalArgumentException("unsupported unit");
+            }
+            if (item.quantity() != null && item.quantity() < 1) {
+                throw new IllegalArgumentException("quantity must be positive");
+            }
+            if (item.entryDate() != null && !item.entryDate().isBlank()) {
+                java.time.LocalDate.parse(item.entryDate());
+            }
+            if (item.remark() != null && item.remark().length() > 255) {
+                throw new IllegalArgumentException("remark is too long");
+            }
+        }
+        return apiClient.postData(
+                "/api/logistics/agent-read/pallet-tasks/finish-inbound/execution/preview",
+                request,
+                FinishInboundExecutionPreviewResponse.class);
     }
 
     public StockDocumentsResponse queryStockDocuments(StockDocumentsRequest request) {

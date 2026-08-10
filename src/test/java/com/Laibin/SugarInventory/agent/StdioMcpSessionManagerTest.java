@@ -226,6 +226,7 @@ class StdioMcpSessionManagerTest {
                 {"name":"query_material_candidates"},
                 {"name":"query_pallet_tasks"},
                 {"name":"preview_task_transition"},
+                {"name":"preview_finish_inbound_execution"},
                 {"name":"query_stock_documents"},
                 {"name":"query_auto_inbound_batches"},
                 {"name":"get_auto_inbound_batch_detail"},

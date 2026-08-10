@@ -1,5 +1,5 @@
 version: 1
-as_of: 2026-08-06
+as_of: 2026-08-10
 candidate: FINISH_INBOUND
 overall_status: NO_GO
 design_status: READY
@@ -19,9 +19,9 @@ planned_tools:
   exact_preview:
     name: preview_finish_inbound_execution
     risk: L2
-    registered: false
-    implemented: false
-    enabled: false
+    registered: true
+    implemented: true
+    enabled: true
   execute:
     name: execute_finish_inbound_task
     risk: L3
@@ -29,12 +29,32 @@ planned_tools:
     implemented: false
     enabled: false
 
+controlled_domain_candidate:
+  channel: CONTROLLED_WEB_UI
+  implemented: true
+  local_isolated_uat: PASS
+  feature_flag: agent.finish-inbound.s3-execute-enabled
+  default_enabled: false
+  dedicated_permission: agent:finish-inbound:execute
+  default_role_assignments: 0
+  mcp_execute_registered: false
+
 current_handoff_preview:
   name: preview_task_transition
   role: TASK_ELIGIBILITY_AND_UI_HANDOFF_ONLY
   execution_authority: false
   bound_fields: [previewVersion, transition, palletCodes]
   missing_execution_fields: [warehouseName, entryDate, side, quantity, unit, remark]
+
+guided_user_journey:
+  goal_contract: FINISH_INBOUND_GUIDED_PREPARATION
+  example_request: 3号库位入库2板黄冰糖
+  status: AUTOMATED_CONTRACT_PASS_BROWSER_UAT_PENDING
+  required_resolution: [exact_product, exact_target_warehouse, exact_pallet_count, exact_pallet_codes]
+  runtime_bound_filters: [productId, taskType, taskStatus, productStatus]
+  model_visible_internal_ids: false
+  execution_authority: false
+  evidence: docs/agent/finish-inbound-guided-scene-uat-2026-08-10.md
 
 exact_preview_input:
   allowed: [code, warehouseName, entryDate, side, quantity, unit, remark]
@@ -50,15 +70,29 @@ confirmation:
   raw_business_dto_at_execute: FORBIDDEN
 
 gates:
+  guided_user_journey:
+    status: PARTIAL
+    completed: AUTOMATED_GOAL_AND_EXACT_SELECTION_CONTRACT
+    pending: REAL_BROWSER_AMBIGUITY_AND_DIALOG_PREFILL_UAT
+    evidence: docs/agent/finish-inbound-guided-scene-uat-2026-08-10.md
   preview_execute_separation:
     status: GO
     evidence: src/main/java/com/Laibin/SugarInventory/agent/internal/service/impl/McpInternalAgentToolGatewayService.java
   exact_execution_preview:
-    status: NO_GO
-    evidence: src/main/java/com/Laibin/SugarInventory/domain/dto/TaskTransitionPreviewDTO.java
+    status: GO
+    evidence:
+      - src/main/java/com/Laibin/SugarInventory/domain/dto/FinishInboundExecutionPreviewDTO.java
+      - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionPreviewService.java
+      - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionPreviewArchiveService.java
+      - migrations/2026-08-09-add-agent-finish-inbound-execution-preview.sql
+      - docs/agent/finish-inbound-s1-exact-preview-uat-2026-08-09.md
   confirmation_binding:
-    status: PARTIAL
-    evidence: migrations/2026-08-05-add-agent-task-transition-preview.sql
+    status: GO
+    scope: S2_CONTROL_PLANE_ONLY
+    evidence:
+      - migrations/2026-08-10-add-agent-finish-inbound-execution-control-plane.sql
+      - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionConfirmationService.java
+      - docs/agent/finish-inbound-s2-control-plane-uat-2026-08-10.md
   confirm_cancel_lock_order:
     status: GO
     evidence:
@@ -74,20 +108,37 @@ gates:
       - src/main/java/com/Laibin/SugarInventory/service/impl/PalletCodeServiceImpl.java
       - src/test/java/com/Laibin/SugarInventory/service/impl/PalletCodeServiceImplTest.java
   idempotency_lifecycle:
-    status: NO_GO
+    status: GO
+    scope: S2_ZERO_WRITE_AND_S3_REAL_DOMAIN_WRITE
+    evidence:
+      - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionAttemptService.java
+      - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionCompletionService.java
+      - src/test/java/com/Laibin/SugarInventory/agent/FinishInboundExecutionNoopOrchestratorTest.java
+      - src/test/java/com/Laibin/SugarInventory/agent/FinishInboundExecutionDomainOrchestratorTest.java
+      - docs/agent/finish-inbound-s3-domain-execution-uat-2026-08-10.md
   atomic_execution_audit:
-    status: NO_GO
+    status: PARTIAL
+    completed: S2_CONTROL_PLANE_AND_ZERO_WRITE_TRANSACTION
+    pending: S3_DOMAIN_WRITE_AND_AUDIT_SAME_TRANSACTION_UAT
+    evidence:
+      - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionAuditService.java
+      - src/main/java/com/Laibin/SugarInventory/mapper/AgentFinishInboundExecutionAuditMapper.java
   dedicated_execute_permission:
-    status: NO_GO
+    status: GO
     planned_permission: agent:finish-inbound:execute
+    default_role_assignments: 0
+    evidence: migrations/2026-08-10-add-agent-finish-inbound-execute-permission.sql
   structured_write_errors:
-    status: NO_GO
+    status: GO
+    scope: CONTROLLED_UI_RESULT_AND_BUSINESS_ERRORS
   concurrency_and_recovery_tests:
     status: GO
-    completed: [service_lock_contract, stable_lock_order, inbound_and_cancel_duplicate_alias_rejection, inbound_and_cancel_batch_limit, changed_alias_rejection, transactional_boundary_contract, isolated_database_concurrent_winner, isolated_database_full_batch_rollback]
+    completed: [service_lock_contract, stable_lock_order, inbound_and_cancel_duplicate_alias_rejection, inbound_and_cancel_batch_limit, changed_alias_rejection, transactional_boundary_contract, isolated_database_concurrent_winner, isolated_database_full_batch_rollback, s2_confirmation_binding, s2_token_rejection, s2_committed_result_replay, s2_audit_fail_closed, s2_business_failure_keeps_token, s2_confirmation_before_request_lock_order]
     pending: []
   isolated_role_uat:
-    status: NO_GO
+    status: GO
+    role: TEMPORARY_ADMIN_WITH_EXPLICIT_DEDICATED_PERMISSION
+    evidence: docs/agent/finish-inbound-s3-domain-execution-uat-2026-08-10.md
 
 required_tests_before_execute_registration:
   service_lock_contract_and_stable_order: PASS
@@ -97,20 +148,39 @@ required_tests_before_execute_registration:
   whole_batch_transactional_boundary_is_present: PASS
   concurrent_confirm_vs_cancel_has_one_deterministic_winner: PASS_LOCAL_MYSQL_5_ROUNDS
   batch_failure_rolls_back_all_business_changes: PASS_LOCAL_MYSQL
-  changed_task_or_pallet_state_invalidates_confirmation: PENDING_S1
-  expired_revoked_or_cross_user_token_is_rejected: PENDING_S2
-  same_idempotency_key_returns_same_committed_result: PENDING_S2
-  different_payload_with_same_idempotency_key_is_rejected: PENDING_S2
-  retry_after_disconnect_does_not_repeat_business_write: PENDING_S2
-  audit_unavailable_fails_closed_before_business_write: PENDING_S2
-  business_failure_does_not_consume_token: PENDING_S2
-  internal_enums_and_ids_are_not_exposed_to_user: PENDING_S3
+  changed_task_or_pallet_state_invalidates_confirmation: PASS_S2_UNIT
+  expired_revoked_or_cross_user_token_is_rejected: PASS_S2_UNIT
+  same_idempotency_key_returns_same_committed_result: PASS_S2_LOCAL_MYSQL_ZERO_WRITE
+  different_payload_with_same_idempotency_key_is_rejected: PASS_S2_CLOSED_CREDENTIAL_ONLY_PROTOCOL
+  retry_after_disconnect_does_not_repeat_business_write: PASS_S3_LOCAL_MYSQL_REAL_WRITE
+  audit_unavailable_fails_closed_before_business_write: PASS_S2_UNIT_PENDING_S4_REAL_DOMAIN_FAILURE_INJECTION
+  business_failure_does_not_consume_token: PASS_S2_UNIT_PENDING_S4_REAL_DATABASE_FAILURE_PATH
+  internal_enums_and_ids_are_not_exposed_to_user: PASS_S3_CONTROLLED_UI
 
 completed_slices:
   S0_SERVICE_HARDENING:
     status: LOCAL_MYSQL_UAT_GO
     isolated_database_uat: PASS
     evidence: docs/agent/finish-inbound-s0-isolated-db-uat-2026-08-06.md
+  S1_EXACT_L2_EXECUTION_PREVIEW:
+    status: LOCAL_MYSQL_AGENT_CHAIN_UAT_GO
+    isolated_database_uat: PASS
+    business_writes: 0
+    execute_tool_calls: 0
+    evidence: docs/agent/finish-inbound-s1-exact-preview-uat-2026-08-09.md
+  S2_CONFIRMATION_IDEMPOTENCY_AND_AUDIT_INFRASTRUCTURE:
+    status: LOCAL_MYSQL_ZERO_WRITE_UAT_GO
+    isolated_database_uat: PASS
+    business_writes: 0
+    execute_tool_calls: 0
+    evidence: docs/agent/finish-inbound-s2-control-plane-uat-2026-08-10.md
+  S3_SINGLE_FINISH_INBOUND_DOMAIN_EXECUTION:
+    status: LOCAL_MYSQL_CONTROLLED_UI_UAT_GO_DEFAULT_OFF
+    isolated_database_uat: PASS
+    business_writes: 1
+    committed_replay_without_second_write: PASS
+    execute_tool_calls: 0
+    evidence: docs/agent/finish-inbound-s3-domain-execution-uat-2026-08-10.md
 
 implementation_order:
   - S0_BUSINESS_CONCURRENCY_AND_BATCH_HARDENING

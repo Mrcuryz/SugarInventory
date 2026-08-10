@@ -631,9 +631,9 @@ M2 工具只做 dry-run，不修改库存主数据。
 
 ### 7.2 `preview_finish_inbound_execution`
 
-状态：协议设计完成，业务加固和工程实现均 `NO-GO`，未登记
+状态：S1 已实现、登记并完成验收；不具备执行权
 风险：L2
-用途：未来在用户完成既有成品入库表单后，对 `FINISH_IN + PENDING` 任务生成精确、不可变、可确认的执行预览。
+用途：在用户完成既有成品入库表单后，对 `FINISH_IN + PENDING` 任务生成精确、不可变的短期执行预览。
 
 输入只允许现有表单中的用户可理解字段：托盘码、仓库名称、入库日期、左/右侧、数量、单位和备注。首版不接受 `productId`、`warehouseId`、`taskId`、`inventoryId`、`rowNumber` 或 `layer`；有关联生产产出码时，最终数量和单位以后端记录为准。
 
@@ -646,7 +646,7 @@ M2 工具只做 dry-run，不修改库存主数据。
 * 不得复用现有 `preview_task_transition` 冒充精确执行预览；
 * 不得扩大到半成品入库、出库或调拨。
 
-完整门禁见 `docs/agent/finish-inbound-l3-gate.yaml`。
+当前实现使用独立 `fip1_` 引用和独立持久化表，不复用任务资格预览；服务端保存规范化输入和任务、托盘、产品、库位、生产产出、历史用料关系/余额快照，普通 Agent 结果会删除引用、摘要和内部状态。L2 工具本身仍不签发确认或执行权。2026-08-10 完成的 S2 确认、撤销、token/幂等哈希与审计，以及 S3 默认关闭的受控 Web 真实执行候选，都属于用户控制面，不是 MCP Tool。S3 复用既有成品入库领域事务，独立执行权限默认不分配，并已在本地隔离数据库通过一次真实写入和已提交结果重放；`execute_finish_inbound_task` 仍未登记。完整门禁见 `docs/agent/finish-inbound-l3-gate.yaml`。
 
 ---
 
@@ -738,7 +738,7 @@ POST /api/agent/transfer/preview
 风险：L3
 用途：未来仅执行已完成精确预览且由用户显式确认的成品入库任务。首个候选不包含半成品入库、出库或调拨。
 
-现有 `preview_task_transition` 只有任务资格预览和既有弹窗交接作用，缺少仓库、日期、侧、数量、单位和备注等最终表单值，不能作为本工具的执行计划。未来必须先新增独立 L2 `preview_finish_inbound_execution`，并关闭 `docs/agent/finish-inbound-l3-gate.yaml` 的全部门禁。
+现有 `preview_task_transition` 只有任务资格预览和既有弹窗交接作用，缺少仓库、日期、侧、数量、单位和备注等最终表单值，不能作为本工具的执行计划。S1 已新增独立 L2 `preview_finish_inbound_execution` 并完成本地 Agent 全链路验收；它仍不确认、不签发 token、不执行写入。S2 已关闭确认、幂等和审计控制面切片；S3 又完成独立权限、默认关闭的受控 UI、既有领域事务复用、隔离数据库真实写入和已提交结果重放，但没有登记 MCP execute。数据库审计故障注入、真实角色授权、浏览器发布验收与回滚演练仍属于 S4。只有剩余门禁全部关闭后，才可单独评估是否登记 execute 工具。
 
 2026-08-06 已完成既有人工成品入库的 S0 加固与本地 MySQL 复验：20 条上限、规范化/别名去重、按托盘主键固定锁顺序、确认与取消统一行锁、取消任务当前读；一轮第二项失败整批回滚和五轮确认/取消竞争均通过。精确预览、确认、token、幂等、专用权限和原子审计仍未实现，因此本工具状态不变。
 
@@ -990,8 +990,9 @@ delete_any_record
 | `query_production_label_completion` | 已实现 | Agent v1 production-04 | L1 | 是 | 生产订单标签预留/使用/回收与二维码绑定/入库完成度 |
 | `query_in_process_materials` | 已实现 | Agent v1 production-05 | L1 | 是 | 已确认领用、已扣减库存且仍关联未完成生产订单的半成品记录分页查询 |
 | `query_material_candidates` | 已实现 | Agent v1 production-05 | L1 | 是 | 受控生产订单的当前半成品库存候选查询 |
-| `query_pallet_tasks` | 已实现 | Agent v1 logistics-01 | L1 | 是 | 当前轮次托盘任务安全分页查询；`task:view` |
+| `query_pallet_tasks` | 已实现 | Agent v1 logistics-01 / Agent v2 guided inbound | L1 | 是 | 当前轮次托盘任务安全分页查询；`task:view`。受控成品入库引导中，Runtime 可按已消歧产品注入隐藏的 `productId` 精确过滤；该 ID 不进入模型工具参数或用户卡片 |
 | `preview_task_transition` | 已实现 | Agent v2 L2 preview-01/02/03 | L2 | 是 | 按受控类型对 1～20 个已选成品入库、成品出库或调拨待处理任务重新读取并生成短期预览；`task:view + task:confirm`；不执行写入 |
+| `preview_finish_inbound_execution` | 已实现（S1） | Agent v2 L2 finish-inbound-S1 | L2 | 是 | 对 1～20 条已填写成品入库表单生成独立精确快照；只接受 7 个用户字段；`task:view + task:confirm`；不确认、不执行、不签发 token |
 | `query_stock_documents` | 已实现 | Agent v1 logistics-02 | L1 | 是 | 明确来源的入库、出库或半成品单据查询；`record:query` |
 | `query_auto_inbound_batches` | 已实现 | Agent v1 logistics-03 | L1 | 是 | 当前用户 Redis 中未过期的近期智能报数批次；不确认入库 |
 | `get_auto_inbound_batch_detail` | 已实现 | Agent v1 logistics-03 | L1 | 是 | 通过用户绑定受控引用读取安全详情；不返回原始文本和内部 ID |
@@ -1017,7 +1018,6 @@ delete_any_record
 | `analyze_assay_records`       | 计划            |     M2/M5 | L2 | 否     | 化验统计分析        |
 | `export_assay_report`         | 计划            |        M5 | L2 | 否     | 化验报表导出        |
 | `preview_auto_inbound_report` | 计划            |        M2 | L2 | 否     | 自然语言报数预览      |
-| `preview_finish_inbound_execution` | 设计完成、工程门禁未关闭 | M3 | L2 | 否 | 首个候选的精确成品入库执行预览；不同于现有任务资格预览 |
 | `preview_outbound_plan`       | 阻塞于后端 dry-run |        M2 | L2 | 否     | 出库预览          |
 | `preview_transfer_plan`       | 阻塞于后端 dry-run |        M2 | L2 | 否     | 调拨预览          |
 | `execute_finish_inbound_task` | 设计完成、工程与启用均 NO-GO | M4 | L3 | 否 | 首个候选仅限成品入库确认 |
@@ -1027,6 +1027,8 @@ delete_any_record
 | `execute_sql`                 | 禁止            |        永不 | L4 | 否     | 不允许           |
 | `call_any_api`                | 禁止            |        永不 | L4 | 否     | 不允许           |
 | `update_any_table`            | 禁止            |        永不 | L4 | 否     | 不允许           |
+
+2026-08-10 起，`query_fixed_product_qr_pool` 也可作为成品入库固定二维码路径的 L1 支撑工具，但不改变工具风险等级或写入边界。Runtime 必须先确认具体产品、目标库位和二维码来源，再强制限定具体产品规范名与“仅空闲”；安全适配层继续过滤非精确产品、未启用固定模式和非空闲记录，并把内部状态转为用户语言。该查询不会创建任务或写库存。用户选择固定二维码后，由受控 Web 弹窗复用现有 `/api/qrcodes/fixed-product/activate/pdf` 入口创建待入库任务；这仍不是 MCP Tool，也不能跳过后续任务资格预览、精确入库预览和用户确认。
 
 ---
 
@@ -1069,7 +1071,7 @@ delete_any_record
 计划：
 
 * `preview_auto_inbound_report`
-* 首个候选 `preview_finish_inbound_execution`（当前 `NO-GO`）
+* 首个候选 `preview_finish_inbound_execution`（S1 已实现；仍无执行权）
 * `preview_outbound_plan`
 * `preview_transfer_plan`
 
@@ -1155,7 +1157,7 @@ M1.2 完成时只有以下 6 个已实现业务工具：
 * `get_pallet_status`
 * `get_assay_status`
 
-M1.3/M1.4、Agent v1 全模块查询、登记报表及首个正式 L2 预览完成后，当前白名单为 53 个无业务写入工具：52 个 L1 只读/登记报表工具和 1 个 L2 预览工具。在原 6 个基础工具之外，新增：
+M1.3/M1.4、Agent v1 全模块查询、登记报表及两个正式 L2 预览完成后，当前白名单为 54 个无业务写入工具：52 个 L1 只读/登记报表工具和 2 个 L2 预览工具。在原 6 个基础工具之外，新增：
 
 * `get_inventory_distribution`
 * `query_assay_records`
@@ -1283,7 +1285,7 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 * 单一板件规格输出 `normalizedPallets` / `normalizedLoosePieces`；跨规格汇总不虚构统一板数，改用 `totalEquivalentPieces`、总重量和“跨规格”展示文本；
 * 普通回答、SSE 和卡片只接收 safe adapter 白名单字段，不显示内部 ID、工具名或原始 JSON。
 
-当前 internal agent gateway 白名单已有 53 个无业务写入工具，其中 52 个为 L1 只读/登记报表工具，1 个为 L2 `preview_task_transition`。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC、审计、当前库存质量筛选、登记报表和首个成品入库任务处理预览；旧备料池查询已下线，仍未增加 login、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
+当前 internal agent gateway 白名单已有 54 个无业务写入工具，其中 52 个为 L1 只读/登记报表工具，2 个为 L2 `preview_task_transition` 与 `preview_finish_inbound_execution`。除原有能力外，已完成库存、库位、物流、二维码/托盘、生产、质量、主数据、员工/RBAC、审计、当前库存质量筛选、登记报表、任务资格预览和成品入库精确预览；旧备料池查询已下线，仍未增加 login、`execute_*`、任意 SQL、任意 HTTP 代理或业务写能力。
 
 仍不支持：库区范围、任意状态字段、库龄分桶、明细下钻和报表导出。这些能力需要独立工具或后续规格评审，不扩展为任意 SQL/HTTP 能力。
 
@@ -1299,7 +1301,7 @@ MCP 工具是智能仓储 AI 助手的内部能力层，不是普通用户界面
 
 ## 18. M1.4 后续模块工具设计索引
 
-状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、当前库存质量筛选、主数据、员工/RBAC、审计、库存补充、登记报表和首个 L2 任务预览工具均已实现并加入当前 53 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
+状态：M1.4b 五个化验查询工具、M1.4c 五个二维码 / 托盘生命周期工具，以及后续 Agent v1 库位、物流、生产、质量目录、当前库存质量筛选、主数据、员工/RBAC、审计、库存补充、登记报表和两个 L2 预览工具均已实现并加入当前 54 工具白名单。下列索引保留历史模块设计来源；是否可用以本文件“工具状态总表”和 `docs/agent/tool-capability-registry.yaml` 为准。
 
 详细设计见 `docs/mcp-analysis/m14-module-tool-design.md`。该文档基于已完成的审计、HITL、LLM Wiki Lite、Answer Review 和 `get_inventory_distribution` 链路，拆分 M1.4b-f 后续只读分析工具。
 
@@ -1512,13 +1514,13 @@ Python Agent Runtime 已加入第一版主 Agent / 专家 Agent handoff 骨架�
 * `administration_expert`：员工、角色与权限摘要；
 * `audit_expert`：业务日志、Agent 工具审计和回答 Review 摘要。
 * `analytics_expert`：只运行已经登记且版本固定的报表，不直接访问领域原始工具。
-* `knowledge_expert`：只调用 Python 进程内 L0 `search_approved_knowledge`，用于已审核现行资料；它不是仓储 MCP Tool，也不进入 Java Gateway 的 53 工具白名单。
+* `knowledge_expert`：只调用 Python 进程内 L0 `search_approved_knowledge`，用于已审核现行资料；它不是仓储 MCP Tool，也不进入 Java Gateway 的 54 工具白名单。
 
 每个专家只接收自己的 context pack 和工具 schema。规划完成后及调用 Java Internal Agent Gateway 前都会校验专家工具白名单；Python 专家白名单不替代 Java 最终权限和只读白名单。
 
 当前专家运行在同一 Python 进程内，默认共享现有模型客户端；已预留按专家注入不同 `ModelClient` 和参数策略的扩展点。详细设计见 `docs/agent/modular-agent-architecture.md`。
 
-生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、53 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。10 个业务专家的 Gateway 白名单和主 Agent 空工具集必须由确定性测试锁定；Python Runtime 另有 1 个纯进程内知识专家，capability snapshot 必须过滤该 profile，避免把本地能力伪装成 Java/MCP 能力。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
+生产启用时，Java Gateway 必须校验 Python Runtime 的协议版本、54 个工具的 registry hash、唯一受控配方的 registry hash；首次绑定 warehouse-mcp 时必须再次核对完整工具清单。任一不一致均 fail-closed，不回退旧 Agent。10 个业务专家的 Gateway 白名单和主 Agent 空工具集必须由确定性测试锁定；Python Runtime 另有 1 个纯进程内知识专家，capability snapshot 必须过滤该 profile，避免把本地能力伪装成 Java/MCP 能力。配方定义见 `docs/agent/orchestration-recipe-registry.yaml`。
 
 RAG-03C 的 Java 接入不改变上述 registry：`knowledge_expert` 的回答只通过既有 Agent chat/stream
 协议返回，知识卡片由 Java 显式白名单重建；内部 `reviewTrace.knowledgeAudit` 只用于生成

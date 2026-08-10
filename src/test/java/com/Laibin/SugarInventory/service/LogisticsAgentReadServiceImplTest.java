@@ -27,10 +27,14 @@ class LogisticsAgentReadServiceImplTest {
                 mock(AutoInboundParseService.class), new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET),
                 new com.Laibin.SugarInventory.agent.security.TaskTransitionPreviewRefCodec(REF_SECRET));
         PalletTaskAgentQueryDTO query = new PalletTaskAgentQueryDTO();
-        query.setTaskType("OUT"); query.setStatus("PENDING");
+        query.setTaskType("OUT"); query.setStatus("PENDING"); query.setProductId(33);
 
         var result = service.queryPalletTasks(query);
 
+        var queryCaptor = org.mockito.ArgumentCaptor.forClass(
+                com.Laibin.SugarInventory.domain.dto.PalletTaskQueryDTO.class);
+        org.mockito.Mockito.verify(palletCodeService).pagePalletTasks(queryCaptor.capture());
+        assertThat(queryCaptor.getValue().getProductId()).isEqualTo(33);
         assertThat(result.getRecords()).singleElement().satisfies(item -> {
             assertThat(item.getCode()).isEqualTo("P001");
             assertThat(item.getTaskStatus()).isEqualTo("PENDING");

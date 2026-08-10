@@ -1,0 +1,28 @@
+Narrative arc:
+1. Establish the promise: enterprise-grade delivery, not a feature demo.
+2. Show the real product and the breadth of business coverage.
+3. Prove frontend, backend, data, deployment, and security foundations.
+4. Show Agent/MCP capability and the safety architecture behind it.
+5. Close with engineering maturity, governed evolution, and an actionable engagement path.
+
+Visual route:
+- Codex Grid light mode, adapted from exact layouts 01, 07/08, 14/15, 17, 19, 20, and 26.
+- White canvas, dark ink, light gray structural regions, single blue accent.
+- Real project screenshots are dominant evidence, not decoration.
+- One system architecture diagram and one Agent safety flow; other slides use flat text/image compositions.
+
+Slide sequence:
+01 Cover
+02 Executive takeaway
+03 Product surfaces
+04 Business coverage
+05 Frontend delivery
+06 Backend and API foundation
+07 Data foundation
+08 Deployment architecture
+09 Security and governance
+10 Agent as business interface
+11 Agent/MCP safety architecture
+12 Quality and maintenance
+13 Governed maturity roadmap
+14 Closing / next step

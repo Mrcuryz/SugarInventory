@@ -89,3 +89,31 @@ test('preview cannot redirect to a mismatched or unknown business dialog', () =>
     fields: [{ ...readyCard.fields[0], batchAction: 'deleteTask', taskGroupLabel: '成品出库' }]
   }), null)
 })
+
+test('guided finish-inbound preview carries only validated form defaults', () => {
+  const guidedCard = {
+    ...readyCard,
+    fields: [{
+      ...readyCard.fields[0],
+      palletCodes: ['BT001A', 'BT001B'],
+      requestedPalletCount: 2,
+      defaultWarehouseName: '3号库位',
+      defaultSide: '左',
+      guidedProductLabel: '黄冰糖（袋）25kg/件 40件/板'
+    }]
+  }
+  assert.deepEqual(taskTransitionPreviewDialogAction(guidedCard), {
+    actionKind: 'open_task_batch',
+    batchAction: 'confirmIn',
+    taskGroupLabel: '成品入库',
+    palletCodes: ['BT001A', 'BT001B'],
+    defaultWarehouseName: '3号库位',
+    defaultSide: '左',
+    requestedPalletCount: 2,
+    guidedProductLabel: '黄冰糖（袋）25kg/件 40件/板'
+  })
+  assert.equal(taskTransitionPreviewDialogAction({
+    ...guidedCard,
+    fields: [{ ...guidedCard.fields[0], requestedPalletCount: 3 }]
+  }), null)
+})

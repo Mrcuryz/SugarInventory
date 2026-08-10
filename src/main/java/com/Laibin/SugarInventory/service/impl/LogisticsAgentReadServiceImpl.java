@@ -90,6 +90,10 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
         internal.setTaskType(enumValue(source.getTaskType(), TASK_TYPES, "taskType"));
         internal.setBizScene(enumValue(source.getBizScene(), BIZ_SCENES, "bizScene"));
         internal.setStatus(enumValue(source.getStatus(), STATUSES, "status"));
+        if (source.getProductId() != null && source.getProductId() <= 0) {
+            throw new BusinessException(400, "productId 必须为正整数");
+        }
+        internal.setProductId(source.getProductId());
         internal.setProductName(text(source.getProductName(), 100, "productName"));
         internal.setProductType(text(source.getProductType(), 50, "productType"));
         internal.setProductStatus(enumValue(source.getProductStatus(), PRODUCT_STATUSES, "productStatus"));

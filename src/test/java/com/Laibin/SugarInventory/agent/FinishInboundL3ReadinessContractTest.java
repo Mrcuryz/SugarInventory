@@ -3,6 +3,8 @@ package com.Laibin.SugarInventory.agent;
 import com.Laibin.SugarInventory.agent.internal.service.impl.McpInternalAgentToolGatewayService;
 import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.ConfirmPalletInItemDTO;
+import com.Laibin.SugarInventory.domain.dto.FinishInboundExecutionPreviewDTO;
+import com.Laibin.SugarInventory.domain.dto.FinishInboundExecutionPreviewItemDTO;
 import com.Laibin.SugarInventory.domain.dto.TaskTransitionPreviewDTO;
 import jakarta.validation.constraints.Size;
 import org.junit.jupiter.api.Test;
@@ -34,14 +36,25 @@ class FinishInboundL3ReadinessContractTest {
     }
 
     @Test
-    void distinguishesTaskEligibilityPreviewFromExactInboundExecutionInput() {
+    void distinguishesTaskEligibilityPreviewFromExactInboundExecutionPreviewAndHumanWriteInput() {
         assertThat(fieldNames(TaskTransitionPreviewDTO.class))
                 .containsExactlyInAnyOrder("previewVersion", "transition", "palletCodes")
                 .doesNotContain("warehouseName", "entryDate", "side", "quantity", "unit", "remark");
 
+        assertThat(fieldNames(FinishInboundExecutionPreviewDTO.class))
+                .containsExactlyInAnyOrder("previewVersion", "items");
+        assertThat(fieldNames(FinishInboundExecutionPreviewItemDTO.class))
+                .containsExactlyInAnyOrder(
+                        "code", "warehouseName", "entryDate", "side", "quantity", "unit", "remark")
+                .doesNotContain("rowNumber", "layer", "productId", "warehouseId", "taskId", "inventoryId");
+
         assertThat(fieldNames(ConfirmPalletInItemDTO.class)).contains(
                 "code", "warehouseName", "entryDate", "side",
                 "rowNumber", "layer", "quantity", "unit", "remark");
+
+        assertThat(McpInternalAgentToolGatewayService.allowedTools())
+                .contains("preview_finish_inbound_execution")
+                .doesNotContain("execute_finish_inbound_task");
     }
 
     @Test
@@ -64,11 +77,14 @@ class FinishInboundL3ReadinessContractTest {
 
     @Test
     void previewPersistenceDoesNotPretendToBeExecutionInfrastructure() throws Exception {
-        String migration = Files.readString(Path.of(
+        String eligibilityMigration = Files.readString(Path.of(
                 "migrations", "2026-08-05-add-agent-task-transition-preview.sql"), StandardCharsets.UTF_8);
+        String exactPreviewMigration = Files.readString(Path.of(
+                "migrations", "2026-08-09-add-agent-finish-inbound-execution-preview.sql"), StandardCharsets.UTF_8);
 
-        assertThat(migration).contains("CREATE TABLE IF NOT EXISTS agent_task_transition_preview");
-        assertThat(migration).doesNotContain(
+        assertThat(eligibilityMigration).contains("CREATE TABLE IF NOT EXISTS agent_task_transition_preview");
+        assertThat(exactPreviewMigration).contains("CREATE TABLE IF NOT EXISTS agent_finish_inbound_execution_preview");
+        assertThat(eligibilityMigration + exactPreviewMigration).doesNotContain(
                 "execution_token", "idempotency_key", "confirmation_ref", "confirmed_at");
     }
 

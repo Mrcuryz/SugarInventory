@@ -19,11 +19,13 @@ export const taskTransitionPreviewDialogAction = card => {
   const palletCodes = [...new Set((summary?.palletCodes || []).map(
     code => String(code || '').trim().toUpperCase()
   ).filter(Boolean))]
+  const requestedPalletCount = Number(summary?.requestedPalletCount || 0)
   if (
     !summary?.canOpenBusinessDialog
     || !expectedGroupLabel
     || summary?.taskGroupLabel !== expectedGroupLabel
     || !palletCodes.length
+    || (requestedPalletCount > 0 && requestedPalletCount !== palletCodes.length)
   ) {
     return null
   }
@@ -31,6 +33,16 @@ export const taskTransitionPreviewDialogAction = card => {
     actionKind: 'open_task_batch',
     batchAction: summary.batchAction,
     taskGroupLabel: expectedGroupLabel,
-    palletCodes
+    palletCodes,
+    ...(String(summary?.defaultWarehouseName || '').trim()
+      ? { defaultWarehouseName: String(summary.defaultWarehouseName).trim() }
+      : {}),
+    ...(['左', '右'].includes(summary?.defaultSide)
+      ? { defaultSide: summary.defaultSide }
+      : {}),
+    ...(requestedPalletCount > 0 ? { requestedPalletCount } : {}),
+    ...(String(summary?.guidedProductLabel || '').trim()
+      ? { guidedProductLabel: String(summary.guidedProductLabel).trim() }
+      : {})
   }
 }

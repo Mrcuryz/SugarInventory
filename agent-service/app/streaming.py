@@ -258,9 +258,9 @@ def events_for_response(
                 "message_end",
                 {
                     "finishReason": "interrupt_required",
+                    **terminal_payload,
                     "interruptId": interrupt_card.interruptId,
                     "interruptKind": interrupt_card.interruptKind or "CLARIFICATION",
-                    **terminal_payload,
                 },
             )
         )
@@ -340,10 +340,12 @@ def _finish_payload(finish_reason: str, terminal_context: EventPayload | None) -
 
 
 def _terminal_context(response: ChatResponse, terminal_context: EventPayload | None) -> EventPayload:
-    payload: EventPayload = dict(terminal_context or {})
-    if response.debug and response.reviewTrace:
-        payload["reviewTrace"] = response.reviewTrace
-    return payload
+    # The complete review trace is already emitted through the internal-only
+    # ``audit`` event above.  Repeating it on the public terminal event both
+    # leaks implementation diagnostics into a user-facing envelope and can
+    # make an otherwise valid clarification fail the Java stream safety
+    # filter.  Terminal events therefore contain control metadata only.
+    return dict(terminal_context or {})
 
 
 def _answer_deltas(answer: str, streamer: AnswerDeltaStreamer | None) -> Iterator[str]:

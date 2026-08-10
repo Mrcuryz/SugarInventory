@@ -527,6 +527,17 @@ class IntentRouter:
                 next_action="answer_directly",
                 answer=self._capability_answer(),
             )
+        if self._is_finish_inbound_execution_preview(normalized):
+            return IntentRoute(
+                intent_type="data_query",
+                intent_subtype="finish_inbound_execution_preview",
+                business_domain="logistics",
+                business_objects=self._business_objects(normalized),
+                support_status="supported",
+                next_action="call_tool",
+                planned_tools=["preview_finish_inbound_execution"],
+                answer="我会按已填写的成品入库字段生成精确预览，本轮不会确认任务或修改库存。",
+            )
         transfer_preview_codes = self._transfer_preview_codes(normalized)
         if transfer_preview_codes:
             return IntentRoute(
@@ -1437,6 +1448,14 @@ class IntentRouter:
             if code not in result:
                 result.append(code)
         return result[:20]
+
+    def _is_finish_inbound_execution_preview(self, text: str) -> bool:
+        return (
+            "成品入库" in text
+            and "预览" in text
+            and any(marker in text for marker in ("精确", "表单", "执行预览"))
+            and any(marker in text for marker in ("库位", "warehouseName"))
+        )
 
     def _finish_outbound_preview_codes(self, text: str) -> list[str]:
         if "预览" not in text or "成品出库" not in text:

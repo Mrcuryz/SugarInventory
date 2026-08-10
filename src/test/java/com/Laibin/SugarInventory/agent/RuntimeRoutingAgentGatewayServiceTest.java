@@ -736,6 +736,42 @@ class RuntimeRoutingAgentGatewayServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void chainedClarificationMarksConsumedInterruptResumedAndLeavesNewInterruptPending() throws Exception {
+        doAnswer(invocation -> {
+            PythonAgentChatRequestDTO forwarded = invocation.getArgument(0);
+            Consumer<PythonAgentStreamEventDTO> consumer = invocation.getArgument(1);
+            consumer.accept(streamEvent(forwarded.getMessageId(), "clarification", 1,
+                    "{\"interruptId\":\"intr_next\",\"interruptKind\":\"CLARIFICATION\",\"expiresAt\":\"2026-08-11T12:00:00Z\",\"options\":[{\"optionId\":\"opt_next\",\"displayLabel\":\"处理已有待入库任务\"}]}"));
+            consumer.accept(streamEvent(forwarded.getMessageId(), "message_end", 2,
+                    "{\"finishReason\":\"interrupt_required\",\"interruptId\":\"intr_next\",\"interruptKind\":\"CLARIFICATION\"}"));
+            return null;
+        }).when(pythonClient).stream(any(), any());
+        AgentMessageRequestDTO request = request("用户选择了候选项");
+        request.setPageContext(Map.of(
+                "selectedOption", Map.of(
+                        "interruptId", "intr_previous",
+                        "action", "SELECT_OPTION",
+                        "optionId", "opt_product",
+                        "clientRequestId", "resume_req_chained",
+                        "resumeToken", "resume_secret"
+                )
+        ));
+
+        gateway.streamMessage(loginUser, "agt_001", request);
+
+        verify(interruptStateService).recordResumeRequested(
+                "agt_001", 2, "intr_previous", "SELECT_OPTION", "opt_product", null,
+                "resume_req_chained");
+        verify(interruptStateService, timeout(3000)).recordCreated(
+                eq("agt_001"), eq(2), any(), eq("intr_next"), eq("CLARIFICATION"), any());
+        verify(interruptStateService, timeout(3000)).recordTerminal(
+                "agt_001", 2, "intr_previous", "RESUMED", "COMPLETED", null);
+        verify(interruptStateService, never()).recordTerminal(
+                eq("agt_001"), eq(2), eq("intr_next"), any(), any(), any());
+    }
+
+    @Test
     void cancelledInterruptResumeReturnsSafeMessageWithoutCallingPython() {
         when(interruptStateService.findOwnedStatus("agt_001", 2, "intr_cancelled")).thenReturn("CANCELLED");
         AgentMessageRequestDTO request = request("用户选择了候选项");

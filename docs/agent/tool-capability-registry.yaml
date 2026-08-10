@@ -102,7 +102,7 @@ agent_architecture:
       model_policy_key: "master_data"
     logistics_expert:
       domains: ["logistics", "task", "document", "auto_inbound"]
-      allowed_tools: ["query_pallet_tasks", "preview_task_transition", "query_stock_documents", "query_auto_inbound_batches", "get_auto_inbound_batch_detail"]
+      allowed_tools: ["resolve_products", "resolve_warehouses", "query_pallet_tasks", "query_fixed_product_qr_pool", "preview_task_transition", "preview_finish_inbound_execution", "query_stock_documents", "query_auto_inbound_batches", "get_auto_inbound_batch_detail"]
       model_policy_key: "logistics"
     administration_expert:
       domains: ["administration", "employee", "rbac"]
@@ -476,6 +476,22 @@ tools:
     required_slots: ["preview_version", "transition", "pallet_codes"]
     permission: "task:view + task:confirm"
     data_scope: "CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW | CURRENT_FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW | CURRENT_TRANSFER_TASK_TRANSITION_PREVIEW"
+
+  preview_finish_inbound_execution:
+    business_name: "成品入库精确执行预览"
+    risk_level: "L2"
+    owner_expert: "logistics_expert"
+    can_answer:
+      - "对 1 到 20 条用户已经填写完成的成品入库表单进行规范化和实时重读，展示托盘、产品、目标库位、日期、侧以及最终有效数量和单位。"
+      - "有关联生产产出码时数量和单位以后端登记值为准，并在服务端保存输入、任务、托盘、产品、库位、生产关联和历史用料余额的不可变快照。"
+      - "READY 预览绑定当前用户、受信 Agent 会话、权限快照、有效期和内容哈希；普通回答不展示引用、摘要或内部 ID。"
+    cannot_answer:
+      - "不能确认任务、执行入库、修改库存、创建单据、签发 executionToken 或生成幂等键。"
+      - "不能接收 rowNumber、layer、productId、warehouseId、taskId 或 inventoryId。"
+      - "不能扩大到半成品入库、出库或调拨。"
+    required_slots: ["preview_version", "items.code", "items.warehouse_name"]
+    permission: "task:view + task:confirm"
+    data_scope: "FINISH_INBOUND_EXECUTION_PREVIEW"
 
   query_stock_documents:
     business_name: "库存单据查询"

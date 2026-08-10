@@ -16,7 +16,11 @@ CoreGoalTypeV1 = Literal[
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
     "CURRENT_PENDING_TASKS",
+    "FINISH_INBOUND_GUIDED_PREPARATION",
+    "FINISH_INBOUND_PENDING_TASK_PREPARATION",
+    "FINISH_INBOUND_FIXED_QR_PREPARATION",
     "FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+    "FINISH_INBOUND_EXECUTION_PREVIEW",
     "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW",
     "TRANSFER_TASK_TRANSITION_PREVIEW",
     "BOILING_BATCH_TRACE",
@@ -72,7 +76,11 @@ CoreFactTypeV1 = Literal[
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
     "CURRENT_PENDING_TASKS",
+    "FINISH_INBOUND_GUIDED_PREPARATION",
+    "FINISH_INBOUND_PENDING_TASK_PREPARATION",
+    "FINISH_INBOUND_FIXED_QR_PREPARATION",
     "FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
+    "FINISH_INBOUND_EXECUTION_PREVIEW",
     "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW",
     "TRANSFER_TASK_TRANSITION_PREVIEW",
     "BOILING_BATCH_TRACE",
@@ -270,6 +278,58 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         ),
         limitations=("任务查询只展示当前任务记录，不代表任务已执行。",),
     ),
+    "FINISH_INBOUND_GUIDED_PREPARATION": GoalContractV1(
+        goalType="FINISH_INBOUND_GUIDED_PREPARATION",
+        ownerExpert="logistics_expert",
+        requiredEntityTypes=("PRODUCT", "WAREHOUSE"),
+        requiredFactTypes=("FINISH_INBOUND_GUIDED_PREPARATION",),
+        allowedTools=("resolve_products", "resolve_warehouses"),
+        evidenceTools=("resolve_products", "resolve_warehouses"),
+        factValidation=FactValidationRuleV1(
+            factLabel="成品入库业务模式确认",
+            requiredFields=("operationMode",),
+        ),
+        limitations=(
+            "本目标只确认具体产品、目标库位以及本次是处理已有待入库任务还是使用空闲固定二维码新建任务。",
+            "两种模式使用不同的 GoalContract 和后续预览，任何一条路径都不得静默回退到另一种二维码来源。",
+        ),
+    ),
+    "FINISH_INBOUND_PENDING_TASK_PREPARATION": GoalContractV1(
+        goalType="FINISH_INBOUND_PENDING_TASK_PREPARATION",
+        ownerExpert="logistics_expert",
+        requiredEntityTypes=("PRODUCT", "WAREHOUSE"),
+        requiredFactTypes=("FINISH_INBOUND_PENDING_TASK_PREPARATION",),
+        allowedTools=("resolve_products", "resolve_warehouses", "query_pallet_tasks"),
+        evidenceTools=("query_pallet_tasks",),
+        factValidation=FactValidationRuleV1(
+            factLabel="已有成品入库任务二维码选择准备",
+            requiredFields=("scopeLabel", "total", "page", "size", "records"),
+            listFields=("records",),
+            noDataWhenEmptyList="records",
+        ),
+        limitations=(
+            "只查询已绑定且当前存在 FINISH_IN 待处理任务的二维码，不创建新任务、不执行入库。",
+            "若数量不足，应明确告知已有任务不足，不得改用空闲固定二维码补足。",
+        ),
+    ),
+    "FINISH_INBOUND_FIXED_QR_PREPARATION": GoalContractV1(
+        goalType="FINISH_INBOUND_FIXED_QR_PREPARATION",
+        ownerExpert="logistics_expert",
+        requiredEntityTypes=("PRODUCT", "WAREHOUSE"),
+        requiredFactTypes=("FINISH_INBOUND_FIXED_QR_PREPARATION",),
+        allowedTools=("resolve_products", "resolve_warehouses", "query_fixed_product_qr_pool"),
+        evidenceTools=("query_fixed_product_qr_pool",),
+        factValidation=FactValidationRuleV1(
+            factLabel="空闲固定产品二维码选择准备",
+            requiredFields=("dataScope", "total", "page", "size", "records"),
+            listFields=("records",),
+            noDataWhenEmptyList="records",
+        ),
+        limitations=(
+            "只查询与已确认具体产品精确匹配、固定产品模式已启用且当前为空闲状态的二维码。",
+            "选择二维码本身不会创建任务或入库；后续必须先通过独立确认创建待入库任务，任务真实存在后才可进入既有任务资格与精确入库预览。",
+        ),
+    ),
     "FINISH_INBOUND_TASK_TRANSITION_PREVIEW": GoalContractV1(
         goalType="FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
         ownerExpert="logistics_expert",
@@ -288,6 +348,26 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         limitations=(
             "预览只重查当前成品入库待处理任务并生成短期摘要，不执行入库或任务确认。",
             "previewRef 不是 executionToken，最终提交仍在既有业务弹窗中完成。",
+        ),
+    ),
+    "FINISH_INBOUND_EXECUTION_PREVIEW": GoalContractV1(
+        goalType="FINISH_INBOUND_EXECUTION_PREVIEW",
+        ownerExpert="logistics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("FINISH_INBOUND_EXECUTION_PREVIEW",),
+        allowedTools=("preview_finish_inbound_execution",),
+        evidenceTools=("preview_finish_inbound_execution",),
+        factValidation=FactValidationRuleV1(
+            factLabel="成品入库精确执行预览",
+            requiredFields=(
+                "previewVersion", "previewStatusLabel", "readyForUserConfirmation",
+                "requestedItemCount", "eligibleItemCount", "items", "blockingIssues",
+            ),
+            listFields=("items", "blockingIssues"),
+        ),
+        limitations=(
+            "精确预览只绑定用户已填写的成品入库表单，不执行入库、任务确认或库存变更。",
+            "预览引用和状态摘要不会展示给普通用户，也不是 executionToken。",
         ),
     ),
     "FINISH_OUTBOUND_TASK_TRANSITION_PREVIEW": GoalContractV1(
@@ -1350,6 +1430,8 @@ def registered_goal_for_plan(
     if tool_name == "preview_task_transition":
         definition = TASK_TRANSITION_PREVIEW_BY_TRANSITION.get(str(arguments.get("transition") or ""))
         return definition.goal_type if definition is not None else None
+    if tool_name == "preview_finish_inbound_execution":
+        return "FINISH_INBOUND_EXECUTION_PREVIEW"
     if tool_name == "resolve_production_entities":
         entity_type = str(arguments.get("entityType") or "").upper()
         if entity_type == "BOILING_BATCH":

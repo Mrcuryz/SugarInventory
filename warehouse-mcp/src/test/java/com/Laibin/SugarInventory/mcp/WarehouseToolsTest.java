@@ -12,6 +12,7 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.MatchType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.OptionType;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletStatusRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletTasksRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.PalletFlowRecordsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveProductsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ResolveWarehousesRequest;
@@ -20,6 +21,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseStatusRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseScope;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.WarehouseRecentOperationsRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.TaskTransitionPreviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FinishInboundExecutionPreviewItem;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.FinishInboundExecutionPreviewRequest;
 import com.Laibin.SugarInventory.mcp.service.WarehouseReadService;
 import com.Laibin.SugarInventory.mcp.tool.InventoryDistributionToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.WarehouseTools;
@@ -1328,6 +1331,35 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void forwardsRuntimeBoundProductIdForExactPalletTaskSelection() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"CURRENT_PALLET_TASKS",
+                  "total":1,
+                  "page":1,
+                  "size":50,
+                  "records":[{"taskType":"FINISH_IN","taskStatus":"PENDING","code":"BT001A"}],
+                  "limitations":[]
+                }
+                """)));
+
+        var response = tools.queryPalletTasks(new PalletTasksRequest(
+                null, "FINISH_IN", null, "PENDING", 84, null, null, "成品",
+                null, null, null, 1, 50));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.records()).hasSize(1);
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath()).isEqualTo("/api/logistics/agent-read/pallet-tasks/query");
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"productId\":84")
+                .contains("\"taskType\":\"FINISH_IN\"")
+                .contains("\"status\":\"PENDING\"")
+                .contains("\"productStatus\":\"成品\"");
+    }
+
+    @Test
     void previewsFinishedInboundTasksThroughDedicatedNoWriteEndpoint() throws Exception {
         backend.enqueue(json(result("""
                 {
@@ -1403,6 +1435,58 @@ class WarehouseToolsTest {
                 .contains("\"transition\":\"CONFIRM_FINISH_OUTBOUND\"")
                 .contains("\"palletCodes\":[\"BT00135D\"]");
         assertThat(recorded.getPath()).doesNotMatch(FORBIDDEN_WRITE_PATHS);
+    }
+
+    @Test
+    void previewsExactFinishedInboundFormThroughDedicatedNoWriteEndpoint() throws Exception {
+        backend.enqueue(json(result("""
+                {
+                  "dataScope":"FINISH_INBOUND_EXECUTION_PREVIEW",
+                  "previewVersion":1,
+                  "previewStatus":"READY",
+                  "previewRef":"fip1_signature",
+                  "stateDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "previewedAt":"2026-08-09T09:00:00",
+                  "expiresAt":"2026-08-09T09:05:00",
+                  "readyForUserConfirmation":true,
+                  "requestedItemCount":1,
+                  "eligibleItemCount":1,
+                  "items":[{"palletCode":"BT0019N1","productName":"黄冰糖（袋）","warehouseName":"1号库位","entryDate":"2026-08-09","side":"左","quantity":1,"unitLabel":"板"}],
+                  "blockingIssues":[],
+                  "warnings":[],
+                  "limitations":["本预览不执行入库。"]
+                }
+                """)));
+
+        var response = tools.previewFinishInboundExecution(new FinishInboundExecutionPreviewRequest(
+                1,
+                List.of(new FinishInboundExecutionPreviewItem(
+                        "BT0019N1", "1号库位", "2026-08-09", "左", 1, "0", "验收预览"))));
+
+        assertThat(response.error()).isNull();
+        assertThat(response.readyForUserConfirmation()).isTrue();
+        assertThat(response.previewRef()).startsWith("fip1_");
+        RecordedRequest recorded = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(recorded).isNotNull();
+        assertThat(recorded.getPath())
+                .isEqualTo("/api/logistics/agent-read/pallet-tasks/finish-inbound/execution/preview");
+        assertThat(recorded.getBody().readUtf8())
+                .contains("\"code\":\"BT0019N1\"")
+                .contains("\"warehouseName\":\"1号库位\"")
+                .doesNotContain("taskId", "productId", "warehouseId", "rowNumber", "layer");
+        assertThat(recorded.getPath()).doesNotMatch(FORBIDDEN_WRITE_PATHS);
+    }
+
+    @Test
+    void rejectsForbiddenOrIncompleteExactPreviewArgumentsBeforeCallingBackend() {
+        var response = tools.previewFinishInboundExecution(new FinishInboundExecutionPreviewRequest(
+                1,
+                List.of(new FinishInboundExecutionPreviewItem(
+                        "BT0019N1", "", "2026-08-09", "左", 1, "0", null))));
+
+        assertThat(response.error()).isNotNull();
+        assertThat(response.error().code()).isEqualTo("INVALID_ARGUMENT");
+        assertThat(backend.getRequestCount()).isZero();
     }
 
     @Test

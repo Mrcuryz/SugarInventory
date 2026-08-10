@@ -1,0 +1,73 @@
+CREATE TABLE IF NOT EXISTS agent_finish_inbound_execution_confirmation (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    confirmation_ref VARCHAR(64) NOT NULL,
+    preview_id BIGINT NOT NULL,
+    preview_ref VARCHAR(64) NOT NULL,
+    owner_user_id INT NOT NULL,
+    agent_session_id VARCHAR(64) NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    required_permissions VARCHAR(200) NOT NULL,
+    preview_content_sha256 CHAR(64) NOT NULL,
+    preview_state_digest CHAR(64) NOT NULL,
+    token_sha256 CHAR(64) NOT NULL,
+    idempotency_key_sha256 CHAR(64) NOT NULL,
+    confirmed_at DATETIME(6) NOT NULL,
+    expires_at DATETIME(6) NOT NULL,
+    revoked_at DATETIME(6) DEFAULT NULL,
+    consumed_at DATETIME(6) DEFAULT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_finish_inbound_confirmation_ref (confirmation_ref),
+    UNIQUE KEY uk_finish_inbound_confirmation_preview (preview_id),
+    KEY idx_finish_inbound_confirmation_owner (owner_user_id, agent_session_id, status),
+    KEY idx_finish_inbound_confirmation_expires (expires_at),
+    CONSTRAINT fk_finish_inbound_confirmation_preview
+        FOREIGN KEY (preview_id) REFERENCES agent_finish_inbound_execution_preview (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_finish_inbound_execution_request (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    execution_ref VARCHAR(64) NOT NULL,
+    confirmation_id BIGINT NOT NULL,
+    confirmation_ref VARCHAR(64) NOT NULL,
+    owner_user_id INT NOT NULL,
+    agent_session_id VARCHAR(64) NOT NULL,
+    idempotency_key_sha256 CHAR(64) NOT NULL,
+    request_sha256 CHAR(64) NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    attempt_count INT NOT NULL,
+    result_code VARCHAR(64) DEFAULT NULL,
+    result_json LONGTEXT DEFAULT NULL,
+    error_code VARCHAR(80) DEFAULT NULL,
+    started_at DATETIME(6) NOT NULL,
+    completed_at DATETIME(6) DEFAULT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_finish_inbound_execution_ref (execution_ref),
+    UNIQUE KEY uk_finish_inbound_request_confirmation (confirmation_id),
+    UNIQUE KEY uk_finish_inbound_request_idempotency (idempotency_key_sha256),
+    KEY idx_finish_inbound_request_owner (owner_user_id, agent_session_id, status),
+    CONSTRAINT fk_finish_inbound_request_confirmation
+        FOREIGN KEY (confirmation_id) REFERENCES agent_finish_inbound_execution_confirmation (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_finish_inbound_execution_audit (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    confirmation_ref VARCHAR(64) NOT NULL,
+    execution_ref VARCHAR(64) DEFAULT NULL,
+    owner_user_id INT NOT NULL,
+    agent_session_id VARCHAR(64) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    from_status VARCHAR(24) DEFAULT NULL,
+    to_status VARCHAR(24) DEFAULT NULL,
+    result_code VARCHAR(64) DEFAULT NULL,
+    error_code VARCHAR(80) DEFAULT NULL,
+    details_sha256 CHAR(64) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_finish_inbound_audit_confirmation (confirmation_ref, created_at),
+    KEY idx_finish_inbound_audit_execution (execution_ref, created_at),
+    KEY idx_finish_inbound_audit_owner (owner_user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

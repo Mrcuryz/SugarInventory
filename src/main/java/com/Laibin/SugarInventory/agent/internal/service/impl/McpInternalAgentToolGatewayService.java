@@ -70,6 +70,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
             "query_material_candidates",
             "query_pallet_tasks",
             "preview_task_transition",
+            "preview_finish_inbound_execution",
             "query_stock_documents",
             "query_auto_inbound_batches",
             "get_auto_inbound_batch_detail",
@@ -121,7 +122,10 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
                     "query_material_candidates")),
             Map.entry("analytics_expert", Set.of("run_registered_report")),
             Map.entry("logistics_expert", Set.of(
-                    "query_pallet_tasks", "preview_task_transition", "query_stock_documents", "query_auto_inbound_batches",
+                    "resolve_products", "resolve_warehouses",
+                    "query_pallet_tasks", "query_fixed_product_qr_pool",
+                    "preview_task_transition", "preview_finish_inbound_execution",
+                    "query_stock_documents", "query_auto_inbound_batches",
                     "get_auto_inbound_batch_detail")),
             Map.entry("master_data_expert", Set.of(
                     "resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog")),
@@ -172,6 +176,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
             entry("query_material_candidates", "/api/production/agent-read/orders/material-candidates/query"),
             entry("query_pallet_tasks", "/api/logistics/agent-read/pallet-tasks/query"),
             entry("preview_task_transition", "/api/logistics/agent-read/pallet-tasks/transition/preview"),
+            entry("preview_finish_inbound_execution", "/api/logistics/agent-read/pallet-tasks/finish-inbound/execution/preview"),
             entry("query_stock_documents", "/api/logistics/agent-read/stock-documents/query"),
             entry("query_auto_inbound_batches", "/api/logistics/agent-read/auto-inbound/batches/query"),
             entry("get_auto_inbound_batch_detail", "/api/logistics/agent-read/auto-inbound/batches/detail/query"),

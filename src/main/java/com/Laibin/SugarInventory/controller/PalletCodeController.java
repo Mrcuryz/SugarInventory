@@ -143,6 +143,7 @@ public class PalletCodeController {
 
     @Operation(summary = "固定产品二维码打印并启用", description = "打印固定产品二维码标签，并立即创建对应入库任务投入本轮业务")
     @PostMapping("/fixed-product/activate/pdf")
+    @PreAuthorize("hasAuthority('qrcode:activate')")
     public void activateFixedProductQrCodes(@RequestBody @Valid FixedProductActivateDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser,
                                             HttpServletResponse response) throws IOException {
