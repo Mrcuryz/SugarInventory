@@ -97,6 +97,9 @@ public interface PalletCodeService extends IService<PalletCode> {
 
     InVO createFixedProductInboundAndConfirm(BindPalletTaskDTO bindDTO, ConfirmPalletInItemDTO confirmDTO, Integer operatorId);
 
+    InVO createFixedProductInboundAndConfirm(BindPalletTaskDTO bindDTO, ConfirmPalletInItemDTO confirmDTO,
+                                             Integer operatorId, String operationBatchNo);
+
     // 批量入库确认，任一失败整体回滚
     List<InVO> confirmFinishedTaskInBatch(ConfirmPalletInBatchDTO dto, Integer operatorId);
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import Any
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from datetime import date
 import json
 import re
@@ -12,7 +12,7 @@ from app.agents import MAIN_AGENT, AgentHandoff, AgentHandoffRouter
 from app.business_time import BusinessClock
 from app.cancellation import RunCancelledError
 from app.context import ContextBuilder
-from app.goal_contracts import registered_goal_for_plan
+from app.goal_contracts import GOAL_CONTRACTS, registered_goal_for_plan
 from app.graph.state import WarehouseAgentState
 from app.knowledge import (
     explicit_knowledge_product_queries,
@@ -810,10 +810,21 @@ class ToolArgumentBuilder:
         self._goal_draft_shadow_enabled = goal_draft_shadow_enabled
         self.business_clock = business_clock or BusinessClock()
 
-    def llm_visible_tool_schemas(self, handoff: AgentHandoff) -> dict[str, dict[str, Any]]:
+    def llm_visible_tool_schemas(
+        self,
+        handoff: AgentHandoff,
+        allowed_tools: Iterable[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Return model-facing schemas with internal database IDs replaced by state refs."""
 
         visible = self._agent_router.tool_schemas(handoff, TOOL_SCHEMAS)
+        if allowed_tools is not None:
+            goal_scope = frozenset(str(tool) for tool in allowed_tools)
+            visible = {
+                tool_name: schema
+                for tool_name, schema in visible.items()
+                if tool_name in goal_scope
+            }
         result: dict[str, dict[str, Any]] = {}
         for tool_name, schema in visible.items():
             model_schema = self._llm_visible_schema(schema)
@@ -885,6 +896,13 @@ class ToolArgumentBuilder:
 
         if tool_name not in ALLOWED_TOOLS and tool_name not in INTERNAL_KNOWLEDGE_TOOLS:
             raise ValueError("tool is not allowed")
+        active_goal = GOAL_CONTRACTS.get(state.active_goal_type)
+        if (
+            state.goal_contract_locked
+            and active_goal is not None
+            and tool_name not in active_goal.allowedTools
+        ):
+            raise ValueError("tool is outside the active GoalContract")
         if tool_name == KNOWLEDGE_TOOL_NAME:
             if state.active_goal_type == "PROCESS_KNOWLEDGE_QUERY":
                 fixed_domains = ["PROCESS"]

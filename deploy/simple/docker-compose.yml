@@ -1,4 +1,15 @@
 services:
+  migration:
+    image: mysql:8.0
+    profiles: ["operations"]
+    env_file: .env
+    entrypoint: ["sh", "/database/apply-migrations.sh"]
+    volumes:
+      - ./apply-migrations.sh:/database/apply-migrations.sh:ro
+      - ./artifacts/database/migrations:/migrations:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -43,6 +54,9 @@ services:
       AGENT_PYTHON_BASE_URL: http://agent:8091
       AGENT_RUNTIME_FALLBACK_ENABLED: "false"
       AGENT_MCP_JAR_PATH: /app/warehouse-mcp/warehouse-mcp.jar
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      DATABASE_SCHEMA_VERIFICATION_ENABLED: "true"
     command: ["java", "-jar", "/app/app.jar"]
     volumes:
       - ./artifacts/app.jar:/app/app.jar:ro

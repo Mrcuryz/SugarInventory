@@ -101,7 +101,7 @@
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+            <el-button v-if="canUpdateWarehouse" link type="primary" @click="openEditDialog(row)">编辑</el-button>
             <el-button link type="primary" @click="goWarehouseMap(row)">平面图定位</el-button>
             <el-button link type="primary" @click="openRecentOperations(row)">最近操作</el-button>
           </template>
@@ -159,6 +159,7 @@
           <div class="maintenance-switch-row">
             <el-switch
                 v-model="editForm.maintenance"
+                :disabled="!canChangeWarehouseStatus"
                 active-text="维护"
                 inactive-text="正常"
             />
@@ -185,8 +186,12 @@ import {
   queryWarehouseLedger
 } from '@/api/warehouseinfo'
 import {formatDateTime} from '@/utils/dateTime'
+import {useAuthStore} from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
+const canUpdateWarehouse = computed(() => authStore.hasPermission('warehouse:update'))
+const canChangeWarehouseStatus = computed(() => authStore.hasPermission('warehouse:status'))
 const loading = ref(false)
 const recentLoading = ref(false)
 const warehouseRows = ref([])

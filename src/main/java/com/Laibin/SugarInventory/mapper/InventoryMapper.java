@@ -22,8 +22,12 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
 
     @Select("SELECT * FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
-            "ORDER BY CASE side WHEN '右' THEN 1 ELSE 2 END, `row_number` DESC")
-    List<Inventory> getInventoryStackOrder(@Param("warehouseId") Integer warehouseId);
+            "AND product_id = #{productId} " +
+            "AND pallet_code_id IS NULL " +
+            "ORDER BY CASE side WHEN '右' THEN 1 ELSE 2 END, `row_number` DESC, id ASC " +
+            "FOR UPDATE")
+    List<Inventory> getLegacyInventoryStackOrderForUpdate(@Param("warehouseId") Integer warehouseId,
+                                                           @Param("productId") Integer productId);
 
     @Select("SELECT COUNT(DISTINCT `row_number`) " +
             "FROM inventory " +
@@ -82,8 +86,11 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
     @Select("SELECT * " +
             "FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
-            "ORDER BY layer DESC LIMIT 1")
-    Inventory getLast(Integer warehouseId);
+            "AND product_id = #{productId} " +
+            "AND pallet_code_id IS NULL " +
+            "ORDER BY layer DESC, id ASC LIMIT 1 FOR UPDATE")
+    Inventory getLastLegacyInventoryForUpdate(@Param("warehouseId") Integer warehouseId,
+                                               @Param("productId") Integer productId);
 
     @Select("SELECT * FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
@@ -99,14 +106,30 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
     @Select("SELECT * FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
             "AND side = #{side} AND layer = #{layer} " +
-            "ORDER BY `row_number` DESC")
-    List<Inventory> getInventoryForOutStock(@Param("warehouseId") int warehouseId,
-                                            @Param("side") String side,
-                                            @Param("layer") int layer);
+            "AND product_id = #{productId} " +
+            "AND pallet_code_id IS NULL " +
+            "ORDER BY `row_number` DESC, id ASC FOR UPDATE")
+    List<Inventory> getLegacyInventoryForOutStockForUpdate(@Param("warehouseId") int warehouseId,
+                                                            @Param("side") String side,
+                                                            @Param("layer") int layer,
+                                                            @Param("productId") Integer productId);
+
+    @Select("<script>" +
+            "SELECT * FROM inventory " +
+            "WHERE product_id = #{productId} " +
+            "AND pallet_code_id IS NULL " +
+            "<if test='warehouseId != null'>AND warehouse_id = #{warehouseId} </if>" +
+            "ORDER BY id ASC FOR UPDATE" +
+            "</script>")
+    List<Inventory> selectLegacyInventoryForProductForUpdate(@Param("productId") Integer productId,
+                                                              @Param("warehouseId") Integer warehouseId);
 
     // **删除某个格子的库存**
     @Delete("DELETE FROM inventory WHERE id = #{id}")
     void deleteInventoryById(@Param("id") int id);
+
+    @Delete("DELETE FROM inventory WHERE id = #{id} AND pallet_code_id IS NULL")
+    int deleteLegacyInventoryById(@Param("id") int id);
 
     @Select("<script>" +
             "SELECT DISTINCT w.id AS warehouse_id, w.warehouse_name " +
@@ -271,6 +294,9 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
 
     @Update("update inventory set pieces = #{pieces} where id = #{id}")
     void updatePieces(@Param("id") Integer id, @Param("pieces") Integer pieces);
+
+    @Update("UPDATE inventory SET pieces = #{pieces} WHERE id = #{id} AND pallet_code_id IS NULL")
+    int updateLegacyPieces(@Param("id") Integer id, @Param("pieces") Integer pieces);
 
     @Update("UPDATE inventory SET assay_id = #{assayId} WHERE id = #{id}")
     int updateAssayById(@Param("id") Integer id, @Param("assayId") Integer assayId);

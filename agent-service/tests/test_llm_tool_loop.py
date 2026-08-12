@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.agents import AgentHandoffRouter
 from app.business_time import BusinessClock
 from app.config import Settings
+from app.goal_contracts import GOAL_CONTRACTS
 from app.graph.state import InMemoryCheckpointer, SelectedEntity, WarehouseAgentState
 from app.model import BasicModelClient, ExpertLoopRequest, MainAgentRouteRequest, ModelDecisionError
 from app.runtime import WarehouseAgentRuntime
@@ -276,6 +277,29 @@ def test_model_visible_schema_replaces_database_ids_with_state_refs() -> None:
     assert "warehouseId" not in serialized
     assert "CURRENT_PRODUCT" in serialized
     assert "CURRENT_WAREHOUSE" in serialized
+
+
+def test_goal_contract_scope_narrows_visible_schemas_and_rejects_tool_drift() -> None:
+    builder = ToolArgumentBuilder()
+    handoff = AgentHandoffRouter().handoff_for_agent("assay_expert")
+    contract = GOAL_CONTRACTS["CURRENT_INVENTORY_ASSAY_GAPS"]
+
+    schemas = builder.llm_visible_tool_schemas(
+        handoff,
+        allowed_tools=contract.allowedTools,
+    )
+
+    assert set(schemas) == set(contract.allowedTools)
+    state = InMemoryCheckpointer().get("agt_goal_scoped_schemas")
+    state.active_goal_type = "CURRENT_INVENTORY_ASSAY_GAPS"
+    state.goal_contract_locked = True
+    with pytest.raises(ValueError, match="outside the active GoalContract"):
+        builder.validate_llm_arguments(
+            tool_name="query_assay_records",
+            arguments={"page": 1, "size": 20},
+            state=state,
+            user_message="查询当前库存缺少近期化验的产品",
+        )
 
 
 def test_product_quality_configuration_uses_controlled_current_product_ref() -> None:
@@ -936,6 +960,11 @@ def test_llm_daily_production_report_uses_analytics_expert_and_returns_report_ca
         model.expert_requests[-1].observations,
         ensure_ascii=False,
     )
+    assert len(model.expert_requests) == 2
+    assert set(model.expert_requests[0].toolSchemas) == {"run_registered_report"}
+    assert model.expert_requests[0].registeredGoalComplete is False
+    assert model.expert_requests[1].toolSchemas == {}
+    assert model.expert_requests[1].registeredGoalComplete is True
 
 
 def test_llm_today_operations_overview_uses_registered_facts_and_safe_card() -> None:

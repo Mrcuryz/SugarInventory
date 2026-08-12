@@ -121,6 +121,15 @@ def _parser() -> argparse.ArgumentParser:
     )
     validate_release.add_argument("--release", type=Path, required=True)
 
+    validate_runtime = subparsers.add_parser(
+        "validate-runtime",
+        help="Validate the active pointer, immutable release, and local query model.",
+    )
+    validate_runtime.add_argument("--runtime-root", type=Path, required=True)
+    validate_runtime.add_argument("--model-path", type=Path, required=True)
+    validate_runtime.add_argument("--model-name", default="BAAI/bge-small-zh-v1.5")
+    validate_runtime.add_argument("--threads", type=int, default=2)
+
     publish = subparsers.add_parser(
         "publish-release",
         help="Copy and atomically activate a validated immutable RAG release.",
@@ -151,6 +160,35 @@ def _print_json(payload: dict[str, object], *, stream: object | None = None) -> 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        if args.command == "validate-runtime":
+            from app.rag.runtime.corpus_loader import (
+                RagRuntimeConfiguration,
+                load_current_corpus,
+            )
+
+            loaded = load_current_corpus(
+                RagRuntimeConfiguration(
+                    enabled=True,
+                    required=True,
+                    root=str(args.runtime_root),
+                    model_path=str(args.model_path),
+                    model_name=args.model_name,
+                    model_threads=args.threads,
+                )
+            )
+            _print_json(
+                {
+                    "status": "SUCCEEDED",
+                    "corpusId": loaded.pointer.corpusId,
+                    "corpusVersion": loaded.pointer.corpusVersion,
+                    "releaseName": loaded.pointer.releaseName,
+                    "documentCount": loaded.retriever.corpus.documentCount,
+                    "chunkCount": loaded.retriever.corpus.chunkCount,
+                    "allowedRoles": list(loaded.retriever.corpus.allowedRoles),
+                }
+            )
+            return 0
+
         if args.command == "validate-release":
             from app.rag.offline.publisher import validate_release
 

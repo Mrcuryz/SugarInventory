@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.service.impl;
 
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.common.PageResult;
+import com.Laibin.SugarInventory.domain.assembler.ManagementViewAssembler;
 import com.Laibin.SugarInventory.domain.dto.AssayGroupQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.AssayGroupSubmitDTO;
 import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
@@ -71,8 +72,11 @@ public class AssayGroupServiceImpl extends ServiceImpl<AssayGroupMapper, AssayGr
             records.forEach(assay -> {
                 if (StringUtils.isNotBlank(assay.getRelatedProducts())) {
                     String[] productIds = assay.getRelatedProducts().split(",");
-                    List<Product> relatedProductList = Arrays.stream(productIds).map(Integer::valueOf)
-                            .map(productMap::get).toList();
+                    List<com.Laibin.SugarInventory.domain.vo.ProductVO> relatedProductList = Arrays.stream(productIds)
+                            .map(Integer::valueOf)
+                            .map(productMap::get)
+                            .map(ManagementViewAssembler::toProductVO)
+                            .toList();
                     assay.setRelatedProductList(relatedProductList);
                 }
             });
@@ -94,17 +98,35 @@ public class AssayGroupServiceImpl extends ServiceImpl<AssayGroupMapper, AssayGr
     }
 
     @Override
-    public AssayGroup updateAssay(Integer id, AssayGroupSubmitDTO dto, User user) {
+    public AssayGroupVO updateAssay(Integer id, AssayGroupSubmitDTO dto, User user) {
         AssayGroup assayGroup = assayGroupMapper.selectById(id);
         if (assayGroup == null) {
             throw new BusinessException(ErrorCode.ASSAY_GROUP_RECORD_NOT_FOUND);
         }
         AssayGroup assay = new AssayGroup();
         BeanUtils.copyProperties(dto, assay);
+        assay.setId(id);
+        assay.setCreatedBy(assayGroup.getCreatedBy());
+        assay.setCreatedAt(assayGroup.getCreatedAt());
         assay.setUpdatedBy(user.getId());
         assay.setUpdatedAt(LocalDateTime.now());
         assayGroupMapper.updateById(assay);
-        return assay;
+        AssayGroupVO vo = new AssayGroupVO();
+        BeanUtils.copyProperties(assay, vo, "createdAt", "updatedAt");
+        vo.setCreatedAt(assay.getCreatedAt() == null ? null : assay.getCreatedAt().toLocalDate());
+        vo.setUpdatedAt(assay.getUpdatedAt().toLocalDate());
+        vo.setUpdateName(user.getName());
+        if (StringUtils.isNotBlank(assay.getRelatedProducts())) {
+            List<Integer> productIds = Arrays.stream(assay.getRelatedProducts().split(","))
+                    .map(Integer::valueOf)
+                    .toList();
+            Map<Integer, Product> products = productService.getMapByIds(productIds);
+            vo.setRelatedProductList(productIds.stream()
+                    .map(products::get)
+                    .map(ManagementViewAssembler::toProductVO)
+                    .toList());
+        }
+        return vo;
     }
 
     @Override

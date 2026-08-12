@@ -77,6 +77,8 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
 
     assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 58
     assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 54
+    assert registry["classified_l1_tool_count"] == 52
+    assert registry["classified_l2_tool_count"] == 2
     assert registry["classified_internal_knowledge_tool_count"] == len(INTERNAL_KNOWLEDGE_TOOLS) == 1
     assert set(current) == set(GOAL_CONTRACTS)
     for goal_type, contract in GOAL_CONTRACTS.items():
@@ -93,6 +95,21 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
         for tool in item[key]
     }
     assert classified_tools == set(ALLOWED_TOOLS) | set(INTERNAL_KNOWLEDGE_TOOLS)
+
+
+def test_current_tool_registry_is_not_described_as_design_only_or_missing_openapi() -> None:
+    registry_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "agent"
+        / "tool-capability-registry.yaml"
+    )
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+
+    assert registry["version"] == "m1.5r-l2-preview02"
+    assert registry["agent_v1_reaudit"]["status"] == "IMPLEMENTED_AND_CONTRACT_LOCKED"
+    assert "OpenAPI" in registry["agent_v1_reaudit"]["source"]
+    assert "缺失" not in registry["agent_v1_reaudit"]["source"]
 
 
 def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:

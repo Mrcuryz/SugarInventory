@@ -3,10 +3,8 @@ package com.Laibin.SugarInventory.service.impl;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.domain.dto.WarehouseDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseUpdateDTO;
-import com.Laibin.SugarInventory.domain.po.Assay;
+import com.Laibin.SugarInventory.domain.enumObject.ErrorCode;
 import com.Laibin.SugarInventory.domain.po.Warehouse;
-import com.Laibin.SugarInventory.mapper.InventoryMapper;
-import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.WarehouseService;
@@ -16,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -33,16 +30,13 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
     @Autowired
     private WarehouseMapper warehouseMapper;
 
-    @Autowired
-    private ProductMapper productMapper;
-
-    @Autowired
-    private InventoryMapper inventoryMapper;
-
     @Override
     @Transactional
     public Warehouse setWarehouseToMaintain(Integer id) {
         Warehouse warehouse = warehouseMapper.selectById(id);
+        if (warehouse == null) {
+            throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
+        }
         int rows = 0;
         if (warehouse.getStatus().equals("维护"))
             rows = warehouseMapper.cancelMaintain(id);
@@ -76,7 +70,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         // 直接调用MyBatis-Plus的insert方法
         int result = warehouseMapper.insert(warehouse);
         if (result < 1) {
-            throw new RuntimeException("创建仓库失败");
+            throw new BusinessException("创建仓库失败");
         }
 
         return warehouse;
@@ -84,13 +78,20 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
 
     @Override
     public Warehouse getWarehouseById(Integer id) {
-        return warehouseMapper.selectById(id);
+        Warehouse warehouse = warehouseMapper.selectById(id);
+        if (warehouse == null) {
+            throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
+        }
+        return warehouse;
     }
 
     @Override
     public Warehouse updateWarehouse(WarehouseUpdateDTO warehouse) {
         // 先查询原有仓库信息
         Warehouse oldWarehouse = warehouseMapper.selectById(warehouse.getId());
+        if (oldWarehouse == null) {
+            throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
+        }
         Warehouse newWarehouse = new Warehouse();
 
         // 检查是否有重复的warehouseId
@@ -116,7 +117,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         // 更新时，不允许用户直接修改 status、curCapacity、createdAt 等字段
         int result = warehouseMapper.updateById(newWarehouse);
         if (result < 1) {
-            throw new RuntimeException("更新仓库信息失败");
+            throw new BusinessException("更新仓库信息失败");
         }
 
         // 返回修改后的仓库信息
@@ -127,7 +128,7 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
     public void deleteWarehouse(Integer id) {
         int result = warehouseMapper.deleteById(id);
         if (result < 1) {
-            throw new RuntimeException("删除仓库失败");
+            throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
         }
     }
 

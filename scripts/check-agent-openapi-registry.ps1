@@ -3,7 +3,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot
+$scriptRoot = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    Join-Path (Get-Location).Path 'scripts'
+} else {
+    $PSScriptRoot
+}
+$root = Split-Path -Parent $scriptRoot
 $gatewaySource = Join-Path $root "src/main/java/com/Laibin/SugarInventory/agent/internal/service/impl/McpInternalAgentToolGatewayService.java"
 $openApiFile = Join-Path $root $OpenApiPath
 

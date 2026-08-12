@@ -4,7 +4,7 @@ param(
 
     [string]$BaseUrl = "http://127.0.0.1:38082",
 
-    [string]$LoginPassword = "lbsp",
+    [string]$LoginPassword = "lbsp-isolated-uat",
 
     [string]$CleanupManifest,
 
@@ -12,6 +12,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$scriptRoot = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    (Get-Location).Path
+} else {
+    $PSScriptRoot
+}
+$projectRoot = if (Test-Path -LiteralPath (Join-Path $scriptRoot 'pom.xml')) {
+    $scriptRoot
+} else {
+    (Resolve-Path -LiteralPath (Join-Path $scriptRoot '..')).Path
+}
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'pom.xml'))) {
+    throw "Unable to resolve project root from script or current directory: $scriptRoot"
+}
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -157,7 +170,7 @@ $migrationFiles = @(
     '2026-08-10-add-agent-finish-inbound-execute-permission.sql'
 )
 foreach ($migrationFile in $migrationFiles) {
-    $sql = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot "..\migrations\$migrationFile"))
+    $sql = [System.IO.File]::ReadAllText((Join-Path $projectRoot "migrations\$migrationFile"))
     Invoke-LocalMySql $sql | Out-Null
 }
 $existingPermissionLink = [int](Invoke-LocalMySql "SELECT COUNT(*) FROM role_permission rp JOIN role r ON r.id=rp.role_id JOIN permission p ON p.id=rp.permission_id WHERE r.role_code='ADMIN' AND p.perm_code='agent:finish-inbound:execute';")[0]
@@ -197,7 +210,7 @@ try {
     Invoke-LocalMySql "UPDATE pallet_code SET code='$(Escape-SqlLiteral $fixture.palletCode)' WHERE id=$($fixture.palletId);" | Out-Null
     $fixture.taskId = [int](Invoke-LocalMySql "INSERT INTO pallet_task(pallet_code_id,task_type,status,product_id,product_status,production_date,screen_mesh_id,created_by,remark,cycle_no) VALUES($($fixture.palletId),'FINISH_IN','PENDING',$productId,'成品',CURDATE(),$screenMeshId,$($fixture.operatorId),'$prefix',1); SELECT LAST_INSERT_ID();")[0]
 
-    $manifestDir = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path 'output\s4-uat'
+    $manifestDir = Join-Path $projectRoot 'output\s4-uat'
     [System.IO.Directory]::CreateDirectory($manifestDir) | Out-Null
     $manifestPath = Join-Path $manifestDir "$prefix.json"
     $manifestJson = $fixture | ConvertTo-Json -Depth 5

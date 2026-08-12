@@ -45,9 +45,10 @@
           <div class="section-subtitle">先完成静态准备，再通过打印并启用正式进入本轮业务。</div>
         </div>
         <div class="toolbar-actions">
-          <el-button @click="printerSettingsVisible = true">打印助手设置</el-button>
-          <el-button type="primary" @click="bindDialogVisible = true">批量绑定产品</el-button>
+          <el-button v-if="canPrint" @click="printerSettingsVisible = true">打印助手设置</el-button>
+          <el-button v-if="canBindProduct" type="primary" @click="bindDialogVisible = true">批量绑定产品</el-button>
           <el-button
+            v-if="canActivate"
             type="primary"
             plain
             :disabled="!selectedRows.length"
@@ -57,6 +58,7 @@
             打印并启用
           </el-button>
           <el-button
+            v-if="canPrint"
             type="primary"
             plain
             :disabled="!selectedRows.length"
@@ -66,6 +68,7 @@
             直接打印
           </el-button>
           <el-button
+            v-if="canPrint"
             plain
             :disabled="!selectedRows.length"
             :loading="pdfLoading"
@@ -213,8 +216,13 @@ import {
 } from '@/api/palletCode'
 import { formatDateTime } from '@/utils/dateTime'
 import { PALLET_STATUS_MAP, getDictLabel, getDictType } from '@/utils/palletCodeDict'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const authStore = useAuthStore()
+const canBindProduct = computed(() => authStore.hasPermission('qrcode:bind_fixed_product'))
+const canActivate = computed(() => authStore.hasPermission('qrcode:activate'))
+const canPrint = computed(() => authStore.hasPermission('qrcode:print'))
 
 const createToday = () => {
   const now = new Date()

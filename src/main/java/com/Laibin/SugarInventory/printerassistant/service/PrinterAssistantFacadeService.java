@@ -24,6 +24,7 @@ public class PrinterAssistantFacadeService {
     private final PrintExecutionService printExecutionService;
     private final PrinterAssistantStatusService printerAssistantStatusService;
     private final LaunchOnStartupService launchOnStartupService;
+    private final PrinterAssistantAccessKeyService accessKeyService;
 
     public PrinterAssistantFacadeService(
             PrinterDiscoveryService printerDiscoveryService,
@@ -31,7 +32,8 @@ public class PrinterAssistantFacadeService {
             LabelRenderService labelRenderService,
             PrintExecutionService printExecutionService,
             PrinterAssistantStatusService printerAssistantStatusService,
-            LaunchOnStartupService launchOnStartupService
+            LaunchOnStartupService launchOnStartupService,
+            PrinterAssistantAccessKeyService accessKeyService
     ) {
         this.printerDiscoveryService = printerDiscoveryService;
         this.localPrinterConfigService = localPrinterConfigService;
@@ -39,6 +41,7 @@ public class PrinterAssistantFacadeService {
         this.printExecutionService = printExecutionService;
         this.printerAssistantStatusService = printerAssistantStatusService;
         this.launchOnStartupService = launchOnStartupService;
+        this.accessKeyService = accessKeyService;
     }
 
     public List<String> listPrinters() {
@@ -117,6 +120,10 @@ public class PrinterAssistantFacadeService {
 
     public boolean isLaunchOnStartupSupported() {
         return launchOnStartupService.isSupported();
+    }
+
+    public String getAccessKey() {
+        return accessKeyService.getAccessKey();
     }
 
     public void setLaunchOnStartup(boolean enabled) {

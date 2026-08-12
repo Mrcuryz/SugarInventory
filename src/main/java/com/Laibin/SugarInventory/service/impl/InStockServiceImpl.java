@@ -599,16 +599,12 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             }
         }
 
-        System.out.println("records:" + records);
-
         // 闁兼儳鍢茶ぐ鍥箑閺勫浚鍞剁憸鐗堟礃閺?
         Long total = inStockMapper.countInStockRecords(
                 queryDTO,
                 currentUser.getId(),
                 isStaff
         );
-        System.out.println("total:" + total);
-
         return new PageResult<>(total, records);
     }
 

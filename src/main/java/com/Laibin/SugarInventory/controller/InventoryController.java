@@ -29,11 +29,12 @@ import java.time.LocalDate;
 @RequestMapping("/api/inventory")
 @RequiredArgsConstructor
 @Tag(name = "库存详情查询", description = "库位中库存详情查询")
+@PreAuthorize("hasAuthority('inventory:view')")
 public class InventoryController {
     private final InventoryService inventoryService;
     private final InventoryDistributionService inventoryDistributionService;
 
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('inventory:view')")
     @Operation(summary = "受控库存分布分析", description = "按受控产品、库位、状态和分组维度查询当前在库库存分布")
     @PostMapping("/distribution")
     public Result<InventoryDistributionVO> getInventoryDistribution(
@@ -41,7 +42,7 @@ public class InventoryController {
         return Result.success(inventoryDistributionService.getDistribution(query));
     }
 
-    @PreAuthorize("hasAuthority('record:query')")
+    @PreAuthorize("hasAnyAuthority('inventory:view', 'record:query')")
     @Operation(summary = "库存详情查询", description = "根据库位ID和产品名称查询库存详情")
     @PostMapping("/summary")
     public Result<PageResult<VInventorySummary>> getSummary(
@@ -95,18 +96,14 @@ public class InventoryController {
                 productionDateStart, productionDateEnd, page, size));
     }
 
-    @PreAuthorize("hasAuthority('record:query')")
+    @PreAuthorize("hasAnyAuthority('inventory:view', 'record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @GetMapping("/warehouses")
     public Result<List<VWarehouseCapacity>> getWarehouses() {
-        try {
-            return Result.success(inventoryService.getWarehouses());
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        return Result.success(inventoryService.getWarehouses());
     }
 
-    @PreAuthorize("hasAuthority('record:query')")
+    @PreAuthorize("hasAnyAuthority('inventory:view', 'record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @GetMapping("/query")
     public Result<PageResult<VWarehouseCapacity>> queryWarehouses(
@@ -122,15 +119,11 @@ public class InventoryController {
             @RequestParam(value = "updatedStart", required = false) String updatedStart,
             @RequestParam(value = "updatedEnd", required = false) String updatedEnd,
             @RequestParam(value = "hasSpace", required = false) Boolean hasSpace) {
-        try {
-            return Result.success(inventoryService.queryWarehouses(warehouseName, ids, page, size, status,
-                    sortField, sortOrder, createdStart, createdEnd, updatedStart, updatedEnd, hasSpace));
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        return Result.success(inventoryService.queryWarehouses(warehouseName, ids, page, size, status,
+                sortField, sortOrder, createdStart, createdEnd, updatedStart, updatedEnd, hasSpace));
     }
 
-    @PreAuthorize("hasAuthority('record:query')")
+    @PreAuthorize("hasAnyAuthority('inventory:view', 'record:query')")
     @Operation(summary = "库位最近操作记录", description = "查询库位最近流转操作记录")
     @GetMapping("/warehouses/{warehouseId}/recent-operations")
     public Result<List<WarehouseRecentOperationVO>> listWarehouseRecentOperations(@PathVariable Integer warehouseId,
@@ -138,29 +131,18 @@ public class InventoryController {
         return Result.success(inventoryService.listWarehouseRecentOperations(warehouseId, limit));
     }
 
-    @PreAuthorize("hasAuthority('record:query')")
+    @PreAuthorize("hasAnyAuthority('inventory:view', 'record:query')")
     @Operation(summary = "库存容量百分比查询", description = "查询库存容量百分比")
     @PostMapping("/query")
     public Result<PageResult<VWarehouseCapacity>> queryWarehouses(@RequestBody OutStockBatchQueryDTO query) {
-        try {
-            System.out.println(query);
-            return Result.success(inventoryService.batchQueryWarehouses(query));
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        return Result.success(inventoryService.batchQueryWarehouses(query));
     }
 
-    @PreAuthorize("hasAuthority('record:query')")
+    @PreAuthorize("hasAnyAuthority('inventory:view', 'record:query')")
     @Operation(summary = "查询所有存有符合标准的产品的库位", description = "根据产品名称、标准名称、筛网ID、入库日期查询存有符合条件产品的库位")
     @PostMapping("/qualified-warehouses")
     public Result<List<OutWarehouseVO>> getQualifiedWarehouses(@RequestBody OutProductQueryDTO queryDTO) {
-        try {
-            System.out.println(queryDTO);
-            return Result.success(inventoryService.getQualifiedWarehouses(queryDTO));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.error(e.getMessage());
-        }
+        return Result.success(inventoryService.getQualifiedWarehouses(queryDTO));
     }
 
     @Operation(summary = "库位中库存详情查询", description = "根据库位ID和条件查询库位中库存详情")

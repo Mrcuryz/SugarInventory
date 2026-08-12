@@ -46,10 +46,11 @@
     <el-card class="table-card" style="max-width: 1400px">
       <div class="table-toolbar">
         <div class="table-toolbar-left">
-          <el-button @click="printerSettingsVisible = true">打印助手设置</el-button>
-          <el-button type="primary" @click="openGenerateDialog">生成二维码</el-button>
-          <el-button type="danger" :disabled="!selectedRows.length" @click="handleBatchInvalid">批量作废</el-button>
+          <el-button v-if="canPrint" @click="printerSettingsVisible = true">打印助手设置</el-button>
+          <el-button v-if="canGenerate" type="primary" @click="openGenerateDialog">生成二维码</el-button>
+          <el-button v-if="canInvalidate" type="danger" :disabled="!selectedRows.length" @click="handleBatchInvalid">批量作废</el-button>
           <el-button
+              v-if="canPrint"
               type="primary"
               plain
               :loading="batchPrintLoading"
@@ -59,6 +60,7 @@
             批量直接打印
           </el-button>
           <el-button
+              v-if="canPrint"
               type="primary"
               plain
               :loading="batchPdfLoading"
@@ -109,7 +111,7 @@
           <template #default="{ row }">
             <div class="row-actions">
               <el-button type="primary" link @click="openQrDialog(row)">二维码</el-button>
-              <el-dropdown trigger="click" @command="command => handleQrAction(row, command)">
+              <el-dropdown v-if="canPrint" trigger="click" @command="command => handleQrAction(row, command)">
                 <el-button type="primary" link :loading="qrDownloadLoading">
                   下载
                 </el-button>
@@ -126,8 +128,8 @@
               <el-button v-if="canShowAssayAction(row)" type="primary" link @click="openAssayDialog(row)">化验</el-button>
               <el-button v-if="canShowLocationAction(row)" type="primary" link @click="goWarehouseMap(row)">位置</el-button>
               <el-button v-if="canShowFlowAction(row)" type="primary" link @click="openFlowDrawer(row)">流转</el-button>
-              <el-button v-if="canShowInvalidAction(row)" type="danger" link @click="handleInvalid(row)">作废</el-button>
-              <el-button v-if="canShowRestoreInvalidAction(row)" type="warning" link @click="handleRestoreInvalid(row)">取消作废</el-button>
+              <el-button v-if="canInvalidate && canShowInvalidAction(row)" type="danger" link @click="handleInvalid(row)">作废</el-button>
+              <el-button v-if="canInvalidate && canShowRestoreInvalidAction(row)" type="warning" link @click="handleRestoreInvalid(row)">取消作废</el-button>
             </div>
           </template>
         </el-table-column>
@@ -154,6 +156,7 @@
       <div v-if="generatedCodes.length" class="code-result">
         <el-tag v-for="code in generatedCodes" :key="code" class="code-tag">{{ code }}</el-tag>
         <el-button
+            v-if="canPrint"
             type="primary"
             plain
             size="small"
@@ -174,7 +177,7 @@
       <div class="qr-wrapper">
         <div class="qr-code">{{ currentCode }}</div>
         <el-image v-if="qrImageUrl" :src="qrImageUrl" fit="contain" class="qr-image"/>
-        <div class="qr-download-actions">
+        <div v-if="canPrint" class="qr-download-actions">
           <el-button type="success" plain :loading="qrPrintLoading" @click="handleDirectPrintByCodes([currentCode])">
             直接打印标签
           </el-button>
@@ -287,7 +290,7 @@
         <div class="flow-panel">
           <div class="panel-title">
             第 {{ displayCycleNo(selectedCycle?.cycleNo) }} 轮明细
-            <el-button type="danger" size="small" :disabled="!selectedFlowIds.length" @click="handleDeleteFlows">批量删除历史记录</el-button>
+            <el-button v-if="canDeleteFlow" type="danger" size="small" :disabled="!selectedFlowIds.length" @click="handleDeleteFlows">批量删除历史记录</el-button>
           </div>
           <el-table
               :data="flowList"
@@ -368,9 +371,15 @@ import {
   getDictLabel,
   getDictType
 } from '@/utils/palletCodeDict'
+import {useAuthStore} from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
+const canGenerate = computed(() => authStore.hasPermission('qrcode:generate'))
+const canPrint = computed(() => authStore.hasPermission('qrcode:print'))
+const canInvalidate = computed(() => authStore.hasPermission('qrcode:invalidate'))
+const canDeleteFlow = computed(() => authStore.hasPermission('qrcode:flow_delete'))
 const searchForm = ref({
   code: '',
   status: '',

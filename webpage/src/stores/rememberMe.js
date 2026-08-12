@@ -1,5 +1,6 @@
 import {defineStore} from 'pinia'
 import {ref} from 'vue'
+import {sanitizeRememberedLogin} from '@/utils/rememberedLogin.mjs'
 
 const rememberMeStore = defineStore('userInfo', () => {
     //定义状态相关的内容
@@ -7,7 +8,7 @@ const rememberMeStore = defineStore('userInfo', () => {
     const info = ref({})
 
     const setInfo = (newInfo) => {
-        info.value = newInfo
+        info.value = sanitizeRememberedLogin(newInfo)
     }
 
 
@@ -15,7 +16,11 @@ const rememberMeStore = defineStore('userInfo', () => {
         info.value = {}
     }
 
-    return {info, setInfo, removeInfo}
+    const sanitizeInfo = () => {
+        info.value = sanitizeRememberedLogin(info.value)
+    }
+
+    return {info, setInfo, removeInfo, sanitizeInfo}
 
 }, {persist: true})
 export default rememberMeStore;

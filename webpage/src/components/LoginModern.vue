@@ -24,9 +24,9 @@ const form = reactive({
 })
 
 const savedInfo = rememberStore.info || {}
+rememberStore.sanitizeInfo()
 if (savedInfo.name) {
   form.name = savedInfo.name
-  form.password = savedInfo.password || ''
   form.rememberMe = true
 }
 
@@ -76,7 +76,7 @@ const handleSubmit = async () => {
       throw new Error('登录响应缺少 token')
     }
     if (form.rememberMe) {
-      rememberStore.setInfo({...form})
+      rememberStore.setInfo({name: form.name})
     } else {
       rememberStore.removeInfo()
     }
@@ -211,7 +211,7 @@ const handleSubmit = async () => {
           </el-form-item>
 
           <div class="form-options">
-            <el-checkbox v-model="form.rememberMe" :disabled="loading">记住登录</el-checkbox>
+            <el-checkbox v-model="form.rememberMe" :disabled="loading">记住用户名</el-checkbox>
           </div>
 
           <el-button

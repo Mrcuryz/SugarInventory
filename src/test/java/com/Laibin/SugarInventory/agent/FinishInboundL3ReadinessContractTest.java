@@ -58,7 +58,7 @@ class FinishInboundL3ReadinessContractTest {
     }
 
     @Test
-    void recognizesCompletedS0BusinessHardeningWithoutOpeningL3Execution() throws Exception {
+    void recognizesCompletedS4IsolationWithoutOpeningMcpExecutionOrProduction() throws Exception {
         Field items = ConfirmPalletInBatchDTO.class.getDeclaredField("items");
         assertThat(items.getAnnotation(Size.class)).isNotNull();
         assertThat(items.getAnnotation(Size.class).max()).isEqualTo(20);
@@ -72,7 +72,13 @@ class FinishInboundL3ReadinessContractTest {
                 "concurrent_confirm_vs_cancel_has_one_deterministic_winner: PASS_LOCAL_MYSQL_5_ROUNDS",
                 "batch_failure_rolls_back_all_business_changes: PASS_LOCAL_MYSQL",
                 "status: LOCAL_MYSQL_UAT_GO",
-                "execution_implementation_status: NO_GO");
+                "execution_implementation_status: S3_CONTROLLED_UI_IMPLEMENTED_DEFAULT_OFF",
+                "production_status: NOT_RELEASED",
+                "next_required_slice: FORMAL_ROLE_OWNER_AND_SEPARATE_PRODUCTION_RELEASE_DECISION",
+                "S4_REAL_DOMAIN_AUDIT_FAILURE_ROLLBACK_AND_RECOVERY_LOCAL_UAT",
+                "status: ISOLATED_UAT_PASS_RELEASE_NO_GO",
+                "release_decision: NO_GO_DEFAULT_OFF_ZERO_ROLE_ASSIGNMENTS",
+                "execute_mcp_registration_review: NOT_STARTED_REMAINS_UNREGISTERED");
     }
 
     @Test

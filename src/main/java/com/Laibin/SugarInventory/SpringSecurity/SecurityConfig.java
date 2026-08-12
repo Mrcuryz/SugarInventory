@@ -39,7 +39,7 @@ public class SecurityConfig {
                                         "/doc.html",
                                         "/swagger-ui/**",
                                         "/webjars/**",
-                                        "/swagger-ui.html").permitAll()
+                            "/swagger-ui.html").permitAll()
                                 .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

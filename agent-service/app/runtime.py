@@ -14,7 +14,7 @@ from typing import Any
 from app.cancellation import current_cancellation_token
 from app.agents import MAIN_AGENT, AgentHandoffRouter, ExpertBoundaryError
 from app.business_time import BusinessClock
-from app.knowledge import is_static_realtime_mixed_query
+from app.knowledge import classify_knowledge_query, is_static_realtime_mixed_query
 from app.execution import (
     AgentExecutionContext,
     bind_execution_context,
@@ -679,6 +679,7 @@ class WarehouseAgentRuntime:
 
     def _begin_registered_goal(self, state: WarehouseAgentState, goal_type: str | None) -> None:
         state.active_goal_type = goal_type
+        state.goal_contract_locked = goal_type is not None
         state.fact_envelopes = []
         state.last_goal_completion = None
         if goal_type is not None and goal_type not in {
@@ -964,6 +965,12 @@ class WarehouseAgentRuntime:
                 "SALES",
             }
         ] if isinstance(raw_domains, list) else []
+        if not domains:
+            domains = (
+                ["PROCESS"]
+                if goal_type == "PROCESS_KNOWLEDGE_QUERY"
+                else ["COMPANY", "PRODUCT_MARKETING", "CERTIFICATION", "SALES"]
+            )
         corpus_version = data.get("corpusVersion")
         evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
         snapshot: dict[str, Any] = {
@@ -1104,6 +1111,34 @@ class WarehouseAgentRuntime:
             }
         if decision is None:
             return self._llm_model_error(request.agentSessionId, "主模型没有生成路由决策。", trace)
+        bounded_knowledge_subtype = classify_knowledge_query(text)
+        if bounded_knowledge_subtype is not None:
+            bounded_knowledge_goal = (
+                "PROCESS_KNOWLEDGE_QUERY"
+                if bounded_knowledge_subtype == "knowledge_process"
+                else "ENTERPRISE_KNOWLEDGE_QUERY"
+            )
+            if not (
+                decision.action == "DELEGATE"
+                and decision.expertAgent == "knowledge_expert"
+                and decision.goalType == bounded_knowledge_goal
+            ):
+                trace["mainRouteGuard"] = {
+                    "status": "RECOVERED_AS_KNOWLEDGE_DELEGATE",
+                    "rejectedAction": decision.action,
+                    "rejectedExpertAgent": decision.expertAgent,
+                    "rejectedGoalType": decision.goalType,
+                    "expertAgent": "knowledge_expert",
+                    "goalType": bounded_knowledge_goal,
+                    "reason": "BOUNDED_STATIC_KNOWLEDGE_QUERY",
+                }
+                decision = MainAgentDecisionV1(
+                    action="DELEGATE",
+                    expertAgent="knowledge_expert",
+                    goalType=bounded_knowledge_goal,
+                    semanticReason="READ_QUERY",
+                    confidence=1.0,
+                )
         if decision.action == "DIRECT_ANSWER":
             if decision.semanticReason not in {"SMALLTALK", "CAPABILITY", "SECURITY_REFUSAL"}:
                 recovery_expert = self._llm_business_recovery_expert(state, text)
@@ -1273,7 +1308,20 @@ class WarehouseAgentRuntime:
     ) -> ChatResponse:
         profile = self.agent_router.profile(expert_agent)
         handoff = self.agent_router.handoff_for_agent(expert_agent, mode="llm_delegate")
-        visible_schemas = self.argument_builder.llm_visible_tool_schemas(handoff)
+        active_goal = GOAL_CONTRACTS.get(state.active_goal_type)
+        goal_tool_scope = (
+            active_goal.allowedTools
+            if (
+                state.goal_contract_locked
+                and active_goal is not None
+                and active_goal.ownerExpert == expert_agent
+            )
+            else None
+        )
+        visible_schemas = self.argument_builder.llm_visible_tool_schemas(
+            handoff,
+            allowed_tools=goal_tool_scope,
+        )
         trace.setdefault("expertLoop", {"expertAgent": expert_agent, "events": []})
         loop_trace = trace["expertLoop"]
         planning_rejections = 0
@@ -1294,6 +1342,12 @@ class WarehouseAgentRuntime:
             if structured is not None:
                 return self._finish_llm_response(structured, trace, request)
             report_business_progress("expert_planning")
+            goal_completion = self._evaluate_registered_goal(state)
+            registered_goal_complete = bool(
+                state.goal_contract_locked
+                and goal_completion is not None
+                and goal_completion.get("status") == "COMPLETE"
+            )
             reset_model_decision_diagnostics()
             try:
                 decision = self.model_client.decide_expert_action(
@@ -1303,11 +1357,12 @@ class WarehouseAgentRuntime:
                         expertAgent=expert_agent,
                         expertInstructions=list(profile.instructions),
                         selectedContext=self._llm_selected_context(state),
-                        toolSchemas=visible_schemas,
+                        toolSchemas={} if registered_goal_complete else visible_schemas,
                         observations=self._llm_model_observations(observations),
                         toolCallCount=tool_call_count,
                         maxToolCalls=self.llm_max_tool_calls,
                         decisionStage="RESULT_ANALYSIS" if observations else "INITIAL",
+                        registeredGoalComplete=registered_goal_complete,
                     )
                 ) if self.model_client is not None else None
             except ModelDecisionError as exc:
@@ -1445,6 +1500,48 @@ class WarehouseAgentRuntime:
                     trace,
                     request,
                 )
+            rediscovery_before_goal_lock = self._llm_selection_rediscovery_error(
+                decision.toolName,
+                decision.arguments,
+                observations,
+            )
+            goal_tool_error = (
+                None
+                if rediscovery_before_goal_lock is not None
+                else self._llm_active_goal_tool_error(
+                    state=state,
+                    expert_agent=expert_agent,
+                    tool_name=decision.toolName,
+                    registered_goal_complete=False,
+                )
+            )
+            if goal_tool_error is not None:
+                planning_rejections += 1
+                if planning_rejections > 1:
+                    return self._finish_llm_response(
+                        self._llm_boundary_rejection(
+                            request.agentSessionId,
+                            trace,
+                            "模型连续提出了超出当前登记目标的工具动作。",
+                        ),
+                        trace,
+                        request,
+                    )
+                observations.append(
+                    {
+                        "observationId": f"obs_{len(observations) + 1}",
+                        "status": "PLAN_REJECTED",
+                        "message": goal_tool_error,
+                    }
+                )
+                loop_trace["events"].append(
+                    {
+                        "action": "PLAN_REJECTED",
+                        "toolName": decision.toolName,
+                        "status": "ACTIVE_GOAL_TOOL_SCOPE_REJECTED",
+                    }
+                )
+                continue
             rediscovery_error = self._llm_selection_rediscovery_error(
                 decision.toolName,
                 decision.arguments,
@@ -1592,6 +1689,40 @@ class WarehouseAgentRuntime:
                     }
                 )
                 continue
+            if registered_goal_complete:
+                goal_tool_error = self._llm_active_goal_tool_error(
+                    state=state,
+                    expert_agent=expert_agent,
+                    tool_name=decision.toolName,
+                    registered_goal_complete=True,
+                )
+                if goal_tool_error is not None:
+                    planning_rejections += 1
+                    if planning_rejections > 1:
+                        return self._finish_llm_response(
+                            self._llm_boundary_rejection(
+                                request.agentSessionId,
+                                trace,
+                                "模型连续提出了超出当前登记目标的工具动作。",
+                            ),
+                            trace,
+                            request,
+                        )
+                    observations.append(
+                        {
+                            "observationId": f"obs_{len(observations) + 1}",
+                            "status": "PLAN_REJECTED",
+                            "message": goal_tool_error,
+                        }
+                    )
+                    loop_trace["events"].append(
+                        {
+                            "action": "PLAN_REJECTED",
+                            "toolName": decision.toolName,
+                            "status": "ACTIVE_GOAL_COMPLETE_TOOL_REJECTED",
+                        }
+                    )
+                    continue
             previous_terminal = self._latest_terminal_empty_result(observations, call_signature)
             if previous_terminal is not None:
                 status = str(previous_terminal.get("status") or "")
@@ -1675,6 +1806,9 @@ class WarehouseAgentRuntime:
                     return self._finish_llm_response(response, trace, request)
                 if exc.code == "RAG_UNAVAILABLE":
                     response = self._knowledge_unavailable_response(request.agentSessionId)
+                    completion = self._attach_goal_completion(response, state)
+                    if completion is not None:
+                        trace["goalCompletion"] = completion
                     return self._finish_llm_response(response, trace, request)
                 continue
 
@@ -1938,6 +2072,7 @@ class WarehouseAgentRuntime:
             "expert_initial": 0,
             "expert_result_analysis": 0,
         }
+        stage_input_bytes = {stage: 0 for stage in stages}
         stage_counts = {stage: 0 for stage in stages}
         decision_count = 0
         trace = response.reviewTrace if isinstance(response.reviewTrace, dict) else {}
@@ -1948,11 +2083,14 @@ class WarehouseAgentRuntime:
                     continue
                 latency_ms = diagnostic.get("latencyMs")
                 stage = str(diagnostic.get("decisionStage") or "")
+                input_bytes = diagnostic.get("inputBytes")
                 if isinstance(latency_ms, (int, float)):
                     decision_count += 1
                     if stage in stages:
                         stages[stage] += max(0, round(float(latency_ms)))
                         stage_counts[stage] += 1
+                if isinstance(input_bytes, (int, float)) and stage in stage_input_bytes:
+                    stage_input_bytes[stage] += max(0, round(float(input_bytes)))
 
         safe_debug = dict(response.debug) if isinstance(response.debug, dict) else {}
         safe_debug.update(
@@ -1961,10 +2099,13 @@ class WarehouseAgentRuntime:
                 "totalDurationMs": max(0, round((time.monotonic() - started) * 1000)),
                 "mainRouteMs": stages["main_route"],
                 "mainRouteDecisionCount": stage_counts["main_route"],
+                "mainRouteInputBytes": stage_input_bytes["main_route"],
                 "expertInitialMs": stages["expert_initial"],
                 "expertInitialDecisionCount": stage_counts["expert_initial"],
+                "expertInitialInputBytes": stage_input_bytes["expert_initial"],
                 "expertResultAnalysisMs": stages["expert_result_analysis"],
                 "expertResultAnalysisDecisionCount": stage_counts["expert_result_analysis"],
+                "expertResultAnalysisInputBytes": stage_input_bytes["expert_result_analysis"],
                 "modelDecisionCount": decision_count,
                 "toolDurationMs": max(0, round(sum(tool_durations) * 1000)),
                 "toolCallCount": len(tool_durations),
@@ -2885,6 +3026,25 @@ class WarehouseAgentRuntime:
                 "用户明确要求完整托盘历史；请改用 query_pallet_flow_records，"
                 "不要用托盘状态或生命周期摘要替代完整记录。"
             )
+        return None
+
+    @staticmethod
+    def _llm_active_goal_tool_error(
+        *,
+        state: WarehouseAgentState,
+        expert_agent: str,
+        tool_name: str,
+        registered_goal_complete: bool,
+    ) -> str | None:
+        contract = GOAL_CONTRACTS.get(state.active_goal_type)
+        if not state.goal_contract_locked or contract is None:
+            return None
+        if contract.ownerExpert != expert_agent:
+            return "当前登记目标不属于本专家，Runtime 已拒绝工具动作。"
+        if registered_goal_complete:
+            return "当前登记目标的必需事实已经完整，请直接分析已引用观察，不得追加工具调用。"
+        if tool_name not in contract.allowedTools:
+            return "该工具不在当前 GoalContract 的 allowedTools 中，Runtime 已拒绝目标漂移。"
         return None
 
     def _llm_structured_expert_clarification(

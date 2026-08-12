@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.assembler.ManagementViewAssembler;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.dto.ProductCreateDTO;
@@ -27,13 +28,14 @@ import java.util.List;
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
 @Tag(name = "产品管理", description = "产品管理相关接口，包括产品查询、创建、更新、删除等")
+@PreAuthorize("hasAuthority('product:view')")
 public class ProductController {
     private final ProductService productService;
 
     @Operation(summary = "查询产品信息", description = "根据产品ID查询产品信息，返回产品详细信息")
     @GetMapping("/{id}")
-    public Result<Product> getProduct(@PathVariable Integer id) {
-        return Result.success(productService.getById(id));
+    public Result<ProductVO> getProduct(@PathVariable Integer id) {
+        return Result.success(ManagementViewAssembler.toProductVO(productService.getById(id)));
     }
 
 
@@ -45,7 +47,7 @@ public class ProductController {
      */
     @Operation(summary = "根据名称查询产品信息", description = "根据产品名称支持模糊查询，返回产品列表")
     @GetMapping("/product")
-    public Result<List<Product>> getProductsByCondition(
+    public Result<List<ProductVO>> getProductsByCondition(
             @Parameter(description = "产品名称，支持模糊查询", example = "冰", required = false)
             @RequestParam(required = false) String name,
             @Parameter(description = "产品类型，例如 '白冰糖' 或 '黄冰糖'", required = false)
@@ -53,17 +55,13 @@ public class ProductController {
             @Parameter(description = "产品状态，例如 '半成品' 或 '成品'", required = false)
             @RequestParam(required = false) String status
     ) {
-        try {
-            System.out.println(name + " " + type + " " + status);
-            return Result.success(productService.getProductsByCondition(name, type, status));
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        return Result.success(ManagementViewAssembler.toProductVOs(
+                productService.getProductsByCondition(name, type, status)));
     }
 
     @Operation(summary = "分页查询产品信息", description = "根据产品名称、类型、状态分页查询")
     @GetMapping("/product/page")
-    public Result<PageResult<Product>> pageProductsByCondition(
+    public Result<PageResult<ProductVO>> pageProductsByCondition(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String status,
@@ -78,7 +76,8 @@ public class ProductController {
         int effectiveSize = size == null || size < 1 ? 10 : size;
         int fromIndex = Math.min((effectivePage - 1) * effectiveSize, list.size());
         int toIndex = Math.min(fromIndex + effectiveSize, list.size());
-        return Result.success(new PageResult<>((long) list.size(), list.subList(fromIndex, toIndex)));
+        PageResult<Product> result = new PageResult<>((long) list.size(), list.subList(fromIndex, toIndex));
+        return Result.success(ManagementViewAssembler.toProductPage(result));
     }
 
     /**
@@ -161,12 +160,8 @@ public class ProductController {
             @Parameter(description = "当前登录用户，基于Token解析获得", required = true)
             @AuthenticationPrincipal LoginUser loginUser
     ) {
-        try {
-            productService.createProduct(vo, loginUser.getUser());
-            return Result.success(true);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        productService.createProduct(vo, loginUser.getUser());
+        return Result.success(true);
     }
 
     /**
@@ -188,11 +183,12 @@ public class ProductController {
     @LogOperation(value = "产品", type = OperationType.UPDATE)
     @PutMapping("")
     @PreAuthorize("hasAuthority('product:update')")
-    public Result<Product> updateProduct(
+    public Result<ProductVO> updateProduct(
             @Validated @RequestBody ProductUpdateDTO dto,
             @AuthenticationPrincipal LoginUser loginUser
     ) {
-        return Result.success(productService.updateProduct(dto, loginUser.getUser().getId()));
+        return Result.success(ManagementViewAssembler.toProductVO(
+                productService.updateProduct(dto, loginUser.getUser().getId())));
     }
 
     @Operation(summary = "删除产品", description = "根据产品ID删除产品")
@@ -210,7 +206,6 @@ public class ProductController {
 
 
     @Operation(summary = "获取产品所有存放的库位", description = "获取产品所有存放的库位")
-    @LogOperation(value = "产品", type = OperationType.DELETE)
     @GetMapping("getProductWarehouse/{id}")
     public Result<List<VInventorySummary>> getProductWarehouse(
             @Parameter(description = "产品ID", required = true)

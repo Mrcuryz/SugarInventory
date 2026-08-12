@@ -54,11 +54,13 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
     private static final Logger log = LoggerFactory.getLogger(AutoInboundParseServiceImpl.class);
     private static final String REDIS_PREFIX = "auto_inbound:batch:";
     private static final String HISTORY_PREFIX = "auto_inbound:history:";
+    private static final String OWNER_PREFIX = "auto_inbound:owner:";
     private static final int HISTORY_LIMIT = 20;
     private static final DateTimeFormatter HISTORY_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
     public AutoInboundParseResponse parse(AutoInboundParseRequest request, User user) {
+        requireUser(user);
         request.setOperator(user);
         String batchId = UUID.randomUUID().toString();
 
@@ -96,6 +98,8 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
             String json = objectMapper.writeValueAsString(tasks);
             stringRedisTemplate.opsForValue()
                     .set(key, json, 24, TimeUnit.HOURS);
+            stringRedisTemplate.opsForValue()
+                    .set(OWNER_PREFIX + batchId, String.valueOf(user.getId()), 24, TimeUnit.HOURS);
             stringRedisTemplate.opsForZSet().add(historyKey(user), batchId, System.currentTimeMillis());
             stringRedisTemplate.expire(historyKey(user), 24, TimeUnit.HOURS);
         } catch (JsonProcessingException e) {
@@ -111,7 +115,8 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
     }
 
     @Override
-    public AutoInboundParseResponse getBatch(String batchId) {
+    public AutoInboundParseResponse getBatch(String batchId, User user) {
+        assertBatchOwner(batchId, user);
         String key = REDIS_PREFIX + batchId;
         String json = stringRedisTemplate.opsForValue().get(key);
         if (json == null) {
@@ -126,6 +131,20 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
             return resp;
         } catch (JsonProcessingException e) {
             throw new RuntimeException("反序列化自动入库任务失败", e);
+        }
+    }
+
+    @Override
+    public void saveBatch(String batchId, List<AutoInboundTask> tasks, User user) {
+        assertBatchOwner(batchId, user);
+        try {
+            stringRedisTemplate.opsForValue().set(
+                    REDIS_PREFIX + batchId,
+                    objectMapper.writeValueAsString(tasks == null ? List.of() : tasks),
+                    24,
+                    TimeUnit.HOURS);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "保存自动入库批次状态失败");
         }
     }
 
@@ -563,7 +582,19 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
             return "EMPTY";
         }
         boolean allCommitted = tasks.stream().allMatch(t -> "COMMITTED".equalsIgnoreCase(t.getStatus()));
-        return allCommitted ? "COMMITTED" : "DRAFT";
+        if (allCommitted) {
+            return "COMMITTED";
+        }
+        if (tasks.stream().anyMatch(t -> "COMMITTING".equalsIgnoreCase(t.getStatus()))) {
+            return "COMMITTING";
+        }
+        if (tasks.stream().anyMatch(t -> "FAILED".equalsIgnoreCase(t.getStatus()))) {
+            return "FAILED";
+        }
+        if (tasks.stream().anyMatch(t -> "COMMITTED".equalsIgnoreCase(t.getStatus()))) {
+            return "PARTIAL";
+        }
+        return "DRAFT";
     }
 
     private String resolveBatchParseType(List<AutoInboundTask> tasks) {
@@ -595,6 +626,33 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
     private String historyKey(User user) {
         Integer userId = user == null ? null : user.getId();
         return HISTORY_PREFIX + (userId == null ? "anonymous" : userId);
+    }
+
+    private void assertBatchOwner(String batchId, User user) {
+        requireUser(user);
+        if (batchId == null || batchId.isBlank() || batchId.length() > 64) {
+            throw new BusinessException(404, "自动入库批次不存在、已过期或不属于当前用户");
+        }
+        String ownerKey = OWNER_PREFIX + batchId;
+        String ownerId = stringRedisTemplate.opsForValue().get(ownerKey);
+        String currentUserId = String.valueOf(user.getId());
+        if (ownerId == null) {
+            Double historyScore = stringRedisTemplate.opsForZSet().score(historyKey(user), batchId);
+            if (historyScore == null) {
+                throw new BusinessException(404, "自动入库批次不存在、已过期或不属于当前用户");
+            }
+            stringRedisTemplate.opsForValue().set(ownerKey, currentUserId, 24, TimeUnit.HOURS);
+            return;
+        }
+        if (!ownerId.equals(currentUserId)) {
+            throw new BusinessException(404, "自动入库批次不存在、已过期或不属于当前用户");
+        }
+    }
+
+    private void requireUser(User user) {
+        if (user == null || user.getId() == null) {
+            throw new BusinessException(401, "用户认证信息无效");
+        }
     }
 
     private Product resolveTaskProduct(AutoInboundTask task) {

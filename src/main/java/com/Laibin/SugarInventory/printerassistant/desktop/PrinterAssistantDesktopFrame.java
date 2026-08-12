@@ -19,6 +19,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
@@ -35,7 +36,9 @@ import java.awt.Image;
 import java.awt.MenuItem;
 import java.awt.PopupMenu;
 import java.awt.SystemTray;
+import java.awt.Toolkit;
 import java.awt.TrayIcon;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
@@ -71,6 +74,7 @@ public class PrinterAssistantDesktopFrame extends JFrame {
     private final JLabel systemDefaultPrinterValue = createValueLabel("-");
     private final JLabel recentPrintStatusValue = createValueLabel("暂无打印记录");
     private final JComboBox<String> printerComboBox = new JComboBox<>();
+    private final JPasswordField accessKeyValue = new JPasswordField();
     private final JCheckBox launchOnStartupCheckBox = new JCheckBox("开机自动启动打印助手");
     private final JButton refreshButton = new JButton("刷新状态");
     private final JButton saveButton = new JButton("保存默认打印机");
@@ -78,6 +82,7 @@ public class PrinterAssistantDesktopFrame extends JFrame {
     private final JButton openLogsButton = new JButton("打开日志目录");
     private final JButton viewLogsButton = new JButton("查看日志");
     private final JButton restartServiceButton = new JButton("重启服务");
+    private final JButton copyAccessKeyButton = new JButton("复制连接密钥");
     private final Timer refreshTimer;
 
     public PrinterAssistantDesktopFrame(String[] launchArgs) {
@@ -126,6 +131,7 @@ public class PrinterAssistantDesktopFrame extends JFrame {
         printerPanel.add(createInfoRow("系统默认打印机", systemDefaultPrinterValue));
         printerPanel.add(createInfoRow("已识别打印机数量", printerCountValue));
         printerPanel.add(createComboRow("默认打印机", printerComboBox));
+        printerPanel.add(createAccessKeyRow());
         printerPanel.add(createCheckboxRow(launchOnStartupCheckBox));
 
         JPanel buttonPanel = new JPanel();
@@ -191,6 +197,19 @@ public class PrinterAssistantDesktopFrame extends JFrame {
         return row;
     }
 
+    private JPanel createAccessKeyRow() {
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        JLabel labelComponent = new JLabel("Web 连接密钥");
+        labelComponent.setPreferredSize(new Dimension(120, 28));
+        accessKeyValue.setEditable(false);
+        accessKeyValue.setToolTipText("在 Web 端“打印助手设置”中粘贴；密钥不会由 HTTP 接口返回");
+        row.add(labelComponent, BorderLayout.WEST);
+        row.add(accessKeyValue, BorderLayout.CENTER);
+        row.add(copyAccessKeyButton, BorderLayout.EAST);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        return row;
+    }
+
     private JLabel createValueLabel(String text) {
         JLabel label = new JLabel(text);
         label.setHorizontalAlignment(SwingConstants.LEFT);
@@ -204,6 +223,7 @@ public class PrinterAssistantDesktopFrame extends JFrame {
         openLogsButton.addActionListener(event -> openLogsDirectory());
         viewLogsButton.addActionListener(event -> openLogViewerDialog());
         restartServiceButton.addActionListener(event -> restartServiceAsync());
+        copyAccessKeyButton.addActionListener(event -> copyAccessKey());
     }
 
     private void startServiceAsync() {
@@ -259,6 +279,7 @@ public class PrinterAssistantDesktopFrame extends JFrame {
         List<String> printers = facadeService.listPrinters();
         LocalPrinterConfigView configView = facadeService.getConfig();
         PrinterAssistantStatusView statusView = facadeService.getStatus(true, "printer-assistant-online");
+        String accessKey = facadeService.getAccessKey();
         boolean autoStartEnabled = facadeService.isLaunchOnStartupEnabled();
         boolean autoStartSupported = facadeService.isLaunchOnStartupSupported();
 
@@ -267,6 +288,7 @@ public class PrinterAssistantDesktopFrame extends JFrame {
             systemDefaultPrinterValue.setText(defaultText(configView.systemDefaultPrinterName()));
             printerCountValue.setText(String.valueOf(printers.size()));
             recentPrintStatusValue.setText(formatLastPrintStatus(statusView.lastPrintStatus()));
+            accessKeyValue.setText(accessKey);
             launchOnStartupCheckBox.setSelected(autoStartEnabled);
             launchOnStartupCheckBox.setEnabled(autoStartSupported);
             launchOnStartupCheckBox.setToolTipText(autoStartSupported ? null : "当前运行方式不支持配置开机自启，请使用安装包版本");
@@ -327,6 +349,16 @@ public class PrinterAssistantDesktopFrame extends JFrame {
         } catch (IOException exception) {
             showMessage("打开日志目录失败", exception.getMessage(), JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void copyAccessKey() {
+        char[] key = accessKeyValue.getPassword();
+        if (key.length == 0) {
+            showMessage("复制失败", "连接密钥尚未生成，请等待服务启动完成。", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(new String(key)), null);
+        showMessage("已复制", "连接密钥已复制，请粘贴到 Web 端打印助手设置中。", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void openLogViewerDialog() {
@@ -456,6 +488,7 @@ public class PrinterAssistantDesktopFrame extends JFrame {
         viewLogsButton.setEnabled(true);
         restartServiceButton.setEnabled(true);
         printerComboBox.setEnabled(enabled);
+        copyAccessKeyButton.setEnabled(enabled);
         launchOnStartupCheckBox.setEnabled(enabled);
     }
 

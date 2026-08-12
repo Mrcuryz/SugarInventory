@@ -22,6 +22,11 @@ def classify_knowledge_query(text: str) -> str | None:
     normalized = "".join((text or "").split())
     if not normalized:
         return None
+    if any(
+        marker in normalized
+        for marker in ("领料", "原料消耗", "材料消耗", "实际消耗", "产出", "入库去向")
+    ):
+        return None
     if "批次" in normalized and any(word in normalized for word in ("合格", "化验", "质检")):
         return None
     if "生产订单" in normalized and any(

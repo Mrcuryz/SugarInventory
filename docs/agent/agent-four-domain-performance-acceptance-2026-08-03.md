@@ -89,3 +89,11 @@ agent-service\.venv\Scripts\python.exe scripts\run-agent-performance-sample.py `
 Runtime 会显式区分 `INITIAL` 与 `RESULT_ANALYSIS`，而不是根据模型名称改变流程。留空或省略任一变量时，该阶段回落到 `AGENT_MODEL_NAME`，因此当前默认行为、权限、工具边界和“模型理解 → 专家决策 → 工具调用 → 结果分析”架构均不变。
 
 本次只完成配置接线和自动化契约验证，没有指定或切换候选模型，也没有重新解释上面的 80 条性能结果。候选模型必须使用同一固定语料、相同重复次数和同一成功判定进行 A/B；正确率、受控失败率或任一业务领域 P95 恶化时不得发布。
+
+## 6. 2026-08-12 复审附录
+
+已按活动 GoalContract 裁剪专家首次决策的模型可见 schema，并在必需事实完整后保留专家结果分析、改用空工具集与短提示；同时增加只记录三阶段请求字节数的安全诊断。Python Agent 全量回归为 `480 passed, 8 skipped`。
+
+经用户明确确认固定问题与 shadow 查询事实的模型端点传输边界后，已完成 20 个预采样和 80 个正式冷会话复测。正式样本 80/80 成功，但整体 P50/P95 从 16.547/39.016 秒恶化到 19.953/46.562 秒；库存 P95 降到 32.875 秒，化验、生产、报表 P95 分别恶化到 59.687、34.172、46.562 秒，四领域仍全部超过 15 秒目标。工具 P95 仅 187 ms，长尾仍集中在模型阶段。
+
+真实 Chromium 的“当前库存缺最近30天化验”两轮问答通过，页面 0 console error；工具审计与页面均为 33 个产品组、55,522 件，且只调用一次正确的化验查询工具。一次性账号、101 个会话、审计和 23 个临时报表快照/执行记录已精确清零，服务与临时日志已停止并删除。结论更新为 `REAL_MODEL_80_OF_80_SUCCESS / CHROMIUM_UAT_PASS / PERFORMANCE_GATE_FAILED`。完整复审和样本证据见 `agent-four-domain-performance-optimization-review-2026-08-12.md`、`evaluation/agent-performance-presample-2026-08-12.json` 与 `evaluation/agent-performance-revalidation-2026-08-12.json`。

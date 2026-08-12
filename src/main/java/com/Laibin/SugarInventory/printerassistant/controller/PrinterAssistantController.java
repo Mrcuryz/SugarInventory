@@ -53,7 +53,9 @@ public class PrinterAssistantController {
     }
 
     @PostMapping("/config/default-printer")
-    public AssistantResponse<LocalPrinterConfigView> saveDefaultPrinter(@RequestBody(required = false) DefaultPrinterRequest request) {
+    public AssistantResponse<LocalPrinterConfigView> saveDefaultPrinter(
+            @Valid @RequestBody(required = false) DefaultPrinterRequest request
+    ) {
         String printerName = request == null ? null : request.printerName();
         return AssistantResponse.success(printerAssistantFacadeService.saveDefaultPrinter(printerName), "success");
     }

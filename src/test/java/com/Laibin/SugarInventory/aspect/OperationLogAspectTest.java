@@ -1,14 +1,22 @@
 package com.Laibin.SugarInventory.aspect;
 
+import com.Laibin.SugarInventory.annotation.LogOperation;
+import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.po.Product;
 import com.Laibin.SugarInventory.domain.po.ScreenMesh;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.po.Warehouse;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
+import com.Laibin.SugarInventory.mapper.OperationLogMapper;
 import com.Laibin.SugarInventory.mapper.ScreenMeshMapper;
 import com.Laibin.SugarInventory.mapper.UserMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import org.junit.jupiter.api.Test;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.LinkedHashMap;
@@ -17,10 +25,44 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OperationLogAspectTest {
+
+    @Test
+    void businessFailureMustNeverCauseASecondInvocation() throws Throwable {
+        OperationLogAspect aspect = preparedAspect();
+        ProceedingJoinPoint joinPoint = annotatedJoinPoint();
+        BusinessException failure = new BusinessException("business failed");
+        when(joinPoint.proceed()).thenThrow(failure);
+
+        BusinessException thrown = assertThrows(BusinessException.class, () -> aspect.logOperation(joinPoint));
+
+        assertSame(failure, thrown);
+        verify(joinPoint, times(1)).proceed();
+    }
+
+    @Test
+    void auditPersistenceFailureReturnsCompletedBusinessResultWithoutReplay() throws Throwable {
+        OperationLogAspect aspect = preparedAspect();
+        OperationLogMapper operationLogMapper = (OperationLogMapper) ReflectionTestUtils.getField(aspect, "operationLogMapper");
+        ProceedingJoinPoint joinPoint = annotatedJoinPoint();
+        Result<String> expected = Result.success("done");
+        when(joinPoint.proceed()).thenReturn(expected);
+        doThrow(new IllegalStateException("audit unavailable")).when(operationLogMapper).insert(any());
+
+        Object actual = aspect.logOperation(joinPoint);
+
+        assertSame(expected, actual);
+        verify(joinPoint, times(1)).proceed();
+    }
 
     @Test
     void normalizeDisplayFieldsShouldHideIdsAndResolveNames() {
@@ -78,5 +120,29 @@ class OperationLogAspectTest {
         assertEquals(1, normalized.get("version"));
         assertEquals("2026-04-20", normalized.get("sampleDate"));
         assertNull(normalized.get("id"));
+    }
+
+    private OperationLogAspect preparedAspect() {
+        OperationLogAspect aspect = new OperationLogAspect();
+        ReflectionTestUtils.setField(aspect, "operationLogMapper", mock(OperationLogMapper.class));
+        ReflectionTestUtils.setField(aspect, "tableServiceMap", Map.of());
+        SecurityContextHolder.clearContext();
+        return aspect;
+    }
+
+    private ProceedingJoinPoint annotatedJoinPoint() throws NoSuchMethodException {
+        ProceedingJoinPoint joinPoint = mock(ProceedingJoinPoint.class);
+        MethodSignature signature = mock(MethodSignature.class);
+        when(signature.getMethod()).thenReturn(AuditFixture.class.getDeclaredMethod("execute"));
+        when(joinPoint.getSignature()).thenReturn(signature);
+        when(joinPoint.getArgs()).thenReturn(new Object[0]);
+        return joinPoint;
+    }
+
+    private static class AuditFixture {
+        @LogOperation(value = "test_table", type = OperationType.INSERT)
+        public Result<String> execute() {
+            return Result.success("done");
+        }
     }
 }

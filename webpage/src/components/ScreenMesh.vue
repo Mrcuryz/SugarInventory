@@ -20,7 +20,7 @@
     <el-card class="table-card" style="max-width: 1200px">
       <div class="table-toolbar">
         <div class="table-toolbar-left">
-          <el-button type="primary" @click="dialogVisible = true;operationType='新增筛网'">新增</el-button>
+          <el-button v-if="canCreate" type="primary" @click="dialogVisible = true;operationType='新增筛网'">新增</el-button>
         </div>
       </div>
       <el-table
@@ -52,11 +52,11 @@
         <el-table-column prop="updatedAt" label="更新时间" width="200" sortable/>
         <el-table-column label="操作" width="250" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small"
+            <el-button v-if="canUpdate" type="primary" size="small"
                        @click="dialogVisible = true;operationType='修改筛网';handleEdit(row)">编辑
             </el-button>
-            <el-button type="success" size="small" @click="openAssociateDialog(row)">新增关联产品</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canUpdateProduct" type="success" size="small" @click="openAssociateDialog(row)">新增关联产品</el-button>
+            <el-button v-if="canDelete" type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -130,6 +130,13 @@ import {computed, ref, onMounted} from 'vue'
 import {addMesh, deleteMesh, getMesh, updateMesh} from '@/api/mesh'
 import {changeProduct, getProductList} from '@/api/product'
 import {ElMessage, ElMessageBox} from 'element-plus'
+import {useAuthStore} from '@/stores/auth'
+
+const authStore = useAuthStore()
+const canCreate = computed(() => authStore.hasPermission('screen_mesh:create'))
+const canUpdate = computed(() => authStore.hasPermission('screen_mesh:update'))
+const canDelete = computed(() => authStore.hasPermission('screen_mesh:delete'))
+const canUpdateProduct = computed(() => authStore.hasPermission('product:update'))
 // 搜索表单
 const searchForm = ref({
   meshName: '',

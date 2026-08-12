@@ -5,7 +5,6 @@ import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.QualityStandardDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
-import com.Laibin.SugarInventory.domain.po.QualityStandard;
 import com.Laibin.SugarInventory.domain.vo.QualityStandardVO;
 import com.Laibin.SugarInventory.service.QualityStandardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +20,7 @@ import java.util.List;
 @RequestMapping("/api/quality-standards")
 @RequiredArgsConstructor
 @Tag(name = "化验标准管理", description = "提供化验标准的增删改查接口")
+@PreAuthorize("hasAuthority('quality_standard:view')")
 public class QualityStandardController {
 
     private final QualityStandardService qualityStandardService;
@@ -54,20 +54,23 @@ public class QualityStandardController {
     @Operation(summary = "新增化验标准", description = "创建新的化验标准")
     @LogOperation(value = "化验标准", type = OperationType.INSERT)
     @PostMapping("/add")
-    public Result<QualityStandard> addQualityStandard(@RequestBody @Valid QualityStandardDTO dto) {
+    @PreAuthorize("hasAuthority('quality_standard:create')")
+    public Result<QualityStandardVO> addQualityStandard(@RequestBody @Valid QualityStandardDTO dto) {
         return Result.success(qualityStandardService.addQualityStandard(dto));
     }
 
     @Operation(summary = "更新化验标准", description = "根据 ID 修改化验标准")
     @LogOperation(value = "化验标准", type = OperationType.UPDATE)
     @PutMapping("/update/{id}")
-    public Result<QualityStandard> updateQualityStandard(@PathVariable Integer id, @RequestBody @Valid QualityStandardDTO dto) {
+    @PreAuthorize("hasAuthority('quality_standard:update')")
+    public Result<QualityStandardVO> updateQualityStandard(@PathVariable Integer id, @RequestBody @Valid QualityStandardDTO dto) {
         return Result.success(qualityStandardService.updateQualityStandard(id, dto));
     }
 
     @Operation(summary = "删除化验标准", description = "若标准已被产品使用，会返回业务提示")
     @LogOperation(value = "化验标准", type = OperationType.DELETE)
     @DeleteMapping("/delete/{id}")
+    @PreAuthorize("hasAuthority('quality_standard:delete')")
     public Result<String> deleteQualityStandard(@PathVariable Integer id) {
         qualityStandardService.deleteQualityStandard(id);
         return Result.success("删除成功");
@@ -76,7 +79,7 @@ public class QualityStandardController {
     @Operation(summary = "强制删除化验标准", description = "管理员可强制删除标准，并清理关联产品关系")
     @LogOperation(value = "化验标准", type = OperationType.DELETE)
     @DeleteMapping("/delete/{id}/force")
-    @PreAuthorize("hasAuthority('product:delete')")
+    @PreAuthorize("hasAuthority('quality_standard:delete')")
     public Result<String> forceDeleteQualityStandard(@PathVariable Integer id) {
         qualityStandardService.forceDeleteQualityStandard(id);
         return Result.success("强制删除成功");

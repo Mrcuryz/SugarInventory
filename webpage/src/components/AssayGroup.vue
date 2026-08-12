@@ -22,7 +22,7 @@
     <el-card class="table-card" style="max-width: 1200px">
       <div class="table-toolbar">
         <div class="table-toolbar-left">
-          <el-button type="primary" @click="openDialog('新增批量化验组')">新增</el-button>
+          <el-button v-if="canCreate" type="primary" @click="openDialog('新增批量化验组')">新增</el-button>
         </div>
       </div>
 
@@ -57,6 +57,7 @@
         <el-table-column label="操作" width="180" align="center">
           <template #default="{ row }">
             <el-button
+                v-if="canUpdate"
                 type="primary"
                 size="small"
                 @click="openDialog('编辑批量化验组', row)"
@@ -64,6 +65,7 @@
               编辑
             </el-button>
             <el-button
+                v-if="canDelete"
                 type="danger"
                 size="small"
                 @click="handleDelete(row)"
@@ -179,6 +181,12 @@ import {ElMessage, ElMessageBox, ElLoading} from 'element-plus'
 import {addAssayGroup, deleteAssayGroup, getAssayGroup, updateAssayGroup} from "@/api/assayGroup";
 import * as XLSX from 'xlsx'
 import {getAssay, getSemiProduct, getStProduct} from "@/api/assay";
+import {useAuthStore} from '@/stores/auth'
+
+const authStore = useAuthStore()
+const canCreate = computed(() => authStore.hasPermission('assay_group:create'))
+const canUpdate = computed(() => authStore.hasPermission('assay_group:update'))
+const canDelete = computed(() => authStore.hasPermission('assay_group:delete'))
 
 // -------------------------- 接口请求（需根据实际项目替换）--------------------------
 // 模拟接口：获取批量化验组列表

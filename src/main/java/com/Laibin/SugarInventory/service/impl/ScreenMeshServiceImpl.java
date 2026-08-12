@@ -3,7 +3,6 @@ package com.Laibin.SugarInventory.service.impl;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.domain.dto.ScreenMeshCreateDTO;
 import com.Laibin.SugarInventory.domain.dto.ScreenMeshUpdateDTO;
-import com.Laibin.SugarInventory.domain.po.Assay;
 import com.Laibin.SugarInventory.domain.po.ScreenMesh;
 import com.Laibin.SugarInventory.mapper.ScreenMeshMapper;
 import com.Laibin.SugarInventory.service.LoggableService;
@@ -22,10 +21,7 @@ public class ScreenMeshServiceImpl implements ScreenMeshService, LoggableService
 
     @Override
     public List<ScreenMesh> findScreenMeshes(String meshName) {
-        System.out.println("findScreenMeshes" + meshName);
-        List<ScreenMesh> list = screenMeshMapper.findByMeshName(meshName);
-        System.out.println(list);
-        return list;
+        return screenMeshMapper.findByMeshName(meshName);
     }
 
     @Override

@@ -344,6 +344,10 @@ def test_realtime_and_batch_qualification_routes_do_not_use_knowledge_expert() -
         user_message="生产订单 PO20260801 的实际原料消耗是多少",
         state=state,
     )
+    contextual_material_and_output = builder.plan(
+        user_message="原料消耗及产出",
+        state=state,
+    )
     certification = builder.plan(
         user_message="公司获得了哪些荣誉认证",
         state=state,
@@ -351,6 +355,8 @@ def test_realtime_and_batch_qualification_routes_do_not_use_knowledge_expert() -
 
     assert material_consumption.toolName != KNOWLEDGE_TOOL_NAME
     assert material_consumption.routeSnapshot["agent_handoff"]["target_agent"] != "knowledge_expert"
+    assert contextual_material_and_output.toolName != KNOWLEDGE_TOOL_NAME
+    assert contextual_material_and_output.routeSnapshot["agent_handoff"]["target_agent"] != "knowledge_expert"
     assert certification.toolName == KNOWLEDGE_TOOL_NAME
     assert certification.routeSnapshot["agent_handoff"]["target_agent"] == "knowledge_expert"
 
@@ -409,6 +415,60 @@ def test_llm_knowledge_goal_uses_fixed_domains_and_safe_formatter_without_second
     assert response.reviewTrace["knowledgeAudit"]["status"] == "SUCCEEDED"
     assert response.reviewTrace["knowledgeAudit"]["corpusVersion"] == "laibin-rag-2026-07-29-v1"
     assert "来源：" in response.answer
+
+
+def test_llm_bounded_knowledge_question_recovers_from_inventory_misroute_and_fails_safe() -> None:
+    model = ScriptedKnowledgeModel(
+        [
+            MainAgentDecisionV1(
+                action="DELEGATE",
+                expertAgent="inventory_expert",
+                goalType="CURRENT_PRODUCT_INVENTORY",
+                semanticReason="READ_QUERY",
+                confidence=0.88,
+            )
+        ],
+        [
+            ExpertLoopDecisionV1(
+                action="CALL_TOOL",
+                toolName=KNOWLEDGE_TOOL_NAME,
+                arguments={"limit": 5},
+                statusReason="NEED_FRESH_DATA",
+            )
+        ],
+    )
+    tools = MockToolClient()
+    runtime = WarehouseAgentRuntime(
+        tool_client=tools,
+        argument_builder=ToolArgumentBuilder(model_client=model),
+        model_client=model,
+        planning_mode="llm",
+        llm_allowed_experts=("knowledge_expert", "inventory_expert"),
+        knowledge_service=None,
+    )
+
+    response = runtime.chat(
+        chat_request("白砂糖金属检测限值是什么？", session="agt_knowledge_route_recovery")
+    )
+
+    assert tools.calls == []
+    assert len(model.expert_requests) == 1
+    assert set(model.expert_requests[0].toolSchemas) == {KNOWLEDGE_TOOL_NAME}
+    assert response.error is not None
+    assert response.error.code == "RAG_UNAVAILABLE"
+    assert response.answer == "知识库当前不可用，请稍后重试。实时库存、库位、托盘和化验查询不受影响。"
+    assert response.reviewTrace["mainRouteGuard"] == {
+        "status": "RECOVERED_AS_KNOWLEDGE_DELEGATE",
+        "rejectedAction": "DELEGATE",
+        "rejectedExpertAgent": "inventory_expert",
+        "rejectedGoalType": "CURRENT_PRODUCT_INVENTORY",
+        "expertAgent": "knowledge_expert",
+        "goalType": "PROCESS_KNOWLEDGE_QUERY",
+        "reason": "BOUNDED_STATIC_KNOWLEDGE_QUERY",
+    }
+    assert response.reviewTrace["goalCompletion"]["status"] != "COMPLETE"
+    assert response.reviewTrace["knowledgeAudit"]["status"] == "UNAVAILABLE"
+    assert response.reviewTrace["knowledgeAudit"]["knowledgeDomains"] == ["PROCESS"]
 
 
 def test_knowledge_expert_cannot_call_any_business_mcp_tool() -> None:

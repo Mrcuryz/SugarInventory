@@ -11,7 +11,11 @@ if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
 }
 
 $BaseUrl = $BaseUrl.TrimEnd("/")
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptDir = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    Join-Path (Get-Location).Path 'scripts'
+} else {
+    $PSScriptRoot
+}
 $projectRoot = Resolve-Path (Join-Path $scriptDir "..")
 $outPath = Join-Path $projectRoot $OutFile
 $outDir = Split-Path -Parent $outPath
@@ -26,7 +30,35 @@ if (-not [string]::IsNullOrWhiteSpace($Token)) {
 }
 
 $response = Invoke-WebRequest -Uri "$BaseUrl/v3/api-docs" -Headers $headers -TimeoutSec 30 -UseBasicParsing
+$document = $response.Content | ConvertFrom-Json
+
+function ConvertTo-CanonicalObject {
+    param($Value)
+    if ($null -eq $Value -or $Value -is [string] -or $Value.GetType().IsPrimitive -or $Value -is [decimal]) {
+        return $Value
+    }
+    if ($Value -is [System.Management.Automation.PSCustomObject]) {
+        $ordered = [ordered]@{}
+        foreach ($property in @($Value.PSObject.Properties | Sort-Object Name)) {
+            $ordered[$property.Name] = ConvertTo-CanonicalObject $property.Value
+        }
+        return $ordered
+    }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $ordered = [ordered]@{}
+        foreach ($key in @($Value.Keys | Sort-Object)) {
+            $ordered[[string]$key] = ConvertTo-CanonicalObject $Value[$key]
+        }
+        return $ordered
+    }
+    if ($Value -is [System.Collections.IEnumerable]) {
+        return @($Value | ForEach-Object { ConvertTo-CanonicalObject $_ })
+    }
+    return $Value
+}
+
+$canonicalJson = ConvertTo-CanonicalObject $document | ConvertTo-Json -Depth 100 -Compress
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-[System.IO.File]::WriteAllText($outPath, $response.Content, $utf8NoBom)
+[System.IO.File]::WriteAllText($outPath, $canonicalJson + [Environment]::NewLine, $utf8NoBom)
 
 Write-Host "Exported OpenAPI document to $outPath"

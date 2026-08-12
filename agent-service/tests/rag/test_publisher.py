@@ -282,3 +282,45 @@ def test_validate_release_cli_outputs_safe_summary(tmp_path: Path, capsys) -> No
     assert payload["status"] == "SUCCEEDED"
     assert payload["corpusVersion"] == "test-corpus-v1"
     assert str(tmp_path) not in output
+
+
+def test_validate_runtime_cli_checks_active_pointer_and_query_model(
+    tmp_path: Path,
+    runtime_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    release, provider = _candidate(tmp_path, "test-corpus-v1")
+    publish_release(release, runtime_root, published_by="pytest", published_at=NOW)
+    model_path = tmp_path / "model"
+    model_path.mkdir()
+
+    monkeypatch.setattr(
+        "app.rag.runtime.local_embedding.FastEmbedQueryProvider",
+        lambda *args, **kwargs: provider,
+    )
+
+    code = main(
+        [
+            "validate-runtime",
+            "--runtime-root",
+            str(runtime_root),
+            "--model-path",
+            str(model_path),
+        ]
+    )
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+
+    assert code == 0
+    assert payload == {
+        "allowedRoles": ["ADMIN", "SUPER_ADMIN"],
+        "chunkCount": 6,
+        "corpusId": "laibin-warehouse-knowledge",
+        "corpusVersion": "test-corpus-v1",
+        "documentCount": 2,
+        "releaseName": "test-corpus-v1",
+        "status": "SUCCEEDED",
+    }
+    assert str(runtime_root) not in output
+    assert str(model_path) not in output

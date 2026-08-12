@@ -8,12 +8,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class InventoryDistributionAuthorizationTest {
     @Test
-    void distributionUsesSameAuthenticatedReadBoundaryAsInventoryOverview() throws Exception {
+    void distributionRequiresInventoryViewPermission() throws Exception {
         PreAuthorize authorization = InventoryController.class
                 .getMethod("getInventoryDistribution", InventoryDistributionQueryDTO.class)
                 .getAnnotation(PreAuthorize.class);
 
         assertThat(authorization).isNotNull();
-        assertThat(authorization.value()).isEqualTo("isAuthenticated()");
+        assertThat(authorization.value()).isEqualTo("hasAuthority('inventory:view')");
     }
 }

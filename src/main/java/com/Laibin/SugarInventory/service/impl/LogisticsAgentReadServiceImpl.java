@@ -232,7 +232,7 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                 .filter(id -> id != null && autoInboundBatchRefCodec.matches(batchRef, id, user.getId()))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(404, "智能报数批次不存在、已过期或不属于当前用户"));
-        AutoInboundParseResponse response = autoInboundParseService.getBatch(batchId);
+        AutoInboundParseResponse response = autoInboundParseService.getBatch(batchId, user);
         List<AutoInboundBatchDetailAgentVO.Task> tasks = safe(response == null ? null : response.getTasks()).stream()
                 .map(this::safeAutoInboundTask).toList();
         return AutoInboundBatchDetailAgentVO.builder()

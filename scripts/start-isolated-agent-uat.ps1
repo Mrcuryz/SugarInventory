@@ -8,14 +8,40 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$PythonPort = 38091,
 
+    [string]$LoginPassword = "lbsp-isolated-uat",
+
+    [string]$PythonExecutable,
+
+    [string]$PythonPath,
+
     [switch]$EnableFinishInboundS2Noop,
 
     [switch]$EnableFinishInboundS3Execute
 )
 
 $ErrorActionPreference = "Stop"
-$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$pythonExe = Join-Path $projectRoot 'agent-service\.venv\Scripts\python.exe'
+$scriptRoot = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    (Get-Location).Path
+} else {
+    $PSScriptRoot
+}
+$projectRootCandidate = if (Test-Path -LiteralPath (Join-Path $scriptRoot 'pom.xml')) {
+    $scriptRoot
+} else {
+    Join-Path $scriptRoot '..'
+}
+$projectRoot = (Resolve-Path -LiteralPath $projectRootCandidate).Path
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'pom.xml'))) {
+    throw "Unable to resolve project root from script or current directory: $scriptRoot"
+}
+$repositoryPython = Join-Path $projectRoot 'agent-service\.venv\Scripts\python.exe'
+$pythonExe = if (-not [string]::IsNullOrWhiteSpace($PythonExecutable)) {
+    $PythonExecutable
+} elseif (Test-Path -LiteralPath $repositoryPython) {
+    $repositoryPython
+} else {
+    throw "Python runtime was not found; pass -PythonExecutable and, when needed, -PythonPath explicitly"
+}
 $javaJar = Join-Path $projectRoot 'target\SugarInventory-1.0-SNAPSHOT.jar'
 $mcpJar = Join-Path $projectRoot 'warehouse-mcp\target\warehouse-mcp-0.1.0-exec.jar'
 
@@ -37,6 +63,10 @@ foreach ($line in [System.IO.File]::ReadAllLines($EnvFile)) {
         [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
     }
 }
+if (-not [string]::IsNullOrWhiteSpace($PythonPath)) {
+    $env:PYTHONPATH = $PythonPath
+}
+$env:WEB_LOGIN_PASSWORD = $LoginPassword
 
 # Python Agent and the Java fallback client use different environment names for
 # the same model credential. Keep the mapping process-local so the source env

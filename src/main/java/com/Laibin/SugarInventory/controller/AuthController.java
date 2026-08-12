@@ -9,10 +9,9 @@ import com.Laibin.SugarInventory.domain.vo.AuthVO;
 import com.Laibin.SugarInventory.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.Data;
+import jakarta.validation.Valid;
 import me.chanjar.weixin.common.error.WxErrorException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,41 +24,27 @@ public class AuthController {
 
     @Operation(summary = "Web 端管理员登录", description = "使用姓名+统一口令登录")
     @PostMapping("/web-login")
-    public Result<AuthVO> webLogin(@RequestBody WebLoginDTO dto) {
+    public Result<AuthVO> webLogin(@Valid @RequestBody WebLoginDTO dto) {
         return authService.handleWebLogin(dto.getName(), dto.getPassword());
     }
 
     @Operation(summary = "微信登录", description = "使用微信临时登录凭证进行登录，返回 JWT Token 和用户基本信息")
     @PostMapping("/wechat-login")
-    public Result<AuthVO> wechatLogin(@RequestBody WechatLoginDTO dto) throws WxErrorException {
-        try {
-            return Result.success(authService.handleWechatLogin(dto.getCode()));
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+    public Result<AuthVO> wechatLogin(@Valid @RequestBody WechatLoginDTO dto) throws WxErrorException {
+        return Result.success(authService.handleWechatLogin(dto.getCode()));
     }
 
     // 微信登录入口
     @Operation(summary = "手机号绑定", description = "微信登录后绑定手机号接口")
     @PostMapping("/phone-bind")
-    public Result<?> wechatLogin(@RequestBody WechatPhoneDTO dto) {
-        try {
-            return Result.success(authService.handleLogin(dto));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.error(e.getMessage());
-        }
+    public Result<?> wechatLogin(@Valid @RequestBody WechatPhoneDTO dto) {
+        return Result.success(authService.handleLogin(dto));
     }
 
     // 工号验证绑定
     @Operation(summary = "工号验证绑定", description = "通过工号验证并绑定用户与微信账号")
     @PostMapping("/manual-bind")
-    public Result<?> manualBind(@RequestBody EmployeeVerifyDTO dto) {
-        try {
-            return Result.success(authService.handleManualBind(dto));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.error(e.getMessage());
-        }
+    public Result<?> manualBind(@Valid @RequestBody EmployeeVerifyDTO dto) throws WxErrorException {
+        return Result.success(authService.handleManualBind(dto));
     }
 }

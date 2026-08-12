@@ -1,8 +1,10 @@
 package com.Laibin.SugarInventory.production.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
+import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionBoilingBatchQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionBoilingBatchSaveDTO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBoilingBatchTraceNodeVO;
@@ -42,6 +44,7 @@ public class ProductionBoilingBatchController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('production:boiling:create')")
+    @LogOperation(value = "production_boiling_batch", type = OperationType.INSERT)
     public Result<ProductionBoilingBatchVO> createBatch(@RequestBody @Valid ProductionBoilingBatchSaveDTO dto,
                                                         @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(boilingBatchService.createBatch(dto,
@@ -51,6 +54,7 @@ public class ProductionBoilingBatchController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('production:boiling:update')")
+    @LogOperation(value = "production_boiling_batch", type = OperationType.UPDATE)
     public Result<ProductionBoilingBatchVO> updateBatch(@PathVariable Long id,
                                                         @RequestBody @Valid ProductionBoilingBatchSaveDTO dto) {
         return Result.success(boilingBatchService.updateBatch(id, dto));
@@ -58,6 +62,7 @@ public class ProductionBoilingBatchController {
 
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAuthority('production:boiling:cancel')")
+    @LogOperation(value = "production_boiling_batch", type = OperationType.UPDATE)
     public Result<Void> cancelBatch(@PathVariable Long id,
                                     @AuthenticationPrincipal LoginUser loginUser) {
         boilingBatchService.cancelBatch(id, loginUser.getUser().getId());

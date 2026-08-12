@@ -1,11 +1,13 @@
 package com.Laibin.SugarInventory.controller;
 
+import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.RolePermissionUpdateDTO;
 import com.Laibin.SugarInventory.domain.dto.RoleQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.RoleSaveDTO;
 import com.Laibin.SugarInventory.domain.dto.RoleStatusUpdateDTO;
+import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.vo.RoleOptionVO;
 import com.Laibin.SugarInventory.domain.vo.RoleVO;
 import com.Laibin.SugarInventory.service.RoleService;
@@ -54,6 +56,7 @@ public class RoleController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('rbac:role:create')")
+    @LogOperation(value = "role", type = OperationType.INSERT)
     @Operation(summary = "新增角色")
     public Result<RoleVO> createRole(@Valid @RequestBody RoleSaveDTO dto) {
         return Result.success(roleService.createRole(dto));
@@ -61,6 +64,7 @@ public class RoleController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('rbac:role:update')")
+    @LogOperation(value = "role", type = OperationType.UPDATE)
     @Operation(summary = "更新角色")
     public Result<RoleVO> updateRole(@PathVariable Integer id, @Valid @RequestBody RoleSaveDTO dto) {
         return Result.success(roleService.updateRole(id, dto));
@@ -68,6 +72,7 @@ public class RoleController {
 
     @PutMapping("/{id}/permissions")
     @PreAuthorize("hasAuthority('rbac:role:assign_permission')")
+    @LogOperation(value = "role", type = OperationType.UPDATE)
     @Operation(summary = "分配角色权限")
     public Result<Boolean> updateRolePermissions(@PathVariable Integer id, @RequestBody RolePermissionUpdateDTO dto) {
         roleService.updateRolePermissions(id, dto);
@@ -76,6 +81,7 @@ public class RoleController {
 
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAuthority('rbac:role:update')")
+    @LogOperation(value = "role", type = OperationType.UPDATE)
     @Operation(summary = "更新角色状态")
     public Result<Boolean> updateRoleStatus(@PathVariable Integer id, @RequestBody RoleStatusUpdateDTO dto) {
         roleService.updateRoleStatus(id, dto.getStatus());
@@ -84,6 +90,7 @@ public class RoleController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('rbac:role:delete')")
+    @LogOperation(value = "role", type = OperationType.DELETE)
     @Operation(summary = "删除角色")
     public Result<Boolean> deleteRole(@PathVariable Integer id) {
         roleService.deleteRole(id);

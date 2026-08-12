@@ -24,7 +24,7 @@
             <div class="section-title">化验标准</div>
             <div class="section-subtitle">维护标准主信息、关联产品和固定 7 项指标。</div>
           </div>
-          <el-button type="primary" @click="openCreate">新增标准</el-button>
+          <el-button v-if="canCreate" type="primary" @click="openCreate">新增标准</el-button>
         </div>
 
         <el-table :data="resultList" row-key="id" highlight-current-row v-loading="loading" @current-change="handleCurrentChange">
@@ -57,9 +57,9 @@
           </el-table-column>
           <el-table-column label="操作" width="220" fixed="right">
             <template #default="{ row }">
-              <el-button type="primary" link @click.stop="openRelationDrawer(row)">添加产品</el-button>
-              <el-button type="primary" link @click.stop="openEdit(row)">编辑</el-button>
-              <el-button type="danger" link @click.stop="handleDelete(row)">删除</el-button>
+              <el-button v-if="canBindProduct" type="primary" link @click.stop="openRelationDrawer(row)">添加产品</el-button>
+              <el-button v-if="canUpdate" type="primary" link @click.stop="openEdit(row)">编辑</el-button>
+              <el-button v-if="canDelete" type="danger" link @click.stop="handleDelete(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -314,8 +314,14 @@ import {
   getStandardPage,
   updateStandard
 } from '@/api/standard'
+import { useAuthStore } from '@/stores/auth'
 
 const MAX_STANDARD_VALUE = 2147483647
+const authStore = useAuthStore()
+const canCreate = computed(() => authStore.hasPermission('quality_standard:create'))
+const canUpdate = computed(() => authStore.hasPermission('quality_standard:update'))
+const canDelete = computed(() => authStore.hasPermission('quality_standard:delete'))
+const canBindProduct = computed(() => authStore.hasPermission('quality_standard:bind_product'))
 
 const productTypes = [
   { value: '白冰糖', label: '白冰糖' },

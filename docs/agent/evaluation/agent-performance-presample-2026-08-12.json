@@ -1,0 +1,1093 @@
+{
+  "schemaVersion": "1.0",
+  "corpus": {
+    "path": "docs/agent/evaluation/agent-performance-corpus-v1.json",
+    "sha256": "8f371c90e9e6d761f518b2386c027c9dc1948338fc5aa4f54af7b442607d70f7",
+    "caseCount": 20,
+    "domainCount": 4,
+    "repeats": 1
+  },
+  "environment": {
+    "baseUrl": "http://127.0.0.1:38082",
+    "measurementMode": "每个样本创建独立 Agent 会话，会话预热不计入消息耗时；只测单轮只读问答",
+    "credentialsPersisted": false,
+    "answersPersisted": false
+  },
+  "startedAt": "2026-08-12T11:36:26.772269+00:00",
+  "endedAt": "2026-08-12T11:44:03.214917+00:00",
+  "sampleCount": 20,
+  "successCount": 20,
+  "summary": {
+    "all": {
+      "sampleCount": 20,
+      "successCount": 20,
+      "selectionCount": 1,
+      "elapsedMs": {
+        "count": 20,
+        "min": 7031,
+        "max": 53344,
+        "mean": 22763.2,
+        "p50": 16360,
+        "p95": 43812
+      },
+      "totalDurationMs": {
+        "count": 20,
+        "min": 6984,
+        "max": 53312,
+        "mean": 22711.55,
+        "p50": 16297,
+        "p95": 43766
+      },
+      "mainRouteMs": {
+        "count": 20,
+        "min": 3312,
+        "max": 32922,
+        "mean": 7520.15,
+        "p50": 4687,
+        "p95": 25594
+      },
+      "mainRouteDecisionCount": {
+        "count": 20,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "mainRouteInputBytes": {
+        "count": 20,
+        "min": 20079,
+        "max": 20179,
+        "mean": 20131.9,
+        "p50": 20135,
+        "p95": 20167
+      },
+      "expertInitialMs": {
+        "count": 20,
+        "min": 0,
+        "max": 10813,
+        "mean": 5275.1,
+        "p50": 4765,
+        "p95": 9453
+      },
+      "expertInitialDecisionCount": {
+        "count": 20,
+        "min": 0,
+        "max": 1,
+        "mean": 0.95,
+        "p50": 1,
+        "p95": 1
+      },
+      "expertInitialInputBytes": {
+        "count": 20,
+        "min": 0,
+        "max": 17712,
+        "mean": 12703.05,
+        "p50": 12350,
+        "p95": 17515
+      },
+      "expertResultAnalysisMs": {
+        "count": 20,
+        "min": 0,
+        "max": 40313,
+        "mean": 9757.15,
+        "p50": 7266,
+        "p95": 34516
+      },
+      "expertResultAnalysisDecisionCount": {
+        "count": 20,
+        "min": 0,
+        "max": 2,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 2
+      },
+      "expertResultAnalysisInputBytes": {
+        "count": 20,
+        "min": 0,
+        "max": 31926,
+        "mean": 13131.8,
+        "p50": 12747,
+        "p95": 26820
+      },
+      "toolDurationMs": {
+        "count": 20,
+        "min": 0,
+        "max": 343,
+        "mean": 154.45,
+        "p50": 140,
+        "p95": 249
+      },
+      "modelDecisionCount": {
+        "count": 20,
+        "min": 1,
+        "max": 4,
+        "mean": 2.95,
+        "p50": 3,
+        "p95": 4
+      },
+      "toolCallCount": {
+        "count": 20,
+        "min": 0,
+        "max": 2,
+        "mean": 1.3,
+        "p50": 1,
+        "p95": 2
+      }
+    },
+    "inventory": {
+      "sampleCount": 5,
+      "successCount": 5,
+      "selectionCount": 0,
+      "elapsedMs": {
+        "count": 5,
+        "min": 11766,
+        "max": 42062,
+        "mean": 19987.4,
+        "p50": 15656,
+        "p95": 42062
+      },
+      "totalDurationMs": {
+        "count": 5,
+        "min": 11718,
+        "max": 42015,
+        "mean": 19921.4,
+        "p50": 15500,
+        "p95": 42015
+      },
+      "mainRouteMs": {
+        "count": 5,
+        "min": 4046,
+        "max": 25594,
+        "mean": 9031.0,
+        "p50": 5312,
+        "p95": 25594
+      },
+      "mainRouteDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "mainRouteInputBytes": {
+        "count": 5,
+        "min": 20091,
+        "max": 20153,
+        "mean": 20122.2,
+        "p50": 20117,
+        "p95": 20153
+      },
+      "expertInitialMs": {
+        "count": 5,
+        "min": 3016,
+        "max": 5625,
+        "mean": 4181.2,
+        "p50": 4203,
+        "p95": 5625
+      },
+      "expertInitialDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "expertInitialInputBytes": {
+        "count": 5,
+        "min": 10735,
+        "max": 12643,
+        "mean": 11952.6,
+        "p50": 12581,
+        "p95": 12643
+      },
+      "expertResultAnalysisMs": {
+        "count": 5,
+        "min": 0,
+        "max": 11484,
+        "mean": 6534.4,
+        "p50": 7266,
+        "p95": 11484
+      },
+      "expertResultAnalysisDecisionCount": {
+        "count": 5,
+        "min": 0,
+        "max": 2,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 2
+      },
+      "expertResultAnalysisInputBytes": {
+        "count": 5,
+        "min": 0,
+        "max": 17800,
+        "mean": 11023.0,
+        "p50": 13145,
+        "p95": 17800
+      },
+      "toolDurationMs": {
+        "count": 5,
+        "min": 109,
+        "max": 249,
+        "mean": 168.4,
+        "p50": 172,
+        "p95": 249
+      },
+      "modelDecisionCount": {
+        "count": 5,
+        "min": 2,
+        "max": 4,
+        "mean": 3.0,
+        "p50": 3,
+        "p95": 4
+      },
+      "toolCallCount": {
+        "count": 5,
+        "min": 1,
+        "max": 2,
+        "mean": 1.6,
+        "p50": 2,
+        "p95": 2
+      }
+    },
+    "assay": {
+      "sampleCount": 5,
+      "successCount": 5,
+      "selectionCount": 0,
+      "elapsedMs": {
+        "count": 5,
+        "min": 7031,
+        "max": 43812,
+        "mean": 24874.6,
+        "p50": 18640,
+        "p95": 43812
+      },
+      "totalDurationMs": {
+        "count": 5,
+        "min": 6984,
+        "max": 43766,
+        "mean": 24828.2,
+        "p50": 18594,
+        "p95": 43766
+      },
+      "mainRouteMs": {
+        "count": 5,
+        "min": 3312,
+        "max": 5531,
+        "mean": 4309.2,
+        "p50": 4625,
+        "p95": 5531
+      },
+      "mainRouteDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "mainRouteInputBytes": {
+        "count": 5,
+        "min": 20119,
+        "max": 20179,
+        "mean": 20155.8,
+        "p50": 20165,
+        "p95": 20179
+      },
+      "expertInitialMs": {
+        "count": 5,
+        "min": 3406,
+        "max": 10813,
+        "mean": 6075.4,
+        "p50": 5219,
+        "p95": 10813
+      },
+      "expertInitialDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "expertInitialInputBytes": {
+        "count": 5,
+        "min": 12338,
+        "max": 13864,
+        "mean": 12925.0,
+        "p50": 13016,
+        "p95": 13864
+      },
+      "expertResultAnalysisMs": {
+        "count": 5,
+        "min": 0,
+        "max": 34516,
+        "mean": 14309.6,
+        "p50": 7860,
+        "p95": 34516
+      },
+      "expertResultAnalysisDecisionCount": {
+        "count": 5,
+        "min": 0,
+        "max": 2,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 2
+      },
+      "expertResultAnalysisInputBytes": {
+        "count": 5,
+        "min": 0,
+        "max": 31926,
+        "mean": 16797.6,
+        "p50": 12627,
+        "p95": 31926
+      },
+      "toolDurationMs": {
+        "count": 5,
+        "min": 109,
+        "max": 187,
+        "mean": 134.0,
+        "p50": 109,
+        "p95": 187
+      },
+      "modelDecisionCount": {
+        "count": 5,
+        "min": 2,
+        "max": 4,
+        "mean": 3.0,
+        "p50": 3,
+        "p95": 4
+      },
+      "toolCallCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      }
+    },
+    "production": {
+      "sampleCount": 5,
+      "successCount": 5,
+      "selectionCount": 1,
+      "elapsedMs": {
+        "count": 5,
+        "min": 10813,
+        "max": 22453,
+        "mean": 15556.4,
+        "p50": 16281,
+        "p95": 22453
+      },
+      "totalDurationMs": {
+        "count": 5,
+        "min": 10765,
+        "max": 22422,
+        "mean": 15503.0,
+        "p50": 16219,
+        "p95": 22422
+      },
+      "mainRouteMs": {
+        "count": 5,
+        "min": 3328,
+        "max": 9406,
+        "mean": 5156.0,
+        "p50": 4172,
+        "p95": 9406
+      },
+      "mainRouteDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "mainRouteInputBytes": {
+        "count": 5,
+        "min": 20091,
+        "max": 20141,
+        "mean": 20121.4,
+        "p50": 20123,
+        "p95": 20141
+      },
+      "expertInitialMs": {
+        "count": 5,
+        "min": 3219,
+        "max": 6766,
+        "mean": 5043.8,
+        "p50": 4687,
+        "p95": 6766
+      },
+      "expertInitialDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "expertInitialInputBytes": {
+        "count": 5,
+        "min": 11618,
+        "max": 12057,
+        "mean": 11927.8,
+        "p50": 12005,
+        "p95": 12057
+      },
+      "expertResultAnalysisMs": {
+        "count": 5,
+        "min": 0,
+        "max": 12173,
+        "mean": 5100.2,
+        "p50": 3703,
+        "p95": 12173
+      },
+      "expertResultAnalysisDecisionCount": {
+        "count": 5,
+        "min": 0,
+        "max": 2,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 2
+      },
+      "expertResultAnalysisInputBytes": {
+        "count": 5,
+        "min": 0,
+        "max": 20643,
+        "mean": 11837.0,
+        "p50": 12868,
+        "p95": 20643
+      },
+      "toolDurationMs": {
+        "count": 5,
+        "min": 125,
+        "max": 343,
+        "mean": 203.0,
+        "p50": 172,
+        "p95": 343
+      },
+      "modelDecisionCount": {
+        "count": 5,
+        "min": 2,
+        "max": 4,
+        "mean": 3.0,
+        "p50": 3,
+        "p95": 4
+      },
+      "toolCallCount": {
+        "count": 5,
+        "min": 1,
+        "max": 2,
+        "mean": 1.8,
+        "p50": 2,
+        "p95": 2
+      }
+    },
+    "report": {
+      "sampleCount": 5,
+      "successCount": 5,
+      "selectionCount": 0,
+      "elapsedMs": {
+        "count": 5,
+        "min": 15516,
+        "max": 53344,
+        "mean": 30634.4,
+        "p50": 27047,
+        "p95": 53344
+      },
+      "totalDurationMs": {
+        "count": 5,
+        "min": 15484,
+        "max": 53312,
+        "mean": 30593.6,
+        "p50": 27000,
+        "p95": 53312
+      },
+      "mainRouteMs": {
+        "count": 5,
+        "min": 4125,
+        "max": 32922,
+        "mean": 11584.4,
+        "p50": 6734,
+        "p95": 32922
+      },
+      "mainRouteDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 1
+      },
+      "mainRouteInputBytes": {
+        "count": 5,
+        "min": 20079,
+        "max": 20153,
+        "mean": 20128.2,
+        "p50": 20143,
+        "p95": 20153
+      },
+      "expertInitialMs": {
+        "count": 5,
+        "min": 0,
+        "max": 9453,
+        "mean": 5800.0,
+        "p50": 6203,
+        "p95": 9453
+      },
+      "expertInitialDecisionCount": {
+        "count": 5,
+        "min": 0,
+        "max": 1,
+        "mean": 0.8,
+        "p50": 1,
+        "p95": 1
+      },
+      "expertInitialInputBytes": {
+        "count": 5,
+        "min": 0,
+        "max": 17712,
+        "mean": 14006.8,
+        "p50": 17473,
+        "p95": 17712
+      },
+      "expertResultAnalysisMs": {
+        "count": 5,
+        "min": 0,
+        "max": 40313,
+        "mean": 13084.4,
+        "p50": 10000,
+        "p95": 40313
+      },
+      "expertResultAnalysisDecisionCount": {
+        "count": 5,
+        "min": 0,
+        "max": 2,
+        "mean": 1.0,
+        "p50": 1,
+        "p95": 2
+      },
+      "expertResultAnalysisInputBytes": {
+        "count": 5,
+        "min": 0,
+        "max": 25731,
+        "mean": 12869.6,
+        "p50": 12657,
+        "p95": 25731
+      },
+      "toolDurationMs": {
+        "count": 5,
+        "min": 0,
+        "max": 172,
+        "mean": 112.4,
+        "p50": 125,
+        "p95": 172
+      },
+      "modelDecisionCount": {
+        "count": 5,
+        "min": 1,
+        "max": 4,
+        "mean": 2.8,
+        "p50": 3,
+        "p95": 4
+      },
+      "toolCallCount": {
+        "count": 5,
+        "min": 0,
+        "max": 1,
+        "mean": 0.8,
+        "p50": 1,
+        "p95": 1
+      }
+    }
+  },
+  "samples": [
+    {
+      "caseId": "PERF-I01",
+      "domain": "inventory",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 15656,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "inventory_distribution"
+      ],
+      "errorType": null,
+      "totalDurationMs": 15500,
+      "mainRouteMs": 4219,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20103,
+      "expertInitialMs": 3297,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12593,
+      "expertResultAnalysisMs": 7719,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 13158,
+      "toolDurationMs": 249,
+      "modelDecisionCount": 3,
+      "toolCallCount": 2
+    },
+    {
+      "caseId": "PERF-I02",
+      "domain": "inventory",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 14578,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "inventory_distribution"
+      ],
+      "errorType": null,
+      "totalDurationMs": 14531,
+      "mainRouteMs": 4046,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20091,
+      "expertInitialMs": 3016,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12581,
+      "expertResultAnalysisMs": 7266,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 13145,
+      "toolDurationMs": 203,
+      "modelDecisionCount": 3,
+      "toolCallCount": 2
+    },
+    {
+      "caseId": "PERF-I03",
+      "domain": "inventory",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 15875,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 15843,
+      "mainRouteMs": 5312,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20147,
+      "expertInitialMs": 4203,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 10735,
+      "expertResultAnalysisMs": 6203,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 11012,
+      "toolDurationMs": 109,
+      "modelDecisionCount": 3,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-I04",
+      "domain": "inventory",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 11766,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 11718,
+      "mainRouteMs": 5984,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20153,
+      "expertInitialMs": 5625,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12643,
+      "expertResultAnalysisMs": 0,
+      "expertResultAnalysisDecisionCount": 0,
+      "expertResultAnalysisInputBytes": 0,
+      "toolDurationMs": 109,
+      "modelDecisionCount": 2,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-I05",
+      "domain": "inventory",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 42062,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 42015,
+      "mainRouteMs": 25594,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20117,
+      "expertInitialMs": 4765,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 11211,
+      "expertResultAnalysisMs": 11484,
+      "expertResultAnalysisDecisionCount": 2,
+      "expertResultAnalysisInputBytes": 17800,
+      "toolDurationMs": 172,
+      "modelDecisionCount": 4,
+      "toolCallCount": 2
+    },
+    {
+      "caseId": "PERF-A01",
+      "domain": "assay",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 18640,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 18594,
+      "mainRouteMs": 5531,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20179,
+      "expertInitialMs": 5219,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12350,
+      "expertResultAnalysisMs": 7735,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 12627,
+      "toolDurationMs": 109,
+      "modelDecisionCount": 3,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-A02",
+      "domain": "assay",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 43812,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 43766,
+      "mainRouteMs": 3312,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20165,
+      "expertInitialMs": 5829,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 13016,
+      "expertResultAnalysisMs": 34516,
+      "expertResultAnalysisDecisionCount": 2,
+      "expertResultAnalysisInputBytes": 26820,
+      "toolDurationMs": 109,
+      "modelDecisionCount": 4,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-A03",
+      "domain": "assay",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 17812,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 17766,
+      "mainRouteMs": 4687,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20167,
+      "expertInitialMs": 5110,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12338,
+      "expertResultAnalysisMs": 7860,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 12615,
+      "toolDurationMs": 109,
+      "modelDecisionCount": 3,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-A04",
+      "domain": "assay",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 7031,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "inventory_quality"
+      ],
+      "errorType": null,
+      "totalDurationMs": 6984,
+      "mainRouteMs": 3391,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20119,
+      "expertInitialMs": 3406,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 13057,
+      "expertResultAnalysisMs": 0,
+      "expertResultAnalysisDecisionCount": 0,
+      "expertResultAnalysisInputBytes": 0,
+      "toolDurationMs": 187,
+      "modelDecisionCount": 2,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-A05",
+      "domain": "assay",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 37078,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 37031,
+      "mainRouteMs": 4625,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20149,
+      "expertInitialMs": 10813,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 13864,
+      "expertResultAnalysisMs": 21437,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 31926,
+      "toolDurationMs": 156,
+      "modelDecisionCount": 3,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-P01",
+      "domain": "production",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 16360,
+      "needsUserSelection": true,
+      "cardTypes": [
+        "candidate_selection"
+      ],
+      "errorType": null,
+      "totalDurationMs": 16297,
+      "mainRouteMs": 9406,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20091,
+      "expertInitialMs": 6766,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 11618,
+      "expertResultAnalysisMs": 0,
+      "expertResultAnalysisDecisionCount": 0,
+      "expertResultAnalysisInputBytes": 0,
+      "toolDurationMs": 125,
+      "modelDecisionCount": 2,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-P02",
+      "domain": "production",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 10813,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "boiling_batch_trace"
+      ],
+      "errorType": null,
+      "totalDurationMs": 10765,
+      "mainRouteMs": 3640,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20117,
+      "expertInitialMs": 3219,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 11936,
+      "expertResultAnalysisMs": 3703,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 12747,
+      "toolDurationMs": 203,
+      "modelDecisionCount": 3,
+      "toolCallCount": 2
+    },
+    {
+      "caseId": "PERF-P03",
+      "domain": "production",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 11875,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "production_order_progress"
+      ],
+      "errorType": null,
+      "totalDurationMs": 11812,
+      "mainRouteMs": 3328,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20123,
+      "expertInitialMs": 4687,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12005,
+      "expertResultAnalysisMs": 3625,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 12868,
+      "toolDurationMs": 172,
+      "modelDecisionCount": 3,
+      "toolCallCount": 2
+    },
+    {
+      "caseId": "PERF-P04",
+      "domain": "production",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 22453,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "production_order_progress"
+      ],
+      "errorType": null,
+      "totalDurationMs": 22422,
+      "mainRouteMs": 5234,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20141,
+      "expertInitialMs": 4672,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12023,
+      "expertResultAnalysisMs": 12173,
+      "expertResultAnalysisDecisionCount": 2,
+      "expertResultAnalysisInputBytes": 20643,
+      "toolDurationMs": 343,
+      "modelDecisionCount": 4,
+      "toolCallCount": 2
+    },
+    {
+      "caseId": "PERF-P05",
+      "domain": "production",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 16281,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "production_order_progress"
+      ],
+      "errorType": null,
+      "totalDurationMs": 16219,
+      "mainRouteMs": 4172,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20135,
+      "expertInitialMs": 5875,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 12057,
+      "expertResultAnalysisMs": 6000,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 12927,
+      "toolDurationMs": 172,
+      "modelDecisionCount": 3,
+      "toolCallCount": 2
+    },
+    {
+      "caseId": "PERF-R01",
+      "domain": "report",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 15516,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "daily_production_report"
+      ],
+      "errorType": null,
+      "totalDurationMs": 15484,
+      "mainRouteMs": 6734,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20079,
+      "expertInitialMs": 4016,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 17334,
+      "expertResultAnalysisMs": 4578,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 11208,
+      "toolDurationMs": 140,
+      "modelDecisionCount": 3,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-R02",
+      "domain": "report",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 27047,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "quality_assay_trend_report"
+      ],
+      "errorType": null,
+      "totalDurationMs": 27000,
+      "mainRouteMs": 7547,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20143,
+      "expertInitialMs": 9328,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 17473,
+      "expertResultAnalysisMs": 10000,
+      "expertResultAnalysisDecisionCount": 2,
+      "expertResultAnalysisInputBytes": 25731,
+      "toolDurationMs": 125,
+      "modelDecisionCount": 4,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-R03",
+      "domain": "report",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 24296,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "quality_metric_trend_report"
+      ],
+      "errorType": null,
+      "totalDurationMs": 24250,
+      "mainRouteMs": 4125,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20123,
+      "expertInitialMs": 9453,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 17515,
+      "expertResultAnalysisMs": 10531,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 12657,
+      "toolDurationMs": 125,
+      "modelDecisionCount": 3,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-R04",
+      "domain": "report",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 53344,
+      "needsUserSelection": false,
+      "cardTypes": [
+        "production_input_output_flow_report"
+      ],
+      "errorType": null,
+      "totalDurationMs": 53312,
+      "mainRouteMs": 6594,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20143,
+      "expertInitialMs": 6203,
+      "expertInitialDecisionCount": 1,
+      "expertInitialInputBytes": 17712,
+      "expertResultAnalysisMs": 40313,
+      "expertResultAnalysisDecisionCount": 1,
+      "expertResultAnalysisInputBytes": 14752,
+      "toolDurationMs": 172,
+      "modelDecisionCount": 3,
+      "toolCallCount": 1
+    },
+    {
+      "caseId": "PERF-R05",
+      "domain": "report",
+      "repeat": 1,
+      "success": true,
+      "elapsedMs": 32969,
+      "needsUserSelection": false,
+      "cardTypes": [],
+      "errorType": null,
+      "totalDurationMs": 32922,
+      "mainRouteMs": 32922,
+      "mainRouteDecisionCount": 1,
+      "mainRouteInputBytes": 20153,
+      "expertInitialMs": 0,
+      "expertInitialDecisionCount": 0,
+      "expertInitialInputBytes": 0,
+      "expertResultAnalysisMs": 0,
+      "expertResultAnalysisDecisionCount": 0,
+      "expertResultAnalysisInputBytes": 0,
+      "toolDurationMs": 0,
+      "modelDecisionCount": 1,
+      "toolCallCount": 0
+    }
+  ]
+}

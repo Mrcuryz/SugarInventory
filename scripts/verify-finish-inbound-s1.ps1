@@ -16,6 +16,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$scriptRoot = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    (Get-Location).Path
+} else {
+    $PSScriptRoot
+}
+$projectRoot = if (Test-Path -LiteralPath (Join-Path $scriptRoot 'pom.xml')) {
+    $scriptRoot
+} else {
+    (Resolve-Path -LiteralPath (Join-Path $scriptRoot '..')).Path
+}
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'pom.xml'))) {
+    throw "Unable to resolve project root from script or current directory: $scriptRoot"
+}
 
 function Assert-True {
     param(
@@ -158,16 +171,16 @@ try {
     ) | Where-Object { $_ }
     Assert-True ($selectedExecutionModes.Count -le 1) "S2, S3 and S4 verification modes must use separate fixtures"
     $migration = [System.IO.File]::ReadAllText(
-        (Join-Path $PSScriptRoot '..\migrations\2026-08-09-add-agent-finish-inbound-execution-preview.sql'))
+        (Join-Path $projectRoot 'migrations\2026-08-09-add-agent-finish-inbound-execution-preview.sql'))
     Invoke-LocalMySql $migration | Out-Null
     if ($VerifyS2ControlPlane -or $requiresS3Permission) {
         $controlMigration = [System.IO.File]::ReadAllText(
-            (Join-Path $PSScriptRoot '..\migrations\2026-08-10-add-agent-finish-inbound-execution-control-plane.sql'))
+            (Join-Path $projectRoot 'migrations\2026-08-10-add-agent-finish-inbound-execution-control-plane.sql'))
         Invoke-LocalMySql $controlMigration | Out-Null
     }
     if ($requiresS3Permission) {
         $permissionMigration = [System.IO.File]::ReadAllText(
-            (Join-Path $PSScriptRoot '..\migrations\2026-08-10-add-agent-finish-inbound-execute-permission.sql'))
+            (Join-Path $projectRoot 'migrations\2026-08-10-add-agent-finish-inbound-execute-permission.sql'))
         Invoke-LocalMySql $permissionMigration | Out-Null
         $existingPermissionLink = [int](Invoke-LocalMySql "SELECT COUNT(*) FROM role_permission rp JOIN role r ON r.id=rp.role_id JOIN permission p ON p.id=rp.permission_id WHERE r.role_code='ADMIN' AND p.perm_code='agent:finish-inbound:execute';")[0]
         Assert-True ($existingPermissionLink -eq 0) "Dedicated Agent execute permission is already assigned to ADMIN; S4 default-deny proof requires zero baseline assignments"

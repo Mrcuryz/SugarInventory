@@ -14,19 +14,19 @@
 
 ## 当前状态
 
-- 最后更新：2026-08-03
-- 总体阶段：Agent v1 第一阶段只读查询已封板；v2-A 已登记七个报表定义，今日运营概览完成工程验收，其余六个定义保持既有跨期比较、ReportRun 同快照导出和跨会话重开能力
-- 当前实施切片：`V2A-REPORT-07-TODAY-OPERATIONS-OVERVIEW`
-- 当前工作状态：LIVE_LLM_BROWSER_PASSED（后端、MCP、Agent、卡片、历史重开和 XLSX 已通过自动化验收；本地真实 HTTP 与 Chrome 外部模型自然语言问答均通过）
-- 当前负责线程：本 Codex 登记报表与数据成熟度实施线程（2026-08-03）
-- 当前文件范围：第一阶段合同与回归基线冻结；仅新增受控登记报表和数据质量底座，不进入 L3 写操作
+- 最后更新：2026-08-12
+- 总体阶段：Agent v1 只读查询和 v2-A 七个登记报表定义已完成本地工程验收；两个 L2 预览已登记；首个 L3 成品入库候选完成 S0～S4 隔离技术验收，但正式角色与生产发布未获批准，仍默认关闭
+- 当前实施切片：`PROJECT-HOLISTIC-REAUDIT-AND-READINESS`
+- 当前工作状态：LOCAL_ENGINEERING_BASELINE_PASS / SHADOW_BROWSER_UAT_PASS / PRODUCTION_RELEASE_NO_GO（Python 485、Java 438、MCP 72、Web 91 与构建通过；性能、仓库外部 RAG 材料/正式资产交付、库存历史 0/7、正式角色/真人验收仍阻断生产发布；本轮改动已建立 Git 基线）
+- 当前负责线程：Codex 全项目顺序复审与整改线程（2026-08-12）
+- 当前文件范围：登记报表执行状态分类、三类账号权限矩阵、shadow 浏览器证据与文档；不保存问题/正文/工具参数，不修改业务数据或正式权限
 
 ## 已确认基线
 
 - 已完成主 Agent、Router、专家 Agent 和首个受控多专家配方的基础架构。
 - 主 Agent 不持有业务工具；专家只能访问本专家白名单工具。
 - 当前仅登记一个复合配方：`warehouse_inventory_latest_assay`。
-- 第一阶段冻结基线共有 52 个已实现的只读 MCP 工具；当前在不改变原有工具业务行为的前提下，新增 1 个登记报表运行工具。
+- 当前运行时基线共有 58 个 GoalContract、52 个 L1 只读/登记报表工具、2 个 L2 无写入预览工具，以及 1 个不进入 Java/MCP 白名单的 Python 进程内 L0 知识工具。
 - Agent v1 专家规划基线：inventory、warehouse、logistics、pallet、production、quality、master_data、administration、audit。
 - v2-A 已按登记制实现七个只读报表定义；今日运营概览明确不支持跨期比较，其余六个定义保留统一跨期比较。七类均进入历史快照和 XLSX 交付；v2-B execute 仍只保留设计和占位。
 
@@ -34,16 +34,17 @@
 
 | 专家 | v1 状态 | 当前说明 |
 |---|---|---|
-| `inventory_expert` | COMPLETED | 6 个 L1 工具 |
+| `inventory_expert` | COMPLETED | 5 个 L1 工具 |
 | `warehouse_expert` | COMPLETED | 5 个 L1 工具 |
-| `logistics_expert` | COMPLETED | 4 个 L1 工具 |
+| `logistics_expert` | COMPLETED | 7 个 L1 工具、2 个 L2 预览工具 |
 | `pallet_expert` | COMPLETED | 9 个 L1 工具 |
-| `production_expert` | COMPLETED | 7 个 L1 工具 |
-| `quality_expert` | COMPLETED | 运行时 ID 为 `assay_expert`，12 个 L1 工具 |
+| `production_expert` | COMPLETED | 8 个 L1 工具 |
+| `quality_expert` | COMPLETED | 运行时 ID 为 `assay_expert`，16 个 L1 工具 |
 | `master_data_expert` | COMPLETED | 4 个 L1 工具（含共享 `resolve_products`） |
 | `administration_expert` | COMPLETED | 3 个 L1 工具 |
 | `audit_expert` | COMPLETED | 3 个 L1 工具 |
 | `analytics_expert` | SEVEN_REPORT_DEFINITIONS | 1 个受控 L1 登记报表工具运行 7 个版本化报表定义；今日运营概览完成工程验收，原六个定义验收结论不变，库存水平趋势生产门禁仍未通过 |
+| `knowledge_expert` | LOCAL_L0 | 1 个 Python 进程内 L0 工具；不进入 Java Gateway/MCP 白名单及其 hash |
 
 ## 当前工作项
 
@@ -68,6 +69,15 @@
 - 工具总数：17 增至 19；未新增配方、写工具或自由执行图。
 
 ## 验证记录
+
+### 2026-08-12：全量复审最终收口
+
+- 修复知识静态分类误抢“原料消耗及产出”实时生产追问；新增确定性和真实 Chromium 回归。
+- 报表运行/归档/执行审计下沉到独立业务编排服务，Controller 恢复纯委派，原异常和审计失败信息均保真。
+- 最终浏览器 fixture 改用 UTF-8 SQL 文件和字段长度内短 ASCII 账号，消除 Windows PowerShell 5/MySQL 参数代码页漂移。
+- 最终自动化为 Python `485 passed, 8 skipped`、Java `438 passed`、warehouse-mcp `72 passed`、Web Node `91 passed`；Web 与两个 JAR 构建通过。
+- shadow Chromium 真实模型完成今日运营概览与不存在生产订单的原料消耗查询；工具审计成功、正常链路 console error 0，临时数据清理后九组计数全为 0。
+- 结论仍为 `LOCAL_ENGINEERING_BASELINE_PASS / SHADOW_BROWSER_UAT_PASS / PRODUCTION_RELEASE_NO_GO`；完整证据见 `project-holistic-reaudit-and-release-readiness-2026-08-12.md`。
 
 ### V1-LOG-02：库存单据查询
 
@@ -574,6 +584,16 @@
 
 ## 变更日志
 
+- 2026-08-12：完成 RAG 当前 artifact、部署与运行时重审。源码仍在；RAG 原始材料按项目约定由仓库外部交付，当前 `deploy/simple/artifacts` 只有 `.gitkeep`，尚未取得正式 `current.json`、v1 release 或 `rag-model`，不能沿用 8 月 2～4 日的 `READY` 结论。修复简单部署打包误删整个 build 的风险，新增容器启动前 `validate-runtime` 和 required fail-closed 门禁；LLM 静态知识短问法在模型误路由时被受控纠偏到 `knowledge_expert`，`RAG_UNAVAILABLE` 立即返回专用降级并保留固定 PROCESS 域审计。RAG 专项 `122 passed, 8 skipped`，8 个 skip 均依赖尚未交付的真实资产。真实 Chromium 输入“白砂糖金属检测限值是什么？”显示“检索现行知识材料/知识库暂不可用”，console 0 error；shadow 审计为 `PROCESS_KNOWLEDGE_QUERY / PROCESS / RAG_UNAVAILABLE`，没有业务工具调用。required 模式以 `RAG_ROOT_MISSING` 启动失败。结论为 `SOURCE_PRESENT / EXTERNAL_MATERIAL_NOT_DELIVERED / FORMAL_ARTIFACT_AND_MODEL_MISSING / REQUIRED_FAIL_CLOSED / OPTIONAL_BROWSER_DEGRADED_PASS / PRODUCTION_NO_GO`，接收与恢复清单见 `rag/rag-current-artifact-and-runtime-reaudit-2026-08-12.md`。
+
+- 2026-08-12：完成四领域性能门禁的代码复审、真实模型复测与 Chromium 验收。主路由明确登记 Goal 时，专家只收到 GoalContract `allowedTools`；参数层拒绝同专家内目标漂移；必需事实完整后仍执行模型结果分析，但改用空工具集和专用短提示。新增三阶段输入字节数诊断且不保存 Prompt、问题、业务事实或回答；Python 全量 `480 passed, 8 skipped`。经用户明确确认固定问题与 shadow 查询事实的数据传输边界后，20 个预采样和 80 个正式冷会话全部完成，正式样本 80/80 成功，但整体 P50/P95 从 16.547/39.016 秒恶化至 19.953/46.562 秒，四领域 P95 仍全部超过 15 秒；工具 P95 仅 187 ms。真实 Chromium 的“当前库存缺最近30天化验”两轮问答通过，页面和工具审计均为 33 个产品组、55,522 件，console 0 error。一次性账号、101 个会话、135 条 API 审计、333 条工具审计、2 条消息复核、23 个报表快照和 23 条执行审计均已精确清零，服务与临时日志已停止并删除。结论为 `REAL_MODEL_80_OF_80_SUCCESS / CHROMIUM_UAT_PASS / PERFORMANCE_GATE_FAILED`，证据见 `agent-four-domain-performance-optimization-review-2026-08-12.md`。
+- 2026-08-12：完成七类登记报表的真实账号技术权限矩阵和 Chromium 验收。仓库账号与车间主任账号因实际均为 99 权限 `ADMIN`，六类非趋势报表可运行且可进入 AI 助手；QC 的质量/任务报表可运行，但生产/运营报表按定义级权限 403，且页面与服务端均禁止进入 AI 助手；库存趋势三组均保持生产口径 0/7、409。现场发现预期权限/业务拒绝会被误算 `FAILED`，已拆为 `REJECTED`，真实浏览器复验为运行 2、拒绝 2、失败 0。15 个临时报表、23 条分两轮执行审计和 2 个空会话均按精确主键清零，真实用户未受影响。当前只可声明技术矩阵通过，正式最小权限角色和真人业务验收仍待完成；证据见 `registered-report-role-technical-matrix-uat-2026-08-12.md`。
+- 2026-08-12：补齐登记报表运行治理与监控聚合。新增只保存报表定义、状态、耗时、部分数据、受限错误摘要和时间的执行审计，不保存用户问题、快照正文、工具参数或模型内容；`log:view` 只读状态统一聚合最近24小时运行成功/失败、部分数据、P50/P95/最大耗时、XLSX 导出、有效/过期快照、最近清理和库存趋势门禁。真实 Chromium 验证两次业务失败、一份生产日报成功快照、6,615 字节同快照 XLSX 和空清理批次，聚合为 3 次运行、1 成功、2 失败、1 导出、P50 4 ms、P95/最大 60 ms，并保持库存趋势 0/7。验收后 1 快照、1 导出、3 执行和 13 空清理审计全部精确清理，业务表无修改。目标告警平台接入和端到端模型性能门禁仍未完成。证据见 `registered-report-operations-observability-uat-2026-08-12.md`。
+- 2026-08-12：完成库存历史 shadow 调度就绪性复核，但生产趋势继续阻断。真实库只有 2026-08-12 `INITIAL_BASELINE`，没有 `DAILY_CLOSE` 或对账，门禁为 0/7；未执行白天回填。修复目标机没有 `pwsh` 时注册脚本无法运行、Windows PowerShell 5.1 不支持新版静态加密 API、ScriptBlock 根目录为空和无 BOM UTF-8 中文解析问题；新增无写入 `-PreflightOnly`。真实 `powershell.exe -File` Verify 以 `MISSING_DAILY_CLOSE` 返回退出码 2 并仅写失败证据。真实 Chromium 登录后显示缺快照、未对账、执行失败、0/7，live OpenAPI 无正式趋势路径；历史全问号门禁原因只在读模型降级为基于真实计数的中文摘要。管理员注册、告警接入和连续 7 天自然积累仍待完成。证据见 `inventory-history-shadow-readiness-validation-2026-08-12.md`。
+
+- 2026-08-12：完成首个成品入库候选 S4 隔离发布验证，但发布决策保持 `NO_GO`。本地 shadow MySQL 真实注入成功审计写入失败，证明任务、托盘、库存、流转、库存事件和库容整事务回滚；移除故障后同一确认安全恢复。确认后任务并发取消形成 `FAILED_FINAL + INVALIDATED` 且无库存写入。真实 Chromium 完成精确预览、双重确认和领域入库，并在服务端已提交后模拟浏览器断线；同一弹窗重试只读取原结果，`attempt_count=1`、三条成功审计、一次业务写入、零 MCP execute。双用户凭据矩阵确认跨用户、撤销、过期、会话撤销和权限撤回都在请求/业务写入前拒绝。所有夹具、权限和 Trigger 零残留；默认配置重启后 live OpenAPI 为 207 路径，S2/S3/execute 路径均为 0，Swagger 页 console 0 error/warning。正式角色责任人和生产审批仍缺失，因此 `agent:finish-inbound:execute` 保持零角色分配，S2/S3 默认关闭，MCP execute 未注册。证据见 `finish-inbound-s4-isolated-release-validation-2026-08-12.md`。
+- 2026-08-12：完成“3号库位入库2板黄冰糖”固定二维码完整浏览器闭环。真实 Chromium 覆盖具体产品消歧、二维码来源选择、0/2 与 1/2 禁用、2/2 启用、双重任务创建确认、PDF 下载、创建后卡片禁用、自动任务资格预览、既有批量入库弹窗和两项精确 L2 预览；账号不具备 `agent:finish-inbound:execute`，未点击人工提交。数据库反查为 2 条待处理任务、2 条合法 `FINISH_BIND` 追溯、任务资格/精确预览各 1，库存、非绑定流转、库存移动、execute 调用和 execution request 均为 0。验收发现历史 2026-04-28 托盘任务半成品字段 SQL 未进入正式迁移目录，已新增幂等补偿迁移并在 shadow 库从 40/40 推进到 41/41；同一会话重试精确预览成功。最终全量回归为 Java 427 项、warehouse-mcp 72 项、Python Agent `478 passed, 8 skipped`、Web 91 项，三个生产构建通过；新 JAR 实际携带补偿迁移并在 shadow 库通过 41 个迁移/47 张必需表启动门禁，Chromium 打开 Swagger UI 后确认默认开关下 live OpenAPI 为 207 个路径、存在 preview 且不存在 execute。一次性数据、浏览器产物和隔离服务已清理。结论为 `LOCAL_BROWSER_UAT_PASS / L2_PREVIEW_ONLY / S4_NO_GO / PRODUCTION_NOT_RELEASED`，证据见 `../方案/2026-08-12-finish-inbound-guided-browser-closure.md`。
+- 2026-08-12：完成 Agent/MCP 当前事实归一化。机器登记明确为 58 个 GoalContract、54 个 Java/MCP 无业务写入工具（52 L1 + 2 L2）、1 个 Python 进程内 L0 工具和 1 个受控复合配方；Python、Java Gateway、warehouse-mcp 工具全集及 capability hash 继续由 fail-closed 合同锁定。新增 Python 打包产物与 `app` 源码树逐字节一致合同，当前 51 个受控文件无缺失、冗余或内容漂移。L3 gate 将 S3 受控 Web 实现和成功审计同事务证据归为已完成，并把 S4 故障注入、正式角色、完整浏览器、恢复矩阵和发布/回滚决策独立列为待办；没有注册 `execute_*`，总体仍为 `NO_GO / NOT_RELEASED`。Agent 全量 `478 passed, 8 skipped`，Java 根项目 424 项、warehouse-mcp 72 项全部通过。真实浏览器和受保护 capability 接口确认 54 工具、2 个 L2、0 个 execute、1 个配方及三个 hash 一致；页面助手完成真实专家/工具链路。验收服务、账号、日志和临时依赖均已清理，历史日期文档保留当时数字，不倒改历史结论。证据见 `../方案/2026-08-12-agent-registry-and-l3-gate-alignment.md`。
 - 2026-08-10：将“3号库位入库2板黄冰糖”等自然语言入库旅程按二维码来源拆成三个职责清晰的 GoalContract。通用目标只解析板数、具体产品、目标库位并要求用户选择业务模式；已有任务目标只读取 `FINISH_IN + PENDING + 成品` 任务；固定二维码目标只读取具体产品下启用固定模式且当前空闲的二维码。当前为 58 个 GoalContract、54 个无业务写入 MCP 工具。固定码选择后由显式 Web 确认复用既有启用入口创建待入库任务，此步不写库存；成功后重新进入主模型、物流专家和任务资格预览，不能直接跳过工具预览打开入库表单。新增 `qrcode:activate` 方法权限，内部状态只输出用户语言，两条来源数量不足时禁止静默互补。全量结果：Agent `478 passed, 5 skipped`，Java 根项目、warehouse-mcp、Web 69 项和生产构建通过；验收中同步修复专家注册表冻结哈希漂移。真实浏览器和固定二维码数据库副作用清单仍待补录，证据见 `finish-inbound-guided-scene-uat-2026-08-10.md`。
 - 2026-08-10：完成首个 L3 候选的 S3 受控界面真实领域执行，但仍未新增或开放 MCP execute 工具。新增独立 `agent:finish-inbound:execute` 权限且默认不分配角色；受控确认弹窗只读取服务端精确预览，不接收或展示 token、幂等键和原始业务 DTO；默认关闭的 S3 Controller 复用既有成品入库领域事务。Java 定向测试、根项目全量测试、前端单测与构建均通过；本地隔离数据库完成 1 条真实成品入库，核对任务、托盘、库存、流转、库存事件和仓库容量，得到 `attempt_count=1`、3 条专用审计、0 次 MCP execute 调用；同一确认重放已提交结果没有第二次写入，全部临时数据与临时权限关联均已清理。当前为 `S3_CONTROLLED_DOMAIN_EXECUTION_LOCAL_UAT_GO / AGENT_L3_EXECUTION_NO_GO / PRODUCTION_NOT_RELEASED`；数据库审计故障注入、正式角色授权、浏览器发布验收和回滚演练留在 S4。证据见 `finish-inbound-s3-domain-execution-uat-2026-08-10.md`。
 - 2026-08-10：完成首个 L3 候选的 S2 零写入控制面，但没有新增或开放 Agent 写工具。新增确认/撤销、服务端一次性 token 与幂等键哈希、单确认单请求、同键结果重放、状态摘要重检和追加式专用审计；测试消费 Controller 仅在显式开关下注册，默认适配器无任何业务服务依赖并固定 `businessWrites=0`。定向测试和根项目全量测试通过；本地正式 Agent 链路完成 S1 预览、重复确认、首次消费和同键重放，得到同一 `executionRef`、`attempt_count=1`、3 条审计、业务写入 0、execute 调用 0并清理全部样本。真实 MySQL 验收发现并修复执行请求非空初始状态的 INSERT 顺序问题。当前仍为 55 个 GoalContract、54 个无业务写入 Java 工具；专用执行权限、受控 UI、真实领域事务和真实写入原子审计留在 S3。结论为 `S2_CONTROL_PLANE_LOCAL_UAT_GO / AGENT_L3_EXECUTION_NO_GO / PRODUCTION_NOT_RELEASED`；证据见 `finish-inbound-s2-control-plane-uat-2026-08-10.md`。

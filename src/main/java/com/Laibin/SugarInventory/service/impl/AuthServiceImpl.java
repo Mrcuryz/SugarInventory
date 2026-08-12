@@ -27,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -53,12 +54,17 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private PermissionMapper permissionMapper;
 
-    private static final String WEB_LOGIN_PASSWORD = "lbsp";
     private static final String WEB_ACCESS_PERMISSION = "system:access";
+
+    @Value("${auth.web-login.password:}")
+    private String webLoginPassword;
 
     @Override
     public Result<AuthVO> handleWebLogin(String name, String password) {
-        if (!WEB_LOGIN_PASSWORD.equals(password)) {
+        if (webLoginPassword == null || webLoginPassword.isBlank()) {
+            throw new BusinessException("Web 登录口令未配置");
+        }
+        if (!webLoginPassword.equals(password)) {
             throw new BusinessException("口令错误");
         }
 

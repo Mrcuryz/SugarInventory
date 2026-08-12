@@ -33,6 +33,7 @@ import java.util.List;
 @RequestMapping("/api/semi-products")
 @RequiredArgsConstructor
 @Tag(name = "半成品记录管理", description = "包括新增、查询、修改半成品记录的相关接口")
+@PreAuthorize("hasAnyAuthority('inventory:view', 'record:query')")
 public class SemiProductRecordController {
     private final SemiProductRecordService semiProductRecordService;
 
@@ -47,29 +48,23 @@ public class SemiProductRecordController {
     @Operation(summary = "半成品入库", description = "新增一条半成品记录，记录产品名称、数量等信息。记录由当前登录用户录入。")
     @PostMapping("/add")
     @CheckWarehouseStatus
+    @PreAuthorize("hasAuthority('inventory:inbound')")
+    @LogOperation(value = "semi_product_record", type = OperationType.INSERT)
     public Result<InVO> addSemiProductRecord(
             @RequestBody AddSemiProductRecordDTO dto,
             @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            return Result.success(semiProductRecordService.addSemiProductRecord(dto, loginUser.getUser().getName()));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.error(500, e.getMessage());
-        }
+        return Result.success(semiProductRecordService.addSemiProductRecord(dto, loginUser.getUser().getName()));
     }
 
     @Operation(summary = "半成品栈式入库", description = "在特殊库位新增一条半成品记录，记录产品名称、数量等信息。记录由当前登录用户录入。")
     @PostMapping("/stack-in")
     @CheckWarehouseStatus
+    @PreAuthorize("hasAuthority('inventory:inbound')")
+    @LogOperation(value = "semi_product_record", type = OperationType.INSERT)
     public Result<InVO> stackModeInStock(
             @RequestBody AddSemiProductRecordDTO dto,
             @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            return Result.success(semiProductRecordService.stackModeInStock(dto, loginUser.getUser().getName()));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.error(500, e.getMessage());
-        }
+        return Result.success(semiProductRecordService.stackModeInStock(dto, loginUser.getUser().getName()));
     }
 
     @Operation(summary = "批量查询半成品记录详情", description = "根据多个记录ID批量查询半成品记录的详细信息")
@@ -113,15 +108,8 @@ public class SemiProductRecordController {
             @RequestBody SemiProductRecordDTO dto,
             @AuthenticationPrincipal LoginUser loginUser
     ) {
-        System.out.println("dto: " + dto);
         User user = loginUser.getUser();
-        try {
-            PageResult<RecordDetailVO> pageResult = semiProductRecordService.getSemiProductRecords(dto, user);
-            System.out.println("Result: " + pageResult.getRecords());
-            return Result.success(pageResult);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.error(500, "查询失败");
-        }
+        PageResult<RecordDetailVO> pageResult = semiProductRecordService.getSemiProductRecords(dto, user);
+        return Result.success(pageResult);
     }
 }

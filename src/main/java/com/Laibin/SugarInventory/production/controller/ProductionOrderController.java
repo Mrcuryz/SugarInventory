@@ -1,8 +1,10 @@
 package com.Laibin.SugarInventory.production.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
+import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionMaterialCandidateQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionInProcessMaterialQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionFinishDTO;
@@ -12,8 +14,6 @@ import com.Laibin.SugarInventory.production.domain.dto.ProductionOrderCreateDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOrderQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOutputBindQrDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOutputCreateDTO;
-import com.Laibin.SugarInventory.production.domain.po.ProductionOrder;
-import com.Laibin.SugarInventory.production.domain.po.ProductionOrderOutputCode;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBindQrResultVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionLabelBatchVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialCandidateVO;
@@ -21,6 +21,8 @@ import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderDetailVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderOptionVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderPageVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderBaseVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionOutputCodeVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOutputVO;
 import com.Laibin.SugarInventory.production.service.ProductionOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,7 +61,8 @@ public class ProductionOrderController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('production:order:create')")
-    public Result<ProductionOrder> createOrder(@RequestBody @Valid ProductionOrderCreateDTO dto,
+    @LogOperation(value = "production_order", type = OperationType.INSERT)
+    public Result<ProductionOrderBaseVO> createOrder(@RequestBody @Valid ProductionOrderCreateDTO dto,
                                                @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(productionOrderService.createOrder(dto,
                 loginUser.getUser().getId(),
@@ -86,6 +89,7 @@ public class ProductionOrderController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('production:order:cancel')")
+    @LogOperation(value = "production_order", type = OperationType.DELETE)
     public Result<Void> deleteOrder(@PathVariable Long id,
                                     @AuthenticationPrincipal LoginUser loginUser) {
         productionOrderService.deleteOrder(id, loginUser.getUser().getId());
@@ -94,6 +98,7 @@ public class ProductionOrderController {
 
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAuthority('production:order:cancel')")
+    @LogOperation(value = "production_order", type = OperationType.UPDATE)
     public Result<Void> cancelOrder(@PathVariable Long id,
                                     @AuthenticationPrincipal LoginUser loginUser) {
         productionOrderService.cancelOrder(id, loginUser.getUser().getId());
@@ -115,6 +120,7 @@ public class ProductionOrderController {
 
     @PostMapping("/{id}/materials/pick")
     @PreAuthorize("hasAuthority('production:material:pick')")
+    @LogOperation(value = "production_order_material", type = OperationType.UPDATE)
     public Result<Void> pickMaterials(@PathVariable Long id,
                                       @RequestBody ProductionMaterialPickDTO dto,
                                       @AuthenticationPrincipal LoginUser loginUser) {
@@ -124,6 +130,7 @@ public class ProductionOrderController {
 
     @PostMapping("/{id}/materials/finish")
     @PreAuthorize("hasAuthority('production:material:pick')")
+    @LogOperation(value = "production_order_material", type = OperationType.UPDATE)
     public Result<Void> finishMaterials(@PathVariable Long id,
                                         @AuthenticationPrincipal LoginUser loginUser) {
         productionOrderService.finishMaterials(id, loginUser.getUser().getId());
@@ -132,6 +139,7 @@ public class ProductionOrderController {
 
     @PostMapping("/{id}/outputs")
     @PreAuthorize("hasAuthority('production:output:create')")
+    @LogOperation(value = "production_order_output", type = OperationType.INSERT)
     public Result<ProductionOutputVO> addOutput(@PathVariable Long id,
                                                 @RequestBody @Valid ProductionOutputCreateDTO dto,
                                                 @AuthenticationPrincipal LoginUser loginUser) {
@@ -140,6 +148,7 @@ public class ProductionOrderController {
 
     @PutMapping("/outputs/{outputId}")
     @PreAuthorize("hasAuthority('production:output:create')")
+    @LogOperation(value = "production_order_output", type = OperationType.UPDATE)
     public Result<ProductionOutputVO> updateOutput(@PathVariable Long outputId,
                                                    @RequestBody @Valid ProductionOutputCreateDTO dto,
                                                    @AuthenticationPrincipal LoginUser loginUser) {
@@ -148,6 +157,7 @@ public class ProductionOrderController {
 
     @DeleteMapping("/outputs/{outputId}")
     @PreAuthorize("hasAuthority('production:output:create')")
+    @LogOperation(value = "production_order_output", type = OperationType.DELETE)
     public Result<Void> deleteOutput(@PathVariable Long outputId,
                                      @AuthenticationPrincipal LoginUser loginUser) {
         productionOrderService.deleteOutput(outputId, loginUser.getUser().getId());
@@ -156,6 +166,7 @@ public class ProductionOrderController {
 
     @PostMapping("/outputs/{outputId}/bind-fixed-qrs")
     @PreAuthorize("hasAuthority('production:output:bindQr')")
+    @LogOperation(value = "production_order_output_code", type = OperationType.UPDATE)
     public Result<ProductionBindQrResultVO> bindFixedQrs(@PathVariable Long outputId,
                                                          @RequestBody ProductionOutputBindQrDTO dto,
                                                          @AuthenticationPrincipal LoginUser loginUser) {
@@ -164,12 +175,14 @@ public class ProductionOrderController {
 
     @PostMapping("/outputs/{outputId}/print-codes")
     @PreAuthorize("hasAuthority('production:output:print')")
-    public Result<List<ProductionOrderOutputCode>> markOutputPrinted(@PathVariable Long outputId) {
+    @LogOperation(value = "production_order_output_code", type = OperationType.UPDATE)
+    public Result<List<ProductionOutputCodeVO>> markOutputPrinted(@PathVariable Long outputId) {
         return Result.success(productionOrderService.markOutputPrinted(outputId));
     }
 
     @PostMapping("/{id}/label-batches")
     @PreAuthorize("hasAuthority('production:label:reserve')")
+    @LogOperation(value = "production_order_label_batch", type = OperationType.INSERT)
     public Result<List<ProductionLabelBatchVO>> reserveLabels(@PathVariable Long id,
                                                               @RequestBody ProductionLabelReserveDTO dto,
                                                               @AuthenticationPrincipal LoginUser loginUser) {
@@ -184,6 +197,7 @@ public class ProductionOrderController {
 
     @PostMapping("/label-batches/{batchId}/print")
     @PreAuthorize("hasAuthority('production:label:print')")
+    @LogOperation(value = "production_order_label_batch", type = OperationType.UPDATE)
     public void printLabelBatch(@PathVariable Long batchId, HttpServletResponse response) throws IOException {
         byte[] pdf = productionOrderService.printLabelBatch(batchId);
         writeDownload(response, "production-label-batch-" + batchId + "-" + LocalDate.now() + ".pdf", pdf);
@@ -200,6 +214,7 @@ public class ProductionOrderController {
 
     @PostMapping("/{id}/production-finish")
     @PreAuthorize("hasAuthority('production:label:finish')")
+    @LogOperation(value = "production_order", type = OperationType.UPDATE)
     public Result<ProductionOrderDetailVO> finishProduction(@PathVariable Long id,
                                                             @RequestBody @Valid ProductionFinishDTO dto,
                                                             @AuthenticationPrincipal LoginUser loginUser) {

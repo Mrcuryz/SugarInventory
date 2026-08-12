@@ -3,7 +3,6 @@ package com.Laibin.SugarInventory;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
-import com.Laibin.SugarInventory.printerassistant.PrinterAssistantApplication;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -24,7 +23,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @ComponentScan(
         basePackages = "com.Laibin.SugarInventory",
-        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = PrinterAssistantApplication.class)
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.REGEX,
+                pattern = "com\\.Laibin\\.SugarInventory\\.printerassistant\\..*"
+        )
 )
 public class SugarInventoryApplication {
     public static void main(String[] args) {

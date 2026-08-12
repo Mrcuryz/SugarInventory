@@ -1,9 +1,11 @@
 package com.Laibin.SugarInventory.domain.vo;
 
-import com.Laibin.SugarInventory.domain.po.BaseEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
@@ -17,4 +19,19 @@ public class ProductVO extends BaseVO {
 
     @Schema(description = "产品类型", example = "白冰糖")
     private String type;
+
+    @Schema(description = "产品类型", example = "白冰糖")
+    private String productType;
+
+    private String status;
+    private String packagingMethod;
+    private BigDecimal weightPerPiece;
+    private Integer piecesPerPallet;
+    private Boolean canStack;
+    private Integer screenMeshId;
+    private Integer createdBy;
+    private LocalDateTime createdAt;
+    private Integer updatedBy;
+    private LocalDateTime updatedAt;
+    private String defaultStandardName;
 }

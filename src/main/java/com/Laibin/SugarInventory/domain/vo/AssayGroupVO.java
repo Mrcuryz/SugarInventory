@@ -1,6 +1,5 @@
 package com.Laibin.SugarInventory.domain.vo;
 
-import com.Laibin.SugarInventory.domain.po.Product;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -13,7 +12,7 @@ public class AssayGroupVO {
     private Integer id;
 
     @Schema(description = "关联产品列表", example = "1")
-    private List<Product> relatedProductList;
+    private List<ProductVO> relatedProductList;
 
     @Schema(description = "关联产品 ID 列表", example = "1,2,3")
     private String relatedProducts;

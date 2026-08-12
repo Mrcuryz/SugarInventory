@@ -4,8 +4,8 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.analytics.domain.dto.RegisteredReportRunQueryDTO;
 import com.Laibin.SugarInventory.analytics.domain.vo.RegisteredReportHistoryItemVO;
 import com.Laibin.SugarInventory.analytics.domain.vo.RegisteredReportRunVO;
-import com.Laibin.SugarInventory.analytics.service.RegisteredReportService;
 import com.Laibin.SugarInventory.analytics.service.impl.RegisteredReportArchiveService;
+import com.Laibin.SugarInventory.analytics.service.impl.RegisteredReportExecutionService;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.common.PageResult;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/analytics/agent-read")
 @RequiredArgsConstructor
 public class AnalyticsAgentReadController {
-    private final RegisteredReportService registeredReportService;
+    private final RegisteredReportExecutionService reportExecutionService;
     private final RegisteredReportArchiveService reportArchiveService;
 
     @PostMapping("/reports/run")
@@ -40,9 +40,8 @@ public class AnalyticsAgentReadController {
     public Result<RegisteredReportRunVO> runRegisteredReport(
             @RequestBody RegisteredReportRunQueryDTO query,
             @AuthenticationPrincipal LoginUser loginUser) {
-        RegisteredReportRunVO report = registeredReportService.run(query);
-        return Result.success(reportArchiveService.persist(
-                report,
+        return Result.success(reportExecutionService.runAndArchive(
+                query,
                 loginUser.getUser().getId(),
                 loginUser.getUser().getName()));
     }
@@ -100,4 +99,5 @@ public class AnalyticsAgentReadController {
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toUnmodifiableSet());
     }
+
 }

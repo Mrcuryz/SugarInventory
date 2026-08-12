@@ -18,7 +18,7 @@ export function listAutoInboundHistory() {
 }
 
 // 3. 确认入库
-// AutoInboundConfirmRequest: { operatorId, confirmedTaskIds, updatedTasks }
+// AutoInboundConfirmRequest: { confirmedTaskIds, updatedTasks }
 export function confirmAutoInbound(batchId, data) {
     return request.post(`/auto-inbound/${batchId}/confirm`, data)
 }

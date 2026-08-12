@@ -21,4 +21,10 @@ public interface RegisteredReportRunMapper extends BaseMapper<RegisteredReportRu
     List<String> selectExpiredReportRunIds(
             @Param("cutoffAt") LocalDateTime cutoffAt,
             @Param("batchSize") int batchSize);
+
+    @Select("SELECT COUNT(*) FROM agent_report_run WHERE expires_at > #{now}")
+    long countActive(@Param("now") LocalDateTime now);
+
+    @Select("SELECT COUNT(*) FROM agent_report_run WHERE expires_at <= #{now}")
+    long countExpired(@Param("now") LocalDateTime now);
 }

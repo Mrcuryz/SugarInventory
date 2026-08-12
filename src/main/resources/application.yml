@@ -30,6 +30,12 @@ springdoc:
   swagger-ui.enabled: true
 server:
   port: 8080
+database:
+  schema:
+    verification-enabled: ${DATABASE_SCHEMA_VERIFICATION_ENABLED:false}
+auth:
+  web-login:
+    password: ${WEB_LOGIN_PASSWORD:}
 wechat:
   appid: ${WECHAT_APP_ID:}
   secret: ${WECHAT_APP_SECRET}

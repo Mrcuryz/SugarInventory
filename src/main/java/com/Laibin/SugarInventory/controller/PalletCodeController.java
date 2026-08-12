@@ -1,7 +1,7 @@
 package com.Laibin.SugarInventory.controller;
 
 import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
-import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.Result;
 import com.Laibin.SugarInventory.domain.dto.GeneratePalletCodeDTO;
 import com.Laibin.SugarInventory.domain.dto.FixedProductActivateDTO;
@@ -32,6 +32,7 @@ import com.Laibin.SugarInventory.domain.dto.DeletePalletFlowBatchDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapBatchOperationDTO;
 import com.Laibin.SugarInventory.domain.dto.WarehouseMapSlotInboundDTO;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
+import com.Laibin.SugarInventory.domain.enumObject.OperationType;
 import com.Laibin.SugarInventory.domain.vo.PalletCodeInfoVO;
 import com.Laibin.SugarInventory.domain.vo.PalletCodePageVO;
 import com.Laibin.SugarInventory.domain.vo.FixedProductQrPoolVO;
@@ -78,6 +79,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/pallet-codes")
 @Tag(name = "托盘码", description = "托盘码生成与解析接口")
+@PreAuthorize("hasAuthority('qrcode:view')")
 public class PalletCodeController {
 
     @Autowired
@@ -88,53 +90,43 @@ public class PalletCodeController {
 
     @Operation(summary = "批量生成托盘码", description = "根据数量批量生成托盘码")
     @PostMapping("/generate")
+    @PreAuthorize("hasAuthority('qrcode:generate')")
+    @LogOperation(value = "pallet_code", type = OperationType.INSERT)
     public Result<List<String>> generate(@RequestBody @Valid GeneratePalletCodeDTO dto,
                                          @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            List<PalletCode> codes = palletCodeService.generateCodes(dto.getCount(), loginUser.getUser().getId());
-            List<String> codeStrings = codes.stream().map(PalletCode::getCode).toList();
-            return Result.success(codeStrings);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        List<PalletCode> codes = palletCodeService.generateCodes(dto.getCount(), loginUser.getUser().getId());
+        List<String> codeStrings = codes.stream().map(PalletCode::getCode).toList();
+        return Result.success(codeStrings);
     }
 
     @Operation(summary = "托盘码列表查询", description = "托盘码管理页分页查询接口")
     @PostMapping("")
     public Result<PageResult<PalletCodePageVO>> page(@RequestBody PalletCodeQueryDTO queryDTO) {
-        try {
-            PageResult<PalletCodePageVO> page = palletCodeService.pagePalletCodes(queryDTO);
-            return Result.success(page);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        PageResult<PalletCodePageVO> page = palletCodeService.pagePalletCodes(queryDTO);
+        return Result.success(page);
     }
 
     @Operation(summary = "固定产品二维码批量绑定", description = "按数量批量将空闲二维码初始化绑定到指定产品")
     @PostMapping("/fixed-product/bind")
+    @PreAuthorize("hasAuthority('qrcode:bind_fixed_product')")
+    @LogOperation(value = "pallet_code", type = OperationType.UPDATE)
     public Result<Integer> bindFixedProduct(@RequestBody @Valid FixedProductBindDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            int count = palletCodeService.bindFixedProductCodes(dto, loginUser.getUser().getId());
-            return Result.success(count);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        int count = palletCodeService.bindFixedProductCodes(dto, loginUser.getUser().getId());
+        return Result.success(count);
     }
 
     @Operation(summary = "固定产品二维码池查询", description = "按产品、状态和是否只看可打印二维码进行筛选")
     @GetMapping("/fixed-product/pool")
+    @PreAuthorize("hasAuthority('qrcode:pool_view')")
     public Result<PageResult<FixedProductQrPoolVO>> pageFixedProductPool(FixedProductPoolQueryDTO queryDTO) {
-        try {
-            PageResult<FixedProductQrPoolVO> page = palletCodeService.pageFixedProductPool(queryDTO);
-            return Result.success(page);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        PageResult<FixedProductQrPoolVO> page = palletCodeService.pageFixedProductPool(queryDTO);
+        return Result.success(page);
     }
 
     @Operation(summary = "批量导出固定产品二维码标签 PDF", description = "仅允许导出固定产品模式且状态为 FREE 的二维码标签")
     @PostMapping("/fixed-product/qrcode-labels/pdf")
+    @PreAuthorize("hasAuthority('qrcode:print')")
     public void batchDownloadFixedProductQrLabelPdf(@RequestBody @Valid PalletQrExportDTO dto,
                                                     HttpServletResponse response) throws IOException {
         byte[] pdf = palletCodeService.generateFixedProductQrLabelPdf(dto);
@@ -144,6 +136,7 @@ public class PalletCodeController {
     @Operation(summary = "固定产品二维码打印并启用", description = "打印固定产品二维码标签，并立即创建对应入库任务投入本轮业务")
     @PostMapping("/fixed-product/activate/pdf")
     @PreAuthorize("hasAuthority('qrcode:activate')")
+    @LogOperation(value = "pallet_code", type = OperationType.UPDATE)
     public void activateFixedProductQrCodes(@RequestBody @Valid FixedProductActivateDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser,
                                             HttpServletResponse response) throws IOException {
@@ -155,12 +148,8 @@ public class PalletCodeController {
     @PostMapping("/tasks/list")
     @PreAuthorize("hasAuthority('task:view')")
     public Result<PageResult<PalletTaskPageVO>> pageTasks(@RequestBody PalletTaskQueryDTO queryDTO) {
-        try {
-            PageResult<PalletTaskPageVO> page = palletCodeService.pagePalletTasks(queryDTO);
-            return Result.success(page);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        PageResult<PalletTaskPageVO> page = palletCodeService.pagePalletTasks(queryDTO);
+        return Result.success(page);
     }
 
     @Operation(summary = "托盘流转轮次分页", description = "按托盘码分页查询历史循环轮次摘要")
@@ -169,12 +158,8 @@ public class PalletCodeController {
     public Result<PageResult<PalletFlowCyclePageVO>> pageFlowCycles(@PathVariable("code") String code,
                                                                     @RequestParam(value = "pageNum", defaultValue = "1") Long pageNum,
                                                                     @RequestParam(value = "pageSize", defaultValue = "5") Long pageSize) {
-        try {
-            PageResult<PalletFlowCyclePageVO> page = palletCodeService.pagePalletFlowCycles(code, pageNum, pageSize);
-            return Result.success(page);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        PageResult<PalletFlowCyclePageVO> page = palletCodeService.pagePalletFlowCycles(code, pageNum, pageSize);
+        return Result.success(page);
     }
 
     @Operation(summary = "托盘流转明细", description = "按托盘码和循环号查询流转时间线")
@@ -182,82 +167,59 @@ public class PalletCodeController {
     @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<List<PalletFlowDetailVO>> listFlowsByCycle(@PathVariable("code") String code,
                                                              @RequestParam("cycleNo") Integer cycleNo) {
-        try {
-            List<PalletFlowDetailVO> records = palletCodeService.listPalletFlowsByCycle(code, cycleNo);
-            return Result.success(records);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        List<PalletFlowDetailVO> records = palletCodeService.listPalletFlowsByCycle(code, cycleNo);
+        return Result.success(records);
     }
 
     @Operation(summary = "批量删除托盘流转记录", description = "仅允许删除超过180天且非当前轮次的历史流转记录")
     @PostMapping("/flows/delete")
+    @PreAuthorize("hasAuthority('qrcode:flow_delete')")
+    @LogOperation(value = "pallet_flow", type = OperationType.DELETE)
     public Result<Void> deleteFlows(@RequestBody @Valid DeletePalletFlowBatchDTO dto) {
-        try {
-            palletCodeService.deletePalletFlows(dto);
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.deletePalletFlows(dto);
+        return Result.success(null);
     }
 
     // 批量确认托盘入库，内部按任务类型自动分支
     @Operation(summary = "托盘任务确认入库", description = "批量确认托盘入库任务")
     @PostMapping("/tasks/confirm")
     @PreAuthorize("hasAuthority('task:confirm')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<List<InVO>> confirmTasks(@RequestBody @Valid ConfirmPalletInBatchDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            Integer operatorId = loginUser.getUser().getId();
-            List<InVO> result = palletCodeService.confirmFinishedTaskInBatch(dto, operatorId);
-            return Result.success(result);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.error(500, "入库确认失败，请联系管理员处理");
-        }
+        Integer operatorId = loginUser.getUser().getId();
+        List<InVO> result = palletCodeService.confirmFinishedTaskInBatch(dto, operatorId);
+        return Result.success(result);
     }
 
     @Operation(summary = "批量作废托盘码", description = "仅允许将空闲托盘码置为 INVALID")
     @PostMapping("/invalid")
+    @PreAuthorize("hasAuthority('qrcode:invalidate')")
+    @LogOperation(value = "pallet_code", type = OperationType.UPDATE)
     public Result<Void> invalidateCodes(@RequestBody @Valid CancelPalletBatchDTO dto,
                                         @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.invalidatePalletCodes(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        } catch (Exception e) {
-            return Result.error(500, "二维码作废失败，请联系管理员处理");
-        }
+        palletCodeService.invalidatePalletCodes(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "取消作废二维码", description = "将作废状态的二维码恢复为空闲状态")
     @PostMapping("/invalid/restore")
+    @PreAuthorize("hasAuthority('qrcode:invalidate')")
+    @LogOperation(value = "pallet_code", type = OperationType.UPDATE)
     public Result<Void> restoreInvalidCodes(@RequestBody @Valid CancelPalletBatchDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.restoreInvalidPalletCodes(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        } catch (Exception e) {
-            return Result.error(500, "取消作废失败，请联系管理员处理");
-        }
+        palletCodeService.restoreInvalidPalletCodes(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "批量取消入库任务", description = "按托盘码取消当前轮次待处理入库任务，并释放托盘回 FREE")
     @PostMapping("/tasks/cancel")
     @PreAuthorize("hasAuthority('task:cancel')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<Void> cancelTasks(@RequestBody @Valid CancelPalletBatchDTO dto,
                                     @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.cancelTasksByCodes(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.cancelTasksByCodes(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "解析托盘码", description = "小程序扫码后解析托盘码并返回基础信息")
@@ -312,6 +274,7 @@ public class PalletCodeController {
 
     @Operation(summary = "下载托盘二维码 PNG", description = "下载白底黑码高清 PNG")
     @GetMapping("/{code}/qrcode.png")
+    @PreAuthorize("hasAuthority('qrcode:print')")
     public void downloadQrCodePng(@PathVariable("code") String code, HttpServletResponse response) throws IOException {
         byte[] png = palletCodeService.generateQrCodePng(code);
         writeDownload(response, "image/png", safeFileName(code) + ".png", png);
@@ -319,6 +282,7 @@ public class PalletCodeController {
 
     @Operation(summary = "下载托盘二维码 SVG", description = "下载托盘二维码 SVG，作为高级排版选项")
     @GetMapping("/{code}/qrcode.svg")
+    @PreAuthorize("hasAuthority('qrcode:print')")
     public void downloadQrCodeSvg(@PathVariable("code") String code, HttpServletResponse response) throws IOException {
         String svg = palletCodeService.generateQrCodeSvg(code);
         writeDownload(response, "image/svg+xml;charset=UTF-8", safeFileName(code) + ".svg", svg.getBytes(StandardCharsets.UTF_8));
@@ -326,6 +290,7 @@ public class PalletCodeController {
 
     @Operation(summary = "下载托盘二维码标签 PDF", description = "下载单个托盘码的 A4 打印版 PDF 标签")
     @GetMapping("/{code}/qrcode-label.pdf")
+    @PreAuthorize("hasAuthority('qrcode:print')")
     public void downloadQrLabelPdf(@PathVariable("code") String code, HttpServletResponse response) throws IOException {
         PalletQrExportDTO dto = new PalletQrExportDTO();
         dto.setCodes(List.of(code));
@@ -335,6 +300,7 @@ public class PalletCodeController {
 
     @Operation(summary = "批量导出托盘二维码标签 PDF", description = "按 A4 标签版批量导出托盘二维码 PDF")
     @PostMapping("/qrcode-labels/pdf")
+    @PreAuthorize("hasAuthority('qrcode:print')")
     public void batchDownloadQrLabelPdf(@RequestBody @Valid PalletQrExportDTO dto,
                                         HttpServletResponse response) throws IOException {
         byte[] pdf = palletCodeService.generateQrLabelPdf(dto);
@@ -345,193 +311,149 @@ public class PalletCodeController {
     @GetMapping("/{code}/assay")
     @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<PalletAssayVO> getAssay(@PathVariable("code") String code) {
-        try {
-            PalletAssayVO vo = palletCodeService.getAssayByCode(code);
-            return Result.success(vo);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        } catch (Exception e) {
-            return Result.error(500, "化验记录查询失败，请联系管理员处理");
-        }
+        PalletAssayVO vo = palletCodeService.getAssayByCode(code);
+        return Result.success(vo);
     }
 
     @Operation(summary = "托盘库存位置", description = "根据托盘码查询当前库存位置")
     @GetMapping("/{code}/inventory")
     @PreAuthorize("hasAuthority('qrcode:view')")
     public Result<PalletInventoryVO> getInventory(@PathVariable("code") String code) {
-        try {
-            PalletInventoryVO vo = palletCodeService.getInventoryByCode(code);
-            return Result.success(vo);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        } catch (Exception e) {
-            return Result.error(500, "库存位置查询失败，请联系管理员处理");
-        }
+        PalletInventoryVO vo = palletCodeService.getInventoryByCode(code);
+        return Result.success(vo);
     }
 
     @Operation(summary = "历史扫码创建入库任务", description = "历史接口：小程序/PC 扫描托盘二维码后确认产品信息并创建入库任务（不处理化验记录）")
     @PostMapping("/bind")
+    @PreAuthorize("hasAuthority('task:create')")
+    @LogOperation(value = "pallet_task", type = OperationType.INSERT)
     public Result<PalletBindResultVO> bind(@RequestBody @Valid BindPalletTaskDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            Integer operatorId = loginUser.getUser().getId();
-            PalletBindResultVO vo = palletCodeService.bindPalletAndCreateTask(dto, operatorId);
-            return Result.success(vo);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        Integer operatorId = loginUser.getUser().getId();
+        PalletBindResultVO vo = palletCodeService.bindPalletAndCreateTask(dto, operatorId);
+        return Result.success(vo);
     }
 
     @Operation(summary = "历史成品任务登记半成品用量", description = "历史接口已停用；新流程通过生产订单关联追溯")
     @PostMapping("/tasks/semi-bind")
+    @PreAuthorize("hasAuthority('task:create')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<List<TaskSemiItemVO>> bindSemiItems(@RequestBody @Valid BindTaskSemiItemsDTO dto,
                                                       @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            Integer operatorId = loginUser.getUser().getId();
-            // 覆盖式绑定：先删旧明细，再保存当前提交的半成品托盘列表
-            List<TaskSemiItemVO> vo = palletCodeService.bindSemiItemsToTask(dto, operatorId);
-            return Result.success(vo);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        Integer operatorId = loginUser.getUser().getId();
+        // 覆盖式绑定：先删旧明细，再保存当前提交的半成品托盘列表
+        List<TaskSemiItemVO> vo = palletCodeService.bindSemiItemsToTask(dto, operatorId);
+        return Result.success(vo);
     }
 
     @Operation(summary = "创建半成品普通出库任务", description = "扫码一个或多个半成品托盘码，创建普通出库任务")
     @PostMapping("/semi/out/create")
     @PreAuthorize("hasAuthority('task:create')")
+    @LogOperation(value = "pallet_task", type = OperationType.INSERT)
     public Result<Void> createSemiOutTasks(@RequestBody @Valid CreateSemiOutTaskDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.createSemiOutTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.createSemiOutTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "确认半成品普通出库", description = "批量确认半成品普通出库任务")
     @PostMapping("/semi/out/confirm")
     @PreAuthorize("hasAuthority('task:confirm')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<Void> confirmSemiOutTasks(@RequestBody @Valid ConfirmSemiOutBatchDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.confirmSemiOutTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.confirmSemiOutTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "创建历史生产占用任务", description = "历史接口已停用；半成品进入生产请通过生产订单领用")
     @PostMapping("/semi/prepare/create")
+    @PreAuthorize("hasAuthority('task:create')")
+    @LogOperation(value = "pallet_task", type = OperationType.INSERT)
     public Result<Void> createSemiPrepareTasks(@RequestBody @Valid CreateSemiPrepareTaskDTO dto,
                                                @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.createSemiPrepareTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.createSemiPrepareTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "确认历史生产占用", description = "历史接口已停用；半成品进入生产请通过生产订单领用")
     @PostMapping("/semi/prepare/confirm")
+    @PreAuthorize("hasAuthority('task:confirm')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<Void> confirmSemiPrepareTasks(@RequestBody @Valid ConfirmSemiPrepareBatchDTO dto,
                                                 @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.confirmSemiPrepareTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.confirmSemiPrepareTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "确认历史半成品消耗", description = "历史接口已停用；新流程通过生产订单关联追溯")
     @PostMapping("/semi/consume/confirm")
+    @PreAuthorize("hasAuthority('task:confirm')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<Void> confirmSemiConsume(@RequestBody @Valid ConfirmSemiConsumeBatchDTO dto,
                                            @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.confirmSemiConsume(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.confirmSemiConsume(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "创建成品出库任务", description = "扫码一个或多个成品托盘码，创建成品出库任务")
     @PostMapping("/finish/out/create")
     @PreAuthorize("hasAuthority('task:create')")
+    @LogOperation(value = "pallet_task", type = OperationType.INSERT)
     public Result<Void> createFinishOutTasks(@RequestBody @Valid CreateFinishOutTaskDTO dto,
                                              @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.createFinishOutTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.createFinishOutTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "确认成品出库", description = "批量确认成品出库任务")
     @PostMapping("/finish/out/confirm")
     @PreAuthorize("hasAuthority('task:confirm')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<Void> confirmFinishOutTasks(@RequestBody @Valid ConfirmFinishOutBatchDTO dto,
                                               @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.confirmFinishOutTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.confirmFinishOutTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "创建托盘调拨任务", description = "扫码一个或多个在库托盘码，创建托盘级调拨任务")
     @PostMapping("/transfer/create")
     @PreAuthorize("hasAuthority('task:create')")
+    @LogOperation(value = "pallet_task", type = OperationType.INSERT)
     public Result<Void> createTransferTasks(@RequestBody @Valid CreateTransferTaskDTO dto,
                                             @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.createTransferTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.createTransferTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "确认托盘调拨", description = "批量确认托盘级调拨任务")
     @PostMapping("/transfer/confirm")
     @PreAuthorize("hasAuthority('task:confirm')")
+    @LogOperation(value = "pallet_task", type = OperationType.UPDATE)
     public Result<Void> confirmTransferTasks(@RequestBody @Valid ConfirmTransferBatchDTO dto,
                                              @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            palletCodeService.confirmTransferTasks(dto, loginUser.getUser().getId());
-            return Result.success(null);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        palletCodeService.confirmTransferTasks(dto, loginUser.getUser().getId());
+        return Result.success(null);
     }
 
     @Operation(summary = "仓库平面图批量创建任务", description = "按库位、侧别和前N板创建出库或调拨任务；传入 codes 时按指定托盘码精确创建")
     @PostMapping("/warehouse-map/tasks/create")
+    @PreAuthorize("hasAuthority('task:create')")
+    @LogOperation(value = "pallet_task", type = OperationType.INSERT)
     public Result<WarehouseMapTaskCreateResultVO> createWarehouseMapTasks(@RequestBody @Valid WarehouseMapBatchOperationDTO dto,
                                                                           @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            WarehouseMapTaskCreateResultVO result = palletCodeService.createWarehouseMapTasks(dto, loginUser.getUser().getId());
-            return Result.success(result);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        WarehouseMapTaskCreateResultVO result = palletCodeService.createWarehouseMapTasks(dto, loginUser.getUser().getId());
+        return Result.success(result);
     }
 
     @Operation(summary = "仓库平面图单板入库", description = "创建入库任务并直接确认到指定库位格子")
     @PostMapping("/warehouse-map/slot/inbound")
+    @PreAuthorize("hasAuthority('task:create') and hasAuthority('task:confirm')")
+    @LogOperation(value = "pallet_task", type = OperationType.INSERT)
     public Result<InVO> createWarehouseMapSlotInbound(@RequestBody @Valid WarehouseMapSlotInboundDTO dto,
                                                       @AuthenticationPrincipal LoginUser loginUser) {
-        try {
-            InVO result = palletCodeService.createWarehouseMapSlotInbound(dto, loginUser.getUser().getId());
-            return Result.success(result);
-        } catch (BusinessException e) {
-            return Result.error(e.getCode(), e.getMessage());
-        }
+        InVO result = palletCodeService.createWarehouseMapSlotInbound(dto, loginUser.getUser().getId());
+        return Result.success(result);
     }
 
     private void writeDownload(HttpServletResponse response, String contentType, String filename, byte[] bytes) throws IOException {

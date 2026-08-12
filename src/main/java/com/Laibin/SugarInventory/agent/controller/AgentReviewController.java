@@ -29,7 +29,7 @@ public class AgentReviewController {
     }
 
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('agent:review:view')")
     public Result<PageResult<AgentMessageReviewListVO>> pageReviews(
             @AuthenticationPrincipal LoginUser loginUser,
             @Valid @ModelAttribute AgentMessageReviewQueryDTO query) {
@@ -37,7 +37,7 @@ public class AgentReviewController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('agent:review:view')")
     public Result<AgentMessageReviewDetailVO> getReviewDetail(
             @AuthenticationPrincipal LoginUser loginUser,
             @PathVariable Long id) {
@@ -45,7 +45,7 @@ public class AgentReviewController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('agent:review:update')")
     public Result<AgentMessageReviewDetailVO> updateReviewStatus(
             @AuthenticationPrincipal LoginUser loginUser,
             @PathVariable Long id,

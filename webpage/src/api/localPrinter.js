@@ -1,5 +1,12 @@
+import {
+  clearPrinterAssistantKey,
+  readPrinterAssistantKey,
+  savePrinterAssistantKey
+} from '@/utils/printerAssistantCredential.mjs'
+
 const ASSISTANT_BASE_URL = 'http://127.0.0.1:9527'
 const DEFAULT_TIMEOUT = 5000
+const ACCESS_KEY_HEADER = 'X-Laibin-Printer-Key'
 
 const requestAssistant = async (path, options = {}) => {
   const controller = new AbortController()
@@ -7,15 +14,25 @@ const requestAssistant = async (path, options = {}) => {
   const timer = window.setTimeout(() => controller.abort(), timeout)
 
   try {
+    const accessKey = options.auth === false ? '' : readPrinterAssistantKey()
+    if (options.auth !== false && !accessKey) {
+      throw new Error('请先在打印助手设置中输入本机连接密钥')
+    }
     const response = await fetch(`${ASSISTANT_BASE_URL}${path}`, {
       method: options.method || 'GET',
-      headers: options.body ? {'Content-Type': 'application/json'} : undefined,
+      headers: {
+        ...(options.body ? {'Content-Type': 'application/json'} : {}),
+        ...(accessKey ? {[ACCESS_KEY_HEADER]: accessKey} : {})
+      },
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal
     })
 
     const rawText = await response.text()
     const payload = rawText ? JSON.parse(rawText) : null
+    if (response.status === 401) {
+      throw new Error('打印助手连接密钥无效，请从本机助手重新复制')
+    }
     if (!response.ok || payload?.success === false) {
       const error = new Error(payload?.message || `标签打印助手请求失败（${response.status}）`)
       error.status = response.status
@@ -39,7 +56,13 @@ const requestAssistant = async (path, options = {}) => {
   }
 }
 
-export const getPrinterAssistantHealth = () => requestAssistant('/health', {timeout: 2500})
+export const getPrinterAssistantHealth = () => requestAssistant('/health', {timeout: 2500, auth: false})
+
+export const getPrinterAssistantAccessKey = () => readPrinterAssistantKey()
+
+export const setPrinterAssistantAccessKey = (accessKey) => savePrinterAssistantKey(accessKey)
+
+export const removePrinterAssistantAccessKey = () => clearPrinterAssistantKey()
 
 export const getLocalPrinters = () => requestAssistant('/printers')
 

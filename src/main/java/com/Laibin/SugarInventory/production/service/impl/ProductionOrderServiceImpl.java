@@ -124,7 +124,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
 
     @Override
     @Transactional
-    public ProductionOrder createOrder(ProductionOrderCreateDTO dto, Integer operatorId, String operatorName) {
+    public ProductionOrderBaseVO createOrder(ProductionOrderCreateDTO dto, Integer operatorId, String operatorName) {
         validateOrderType(dto.getOrderType());
         validateBoilingSourcesForOrderType(dto);
         ProductionOrder order = new ProductionOrder();
@@ -146,7 +146,7 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
             productionOrderMapper.insert(order);
         }
         boilingBatchService.reserveForOrder(order, dto.getBoilingSources(), operatorId, operatorName);
-        return order;
+        return toBaseVO(order);
     }
 
     @Override
@@ -401,13 +401,10 @@ public class ProductionOrderServiceImpl implements ProductionOrderService {
 
     @Override
     @Transactional
-    public List<ProductionOrderOutputCode> markOutputPrinted(Long outputId) {
+    public List<ProductionOutputCodeVO> markOutputPrinted(Long outputId) {
         requireOutputForUpdate(outputId);
         outputCodeMapper.markPrintedByOutput(outputId);
-        return outputCodeMapper.selectList(new QueryWrapper<ProductionOrderOutputCode>()
-                .eq("output_id", outputId)
-                .ne("status", "CANCELED")
-                .orderByAsc("id"));
+        return outputCodeMapper.listCodesByOutput(outputId);
     }
 
     @Override

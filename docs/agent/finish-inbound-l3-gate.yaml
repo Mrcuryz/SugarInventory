@@ -1,11 +1,12 @@
 version: 1
-as_of: 2026-08-10
+as_of: 2026-08-12
 candidate: FINISH_INBOUND
 overall_status: NO_GO
 design_status: READY
 business_hardening_status: GO
-execution_implementation_status: NO_GO
+execution_implementation_status: S3_CONTROLLED_UI_IMPLEMENTED_DEFAULT_OFF
 production_status: NOT_RELEASED
+next_required_slice: FORMAL_ROLE_OWNER_AND_SEPARATE_PRODUCTION_RELEASE_DECISION
 
 scope:
   task_type: FINISH_IN
@@ -49,7 +50,7 @@ current_handoff_preview:
 guided_user_journey:
   goal_contract: FINISH_INBOUND_GUIDED_PREPARATION
   example_request: 3号库位入库2板黄冰糖
-  status: AUTOMATED_CONTRACT_PASS_BROWSER_UAT_PENDING
+  status: REAL_BROWSER_UAT_PASS
   required_resolution: [exact_product, exact_target_warehouse, exact_pallet_count, exact_pallet_codes]
   runtime_bound_filters: [productId, taskType, taskStatus, productStatus]
   model_visible_internal_ids: false
@@ -71,9 +72,9 @@ confirmation:
 
 gates:
   guided_user_journey:
-    status: PARTIAL
-    completed: AUTOMATED_GOAL_AND_EXACT_SELECTION_CONTRACT
-    pending: REAL_BROWSER_AMBIGUITY_AND_DIALOG_PREFILL_UAT
+    status: GO
+    completed: AUTOMATED_AND_REAL_BROWSER_GOAL_SELECTION_DIALOG_PREFILL_EXACT_PREVIEW
+    pending: []
     evidence: docs/agent/finish-inbound-guided-scene-uat-2026-08-10.md
   preview_execute_separation:
     status: GO
@@ -117,12 +118,14 @@ gates:
       - src/test/java/com/Laibin/SugarInventory/agent/FinishInboundExecutionDomainOrchestratorTest.java
       - docs/agent/finish-inbound-s3-domain-execution-uat-2026-08-10.md
   atomic_execution_audit:
-    status: PARTIAL
-    completed: S2_CONTROL_PLANE_AND_ZERO_WRITE_TRANSACTION
-    pending: S3_DOMAIN_WRITE_AND_AUDIT_SAME_TRANSACTION_UAT
+    status: GO
+    completed: S4_REAL_DOMAIN_AUDIT_FAILURE_ROLLBACK_AND_RECOVERY_LOCAL_UAT
+    pending_release_validation: []
     evidence:
       - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionAuditService.java
       - src/main/java/com/Laibin/SugarInventory/mapper/AgentFinishInboundExecutionAuditMapper.java
+      - src/main/java/com/Laibin/SugarInventory/agent/service/FinishInboundExecutionCompletionService.java
+      - docs/agent/finish-inbound-s3-domain-execution-uat-2026-08-10.md
   dedicated_execute_permission:
     status: GO
     planned_permission: agent:finish-inbound:execute
@@ -153,8 +156,8 @@ required_tests_before_execute_registration:
   same_idempotency_key_returns_same_committed_result: PASS_S2_LOCAL_MYSQL_ZERO_WRITE
   different_payload_with_same_idempotency_key_is_rejected: PASS_S2_CLOSED_CREDENTIAL_ONLY_PROTOCOL
   retry_after_disconnect_does_not_repeat_business_write: PASS_S3_LOCAL_MYSQL_REAL_WRITE
-  audit_unavailable_fails_closed_before_business_write: PASS_S2_UNIT_PENDING_S4_REAL_DOMAIN_FAILURE_INJECTION
-  business_failure_does_not_consume_token: PASS_S2_UNIT_PENDING_S4_REAL_DATABASE_FAILURE_PATH
+  audit_unavailable_fails_closed_before_business_write: PASS_S4_LOCAL_MYSQL_REAL_DOMAIN_ROLLBACK
+  business_failure_does_not_consume_token: PASS_S4_LOCAL_MYSQL_STATE_INVALIDATION_FINAL_FAILURE
   internal_enums_and_ids_are_not_exposed_to_user: PASS_S3_CONTROLLED_UI
 
 completed_slices:
@@ -181,6 +184,23 @@ completed_slices:
     committed_replay_without_second_write: PASS
     execute_tool_calls: 0
     evidence: docs/agent/finish-inbound-s3-domain-execution-uat-2026-08-10.md
+
+completed_release_validation:
+  S4_ISOLATED_UAT_AND_SEPARATE_RELEASE_DECISION:
+    status: ISOLATED_UAT_PASS_RELEASE_NO_GO
+    automated_fixture_status: REAL_LOCAL_MYSQL_AND_CHROMIUM_EVIDENCE_ACCEPTED
+    completed_evidence:
+      - REAL_DOMAIN_AUDIT_FAILURE_ROLLBACK_AND_RECOVERY
+      - REAL_DATABASE_STATE_INVALIDATION_PATH
+      - COMPLETE_CONTROLLED_BROWSER_EXECUTION
+      - DISCONNECT_DUPLICATE_CLICK_EXPIRY_REVOCATION_CROSS_USER_SESSION_AND_PERMISSION_RECOVERY
+      - DEFAULT_OFF_OPENAPI_AND_ZERO_ROLE_ASSIGNMENT_ROLLBACK
+    unresolved_release_authority:
+      - FORMAL_ROLE_OWNERSHIP_DECISION
+      - SEPARATE_PRODUCTION_RELEASE_APPROVAL
+    release_decision: NO_GO_DEFAULT_OFF_ZERO_ROLE_ASSIGNMENTS
+    execute_mcp_registration_review: NOT_STARTED_REMAINS_UNREGISTERED
+    evidence: docs/agent/finish-inbound-s4-isolated-release-validation-2026-08-12.md
 
 implementation_order:
   - S0_BUSINESS_CONCURRENCY_AND_BATCH_HARDENING

@@ -17,11 +17,9 @@ const form = reactive({
   password: '',
   rememberMe: false
 })
-// 记住我
-let rememberMe = ref('')
 const rememberMeData = async () => {
+  rememberStore.sanitizeInfo();
   form.name = rememberStore.info.name;
-  form.password = rememberStore.info.password;
 }
 if (rememberStore.info) {
   rememberMeData();
@@ -42,8 +40,8 @@ const loading = ref(false)
 
 // 提交处理
 const handleSubmit = async () => {
-  if (rememberMe) {
-    rememberStore.setInfo(form);
+  if (form.rememberMe) {
+    rememberStore.setInfo({name: form.name});
   } else {
     rememberStore.removeInfo();
   }
@@ -108,7 +106,7 @@ const handleSubmit = async () => {
             </el-form-item>
 
             <el-form-item>
-              <el-checkbox v-model="rememberMe">记住登录</el-checkbox>
+              <el-checkbox v-model="form.rememberMe">记住用户名</el-checkbox>
             </el-form-item>
 
             <el-form-item>

@@ -184,7 +184,7 @@
           />
           </el-form-item>
           <div class="parse-actions">
-            <el-button type="primary" :loading="loadingParse" @click="handleParse">
+            <el-button v-if="canCreateTask" type="primary" :loading="loadingParse" @click="handleParse">
               解析报数
             </el-button>
             <el-button @click="handleResetParse">清空</el-button>
@@ -1056,7 +1056,7 @@
 <!--          </template>-->
 <!--        </el-table-column>-->
 
-        <el-table-column type="selection" width="48" />
+        <el-table-column type="selection" width="48" :selectable="isTaskSelectable" />
 
         <el-table-column label="日期" min-width="170">
           <template #default="{ row }">
@@ -1180,6 +1180,7 @@
         </div>
         <div class="right">
           <el-button
+              v-if="canConfirmTask"
               type="primary"
               :loading="loadingConfirm"
               :disabled="!selectedTaskIds.length"
@@ -1345,6 +1346,7 @@ import { getSemiProduct, getStProduct } from '@/api/assay'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTokenStore } from '@/stores/token'
+import { useAuthStore } from '@/stores/auth'
 import { confirmAutoInbound, getAutoInboundBatch, listAutoInboundHistory, parseAutoInbound } from '@/api/autoInbound'
 import { getWarehouse } from '@/api/warehouse'
 import { Box, CircleCheck, Delete, Document, Goods, Search, Warning } from '@element-plus/icons-vue'
@@ -1415,6 +1417,9 @@ const selectedTaskIds = ref([])
 
 // 当前用户 ID（操作员）
 const tokenStore = useTokenStore()
+const authStore = useAuthStore()
+const canCreateTask = computed(() => authStore.hasPermission('task:create'))
+const canConfirmTask = computed(() => authStore.hasPermission('task:confirm'))
 const operatorId = ref(decodeJwtSub(tokenStore.token))
 const router = useRouter()
 
@@ -2809,6 +2814,35 @@ const getDetailQuantityText = (task) => {
   return `${boardQuantity}板 / ${pieceQuantity}件`
 }
 
+// COMMITTING 可能是上次数据库已提交、Redis 回写未完成的恢复态；
+// 再次确认会由后端锁与幂等事实决定拒绝、继续或恢复，只禁用已完成任务。
+const isTaskSelectable = (task) => String(task?.status || '').toUpperCase() !== 'COMMITTED'
+
+const buildConfirmTaskUpdate = (task) => {
+  const common = {
+    taskId: task.taskId,
+    entryDate: task.entryDate,
+    side: task.side,
+    remark: task.remark
+  }
+  if (task.type === 'SEMI_PRODUCT') {
+    return {
+      ...common,
+      semiProductId: task.semiProductId,
+      semiWarehouseName: task.semiWarehouseName,
+      semiBoardQuantity: task.semiBoardQuantity,
+      semiPieceQuantity: task.semiPieceQuantity
+    }
+  }
+  return {
+    ...common,
+    productId: task.productId,
+    warehouseName: task.warehouseName,
+    finishedBoardQuantity: task.finishedBoardQuantity,
+    finishedPieceQuantity: task.finishedPieceQuantity
+  }
+}
+
 const consumptionRows = computed(() => {
   const task = consumptionTask.value
   if (!task || !Array.isArray(task.productionConsumptionItems)) return []
@@ -2842,11 +2876,6 @@ const handleConfirm = async () => {
     return
   }
 
-  if (!operatorId.value) {
-    ElMessage.error('无法获取当前用户ID，请重新登录后再试')
-    return
-  }
-
   try {
     const selectedTasks = taskList.value.filter((t) =>
         selectedTaskIds.value.includes(t.taskId)
@@ -2873,15 +2902,12 @@ const handleConfirm = async () => {
 
   const updatedTasks = taskList.value.filter((t) =>
       selectedTaskIds.value.includes(t.taskId)
-  )
-  console.log('updatedTasks:', updatedTasks)
+  ).map(buildConfirmTaskUpdate)
 
   const payload = {
-    operatorId: operatorId.value,
     confirmedTaskIds: selectedTaskIds.value,
     updatedTasks
   }
-  console.log('payload:', payload)
   loadingConfirm.value = true
   try {
     const res = await confirmAutoInbound(batchId.value, payload)

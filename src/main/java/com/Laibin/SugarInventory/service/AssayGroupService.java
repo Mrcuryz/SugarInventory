@@ -32,7 +32,7 @@ public interface AssayGroupService extends IService<AssayGroup> {
     /**
      * 更新批量化验组数据
      */
-    AssayGroup updateAssay(Integer id, AssayGroupSubmitDTO dto, User user);
+    AssayGroupVO updateAssay(Integer id, AssayGroupSubmitDTO dto, User user);
 
     /**
      * 删除批量化验组数据

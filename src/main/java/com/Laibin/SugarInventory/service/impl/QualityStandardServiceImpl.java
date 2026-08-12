@@ -92,7 +92,7 @@ public class QualityStandardServiceImpl implements QualityStandardService, Logga
 
     @Override
     @Transactional
-    public QualityStandard addQualityStandard(QualityStandardDTO dto) {
+    public QualityStandardVO addQualityStandard(QualityStandardDTO dto) {
         validateDuplicate(dto, null);
         List<QualityStandardItemDTO> normalizedItems = normalizeItems(dto.getItems());
         QualityStandard standard = convertToEntity(dto);
@@ -103,12 +103,12 @@ public class QualityStandardServiceImpl implements QualityStandardService, Logga
         qualityStandardMapper.insert(standard);
         replaceItems(standard.getId(), normalizedItems);
         attachItems(standard);
-        return standard;
+        return convertToVO(standard, Collections.emptyList());
     }
 
     @Override
     @Transactional
-    public QualityStandard updateQualityStandard(Integer id, QualityStandardDTO dto) {
+    public QualityStandardVO updateQualityStandard(Integer id, QualityStandardDTO dto) {
         QualityStandard existing = qualityStandardMapper.selectById(id);
         if (existing == null) {
             throw new BusinessException("化验标准不存在");
@@ -125,7 +125,7 @@ public class QualityStandardServiceImpl implements QualityStandardService, Logga
         qualityStandardMapper.updateById(updated);
         replaceItems(id, normalizedItems);
         attachItems(updated);
-        return updated;
+        return convertToVO(updated, loadRelatedProducts(id));
     }
 
     @Override

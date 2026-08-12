@@ -106,4 +106,34 @@ class InventoryHistoryOperationsReadServiceTest {
         assertEquals("尚无运行记录", status.getLatestExecutionStatus());
         assertNull(status.getLatestFailureSummary());
     }
+
+    @Test
+    void corruptedLegacyGateReasonFallsBackToDeterministicUserSummary() {
+        InventorySnapshotRunMapper snapshotMapper = mock(InventorySnapshotRunMapper.class);
+        InventoryReconciliationRunMapper reconciliationMapper =
+                mock(InventoryReconciliationRunMapper.class);
+        InventoryHistoryJobRunMapper jobMapper = mock(InventoryHistoryJobRunMapper.class);
+        InventoryTrendReleaseGateMapper gateMapper = mock(InventoryTrendReleaseGateMapper.class);
+        InventoryTrendReleaseGate gate = new InventoryTrendReleaseGate();
+        gate.setStatus("BLOCKED");
+        gate.setConsecutivePassedDays(0);
+        gate.setRequiredPassedDays(7);
+        gate.setReason("???????????????");
+        when(gateMapper.findByGateKey("INVENTORY_LEVEL_TREND")).thenReturn(gate);
+        InventoryHistoryOperationsReadService service =
+                new InventoryHistoryOperationsReadService(
+                        snapshotMapper,
+                        reconciliationMapper,
+                        jobMapper,
+                        gateMapper,
+                        CLOCK
+                );
+
+        InventoryHistoryOperationsStatusVO status = service.latestStatus();
+
+        assertEquals(
+                "等待连续可信日终快照和每日守恒对账（当前 0/7 天）",
+                status.getTrendGateSummary()
+        );
+    }
 }

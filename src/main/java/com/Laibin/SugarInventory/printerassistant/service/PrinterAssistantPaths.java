@@ -16,6 +16,10 @@ public final class PrinterAssistantPaths {
         return getHomeDir().resolve("config.json");
     }
 
+    public static Path getAccessKeyPath() {
+        return getHomeDir().resolve("access-key.txt");
+    }
+
     public static Path getLogsDir() {
         return getHomeDir().resolve("logs");
     }

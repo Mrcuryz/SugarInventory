@@ -1,4 +1,4 @@
-version: m1.5r-l2-preview01
+version: m1.5r-l2-preview02
 scope: "Agent Runtime Playbook + Tool Capability Registry + LLM Wiki Lite"
 principles:
   - "本 registry 描述业务能力和工具选择边界，不替代 MCP schema。"
@@ -8,9 +8,9 @@ principles:
   - "当前阶段不执行入库、出库、调拨、改库存、化验写入、基础资料修改或生产订单写入。"
 
 agent_v1_reaudit:
-  status: "DESIGN_ONLY"
-  source: "前端菜单/路由 + webpage API + 后端 Controller；docs/openapi.json 当前缺失。"
-  finding: "当前 52 个只读/登记报表工具与 1 个无写入 L2 任务预览工具已完成已登记专家的运行时规划集；run_registered_report 目前受控运行七个版本化确定性报表定义，不接受模型创建任意报表。"
+  status: "IMPLEMENTED_AND_CONTRACT_LOCKED"
+  source: "Python Runtime + Java Gateway + warehouse-mcp ToolCallback + 后端 Controller/OpenAPI + 前端菜单/API。"
+  finding: "当前 52 个 L1 只读/登记报表工具与 2 个无写入 L2 预览工具已完成已登记专家的运行时规划集；run_registered_report 目前受控运行七个版本化确定性报表定义，不接受模型创建任意报表。"
   target_expert_domains:
     - inventory
     - warehouse
@@ -34,7 +34,7 @@ expert_tool_roadmap:
   recipe_roadmap: "docs/agent/cross-expert-recipe-roadmap-registry.yaml"
   data_semantic_roadmap: "docs/agent/data-semantic-roadmap-registry.yaml"
   business_rule_roadmap: "docs/agent/business-rule-roadmap-registry.yaml"
-  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 52 个 L1 只读/登记报表工具、1 个 L2 任务预览工具、专家白名单或配方注册表。"
+  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 52 个 L1 只读/登记报表工具、2 个 L2 预览工具、专家白名单或配方注册表。"
 
 agent_architecture:
   main_agent:

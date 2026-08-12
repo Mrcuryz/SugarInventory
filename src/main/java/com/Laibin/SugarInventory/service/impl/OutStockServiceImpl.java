@@ -14,7 +14,6 @@ import com.Laibin.SugarInventory.service.InStockService;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.OutStockService;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.Data;
 import lombok.Getter;
@@ -34,6 +33,11 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class OutStockServiceImpl implements OutStockService, LoggableService<OutStock> {
+
+    private static final String LEGACY_INVENTORY_REQUIRED_MESSAGE =
+            "传统出库仅处理无二维码库存；二维码托盘请通过托盘任务出库";
+    private static final String LEGACY_INVENTORY_CHANGED_MESSAGE =
+            "库存状态已变化，请刷新后重试；二维码托盘不能通过传统出库处理";
 
     private final InventoryMapper inventoryMapper;
     private final WarehouseMapper warehouseMapper;
@@ -73,9 +77,14 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         int remainingQuantity = dto.getQuantity(); // 需出库的总数量
         String currentSide = dto.getSide(); // 当前出库侧
 
-        Inventory curInventory = inventoryMapper.getLast(dto.getWarehouseId());
+        Product product = productMapper.selectById(dto.getProductId());
+        if (product == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        Inventory curInventory = inventoryMapper.getLastLegacyInventoryForUpdate(
+                dto.getWarehouseId(), dto.getProductId());
         if (curInventory == null) {
-            throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
+            throw legacyInventoryNotFound();
         }
         int curLayer = curInventory.getLayer(); // 当前堆积层数
         int curCapacity;
@@ -88,23 +97,22 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         // **1. 可堆积产品：先查找第二层**
         if (curLayer == 2 && remainingQuantity > 0) {
             inventoryList.addAll(inventoryMapper.
-                    getInventoryForOutStock(dto.getWarehouseId(), currentSide, 2));
+                    getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), currentSide, 2, dto.getProductId()));
             inventoryList.addAll(inventoryMapper.
-                    getInventoryForOutStock(dto.getWarehouseId(), nextSide, 2));
+                    getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), nextSide, 2, dto.getProductId()));
         }
 
         // **2. 查找第一层**
         inventoryList.addAll(inventoryMapper.
-                getInventoryForOutStock(dto.getWarehouseId(), currentSide, 1));
+                getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), currentSide, 1, dto.getProductId()));
         inventoryList.addAll(inventoryMapper.
-                getInventoryForOutStock(dto.getWarehouseId(), nextSide, 1));
+                getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), nextSide, 1, dto.getProductId()));
 
         curCapacity = inventoryList.size();
 
         if (curCapacity == 0) {
-            throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
+            throw legacyInventoryNotFound();
         }
-        Product product = productMapper.selectById(dto.getProductId());
 
         // 出库规则修改
         return this.outStock(inventoryList, product, dto.getWarehouseId(), null,
@@ -206,12 +214,8 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
                          Integer quantity, String unit,
                          Integer operatorId,
                          Integer outType) {
-        LambdaQueryWrapper<Inventory> queryWrapper = new LambdaQueryWrapper<Inventory>()
-                .eq(Inventory::getProductId, product.getId());
-        if (warehouseId != null) {
-            queryWrapper.eq(Inventory::getWarehouseId, warehouseId);
-        }
-        List<Inventory> inventoryList = inventoryMapper.selectList(queryWrapper);
+        List<Inventory> inventoryList = inventoryMapper.selectLegacyInventoryForProductForUpdate(
+                product.getId(), warehouseId);
         this.outStock(inventoryList, product, warehouseId, entryDate, quantity, unit, operatorId, outType, null);
     }
 
@@ -235,9 +239,12 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
         if (inventoryList.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND.getCode(), product.getProductName() + "库存信息未找到");
+            throw legacyInventoryNotFound();
         }
-        Warehouse warehouse = warehouseMapper.selectById(warehouseId);
+        Warehouse warehouse = warehouseMapper.selectByIdForUpdate(warehouseId);
+        if (warehouse == null) {
+            throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
+        }
         // 处理整版优先和散件优先
         List<Inventory> inventories = this.sortInventory(inventoryList, outType, currentSide);
 
@@ -269,7 +276,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
                 batchInfo.incrementPieces(totalOutPieces);
                 inventory.setPieces(inventoryTotalPieces - totalOutPieces);
                 totalOutPieces = 0;
-                inventoryMapper.updatePieces(inventory.getId(), inventory.getPieces());
+                requireLegacyMutation(inventoryMapper.updateLegacyPieces(inventory.getId(), inventory.getPieces()));
             } else {
                 // 出库数量大于等于该层数量，代表该层数据出完了，直接删除该层记录
                 // 如果该层为整板，记录出库整板，如果是散件，记录出库散件数
@@ -279,7 +286,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
                     batchInfo.incrementQuantity();
                 }
                 // **直接删除该板**
-                inventoryMapper.deleteInventoryById(inventory.getId());
+                requireLegacyMutation(inventoryMapper.deleteLegacyInventoryById(inventory.getId()));
                 totalOutPieces = totalOutPieces - inventoryTotalPieces;
                 totalOutQuantity++;
             }
@@ -392,13 +399,16 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
         Integer quantity = dto.getQuantity();
         Integer outType = dto.getOutType();
         Product product = productMapper.selectById(dto.getProductId());
+        if (product == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
 
         Integer warehouseId = dto.getWarehouseId();
-        Warehouse warehouse = warehouseMapper.selectById(warehouseId);
+        List<Inventory> inventoryList = inventoryMapper.getLegacyInventoryStackOrderForUpdate(
+                warehouseId, product.getId());
+        if (inventoryList.isEmpty()) throw legacyInventoryNotFound();
+        Warehouse warehouse = warehouseMapper.selectByIdForUpdate(warehouseId);
         if (warehouse == null) throw new BusinessException(ErrorCode.WAREHOUSE_NOT_FOUND);
-
-        List<Inventory> inventoryList = inventoryMapper.getInventoryStackOrder(warehouseId);
-        if (inventoryList.isEmpty()) throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND);
 
         Map<String, BatchInfo> batchMap = new HashMap<>();
         LocalDateTime now = LocalDateTime.now();
@@ -427,7 +437,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
                 batchInfo.incrementPieces(totalOutPieces);
                 inv.setPieces(inventoryTotalPieces - totalOutPieces);
                 totalOutPieces = 0;
-                inventoryMapper.updatePieces(inv.getId(), inv.getPieces());
+                requireLegacyMutation(inventoryMapper.updateLegacyPieces(inv.getId(), inv.getPieces()));
             } else {
                 // 出库数量大于等于该层数量，代表该层数据出完了，直接删除该层记录
                 // 如果该层为整板，记录出库整板，如果是散件，记录出库散件数
@@ -437,7 +447,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
                     batchInfo.incrementQuantity();
                 }
                 // **直接删除该板**
-                inventoryMapper.deleteInventoryById(inv.getId());
+                requireLegacyMutation(inventoryMapper.deleteLegacyInventoryById(inv.getId()));
                 totalOutPieces = totalOutPieces - inventoryTotalPieces;
                 totalOutQuantity++;
             }
@@ -515,6 +525,16 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
                 .operatorId(outStock.getOperatorId())
                 .actionKind("OUTBOUND")
                 .build());
+    }
+
+    private BusinessException legacyInventoryNotFound() {
+        return new BusinessException(ErrorCode.INVENTORY_NOT_FOUND.getCode(), LEGACY_INVENTORY_REQUIRED_MESSAGE);
+    }
+
+    private void requireLegacyMutation(int affectedRows) {
+        if (affectedRows != 1) {
+            throw new BusinessException(ErrorCode.INVENTORY_NOT_FOUND.getCode(), LEGACY_INVENTORY_CHANGED_MESSAGE);
+        }
     }
 
 

@@ -16,6 +16,7 @@ import com.Laibin.SugarInventory.mapper.RoleMapper;
 import com.Laibin.SugarInventory.mapper.RolePermissionMapper;
 import com.Laibin.SugarInventory.mapper.UserMapper;
 import com.Laibin.SugarInventory.service.RoleService;
+import com.Laibin.SugarInventory.service.LoggableService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -31,7 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements RoleService {
+public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements RoleService, LoggableService<Role> {
     private static final String ROLE_STATUS_ENABLED = "ENABLED";
     private static final String ROLE_STATUS_DISABLED = "DISABLED";
     private static final String ADMIN_ROLE_CODE = "ADMIN";
@@ -306,5 +307,15 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
         }
         String text = value.trim();
         return text.isEmpty() ? null : text;
+    }
+
+    @Override
+    public Role findById(Integer id) {
+        return getById(id);
+    }
+
+    @Override
+    public String getTableName() {
+        return "role";
     }
 }

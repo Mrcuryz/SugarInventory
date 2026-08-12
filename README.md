@@ -44,7 +44,8 @@
 ```text
 .
 ├─ src/                                # Spring Boot 后端源码
-├─ data/laibin.sql                     # MySQL 初始化脚本（含示例数据）
+├─ laibin.sql                          # MySQL 初始化脚本（含示例数据）
+├─ migrations/                         # 按文件名顺序执行的增量迁移
 ├─ webpage/                            # Vue 3 Web 管理端
 ├─ LaibinSugarInventoryWxAPP/          # 微信小程序
 ├─ docker/                             # Docker 与 Nginx 示例配置
@@ -66,13 +67,28 @@
 ### 2) 初始化数据库
 
 1. 创建数据库：`laibin`
-2. 导入脚本：`data/laibin.sql`
+2. 导入脚本：`laibin.sql`
+3. 执行增量迁移并建立 checksum 台账
 
 示例命令：
 
 ```bash
 mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS laibin DEFAULT CHARSET utf8mb4;"
-mysql -u root -p laibin < data/laibin.sql
+mysql -u root -p laibin < laibin.sql
+```
+
+Windows/PowerShell 环境使用受控迁移执行器：
+
+```powershell
+.\scripts\apply-database-migrations.ps1 -EnvFile .\.env
+```
+
+已有数据库首次接入时，可在核实历史版本后显式使用
+`-BaselineThrough <迁移文件名>`；该参数只登记已经存在的历史变更，不应凭日期猜测。
+部署前可进行只读复核：
+
+```powershell
+.\scripts\apply-database-migrations.ps1 -EnvFile .\.env -VerifyOnly
 ```
 
 ### 3) 配置后端
@@ -90,6 +106,8 @@ mysql -u root -p laibin < data/laibin.sql
 建议：
 
 - 使用环境变量或私有配置文件覆盖敏感信息，不要把真实密钥提交到仓库。
+- Web 登录必须通过 `WEB_LOGIN_PASSWORD` 提供至少 12 位的共享口令；应用不再包含默认口令，缺失、过短或仍为占位值时启动失败。
+- `JWT_SECRET` 必须是 Base64，且解码后至少 64 字节，以满足当前 HS512 签名要求；不合格配置会在启动期失败。
 
 ### 4) 启动后端
 
@@ -133,6 +151,13 @@ npm run dev
 
 脚本会生成 UTF-8 无 BOM 的 `docs/openapi.json`。如果接口需要鉴权，可先设置 `WAREHOUSE_API_TOKEN` 环境变量。
 
+提交或发布前应将快照与同一构建的运行实例对比：
+
+```powershell
+.\scripts\check-openapi-snapshot.ps1 -BaseUrl http://localhost:8080
+.\scripts\check-agent-openapi-registry.ps1
+```
+
 ## 统一返回与分页约定
 
 - 统一响应：`Result<T>`
@@ -163,9 +188,10 @@ npm run dev
 
 - Web 登录接口：`POST /api/auth/web-login`
 - 登录参数：`name` + `password`
-- 当前代码中 Web 固定口令常量为：`lbsp`（`AuthServiceImpl`）
+- Web 登录口令来自环境变量 `WEB_LOGIN_PASSWORD`，仓库中没有默认值。
+- “记住用户名”只持久化用户名，不保存密码；历史版本留下的持久化密码会在登录页初始化时清除。
 
-> 建议上线前改为安全的账号体系与密码策略，不要使用固定口令。
+> 当前仍是统一口令模型，不等同于个人密码体系；正式安全评审应继续评估 SSO 或逐用户凭证。
 
 ## Docker 说明
 
@@ -174,6 +200,8 @@ npm run dev
 - `docker/Dockerfile`
 - `docker/docker-compose.yml`
 - `docker/nginx.conf`
+
+`deploy/simple/update.sh` 会在更新应用容器前先运行一次性 MySQL 迁移容器；迁移失败、checksum 不一致或迁移锁被占用时，不会继续启动新版本后端。生产后端同时启用 schema 启动门禁，数据库台账或必需表不完整时会失败关闭。
 
 ## 开发规范
 

@@ -29,7 +29,7 @@
           <div class="section-subtitle">维护产品基础资料，并为产品配置正式化验标准关系。</div>
         </div>
         <div class="table-toolbar-left">
-          <el-button type="primary" @click="openCreate">新增产品</el-button>
+          <el-button v-if="canCreate" type="primary" @click="openCreate">新增产品</el-button>
           <el-button @click="exportExcel">导出 Excel</el-button>
         </div>
       </div>
@@ -62,9 +62,9 @@
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="openRelationDrawer(row)">标准关联</el-button>
-            <el-button type="primary" link @click="editProduct(row)">编辑</el-button>
-            <el-button type="danger" link @click="deleteProduct(row)">删除</el-button>
+              <el-button v-if="canViewStandards" type="primary" link @click="openRelationDrawer(row)">标准关联</el-button>
+              <el-button v-if="canUpdate" type="primary" link @click="editProduct(row)">编辑</el-button>
+              <el-button v-if="canDelete" type="danger" link @click="deleteProduct(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -132,7 +132,7 @@
               <div class="section-title">新增关联</div>
               <div class="section-subtitle">给当前产品绑定可用标准，并设置默认标准与优先级。</div>
             </div>
-            <el-button type="primary" @click="submitRelation">绑定标准</el-button>
+            <el-button v-if="canBindStandards" type="primary" @click="submitRelation">绑定标准</el-button>
           </div>
           <div class="relation-form-grid">
             <el-select v-model="relationForm.qualityStandardId" filterable placeholder="选择化验标准">
@@ -172,8 +172,8 @@
           <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
           <el-table-column label="操作" width="160" fixed="right">
             <template #default="{ row }">
-              <el-button type="primary" link @click="setDefaultRelation(row)" :disabled="row.isDefault">设为默认</el-button>
-              <el-button type="danger" link @click="removeRelation(row)">删除</el-button>
+              <el-button v-if="canBindStandards" type="primary" link @click="setDefaultRelation(row)" :disabled="row.isDefault">设为默认</el-button>
+              <el-button v-if="canBindStandards" type="danger" link @click="removeRelation(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -183,7 +183,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { addProduct, changeProduct, getProductList, removeProduct } from '@/api/product'
@@ -195,6 +195,14 @@ import {
   listProductStandardRelations,
   setDefaultProductStandardRelation
 } from '@/api/productQualityStandard'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const canCreate = computed(() => authStore.hasPermission('product:create'))
+const canUpdate = computed(() => authStore.hasPermission('product:update'))
+const canDelete = computed(() => authStore.hasPermission('product:delete'))
+const canViewStandards = computed(() => authStore.hasPermission('quality_standard:view'))
+const canBindStandards = computed(() => authStore.hasPermission('quality_standard:bind_product'))
 
 const searchForm = ref({ name: '', type: '', status: '' })
 const productList = ref([])

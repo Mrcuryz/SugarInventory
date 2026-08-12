@@ -64,11 +64,17 @@ GET /api/inventory-history/operations/status
 
 ### 5.1 Windows
 
-先构建后端可执行包，然后以管理员 PowerShell 注册任务：
+先构建后端可执行包。可先用普通 PowerShell 做无写入预检，再以管理员 PowerShell 注册任务；脚本会优先使用 PowerShell 7，未安装时兼容系统自带 Windows PowerShell：
 
 ```powershell
 mvn -q package -DskipTests
-pwsh -NoProfile -File scripts/register-inventory-history-tasks.ps1 `
+powershell.exe -NoProfile -File scripts/register-inventory-history-tasks.ps1 `
+  -EnvFile D:\path\to\backend.env `
+  -JarPath D:\path\to\SugarInventory-1.0-SNAPSHOT.jar `
+  -PreflightOnly
+
+# 仅这一步需要“以管理员身份运行”
+powershell.exe -NoProfile -File scripts/register-inventory-history-tasks.ps1 `
   -EnvFile D:\path\to\backend.env `
   -JarPath D:\path\to\SugarInventory-1.0-SNAPSHOT.jar
 ```
@@ -131,3 +137,18 @@ systemctl enable --now laibin-inventory-history-verify.timer
 本地开发机经常关机，无法靠进程持续运行自然积累连续 7 天快照。为避免工程验收被等待时间阻断，2026-08-01 增加了隔离的本地/UAT 历史回放：以当前库存为锚点，按现有入库、半成品入库和出库登记时间反向还原产品总库存，并先校验件数、重量守恒。
 
 该回放只验证 GoalContract、专家决策、报表运行、业务卡片、历史重开和 XLSX 导出链路。它不重建历史库位分布，不证明登记时间等于现场发生时间，不生成正式日终快照，也不会修改 `INVENTORY_LEVEL_TREND` 的连续通过天数。生产环境仍必须满足本文件定义的独立调度、可信窗口、每日守恒对账和连续 7 天门禁。
+
+## 9. 2026-08-12 shadow 环境复核
+
+对当前 shadow 库与 Windows 目标机重新审查后确认：
+
+- shadow 库只有 2026-08-12 建立的 `INITIAL_BASELINE`，没有 `DAILY_CLOSE` 或守恒对账；
+- 2026-08-11 缺少可信快照，门禁保持 `BLOCKED`、0/7；没有执行白天回填；
+- 目标机没有 PowerShell 7，原注册脚本会因强制查找 `pwsh` 而无法注册；执行器还使用了 Windows PowerShell 5.1 不支持的新版静态加密 API；
+- 注册脚本现已支持 PowerShell 7 → Windows PowerShell 回退、绝对路径归一化、env 必需键与 Java/Jar 校验，以及不创建任务的 `-PreflightOnly`；
+- 执行器现已兼容 Windows PowerShell 5.1，并可在 ScriptBlock 或 `-File` 调用方式下安全定位项目根目录；
+- 真实 `-File` Verify 已连接 shadow 库并以 `MISSING_DAILY_CLOSE` 返回退出码 2，新增失败证据但没有库存、快照或对账写入；
+- 真实 Chromium 登录后只读运维接口明确显示“缺少可信日终快照”“未执行”“执行失败”“暂不可开放库存趋势”和 0/7；OpenAPI 没有正式库存趋势路径；
+- 早期迁移种子在该 shadow 库中留下全问号门禁原因，读模型现仅对此类空白/全问号历史值生成基于真实 0/7 计数的确定性中文摘要，不修改历史事实。
+
+完整证据见 `inventory-history-shadow-readiness-validation-2026-08-12.md`。本次关闭的是“目标机脚本不可运行和状态不可读”的实现缺口，不是生产趋势门禁：管理员安装 Capture/Verify、接入告警并自然积累连续 7 个 `PASSED` 日仍为必需条件。

@@ -566,7 +566,80 @@ def test_openai_compatible_expert_returns_one_strict_tool_action() -> None:
             "availableTools",
             "maxToolCalls",
         ]
-        assert list(model_request)[-2:] == ["observations", "toolCallCount"]
+        assert list(model_request)[-3:] == [
+            "observations",
+            "toolCallCount",
+            "registeredGoalComplete",
+        ]
+        assert model_request["registeredGoalComplete"] is False
+        diagnostics = take_model_decision_diagnostics()
+        assert diagnostics[-1]["inputBytes"] > 0
+    finally:
+        model_server.stop()
+
+
+def test_openai_compatible_completed_goal_uses_short_final_analysis_prompt() -> None:
+    model_server = FakeModelStreamServer(
+        [],
+        direct_answer=json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "action": "FINAL_ANSWER",
+                "toolName": None,
+                "arguments": {},
+                "answer": "今天已登记产出 2500 kg。",
+                "clarificationPrompt": None,
+                "citedObservationIds": ["obs_1"],
+                "statusReason": "ENOUGH_DATA",
+            },
+            ensure_ascii=False,
+        ),
+    )
+    model_server.start()
+    try:
+        model = OpenAICompatibleModelClient(
+            Settings(
+                model_mode="openai_compatible",
+                model_base_url=model_server.base_url,
+                model_name="test-model",
+                expert_result_model_name="expert-result-test-model",
+                model_timeout_ms=2000,
+            )
+        )
+
+        decision = model.decide_expert_action(
+            ExpertLoopRequest(
+                userMessage="今天产量如何？",
+                messages=[],
+                expertAgent="analytics_expert",
+                expertInstructions=["只能根据登记报表事实回答。"],
+                selectedContext={"ACTIVE_GOAL": {"goalType": "DAILY_PRODUCTION_ANALYSIS"}},
+                toolSchemas={},
+                observations=[
+                    {
+                        "observationId": "obs_1",
+                        "status": "AVAILABLE",
+                        "data": {"metrics": {"totalWeightKg": 2500}},
+                    }
+                ],
+                toolCallCount=1,
+                maxToolCalls=3,
+                decisionStage="RESULT_ANALYSIS",
+                registeredGoalComplete=True,
+            )
+        )
+        diagnostics = take_model_decision_diagnostics()
+
+        assert decision is not None
+        assert decision.action == "FINAL_ANSWER"
+        assert model_server.last_body["model"] == "expert-result-test-model"
+        system_prompt = model_server.last_body["messages"][0]["content"]
+        assert "must never choose CALL_TOOL" in system_prompt
+        assert "warehouseScope.type=ALL" not in system_prompt
+        model_request = json.loads(model_server.last_body["messages"][1]["content"])
+        assert model_request["availableTools"] == {}
+        assert model_request["registeredGoalComplete"] is True
+        assert diagnostics[-1]["inputBytes"] > 0
     finally:
         model_server.stop()
 
@@ -1287,6 +1360,28 @@ def test_tool_allowlists_match_java_gateway_and_warehouse_mcp_registration() -> 
 
     assert java_tools == ALLOWED_TOOLS
     assert mcp_tools == ALLOWED_TOOLS
+
+
+def test_packaged_python_runtime_matches_source_tree() -> None:
+    repository = Path(__file__).resolve().parents[2]
+    source_root = repository / "agent-service/app"
+    packaged_root = repository / "agent-service/build/lib/app"
+    tracked_suffixes = {".py", ".json", ".yaml", ".yml"}
+
+    source_files = {
+        path.relative_to(source_root): path.read_bytes()
+        for path in source_root.rglob("*")
+        if path.is_file() and path.suffix in tracked_suffixes
+    }
+    packaged_files = {
+        path.relative_to(packaged_root): path.read_bytes()
+        for path in packaged_root.rglob("*")
+        if path.is_file() and path.suffix in tracked_suffixes
+    }
+
+    assert source_files
+    assert packaged_files.keys() == source_files.keys()
+    assert packaged_files == source_files
 
 
 def test_runtime_tool_profiles_match_capability_registry_with_two_l2_previews() -> None:

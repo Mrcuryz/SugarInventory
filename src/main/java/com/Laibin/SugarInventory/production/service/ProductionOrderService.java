@@ -10,8 +10,6 @@ import com.Laibin.SugarInventory.production.domain.dto.ProductionOrderCreateDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOrderQueryDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOutputBindQrDTO;
 import com.Laibin.SugarInventory.production.domain.dto.ProductionOutputCreateDTO;
-import com.Laibin.SugarInventory.production.domain.po.ProductionOrder;
-import com.Laibin.SugarInventory.production.domain.po.ProductionOrderOutputCode;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionBindQrResultVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionLabelBatchVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialCandidateVO;
@@ -19,6 +17,8 @@ import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderDetailVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderOptionVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderPageVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionOrderBaseVO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionOutputCodeVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionOutputVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionQuantitySplitVO;
 
@@ -27,7 +27,7 @@ import java.util.List;
 public interface ProductionOrderService {
     PageResult<ProductionOrderPageVO> pageOrders(ProductionOrderQueryDTO query);
 
-    ProductionOrder createOrder(ProductionOrderCreateDTO dto, Integer operatorId, String operatorName);
+    ProductionOrderBaseVO createOrder(ProductionOrderCreateDTO dto, Integer operatorId, String operatorName);
 
     ProductionOrderDetailVO getOrderDetail(Long id);
 
@@ -53,7 +53,7 @@ public interface ProductionOrderService {
 
     ProductionBindQrResultVO bindFixedQrs(Long outputId, ProductionOutputBindQrDTO dto, Integer operatorId);
 
-    List<ProductionOrderOutputCode> markOutputPrinted(Long outputId);
+    List<ProductionOutputCodeVO> markOutputPrinted(Long outputId);
 
     List<ProductionLabelBatchVO> reserveLabels(Long orderId, ProductionLabelReserveDTO dto, Integer operatorId);
 

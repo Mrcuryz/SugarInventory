@@ -74,7 +74,7 @@ class LogisticsAgentReadServiceImplTest {
         task.setType(com.Laibin.SugarInventory.domain.enumObject.AutoInboundType.FINISHED_PRODUCT);
         task.setProductName("单晶冰糖"); task.setWarehouseName("1号库位");
         var response = new com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse(); response.setTasks(List.of(task));
-        when(parseService.getBatch("raw-batch-1")).thenReturn(response);
+        when(parseService.getBatch(any(), any())).thenReturn(response);
         var codec = new com.Laibin.SugarInventory.agent.security.AutoInboundBatchRefCodec(REF_SECRET);
         LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
                 mock(PalletCodeService.class), mock(InStockService.class), mock(OutStockService.class),

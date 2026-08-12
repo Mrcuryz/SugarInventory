@@ -161,8 +161,8 @@
           <div class="panel-operation-card compact">
             <div class="section-title">批量操作</div>
             <div class="operation-actions no-indent">
-              <el-button type="primary" @click="openBatchDialog('OUT')">新增出库</el-button>
-              <el-button type="warning" @click="openBatchDialog('TRANSFER')">调拨出库</el-button>
+              <el-button v-if="canCreateTask" type="primary" @click="openBatchDialog('OUT')">新增出库</el-button>
+              <el-button v-if="canCreateTask" type="warning" @click="openBatchDialog('TRANSFER')">调拨出库</el-button>
             </div>
           </div>
 
@@ -270,15 +270,15 @@
               <div class="slot-detail-row"><span>当前位置</span><strong>{{ formatInventoryPosition(selectedSlot.record) }}</strong></div>
               <div class="slot-action-row">
                 <el-button size="small" @click="showAssay(selectedSlot.record)">查看化验</el-button>
-                <el-button size="small" type="primary" @click="submitSingleOut(selectedSlot.record)">出库</el-button>
-                <el-button size="small" type="warning" @click="prepareSingleTransfer(selectedSlot.record)">调拨</el-button>
+                  <el-button v-if="canCreateTask" size="small" type="primary" @click="submitSingleOut(selectedSlot.record)">出库</el-button>
+                  <el-button v-if="canCreateTask" size="small" type="warning" @click="prepareSingleTransfer(selectedSlot.record)">调拨</el-button>
               </div>
             </template>
             <template v-else>
               <div class="slot-detail-row"><span>当前位置</span><strong>{{ formatSlotPosition(selectedSlot) }}</strong></div>
               <div class="slot-detail-row"><span>当前状态</span><strong>空置</strong></div>
               <div class="slot-action-row">
-                <el-button size="small" type="primary" @click="openSlotInboundDialog(selectedSlot)">入库</el-button>
+                  <el-button v-if="canCreateAndConfirmTask" size="small" type="primary" @click="openSlotInboundDialog(selectedSlot)">入库</el-button>
               </div>
             </template>
           </div>
@@ -439,9 +439,13 @@ import {getMesh} from '@/api/mesh'
 import {getProductList} from '@/api/product'
 import {formatDateTime} from '@/utils/dateTime'
 import {buildProductCascaderOptions, productCascaderProps} from '@/utils/productCascader'
+import {useAuthStore} from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
+const canCreateTask = computed(() => authStore.hasPermission('task:create'))
+const canCreateAndConfirmTask = computed(() => canCreateTask.value && authStore.hasPermission('task:confirm'))
 const viewBoxWidth = 1200
 const viewBoxHeight = 800
 const verticalGridLines = [150, 300, 450, 600, 750, 900, 1050]

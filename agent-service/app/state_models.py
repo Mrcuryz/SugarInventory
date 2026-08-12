@@ -68,6 +68,7 @@ class WarehouseAgentState:
     selected_boiling_batch: SelectedEntity | None = None
     selected_pallet: SelectedEntity | None = None
     active_goal_type: str | None = None
+    goal_contract_locked: bool = False
     fact_envelopes: list[dict[str, Any]] = field(default_factory=list)
     last_goal_completion: dict[str, Any] | None = None
     last_inventory_result: dict[str, Any] | None = None

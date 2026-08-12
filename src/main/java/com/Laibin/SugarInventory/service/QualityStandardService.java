@@ -2,7 +2,6 @@ package com.Laibin.SugarInventory.service;
 
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.domain.dto.QualityStandardDTO;
-import com.Laibin.SugarInventory.domain.po.QualityStandard;
 import com.Laibin.SugarInventory.domain.vo.QualityStandardVO;
 
 import java.util.List;
@@ -14,9 +13,9 @@ public interface QualityStandardService {
 
     QualityStandardVO getQualityStandardById(Integer id);
 
-    QualityStandard addQualityStandard(QualityStandardDTO dto);
+    QualityStandardVO addQualityStandard(QualityStandardDTO dto);
 
-    QualityStandard updateQualityStandard(Integer id, QualityStandardDTO dto);
+    QualityStandardVO updateQualityStandard(Integer id, QualityStandardDTO dto);
 
     void deleteQualityStandard(Integer id);
 

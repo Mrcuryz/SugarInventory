@@ -1,7 +1,7 @@
 # 智能仓储 RAG 文档索引
 
-状态：`SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED`
-基线日期：2026-08-03
+状态：`SOURCE_PRESENT / FORMAL_ARTIFACT_AND_MODEL_MISSING / REQUIRED_FAIL_CLOSED / OPTIONAL_BROWSER_DEGRADED_PASS / PRODUCTION_NO_GO`
+基线日期：2026-08-12
 适用范围：来宾智能仓储 Web Agent 的静态知识检索
 
 ## 1. 目标
@@ -40,6 +40,7 @@ D:\Users\Mrcury\Desktop\laibin RAG
 | [rag-controlled-web-runtime-validation-2026-08-03.md](rag-controlled-web-runtime-validation-2026-08-03.md) | 当前提交在 5174→28080→28091 的真实浏览器、数值、无证据、混合路由和角色门禁记录 | 隔离 Web 全链路通过；当前部署未切换 |
 | [rag-source-integration-plan-2026-08-03.md](rag-source-integration-plan-2026-08-03.md) | 将 dirty worktree 中的 RAG 实现安全纳入版本控制 | 已集成到 `4150e6d`，工程回归通过 |
 | [rag-source-integration-manifest-2026-08-03.md](rag-source-integration-manifest-2026-08-03.md) | RAG 专属文件、外围依赖、共享 hunk 和禁止纳入项清单 | 集成清单已收口；部署 artifact 继续排除在 Git 外 |
+| [rag-current-artifact-and-runtime-reaudit-2026-08-12.md](rag-current-artifact-and-runtime-reaudit-2026-08-12.md) | 当前 artifact、模型、部署保护、降级链路与恢复门禁复审 | 当前权威状态；正式 artifact/model 缺失，生产 `NO_GO` |
 | [evaluation-plan.md](evaluation-plan.md) | 检索、回答、权限和回归评测方案 | extraction/document/index golden 与固定检索评测已建立 |
 | [development-log.md](development-log.md) | RAG 设计与开发的追加式事实日志 | 已建立 |
 

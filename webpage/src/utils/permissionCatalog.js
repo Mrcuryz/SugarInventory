@@ -12,12 +12,17 @@ export const permissionGroupCatalog = [
   {
     key: 'warehouse',
     title: '库位与仓库',
-    permissions: ['warehouse:view', 'warehouse_map:view']
+    permissions: ['warehouse:view', 'warehouse_map:view', 'warehouse:create', 'warehouse:update', 'warehouse:delete', 'warehouse:status']
   },
   {
     key: 'qrcode',
     title: '二维码管理',
-    permissions: ['qrcode:view', 'qrcode:generate', 'qrcode:print', 'qrcode:bind_fixed_product', 'qrcode:activate', 'qrcode:pool_view']
+    permissions: ['qrcode:view', 'qrcode:generate', 'qrcode:print', 'qrcode:bind_fixed_product', 'qrcode:activate', 'qrcode:pool_view', 'qrcode:invalidate', 'qrcode:flow_delete']
+  },
+  {
+    key: 'inventory_operation',
+    title: '传统库存作业',
+    permissions: ['inventory:inbound', 'inventory:outbound', 'inventory:transfer']
   },
   {
     key: 'task',
@@ -48,6 +53,11 @@ export const permissionGroupCatalog = [
     key: 'assay',
     title: '化验管理',
     permissions: ['assay:view', 'assay:create', 'assay:update', 'assay:delete', 'assay:query', 'assay:copy', 'quality:test']
+  },
+  {
+    key: 'screen_mesh',
+    title: '筛网管理',
+    permissions: ['screen_mesh:view', 'screen_mesh:create', 'screen_mesh:update', 'screen_mesh:delete']
   },
   {
     key: 'assay_group',
@@ -95,16 +105,25 @@ const permissionMeta = {
   'product:delete': '产品删除',
   'warehouse:view': '库位查看',
   'warehouse_map:view': '仓库平面图查看',
+  'warehouse:create': '库位新增',
+  'warehouse:update': '库位编辑',
+  'warehouse:delete': '库位删除',
+  'warehouse:status': '库位状态维护',
   'qrcode:view': '二维码查看',
   'qrcode:generate': '二维码生成',
   'qrcode:print': '二维码打印',
   'qrcode:bind_fixed_product': '绑定固定产品',
   'qrcode:activate': '打印并启用',
   'qrcode:pool_view': '固定产品二维码池查看',
+  'qrcode:invalidate': '二维码作废与恢复',
+  'qrcode:flow_delete': '二维码历史流转删除',
   'task:view': '任务中心查看',
   'task:create': '任务创建',
   'task:confirm': '任务确认',
   'task:cancel': '任务取消',
+  'inventory:inbound': '传统库存入库',
+  'inventory:outbound': '传统库存出库',
+  'inventory:transfer': '传统库存调拨',
   'production:boiling:view': '煮糖批次查看',
   'production:boiling:create': '煮糖批次创建',
   'production:boiling:update': '煮糖批次编辑',
@@ -120,6 +139,9 @@ const permissionMeta = {
   'production:output:bindQr': '历史产出分配二维码',
   'production:output:print': '产出二维码打印',
   'screen_mesh:view': '筛网查看',
+  'screen_mesh:create': '筛网新增',
+  'screen_mesh:update': '筛网编辑',
+  'screen_mesh:delete': '筛网删除',
   'assay:view': '化验查看',
   'assay:create': '化验新增',
   'assay:update': '化验编辑',

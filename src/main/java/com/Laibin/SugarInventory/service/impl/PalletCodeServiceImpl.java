@@ -970,6 +970,15 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     public InVO createFixedProductInboundAndConfirm(BindPalletTaskDTO bindDTO,
                                                     ConfirmPalletInItemDTO confirmDTO,
                                                     Integer operatorId) {
+        return createFixedProductInboundAndConfirm(bindDTO, confirmDTO, operatorId, null);
+    }
+
+    @Override
+    @Transactional
+    public InVO createFixedProductInboundAndConfirm(BindPalletTaskDTO bindDTO,
+                                                     ConfirmPalletInItemDTO confirmDTO,
+                                                     Integer operatorId,
+                                                     String operationBatchNo) {
         PalletCode palletCode = parseAndFindForUpdate(bindDTO.getCode());
         if (!Boolean.TRUE.equals(palletCode.getFixedModeEnabled()) || palletCode.getFixedProductId() == null) {
             throw new BusinessException("二维码未启用固定产品模式");
@@ -986,7 +995,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                 product.getPiecesPerPallet(), "固定产品二维码入库");
 
         createInboundTaskForPallet(palletCode, product, productStatus, bindDTO.getProductionDate(),
-                operatorId, bindDTO.getRemark());
+                operatorId, bindDTO.getRemark(), operationBatchNo);
 
         confirmDTO.setCode(palletCode.getCode());
         confirmDTO.setQuantity(bindDTO.getQuantity());
@@ -1666,6 +1675,17 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                                                           LocalDate productionDate,
                                                           Integer operatorId,
                                                           String remark) {
+        return createInboundTaskForPallet(palletCode, product, productStatus, productionDate,
+                operatorId, remark, null);
+    }
+
+    private PalletBindResultVO createInboundTaskForPallet(PalletCode palletCode,
+                                                           Product product,
+                                                           String productStatus,
+                                                           LocalDate productionDate,
+                                                           Integer operatorId,
+                                                           String remark,
+                                                           String operationBatchNo) {
         Integer screenMeshId = product.getScreenMeshId();
 
         int currentCycleNo = getCurrentCycleNo(palletCode);
@@ -1699,6 +1719,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         task.setCreatedBy(operatorId);
         task.setCreatedAt(now);
         task.setRemark(remark);
+        task.setOperationBatchNo(operationBatchNo);
         task.setCycleNo(nextCycle);
         palletTaskMapper.insert(task);
 

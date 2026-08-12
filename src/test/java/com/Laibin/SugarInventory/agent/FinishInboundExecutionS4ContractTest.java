@@ -19,6 +19,8 @@ class FinishInboundExecutionS4ContractTest {
         assertThat(script).contains(
                 "VerifyS4AuditRollback",
                 "VerifyS4StateInvalidation",
+                "[string]::IsNullOrWhiteSpace($PSScriptRoot)",
+                "Unable to resolve project root",
                 "S4PermissionDeniedBeforeGrant",
                 "CREATE TRIGGER",
                 "NEW.event_type='EXECUTION_SUCCEEDED'",
@@ -53,6 +55,9 @@ class FinishInboundExecutionS4ContractTest {
 
         assertThat(script).contains(
                 "Refusing non-local database host",
+                "[string]::IsNullOrWhiteSpace($PSScriptRoot)",
+                "Unable to resolve project root",
+                "[string]$LoginPassword = \"lbsp-isolated-uat\"",
                 "Dedicated Agent execute permission must be unassigned",
                 "permissionLinkInserted",
                 "CleanupManifest",
@@ -60,5 +65,43 @@ class FinishInboundExecutionS4ContractTest {
                 "DELETE FROM stock_movement_event",
                 "DELETE FROM role_permission");
         assertThat(script).doesNotContain("executionToken", "idempotencyKey");
+    }
+
+    @Test
+    void isolatedLauncherSupportsSafeScriptBlockInvocationFromProjectRoot() throws Exception {
+        String script = Files.readString(Path.of("scripts",
+                "start-isolated-agent-uat.ps1"), StandardCharsets.UTF_8);
+
+        assertThat(script).contains(
+                "[string]::IsNullOrWhiteSpace($PSScriptRoot)",
+                "(Get-Location).Path",
+                "Test-Path -LiteralPath (Join-Path $projectRoot 'pom.xml')",
+                "Unable to resolve project root",
+                "[string]$PythonExecutable",
+                "[string]$PythonPath",
+                "[string]$LoginPassword = \"lbsp-isolated-uat\"",
+                "pass -PythonExecutable",
+                "$env:PYTHONPATH = $PythonPath",
+                "$env:WEB_LOGIN_PASSWORD = $LoginPassword");
+    }
+
+    @Test
+    void credentialRecoveryFixtureCoversRealCrossUserRevocationExpiryAndSessionRevocation() throws Exception {
+        String script = Files.readString(Path.of("scripts",
+                "verify-finish-inbound-s4-credential-recovery-browser.ps1"), StandardCharsets.UTF_8);
+
+        assertThat(script).contains(
+                "Refusing non-local application host",
+                "Refusing non-local database host",
+                "Cross-user replay",
+                "Revoked confirmation",
+                "Expired confirmation",
+                "Revoked session",
+                "Permission rollback",
+                "ExecutionRequests=0",
+                "BusinessWrites=0",
+                "CredentialsReturnedToOutput=$false",
+                "DELETE rp FROM role_permission");
+        assertThat(script).doesNotContain("Write-Output $executionToken", "Write-Output $idempotencyKey");
     }
 }

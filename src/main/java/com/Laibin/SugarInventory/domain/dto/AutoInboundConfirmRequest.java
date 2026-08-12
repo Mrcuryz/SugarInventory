@@ -1,7 +1,5 @@
 package com.Laibin.SugarInventory.domain.dto;
 
-import com.Laibin.SugarInventory.domain.po.User;
-import com.Laibin.SugarInventory.domain.redis.AutoInboundTask;
 import lombok.Data;
 
 import java.util.List;
@@ -10,8 +8,7 @@ import java.util.List;
 public class AutoInboundConfirmRequest {
 
     private List<String> confirmedTaskIds;
-    private User operator;
 
-    /** 前端修改后的任务（覆盖部分字段，如仓库、数量、semiRecords） */
-    private List<AutoInboundTask> updatedTasks;
+    /** 前端只能提交明确允许修订的字段。 */
+    private List<AutoInboundTaskUpdateDTO> updatedTasks;
 }

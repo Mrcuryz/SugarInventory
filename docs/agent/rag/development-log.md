@@ -1913,6 +1913,48 @@ v2 纠偏：
 | `RAG-04` | Web 管理员展示、审计和真实浏览器验收 | `COMPLETED / UAT_10_OF_10_PASSED` |
 | `RAG-05` | 发布、原子切换和恢复机制 | `SOURCE_INTEGRATED / ENGINEERING_REGRESSION_PASSED / V1_ARTIFACT_VALIDATED / ISOLATED_RUNTIME_28091_VERIFIED / ISOLATED_WEB_5174_VERIFIED / CURRENT_DEPLOYMENT_NOT_SWITCHED` |
 
+### 2026-08-12 — RAG 当前 artifact、部署与运行时复审
+
+状态：`ENGINEERING_TESTS_PASSED / OPTIONAL_BROWSER_DEGRADED_PASS / FORMAL_ARTIFACT_AND_MODEL_MISSING / PRODUCTION_NO_GO`
+
+目标：
+
+- 按历史设计、实施、发布和验收记录重新核对当前文件、部署脚本、运行时与真实浏览器；
+- 不能恢复正式资产时，收紧发布门禁并验证 required fail-closed 与 optional 安全降级。
+
+改动范围：
+
+- `app/runtime.py`、`app/rag/offline/cli.py`、部署打包/更新脚本及对应测试；
+- 新增隔离 RAG UAT 启动脚本和当前复审记录；
+- 同步 Python 打包产物。
+
+关键决策：
+
+- 历史通过不等于当前 artifact 存在；不使用 fixture、手写 pointer 或历史 SHA 文本伪造恢复；
+- 有界静态知识分类只用于把模型误路由纠偏回已经登记的知识专家/Goal，不扩大实时业务路由；
+- 正式部署启用 RAG 时必须同时 required，并在迁移/切换前完整加载 runtime contract。
+
+验证命令：
+
+- Python RAG 专项：`122 passed, 8 skipped`；
+- Chromium：固定短问法、降级提示、处理步骤、console 和 shadow 审计；
+- required 故障注入：缺正式根目录时 Python 启动退出。
+
+验证结果：
+
+- optional 模式专用降级和 `PROCESS / RAG_UNAVAILABLE` 审计通过，没有实时业务工具调用；
+- required 模式 `RAG_ROOT_MISSING` fail-closed；
+- 正式 artifact、模型和原材料仍缺失，8 个真实资产测试保持 skip。
+
+遗留风险：
+
+- 生产发布 `NO_GO`；必须先从可信备份或原构建机恢复并核对历史完整身份。
+
+下一步：
+
+- 按 `rag-current-artifact-and-runtime-reaudit-2026-08-12.md` 的恢复清单取回正式资产；
+- 恢复后重跑 83/83、required readiness、权限/引用/审计浏览器矩阵与回滚。
+
 ## 5. 日志模板
 
 ```markdown

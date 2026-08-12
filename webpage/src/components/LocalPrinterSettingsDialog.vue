@@ -2,10 +2,10 @@
   <el-dialog v-model="dialogVisible" title="打印助手设置" width="560px" destroy-on-close>
     <div class="assistant-status">
       <el-alert
-        :type="assistantOnline ? 'success' : 'warning'"
+        :type="assistantOnline && assistantAuthorized ? 'success' : 'warning'"
         :closable="false"
-        :title="assistantOnline ? '本机标签打印助手在线' : '未检测到本机标签打印助手'"
-        :description="assistantOnline ? '已连接 127.0.0.1:9527，可直接把标签提交到本地打印机。' : '请先启动 PrinterAssistantApplication 或其桌面版程序；未启动时页面仍可回退导出 PDF。'"
+        :title="assistantStatusTitle"
+        :description="assistantStatusDescription"
       />
     </div>
 
@@ -18,6 +18,15 @@
       </el-descriptions>
 
       <el-form label-width="110px" class="printer-form">
+        <el-form-item label="连接密钥">
+          <el-input
+            v-model="accessKeyInput"
+            type="password"
+            show-password
+            autocomplete="off"
+            placeholder="从本机标签打印助手复制"
+          />
+        </el-form-item>
         <el-form-item label="默认打印机">
           <el-select
             v-model="selectedPrinterName"
@@ -25,7 +34,7 @@
             filterable
             placeholder="不设置时使用系统默认打印机"
             style="width: 100%"
-            :disabled="!assistantOnline"
+            :disabled="!assistantAuthorized"
           >
             <el-option
               v-for="item in printerOptions"
@@ -40,8 +49,9 @@
 
     <template #footer>
       <el-button @click="loadState">刷新</el-button>
-      <el-button :disabled="!assistantOnline" :loading="testLoading" @click="handleTestPrint">测试打印</el-button>
-      <el-button type="primary" :disabled="!assistantOnline" :loading="saveLoading" @click="handleSave">
+      <el-button :disabled="!assistantOnline" :loading="connectLoading" @click="handleConnect">连接助手</el-button>
+      <el-button :disabled="!assistantAuthorized" :loading="testLoading" @click="handleTestPrint">测试打印</el-button>
+      <el-button type="primary" :disabled="!assistantAuthorized" :loading="saveLoading" @click="handleSave">
         保存默认打印机
       </el-button>
     </template>
@@ -55,8 +65,10 @@ import {
   buildAssistantErrorMessage,
   getLocalPrinterConfig,
   getLocalPrinters,
+  getPrinterAssistantAccessKey,
   getPrinterAssistantHealth,
   printTestLabel,
+  setPrinterAssistantAccessKey,
   saveDefaultLocalPrinter
 } from '@/api/localPrinter'
 
@@ -77,7 +89,10 @@ const dialogVisible = computed({
 const loading = ref(false)
 const saveLoading = ref(false)
 const testLoading = ref(false)
+const connectLoading = ref(false)
 const assistantOnline = ref(false)
+const assistantAuthorized = ref(false)
+const accessKeyInput = ref('')
 const printerOptions = ref([])
 const selectedPrinterName = ref('')
 const config = reactive({
@@ -85,32 +100,69 @@ const config = reactive({
   systemDefaultPrinterName: ''
 })
 
-const resetState = () => {
-  assistantOnline.value = false
+const assistantStatusTitle = computed(() => {
+  if (!assistantOnline.value) return '未检测到本机标签打印助手'
+  if (!assistantAuthorized.value) return '已检测到打印助手，请输入连接密钥'
+  return '本机标签打印助手已安全连接'
+})
+
+const assistantStatusDescription = computed(() => {
+  if (!assistantOnline.value) return '请先启动本机桌面版程序；未启动时页面仍可回退导出 PDF。'
+  if (!assistantAuthorized.value) return '请在桌面版标签打印助手中复制 Web 连接密钥；密钥只保存在当前浏览器会话。'
+  return '已认证连接 127.0.0.1:9527，可把标签提交到本地打印机。'
+})
+
+const resetProtectedState = () => {
+  assistantAuthorized.value = false
   printerOptions.value = []
   selectedPrinterName.value = ''
   config.defaultPrinterName = ''
   config.systemDefaultPrinterName = ''
 }
 
+const loadProtectedState = async () => {
+  const [printersRes, configRes] = await Promise.all([
+    getLocalPrinters(),
+    getLocalPrinterConfig()
+  ])
+  printerOptions.value = Array.isArray(printersRes.data) ? printersRes.data : []
+  config.defaultPrinterName = configRes.data?.defaultPrinterName || ''
+  config.systemDefaultPrinterName = configRes.data?.systemDefaultPrinterName || ''
+  selectedPrinterName.value = config.defaultPrinterName || ''
+  assistantAuthorized.value = true
+}
+
 const loadState = async () => {
   loading.value = true
+  assistantOnline.value = false
+  resetProtectedState()
   try {
     await getPrinterAssistantHealth()
     assistantOnline.value = true
-    const [printersRes, configRes] = await Promise.all([
-      getLocalPrinters(),
-      getLocalPrinterConfig()
-    ])
-    printerOptions.value = Array.isArray(printersRes.data) ? printersRes.data : []
-    config.defaultPrinterName = configRes.data?.defaultPrinterName || ''
-    config.systemDefaultPrinterName = configRes.data?.systemDefaultPrinterName || ''
-    selectedPrinterName.value = config.defaultPrinterName || ''
+    accessKeyInput.value = getPrinterAssistantAccessKey()
+    resetProtectedState()
+    if (accessKeyInput.value) {
+      await loadProtectedState()
+    }
   } catch (error) {
-    resetState()
+    resetProtectedState()
     ElMessage.warning(buildAssistantErrorMessage(error))
   } finally {
     loading.value = false
+  }
+}
+
+const handleConnect = async () => {
+  connectLoading.value = true
+  try {
+    setPrinterAssistantAccessKey(accessKeyInput.value)
+    await loadProtectedState()
+    ElMessage.success('打印助手已安全连接')
+  } catch (error) {
+    resetProtectedState()
+    ElMessage.error(buildAssistantErrorMessage(error))
+  } finally {
+    connectLoading.value = false
   }
 }
 

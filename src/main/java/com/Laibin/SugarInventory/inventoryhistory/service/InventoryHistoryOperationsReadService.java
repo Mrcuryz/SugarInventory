@@ -59,7 +59,7 @@ public class InventoryHistoryOperationsReadService {
                 .trendGateStatus(gateLabel(gate))
                 .consecutivePassedDays(gate == null ? 0 : gate.getConsecutivePassedDays())
                 .requiredPassedDays(gate == null ? 0 : gate.getRequiredPassedDays())
-                .trendGateSummary(gate == null ? "库存趋势发布门禁尚未初始化" : gate.getReason())
+                .trendGateSummary(gateSummary(gate))
                 .build();
     }
 
@@ -107,5 +107,24 @@ public class InventoryHistoryOperationsReadService {
             return "暂不可开放库存趋势";
         }
         return "已具备进入产品评审的条件";
+    }
+
+    private String gateSummary(InventoryTrendReleaseGate gate) {
+        if (gate == null) {
+            return "库存趋势发布门禁尚未初始化";
+        }
+        String reason = gate.getReason();
+        if (reason == null || reason.isBlank() || reason.chars().allMatch(ch -> ch == '?')) {
+            if ("ELIGIBLE".equals(gate.getStatus())) {
+                return "连续可信日终快照和每日守恒对账已达到进入产品评审的条件";
+            }
+            int passed = gate.getConsecutivePassedDays() == null
+                    ? 0 : gate.getConsecutivePassedDays();
+            int required = gate.getRequiredPassedDays() == null
+                    ? 0 : gate.getRequiredPassedDays();
+            return "等待连续可信日终快照和每日守恒对账（当前 "
+                    + passed + "/" + required + " 天）";
+        }
+        return reason;
     }
 }

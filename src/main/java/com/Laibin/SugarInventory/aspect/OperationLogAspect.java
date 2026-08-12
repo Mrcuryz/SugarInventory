@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.*;
 import org.aspectj.lang.reflect.MethodSignature;
@@ -38,6 +39,7 @@ import java.util.*;
 
 @Aspect
 @Component
+@Slf4j
 public class OperationLogAspect {
     private static final Set<String> INTERNAL_AUDIT_FIELDS = Set.of(
             "appliedStandardId",
@@ -57,6 +59,16 @@ public class OperationLogAspect {
             "warehouseId",
             "assayId",
             "relatedId"
+    );
+    private static final Set<String> SENSITIVE_AUDIT_FIELDS = Set.of(
+            "password",
+            "authorization",
+            "accessToken",
+            "refreshToken",
+            "token",
+            "secret",
+            "openid",
+            "sessionKey"
     );
 
     @Autowired
@@ -114,6 +126,9 @@ public class OperationLogAspect {
 
     @Around("operationLogPointcut()")
     public Object logOperation(ProceedingJoinPoint joinPoint) throws Throwable {
+        boolean businessMethodInvoked = false;
+        boolean businessMethodCompleted = false;
+        Object result = null;
         try {
             // 获取注解信息
             MethodSignature signature = (MethodSignature) joinPoint.getSignature();
@@ -122,11 +137,11 @@ public class OperationLogAspect {
             String tableName = opLogAnnotation.value();
             OperationType operationType = opLogAnnotation.type();
 
-            OperationLog logEntity = new OperationLog();
-
             String operator = "system";
             // 获取当前操作人
-            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            Object principal = SecurityContextHolder.getContext().getAuthentication() == null
+                    ? null
+                    : SecurityContextHolder.getContext().getAuthentication().getPrincipal();
             if (principal instanceof LoginUser) {
                 LoginUser loginUser = (LoginUser) principal;
                 operator = loginUser.getUser().getName();
@@ -135,24 +150,38 @@ public class OperationLogAspect {
             // 对于 UPDATE 和 DELETE 操作，在执行前获取旧数据
             Object[] args = joinPoint.getArgs();
 
-            Object oldData = null;
             Object newData = null;
+            Object auditInput = null;
             List<Integer> ids = new ArrayList<>();
 
             for (Object arg : args) {
+                if (arg != null && (arg instanceof BaseEntity
+                        || arg instanceof BaseDTO
+                        || arg instanceof List<?>
+                        || arg.getClass().getPackageName().contains(".domain.dto"))) {
+                    auditInput = arg;
+                }
                 if (operationType == OperationType.UPDATE || operationType == OperationType.DELETE) {
-                    if (arg instanceof Integer) {
-                        ids.add((Integer) arg);
+                    if (arg instanceof Integer integerId && integerId > 0 && !ids.contains(integerId)) {
+                        ids.add(integerId);
                     } else if (arg instanceof BaseDTO) {
-                        if (((BaseDTO) arg).getId() != null)
-                            ids.add(((BaseDTO) arg).getId());
+                        Integer dtoId = ((BaseDTO) arg).getId();
+                        if (dtoId != null && dtoId > 0 && !ids.contains(dtoId)) {
+                            ids.add(dtoId);
+                        }
                     } else if (arg instanceof BaseEntity) {
-                        ids.add(((BaseEntity) arg).getId());
+                        Integer entityId = ((BaseEntity) arg).getId();
+                        if (entityId != null && entityId > 0 && !ids.contains(entityId)) {
+                            ids.add(entityId);
+                        }
                     } else if (arg instanceof List<?>) {
                         // **批量情况**
                         for (Object item : (List<?>) arg) {
                             if (item instanceof BaseDTO) {
-                                ids.add(((BaseDTO) item).getId());
+                                Integer itemId = ((BaseDTO) item).getId();
+                                if (itemId != null && itemId > 0 && !ids.contains(itemId)) {
+                                    ids.add(itemId);
+                                }
                             }
                         }
                     }
@@ -168,7 +197,7 @@ public class OperationLogAspect {
 
             List<Object> oldDataList = new ArrayList<>();
             if ((operationType == OperationType.UPDATE || operationType == OperationType.DELETE) && !ids.isEmpty()) {
-                LoggableService<?> service = tableServiceMap.get(tableName);
+                LoggableService<?> service = tableServiceMap == null ? null : tableServiceMap.get(tableName);
                 if (service != null) {
                     for (Integer id : ids) {
                         oldDataList.add(service.findById(id));
@@ -176,7 +205,9 @@ public class OperationLogAspect {
                 }
             }
 
-            Object result = joinPoint.proceed();
+            businessMethodInvoked = true;
+            result = joinPoint.proceed();
+            businessMethodCompleted = true;
 
             if (result instanceof Result) {
                 if (((Result<?>) result).getCode() != 200)
@@ -189,9 +220,13 @@ public class OperationLogAspect {
                     newDataList.addAll((List<?>) result);
                 } else if (result instanceof BaseVO || result instanceof BaseEntity) {
                     newDataList.add(result);
-                } else if (result instanceof Result<?> resultWrapper
-                        && (resultWrapper.getData() instanceof BaseVO || resultWrapper.getData() instanceof BaseEntity)) {
-                    newDataList.add(resultWrapper.getData());
+                } else if (result instanceof Result<?> resultWrapper && resultWrapper.getData() != null) {
+                    Object resultData = resultWrapper.getData();
+                    if (resultData instanceof List<?> listData) {
+                        newDataList.addAll(listData);
+                    } else {
+                        newDataList.add(resultData);
+                    }
                 }
             }
 
@@ -207,8 +242,13 @@ public class OperationLogAspect {
             } else if (operationType == OperationType.UPDATE || operationType == OperationType.DELETE) {
                 // **批量更新 / 删除**
                 for (int i = 0; i < ids.size(); i++) {
-                    Object oldItem = oldDataList.get(i);
+                    Object oldItem = i < oldDataList.size() ? oldDataList.get(i) : null;
                     Object newItem = (operationType == OperationType.UPDATE && i < newDataList.size()) ? newDataList.get(i) : null;
+                    logEntries.add(createLog(tableName, operationType, oldItem, newItem, operator));
+                }
+                if (ids.isEmpty()) {
+                    Object oldItem = operationType == OperationType.DELETE ? auditInput : null;
+                    Object newItem = operationType == OperationType.UPDATE ? auditInput : null;
                     logEntries.add(createLog(tableName, operationType, oldItem, newItem, operator));
                 }
             }
@@ -218,9 +258,15 @@ public class OperationLogAspect {
             }
             return result;
         } catch (Exception e) {
-            e.printStackTrace();
-            System.err.println("参数错误：" + e.getMessage());
-            return joinPoint.proceed(); // 跳过日志记录，继续执行原方法
+            if (businessMethodInvoked && !businessMethodCompleted) {
+                throw e;
+            }
+            if (businessMethodCompleted) {
+                log.error("Operation audit failed after business method completed: {}", joinPoint.getSignature(), e);
+                return result;
+            }
+            log.error("Operation audit preparation failed; continuing business method once: {}", joinPoint.getSignature(), e);
+            return joinPoint.proceed();
         }
     }
 
@@ -228,7 +274,9 @@ public class OperationLogAspect {
         OperationLog log = new OperationLog();
         String changedFieldsJson = "{}";
         if (operationType == OperationType.UPDATE) {
-            Map<String, Object> changedFields = normalizeDisplayFields(getChangedFields(oldData, newData));
+            Map<String, Object> changedFields = oldData == null
+                    ? normalizeDisplayFields(getOrderedFieldMap(newData, true))
+                    : normalizeDisplayFields(getChangedFields(oldData, newData));
             changedFieldsJson = convertToJson(changedFields);
         } else if (operationType == OperationType.INSERT) {
             Map<String, Object> newDataMap = normalizeDisplayFields(getOrderedFieldMap(newData, true));
@@ -272,7 +320,7 @@ public class OperationLogAspect {
                 }
             }
         } catch (IllegalAccessException e) {
-            System.err.println("反射比较字段失败: " + e.getMessage());
+            log.warn("Failed to compare fields while building operation audit", e);
         }
         return changes;
     }
@@ -352,13 +400,13 @@ public class OperationLogAspect {
                 map.put(fieldName, value);
             }
         } catch (IllegalAccessException e) {
-            System.err.println("反射获取字段值失败: " + e.getMessage());
+            log.warn("Failed to read fields while building operation audit", e);
         }
         return map;
     }
 
     private boolean isIgnoredField(String field) {
-        return field.equals("id") || HIDDEN_ID_FIELDS.contains(field)
+        return field.equals("id") || HIDDEN_ID_FIELDS.contains(field) || SENSITIVE_AUDIT_FIELDS.contains(field)
                 || field.equals("createdAt") || field.equals("updatedAt") || field.equals("testedBy") ||
                 field.equals("createdBy") || field.equals("updatedBy") || field.equals("selectType") ||
                 field.equals("relatedId") || INTERNAL_AUDIT_FIELDS.contains(field) || field.isEmpty();
@@ -367,6 +415,7 @@ public class OperationLogAspect {
     private boolean shouldHideFromDisplay(String field) {
         return field == null || field.isEmpty()
                 || HIDDEN_ID_FIELDS.contains(field)
+                || SENSITIVE_AUDIT_FIELDS.contains(field)
                 || INTERNAL_AUDIT_FIELDS.contains(field)
                 || field.equals("testedBy")
                 || field.equals("createdBy")
@@ -437,8 +486,7 @@ public class OperationLogAspect {
             if (obj == null) return "{}";
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
-            System.err.println("JSON 序列化失败：" + e.getMessage());
-            e.printStackTrace();
+            log.error("Failed to serialize operation audit payload", e);
             return "{}"; // 发生异常时，避免返回 null
         }
     }

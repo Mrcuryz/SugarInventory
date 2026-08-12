@@ -39,7 +39,13 @@ try {
     if ($null -eq $wheel) { throw 'Agent wheel was not produced.' }
     Copy-Item -LiteralPath $wheel.FullName -Destination (Join-Path $artifacts 'agent-service.whl') -Force
 
-    foreach ($generated in @('agent-service\build', 'agent-service\warehouse_agent_service.egg-info')) {
+    # setuptools may leave packaging-only output below build/. Keep the separately
+    # validated RAG recovery sources (build/rag and build/rag-models) intact.
+    foreach ($generated in @(
+        'agent-service\build\lib',
+        'agent-service\build\bdist.win-amd64',
+        'agent-service\warehouse_agent_service.egg-info'
+    )) {
         if (Test-Path -LiteralPath $generated) {
             Remove-Item -LiteralPath $generated -Recurse -Force
         }
@@ -50,6 +56,13 @@ try {
         Remove-Item -LiteralPath $distTarget -Recurse -Force
     }
     Copy-Item -LiteralPath 'webpage\dist' -Destination $distTarget -Recurse
+
+    $databaseTarget = Join-Path $artifacts 'database'
+    if (Test-Path -LiteralPath $databaseTarget) {
+        Remove-Item -LiteralPath $databaseTarget -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $databaseTarget | Out-Null
+    Copy-Item -LiteralPath 'migrations' -Destination (Join-Path $databaseTarget 'migrations') -Recurse
 } finally {
     Pop-Location
 }

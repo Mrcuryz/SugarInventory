@@ -28,7 +28,7 @@ public class QualityCatalogAgentReadServiceImpl implements QualityCatalogAgentRe
         return QualityCatalogAgentVO.AssayGroups.builder().dataScope("CURRENT_ASSAY_GROUP_CATALOG")
                 .total(result.getTotal() == null ? 0 : result.getTotal()).page(page).size(size)
                 .records(rows.stream().map(item -> QualityCatalogAgentVO.AssayGroupRow.builder().groupName(item.getStandardName())
-                        .productNames(item.getRelatedProductList() == null ? List.of() : item.getRelatedProductList().stream().map(Product::getProductName).toList())
+                        .productNames(item.getRelatedProductList() == null ? List.of() : item.getRelatedProductList().stream().map(ProductVO::getProductName).toList())
                         .createdAt(item.getCreatedAt()).updatedAt(item.getUpdatedAt()).remark(item.getRemark()).build()).toList())
                 .limitations(List.of("化验组仅表示当前配置的产品分组，不是化验标准、合格结论或库存批次范围。", "结果不包含组 ID、产品 ID 或维护人，也不执行配置修改。"))
                 .build();

@@ -3,10 +3,12 @@ package com.Laibin.SugarInventory.controller;
 import com.Laibin.SugarInventory.annotation.LogOperation;
 import com.Laibin.SugarInventory.common.PageResult;
 import com.Laibin.SugarInventory.common.Result;
+import com.Laibin.SugarInventory.domain.assembler.ManagementViewAssembler;
+import com.Laibin.SugarInventory.domain.dto.EmployeeCreateDTO;
 import com.Laibin.SugarInventory.domain.dto.EmployeeQueryDTO;
 import com.Laibin.SugarInventory.domain.dto.EmployeeUpdateDTO;
 import com.Laibin.SugarInventory.domain.enumObject.OperationType;
-import com.Laibin.SugarInventory.domain.po.EmployeeRoster;
+import com.Laibin.SugarInventory.domain.vo.EmployeeRosterVO;
 import com.Laibin.SugarInventory.service.EmployeeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,48 +28,37 @@ public class EmployeeRosterController {
 
     @Operation(summary = "导入员工名册")
     @PreAuthorize("hasAnyAuthority('employee:create','user:create')")
+    @LogOperation(value = "员工名册", type = OperationType.INSERT)
     @PostMapping("/import")
     public Result<String> importEmployeeRoster(
             @Parameter(description = "员工名册EXCEL文件")
             @RequestParam("file") MultipartFile file) {
-        try {
-            employeeService.importEmployeeRoster(file);
-            return Result.success("员工名册导入成功");
-        } catch (Exception e) {
-            return Result.error("员工名册导入失败：" + e.getMessage());
-        }
+        employeeService.importEmployeeRoster(file);
+        return Result.success("员工名册导入成功");
     }
 
     @Operation(summary = "新增员工")
     @PreAuthorize("hasAnyAuthority('employee:create','user:create')")
+    @LogOperation(value = "员工名册", type = OperationType.INSERT)
     @PostMapping("/add")
-    public Result<String> addEmployee(@Validated @RequestBody EmployeeRoster employeeRoster) {
-        try {
-            employeeService.save(employeeRoster);
-            return Result.success("员工信息新增成功");
-        } catch (Exception e) {
-            return Result.error(500, "员工信息新增失败: " + e.getMessage());
-        }
+    public Result<String> addEmployee(@Validated @RequestBody EmployeeCreateDTO dto) {
+        employeeService.save(ManagementViewAssembler.toEmployeeRoster(dto));
+        return Result.success("员工信息新增成功");
     }
 
     @Operation(summary = "根据条件（可选）查询员工名册")
     @PreAuthorize("hasAuthority('rbac:user:view')")
     @PostMapping("/query")
-    public Result<PageResult<EmployeeRoster>> queryEmployee(@RequestBody EmployeeQueryDTO queryDTO) {
-        PageResult<EmployeeRoster> result = employeeService.queryEmployee(queryDTO);
-        return Result.success(result);
+    public Result<PageResult<EmployeeRosterVO>> queryEmployee(@RequestBody EmployeeQueryDTO queryDTO) {
+        return Result.success(ManagementViewAssembler.toEmployeeRosterPage(employeeService.queryEmployee(queryDTO)));
     }
 
     @PutMapping("/update")
     @Operation(summary = "更新员工信息", description = "根据ID修改员工信息，可选更新姓名、手机号、部门、职位、状态、角色等")
     @PreAuthorize("hasAnyAuthority('employee:update','user:update')")
     @LogOperation(value = "员工名册", type = OperationType.UPDATE)
-    public Result<EmployeeRoster> updateEmployee(@Validated @RequestBody EmployeeUpdateDTO dto) {
-        try {
-            return Result.success(employeeService.updateEmployee(dto));
-        } catch (Exception e) {
-            return Result.error(500, "员工信息更新失败: " + e.getMessage());
-        }
+    public Result<EmployeeRosterVO> updateEmployee(@Validated @RequestBody EmployeeUpdateDTO dto) {
+        return Result.success(ManagementViewAssembler.toEmployeeRosterVO(employeeService.updateEmployee(dto)));
     }
 
     @DeleteMapping("/clearResigned")
@@ -75,11 +66,7 @@ public class EmployeeRosterController {
     @PreAuthorize("hasAnyAuthority('employee:delete','user:delete')")
     @LogOperation(value = "员工名册", type = OperationType.DELETE)
     public Result<String> clearResignedEmployees() {
-        try {
-            int deletedRows = employeeService.clearResignedEmployees();
-            return Result.success("成功清理 " + deletedRows + " 条离职员工记录");
-        } catch (Exception e) {
-            return Result.error(500, "清理失败：" + e.getMessage());
-        }
+        int deletedRows = employeeService.clearResignedEmployees();
+        return Result.success("成功清理 " + deletedRows + " 条离职员工记录");
     }
 }
