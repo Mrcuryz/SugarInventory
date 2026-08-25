@@ -37,7 +37,7 @@ public class FinishInboundExecutionS3Controller {
     private final FinishInboundExecutionDomainOrchestrator orchestrator;
 
     @PostMapping("/pending-preview")
-    @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm') "
+    @PreAuthorize("hasAuthority('task:view') "
             + "and hasAuthority('agent:finish-inbound:execute')")
     public Result<FinishInboundExecutionPendingVO> pendingPreview(
             @AuthenticationPrincipal LoginUser loginUser,
@@ -49,7 +49,7 @@ public class FinishInboundExecutionS3Controller {
     }
 
     @PostMapping("/previews/{previewRef}/confirm-and-execute")
-    @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm') "
+    @PreAuthorize("hasAuthority('task:view') "
             + "and hasAuthority('agent:finish-inbound:execute')")
     public Result<FinishInboundExecutionResultVO> confirmAndExecute(
             @AuthenticationPrincipal LoginUser loginUser,
@@ -66,7 +66,7 @@ public class FinishInboundExecutionS3Controller {
     }
 
     @PostMapping("/confirmations/{confirmationRef}/execute")
-    @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm') "
+    @PreAuthorize("hasAuthority('task:view') "
             + "and hasAuthority('agent:finish-inbound:execute')")
     public Result<FinishInboundExecutionResultVO> execute(
             @AuthenticationPrincipal LoginUser loginUser,
@@ -80,7 +80,7 @@ public class FinishInboundExecutionS3Controller {
     }
 
     private void requireSession(LoginUser loginUser, String agentSessionId) {
-        AgentAccessPolicy.requireAdmin(loginUser);
+        AgentAccessPolicy.requireAgentAccess(loginUser);
         agentSessionService.requireOwnedActiveSession(loginUser, agentSessionId);
     }
 

@@ -1,6 +1,6 @@
 # 冰糖仓储管理 Agent 项目交接文档
 
-更新时间：2026-08-11（Asia/Shanghai）  
+更新时间：2026-08-13（Asia/Shanghai）
 适用对象：接手本仓库的 Codex 任务、开发者、测试与架构评审人员  
 当前分支：`dev`  
 文档性质：工作区事实快照，不代表生产发布批准
@@ -29,13 +29,14 @@
 
 历史文档只能证明当时的状态。不要用历史结论覆盖当前代码，也不要把设计占位当作已实现能力。
 
-### 0.2 当前工作区非常脏，禁止清理式接手
+### 0.2 当前 Git 基线与本机运行资产
 
-截至本文生成时：
+截至 2026-08-13 本轮接手并执行 `git pull --ff-only` 后：
 
-- `HEAD`：`cfb0bb5`（`fix(tasks): close finish inbound s0 uat`）；
-- 工作区约有 194 条 modified/untracked 状态；
-- 其中包含尚未提交的 Agent、MCP、Web、数据库迁移、成品入库 S1～S3 与最新连续中断修复；
+- 分支：`dev`，跟踪 `origin/dev`；
+- `HEAD`：`9e8bb53`（`feat: harden agent and warehouse release boundaries`）；
+- 拉取完成时工作区干净；后续任务仍必须先执行 `git status --short`，保留用户和其他线程产生的改动，不得清理式接手；
+- `deploy/simple/artifacts/rag/` 和 `deploy/simple/artifacts/rag-model/` 属于 Git 忽略的本机运行资产，不能因为本机存在就宣称仓库可从零复现，也不能因为远端仓库未跟踪就宣称本机不可运行。
 - `.playwright-cli/`、`.playwright-mcp/`、`output/` 多为验收产物，不能未经筛选直接提交；
 - 不得执行 `git reset --hard`、`git checkout -- .`、批量删除或覆盖当前用户改动。
 
@@ -278,14 +279,12 @@ SSE 主要事件包括 `message_start`、`progress`、`clarification`、`text_de
 
 ### 4.4 RAG/知识能力
 
-2026-08-12 复审确认：源码仍在，但当前 `deploy/simple/artifacts/` 只有 `.gitkeep`，不存在
-`current.json`、v1 release 或 `rag-model`；历史原材料目录和 `agent-service/build` 中的离线候选/
-模型也不存在。2026-08-02～08-04 记录只证明当时发布和 UAT 通过，不能再表述为当前 artifact 在线。
+RAG 必须区分两个事实层级：
 
-当前结论是 `FORMAL_ARTIFACT_AND_MODEL_MISSING / PRODUCTION_NO_GO`。必需模式已验证在
-`RAG_ROOT_MISSING` 时启动失败；可选模式的真实 Chromium 已验证专用“知识库暂不可用”降级，
-且审计保持 `PROCESS_KNOWLEDGE_QUERY / PROCESS / RAG_UNAVAILABLE`，没有误调用产品解析或实时业务工具。
-恢复步骤与历史身份见 [RAG 当前 artifact 与运行时复审](rag/rag-current-artifact-and-runtime-reaudit-2026-08-12.md)。
+- **仓库可复现性**：远端仓库不跟踪正式 release、模型和原始审核材料；全新环境只拉取 Git 后不能独立恢复 RAG，因此生产交付仍为 `NO_GO`；
+- **当前开发机运行资产**：本机 Git 忽略目录中存在 `current.json`、不可变 release `laibin-rag-2026-07-29-v1` 和匹配的 `rag-model`。2026-08-13 已使用当前代码重新执行离线 release 校验，10 份文档、196 个切片、83 项评测和 23 个制品文件全部通过，release SHA-256 为 `4a7525328af286d8ca7702ddc52c3f857244745bf0db080a84d426c6392456f6`；随后在 required 模式下完成两次真实工艺知识查询，每次均返回 5 张安全引用卡片、未进入降级且未暴露内部工具名。当前本机运行态为 `READY`，但每次重启后仍须重新验证，不能由文件存在推断。
+
+缺失资产时，必需模式已验证在 `RAG_ROOT_MISSING` 时启动失败；可选模式的真实 Chromium 已验证专用“知识库暂不可用”降级，且审计保持 `PROCESS_KNOWLEDGE_QUERY / PROCESS / RAG_UNAVAILABLE`，没有误调用产品解析或实时业务工具。恢复步骤与历史身份见 [RAG 当前 artifact 与运行时复审](rag/rag-current-artifact-and-runtime-reaudit-2026-08-12.md)。
 
 边界：
 
@@ -313,11 +312,11 @@ SSE 主要事件包括 `message_start`、`progress`、`clarification`、`text_de
 
 - `execute_finish_inbound_task` 没有注册、没有实现为 MCP Tool、没有启用；
 - S3 是默认关闭的 Web 控制面候选，不是模型可调用的写工具；
-- 专用权限 `agent:finish-inbound:execute` 默认不分配任何正式角色；
+- 专用权限 `agent:finish-inbound:execute` 在研发阶段分配给 `WAREHOUSE_MANAGER`；不同时授予通用 `task:confirm`；
 - 正常启动不要传 `-EnableFinishInboundS3Execute`；
 - 出库、调拨、半成品入库和主动触发不在首个 L3 候选范围。
 
-权威门禁见 [成品入库 L3 Gate](finish-inbound-l3-gate.yaml)。2026-08-12 已完成 S4 本地 shadow MySQL 故障注入、状态失效、完整浏览器执行、断线/重复提交、过期/撤销/跨用户/会话/权限恢复和默认关闭回滚验证；技术隔离验收通过。正式角色责任人和生产审批仍未确定，因此发布决策为 `NO_GO / NOT_RELEASED`，专用权限零分配，S2/S3 默认关闭，MCP execute 未注册。完整证据见 [S4 隔离发布验证](finish-inbound-s4-isolated-release-validation-2026-08-12.md)。
+权威门禁见 [成品入库 L3 Gate](finish-inbound-l3-gate.yaml)。2026-08-13 责任角色已确定为仓管；仓管无需 `task:confirm` 即可完成一次真实受控成品入库，同键重放不重复写入，出库预览被拒绝。生产审批仍未完成，因此发布决策仍为 `NO_GO / NOT_RELEASED`，S3 默认关闭，MCP execute 未注册。权限边界见 [仓管受控成品入库权限决策](warehouse-manager-controlled-finish-inbound-permission-2026-08-13.md)。
 
 ## 5. 当前高价值业务旅程
 
@@ -573,8 +572,24 @@ Python 依赖使用仓库已有 `agent-service/.venv`。不要把模型密钥、
 pwsh -NoProfile -File scripts/start-isolated-agent-uat.ps1 `
   -EnvFile "<user-authorized-env-file>" `
   -JavaPort 38082 `
-  -PythonPort 38091
+  -PythonPort 38091 `
+  -EnableDatabaseSchemaVerification `
+  -EnableRag `
+  -RequireRag
 ```
+
+本机存在已校验 RAG 资产时，`-EnableRag -RequireRag` 默认使用仓库下 Git 忽略的
+`deploy/simple/artifacts/rag` 与 `deploy/simple/artifacts/rag-model`；也可通过 `-RagRoot`、`-RagModelPath`
+显式指定。启动脚本在读取 env 后覆盖这些验收参数，避免 env 中的旧值改变本次口径。启动成功后不能只看进程或文件，还应执行真实检索验收：
+
+```powershell
+pwsh -NoProfile -File scripts/verify-agent-rag-runtime.ps1 `
+  -BaseUrl "http://127.0.0.1:38082" `
+  -LoginName "<authorized-admin-name>" `
+  -LoginPassword "<process-local-web-password>"
+```
+
+脚本仅允许访问本机地址，断言回答没有进入 RAG 降级且至少返回一张安全知识引用卡片，并在结束时撤销临时 Agent 会话。
 
 脚本只在进程内加载配置并生成临时安全材料。常规启动不要添加：
 
@@ -593,11 +608,13 @@ $env:VITE_API_PROXY_TARGET = "http://127.0.0.1:38082/"
 npm run dev -- --port 5174
 ```
 
-当前生成本文时，本机监听状态为：
+2026-08-13 最终验收时，本机监听状态为：
 
-- Web `5174`；
+- Web 未由本轮启动；
 - Java `38082`；
 - Python `38091`。
+
+Java 使用最新构建并启用 schema verification：42 个迁移、48 张必需表、33 个关键列、1 个关键可空约束和 7 个关键索引全部通过；RAG required 真实查询通过。本地旧库已按既有审计结论接入受控迁移：29 条历史迁移标记为 `BASELINED`，13 条后续迁移为真实 `APPLIED`。这只证明当前本地验收库就绪，不代表生产库已迁移。
 
 这些进程是临时状态，电脑重启后会消失。新任务必须重新核对端口和日志，不能依据本文假定在线。
 
@@ -639,12 +656,12 @@ Web 的 `.mjs` 组件测试当前多用 Node test runner，可根据相关测试
 2. **[2026-08-12 已解决] Goal/MCP 当前基线已归一化。** 当前权威数量是 58 Goal、54 Java/MCP 工具（52 L1 + 2 L2）和 1 个 Python 进程内 L0 工具；历史日期文档保留其当时数字。
 3. **[2026-08-12 已解决] S4 隔离技术发布证据已闭环。** 真实故障、浏览器、恢复和回滚均通过；因正式角色和生产审批缺失，发布结论仍是 `NO_GO / NOT_RELEASED`，不是把 S4 技术通过误写为生产批准。
 4. **[2026-08-12 已解决] 成品入库引导的固定码完整浏览器旅程已闭环。** 创建任务弹窗、创建后卡片禁用、资格预览、精确预览、最终停止和数据库零库存写入均已有真实证据；同时补齐了历史未纳管的托盘任务半成品字段迁移。S4/生产发布仍未通过。
-5. **[2026-08-12 代码边界与真实功能已闭环；性能门禁明确失败] 模型结构化响应仍有长尾。** 主路由明确登记 Goal 后已按 GoalContract 裁剪专家 schema，完成态结果分析保留模型但使用空工具集和短提示，并新增仅含请求字节数的三阶段诊断；Python 全量 `480 passed, 8 skipped`。经用户明确授权固定问题和 shadow 查询事实发送到指定模型端点后，20 个预采样与 80 个正式冷会话均已完成；正式样本 80/80 成功，真实 Chromium 代表性化验查询功能通过且事实与工具审计一致，但整体 P50/P95 从 16.547/39.016 秒恶化到 19.953/46.562 秒，四领域 P95 仍全部超过 15 秒。门禁为 `FAILED / NOT_PASSED`，不能以可用性成功替代性能通过。一次性账号、会话、审计和临时报表痕迹均已清零。证据见 [性能优化复审](agent-four-domain-performance-optimization-review-2026-08-12.md)。
-6. **[2026-08-12 运行脚本已修复，生产数据门禁仍未完成] 库存趋势目标机就绪性已复核。** Windows 调度脚本已支持系统自带 PowerShell、无写入预检和真实退出码；shadow 当前只有 2026-08-12 启用基线、无 `DAILY_CLOSE`/对账，门禁为 0/7。浏览器明确保持阻断，不能用本地回放代替连续 7 天真实日终快照和对账。目标环境管理员注册与自然积累仍待完成。
-7. **[2026-08-12 工程保护与降级已闭环；仓库外部材料交付阻断] RAG 当前没有可发布 artifact/model。** 原始材料按项目约定不存放在本地仓库；部署打包已保护外部恢复源，更新脚本增加 required 模式和容器内完整预检，真实 Chromium 降级与审计通过。必须先接收可信外部材料或不可变 release 与匹配模型，逐项校验后重跑完整 RAG/浏览器/回滚验收；当前生产结论为 `NO_GO`。
-8. **业务指标禁止幻觉扩展。** 当前没有返工、报废、损耗、SLA、计划顺延等事实；不要要求产品经理补不存在的规则后再实现，也不要模型自行推导。
-9. **历史接口仍包含旧流程。** 例如半成品备料池相关接口/迁移可能仍在仓库，但 Agent、MCP 和报表已明确弃用，不能因为代码存在就重新暴露。
-10. **报表正式角色尚未建立。** 2026-08-12 技术矩阵确认仓管和车间主任账号实际都是 99 权限的 `ADMIN`，QC 虽可运行有权报表却不能进入 AI 助手；不能把该矩阵等同于仓管、质检、生产主管最小权限设计或真人验收完成。
+5. **[2026-08-13 正式性能标准已确认；现有证据仍不完整] 模型结构化响应仍有长尾。** 主路由明确登记 Goal 后已按 GoalContract 裁剪专家 schema，完成态结果分析保留模型但使用空工具集和短提示，并新增仅含请求字节数的三阶段诊断；Python 全量 `480 passed, 8 skipped`。经用户明确授权固定问题和 shadow 查询事实发送到指定模型端点后，20 个预采样与 80 个正式冷会话均已完成；正式样本 80/80 成功，真实 Chromium 代表性化验查询功能通过且事实与工具审计一致，整体 P50/P95 为 19.953/46.562 秒，工具 P95 为 187 ms。产品已确认[分层性能 SLO](agent-performance-slo-proposal-2026-08-13.md)：灰度底线为首个进度 P95 ≤ 1.5 秒、端到端 P50/P90/P95 ≤ 22/40/50 秒、硬超时 ≤ 90 秒、工具 P95 ≤ 1 秒；优化目标为端到端 P50/P95 ≤ 18/35 秒。旧 P95 15 秒不再作为当前发布判定标准。现有证据只覆盖整体 P50/P95 与工具 P95，尚未完整覆盖首个进度、P90、分领域回归和最慢请求，所以当前性能 gate 为 `POLICY_APPROVED / EVIDENCE_PARTIAL`，不是完整通过。一次性账号、会话、审计和临时报表痕迹均已清零。历史实验见 [性能优化复审](agent-four-domain-performance-optimization-review-2026-08-12.md)。
+6. **[2026-08-13 正式最小角色工程与隔离 UAT 已通过，尚未分配现有用户]** 当前仓管和生产主管实际是 99 权限 `ADMIN`，不能继续作为最小权限证据。新增独立 `agent:use`，Web、Java 会话/委派恢复和 Python chat/stream/resume 统一按该权限校验；新增 `WAREHOUSE_MANAGER` 与 `PROD_SUPERVISOR` 两个只读预置角色，既有 `QC` 获得助手入口，`STAFF` 不自动获得。本地迁移已到 44/44；一次性三角色 HTTP UAT 验证助手入口、岗位只读和跨职责 403，权限数分别为仓管 17、QC 42、生产主管 18，三者 Agent 写权限均为 0，夹具已精确清理。迁移不修改任何现有用户，不授予 AI 审查/审计或 `agent:finish-inbound:execute`；QC 历史业务权限保持原状，但未登记为 Agent 写工具。正式账号分配与真人口径验收仍待业务负责人完成。详见 [只读业务角色与助手入口权限设计](agent-readonly-business-role-permission-design-2026-08-13.md)。
+7. **[2026-08-13 库存趋势门禁复核]** 两项 Windows 计划任务已注册，但开发机 03:02 开机补跑已超过 00:00～00:10 可信窗口，Capture/Verify 均退出码 2；当前只读 Verify 明确缺少 2026-08-12 可信日终。代码拒绝白天回填是正确安全边界。本地 7 天历史回放已验证算法、图表、历史和 XLSX，并持续标注模拟；自然连续 7 天改为目标部署环境的生产发布门禁，不再要求开发机夜间开机来完成工程验收。详见 [库存趋势可信日终门禁复核](inventory-history-gate-recheck-2026-08-13.md)。
+8. **[2026-08-13 本机资产校验通过；仓库可复现与生产交付仍阻断] RAG 不能只用“有/没有”概括。** 当前开发机的 Git 忽略目录内已有不可变 release 与匹配模型，离线 release 校验通过；但远端仓库和正式外部交付链仍不能从零恢复这些资产。部署打包已保护外部恢复源，更新脚本增加 required 模式和容器内完整预检，真实 Chromium 降级与审计通过。生产前仍需建立可信外部材料/制品交付、逐项校验并重跑完整 RAG/浏览器/回滚验收；当前生产结论为 `NO_GO`。
+9. **业务指标禁止幻觉扩展。** 当前没有返工、报废、损耗、SLA、计划顺延等事实；不要要求产品经理补不存在的规则后再实现，也不要模型自行推导。
+10. **历史接口仍包含旧流程；智能报数中的不可达写路径已清理。** 半成品备料池相关表、迁移和兼容查询仍可能在仓库，但 Agent、MCP 和报表已明确弃用，不能因为代码存在就重新暴露。2026-08-13 已删除 `AutoInboundConfirmServiceImpl` 中不可达的旧备料池扣减/旧消费记录写入代码；现行实际消耗仍只认生产订单物料领用并确认后的库存扣减事实。
 11. **[2026-08-12 最终回归已解决] 知识纠偏不能覆盖生产实时语义。** “领料、原料/材料消耗、实际消耗、产出、入库去向”已明确排除在静态知识分类外；真实 Chromium 生产订单消耗查询进入生产专家，订单不存在时明确返回无匹配，不调用 RAG。
 12. **[2026-08-12 最终回归已解决] 报表执行审计不再放在 Controller。** 运行、归档、成功/失败审计由 `RegisteredReportExecutionService` 编排，Controller 只委派；原业务异常保留，审计自身失败只记日志并作为 suppressed exception。
 
@@ -660,9 +677,9 @@ Web 的 `.mjs` 组件测试当前多用 Node test runner，可根据相关测试
 
 ### P1：完成报表分析的生产准备
 
-1. [脚本与 shadow 技术验收已完成；管理员安装/自然积累待完成] 在真实目标环境注册 Capture/Verify，并积累库存连续 7 天可信日终快照和守恒对账；
+1. [本地 7 天回放与 shadow 技术验收已完成；目标环境自然积累待完成] 在真实目标环境注册 Capture/Verify，并积累库存连续 7 天可信日终快照和守恒对账；开发机关机错过可信窗口不再阻断本地工程验收，但也不能用模拟回放替代生产门禁；
 2. [2026-08-12 工程与 shadow 浏览器验收已完成；目标告警平台接入待完成] 建立报表运行、导出、清理、数据质量与耗时监控；
-3. [技术权限矩阵与真实 Chromium 已完成；正式角色设计/真人验收待完成] 用仓管、质检、生产主管按真实问题做七类报表验收，记录口径理解、完成率、事实一致性、轮次和延迟；当前证据见 [角色技术矩阵验收](registered-report-role-technical-matrix-uat-2026-08-12.md)；
+3. [最小角色设计、隔离 HTTP UAT 与真实 Chromium 技术验收已完成；正式账号分配/真人验收待完成] 用仓管、质检、生产主管按真实问题做七类报表验收，记录口径理解、完成率、事实一致性、轮次和延迟；角色证据见 [只读业务角色与助手入口权限设计](agent-readonly-business-role-permission-design-2026-08-13.md)；
 4. 只在数据库出现真实字段和可达写入链路后，评估新指标；
 5. 再评估 PDF/CSV、订阅和主动通知，不提前做模型预测。
 

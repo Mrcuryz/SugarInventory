@@ -6,6 +6,9 @@ param(
 
     [string]$LoginPassword = "lbsp",
 
+    [ValidateSet('ADMIN', 'WAREHOUSE_MANAGER')]
+    [string]$ExecutionRoleCode = 'ADMIN',
+
     [switch]$VerifyS2ControlPlane,
 
     [switch]$VerifyS3DomainExecution,
@@ -160,6 +163,7 @@ $s4AuditTriggerName = $null
 $s4StateDelayTriggerName = $null
 $s4StateJob = $null
 $requiresS3Permission = $VerifyS3DomainExecution -or $VerifyS4AuditRollback -or $VerifyS4StateInvalidation
+$isWarehouseRoleUat = $ExecutionRoleCode -eq 'WAREHOUSE_MANAGER'
 $s4PermissionDeniedBeforeGrant = $false
 
 try {
@@ -170,6 +174,7 @@ try {
         [bool]$VerifyS4StateInvalidation
     ) | Where-Object { $_ }
     Assert-True ($selectedExecutionModes.Count -le 1) "S2, S3 and S4 verification modes must use separate fixtures"
+    Assert-True (-not $isWarehouseRoleUat -or $VerifyS3DomainExecution) "WAREHOUSE_MANAGER is only supported for the S3 domain execution UAT"
     $migration = [System.IO.File]::ReadAllText(
         (Join-Path $projectRoot 'migrations\2026-08-09-add-agent-finish-inbound-execution-preview.sql'))
     Invoke-LocalMySql $migration | Out-Null
@@ -184,20 +189,30 @@ try {
         Invoke-LocalMySql $permissionMigration | Out-Null
         $existingPermissionLink = [int](Invoke-LocalMySql "SELECT COUNT(*) FROM role_permission rp JOIN role r ON r.id=rp.role_id JOIN permission p ON p.id=rp.permission_id WHERE r.role_code='ADMIN' AND p.perm_code='agent:finish-inbound:execute';")[0]
         Assert-True ($existingPermissionLink -eq 0) "Dedicated Agent execute permission is already assigned to ADMIN; S4 default-deny proof requires zero baseline assignments"
+        if ($isWarehouseRoleUat) {
+            $warehousePermissionMigration = [System.IO.File]::ReadAllText(
+                (Join-Path $projectRoot 'migrations\2026-08-13-grant-warehouse-manager-controlled-finish-inbound.sql'))
+            Invoke-LocalMySql $warehousePermissionMigration | Out-Null
+        }
     }
 
     $escapedName = Escape-SqlLiteral $testName
     $escapedEmployeeId = Escape-SqlLiteral $employeeId
     $escapedMobile = Escape-SqlLiteral $mobile
-    $employeeRosterId = [int](Invoke-LocalMySql "INSERT INTO employee_roster(employee_id,name,mobile,department,position,status,role_code) VALUES('$escapedEmployeeId','$escapedName','$escapedMobile','本地验收','Agent S1','在职','ADMIN'); SELECT LAST_INSERT_ID();")[0]
+    $employeeRosterId = [int](Invoke-LocalMySql "INSERT INTO employee_roster(employee_id,name,mobile,department,position,status,role_code) VALUES('$escapedEmployeeId','$escapedName','$escapedMobile','本地验收','Agent S1','在职','$(Escape-SqlLiteral $ExecutionRoleCode)'); SELECT LAST_INSERT_ID();")[0]
 
     $login = Invoke-AgentPost '/api/auth/web-login' @{ name = $testName; password = $LoginPassword } ''
     Assert-True ($login.code -eq 200) "Web login failed"
     Assert-True ([bool]$login.data.token) "Web login returned no token"
     Assert-True (@($login.data.permissionCodes) -contains 'task:view') "Temporary ADMIN lacks task:view"
-    Assert-True (@($login.data.permissionCodes) -contains 'task:confirm') "Temporary ADMIN lacks task:confirm"
+    if ($isWarehouseRoleUat) {
+        Assert-True (@($login.data.permissionCodes) -notcontains 'task:confirm') "WAREHOUSE_MANAGER unexpectedly received generic task:confirm"
+        Assert-True (@($login.data.permissionCodes) -contains 'agent:finish-inbound:execute') "WAREHOUSE_MANAGER lacks controlled finish inbound execution"
+    } else {
+        Assert-True (@($login.data.permissionCodes) -contains 'task:confirm') "Temporary ADMIN lacks task:confirm"
+    }
     if ($requiresS3Permission) {
-        Assert-True (-not (@($login.data.permissionCodes) -contains 'agent:finish-inbound:execute')) "Temporary ADMIN unexpectedly received the default-deny Agent execute permission"
+        Assert-True ($isWarehouseRoleUat -or -not (@($login.data.permissionCodes) -contains 'agent:finish-inbound:execute')) "Temporary ADMIN unexpectedly received the default-deny Agent execute permission"
     }
     $token = $login.data.token
 
@@ -272,10 +287,11 @@ try {
     $archive = (Invoke-LocalMySql "SELECT CONCAT(preview_ref,'|',status,'|',required_permissions,'|',owner_user_id) FROM agent_finish_inbound_execution_preview WHERE agent_session_id='$agentSessionId' LIMIT 1;")[0].Split('|')
     Assert-True ($archive[0] -match '^fip1_[A-Za-z0-9_-]{43}$') "Stored preview ref is invalid"
     Assert-True ($archive[1] -eq 'READY') "Stored preview is not READY"
-    Assert-True ($archive[2] -eq 'task:confirm,task:view') "Stored permission snapshot is invalid"
+    $expectedPreviewPermission = if ($isWarehouseRoleUat) { 'agent:finish-inbound:execute,task:view' } else { 'task:confirm,task:view' }
+    Assert-True ($archive[2] -eq $expectedPreviewPermission) "Stored permission snapshot is invalid"
     Assert-True ([int]$archive[3] -eq $operatorId) "Stored preview owner is invalid"
 
-    if ($requiresS3Permission) {
+    if ($requiresS3Permission -and -not $isWarehouseRoleUat) {
         $denied = Invoke-AgentPost "/api/agent/sessions/$agentSessionId/finish-inbound-execution/s3/pending-preview" @{
             palletCodes = @($palletCode)
         } $token
@@ -370,7 +386,7 @@ try {
 
         $confirmationRow = (Invoke-LocalMySql "SELECT CONCAT(confirmation_ref,'|',status,'|',required_permissions) FROM agent_finish_inbound_execution_confirmation WHERE agent_session_id='$agentSessionId' LIMIT 1;")[0].Split('|')
         Assert-True ($confirmationRow[1] -eq 'CONSUMED') "S3 confirmation was not consumed"
-        Assert-True ($confirmationRow[2] -eq 'agent:finish-inbound:execute,task:confirm,task:view') "S3 dedicated permission snapshot is invalid"
+        Assert-True ($confirmationRow[2] -eq 'agent:finish-inbound:execute,task:view') "S3 dedicated permission snapshot is invalid"
         $requestRow = (Invoke-LocalMySql "SELECT CONCAT(execution_ref,'|',status,'|',attempt_count,'|',result_code) FROM agent_finish_inbound_execution_request WHERE agent_session_id='$agentSessionId' LIMIT 1;")[0].Split('|')
         $s3ExecutionRef = $requestRow[0]
         Assert-True ($requestRow[1] -eq 'SUCCEEDED') "S3 execution request did not persist success"
@@ -507,6 +523,7 @@ try {
         S2ExecutionRef = $s2ExecutionRef
         S2AuditEvents = $s2AuditCount
         S3DomainExecution = if ($VerifyS3DomainExecution) { 'PASS' } else { 'NOT_RUN' }
+        ExecutionRoleCode = $ExecutionRoleCode
         S3ExecutionRef = $s3ExecutionRef
         S3AuditEvents = $s3AuditCount
         S3CommittedReplay = $s3Replayed

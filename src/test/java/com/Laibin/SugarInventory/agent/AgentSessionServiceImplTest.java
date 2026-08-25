@@ -97,7 +97,7 @@ class AgentSessionServiceImplTest {
     }
 
     @Test
-    void rejectsSessionCreationForNonAdmin() {
+    void rejectsSessionCreationWithoutAgentUsePermission() {
         loginUser.getUser().setRoleCode("STAFF");
 
         assertThatThrownBy(() -> service.createSession(
@@ -151,7 +151,7 @@ class AgentSessionServiceImplTest {
     }
 
     @Test
-    void validateDelegationRejectsUserWhoseAdminRoleWasRemoved() {
+    void validateDelegationRejectsUserWhoseAgentAccessWasRemoved() {
         Claims claims = validClaims();
         AgentSession session = activeSession();
         when(sessionMapper.selectById("session-1")).thenReturn(session);
@@ -163,7 +163,25 @@ class AgentSessionServiceImplTest {
                 loginUser))
                 .isInstanceOf(AgentSessionAuthenticationException.class)
                 .extracting("status", "errorCode")
-                .containsExactly(403, "AGENT_ROLE_DENIED");
+                .containsExactly(403, "AGENT_ACCESS_DENIED");
+    }
+
+    @Test
+    void validateDelegationAllowsNonAdminWithAgentUsePermission() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+        loginUser.getUser().setRoleCode("QC");
+        loginUser.setAuthorities(List.of(
+                new SimpleGrantedAuthority("agent:use"),
+                new SimpleGrantedAuthority("inventory:view")));
+
+        AgentSession result = service.validateDelegation(
+                claims,
+                new MockHttpServletRequest("GET", "/api/inventory/stock/page"),
+                loginUser);
+
+        assertThat(result).isSameAs(session);
     }
 
     @Test
@@ -371,7 +389,7 @@ class AgentSessionServiceImplTest {
     }
 
     @Test
-    void requireActiveInternalToolSessionRejectsUserWhoseAdminRoleWasRemoved() {
+    void requireActiveInternalToolSessionRejectsUserWhoseAgentAccessWasRemoved() {
         AgentSession session = activeSession();
         when(sessionMapper.selectById("session-1")).thenReturn(session);
         loginUser.getUser().setRoleCode("STAFF");
@@ -380,7 +398,7 @@ class AgentSessionServiceImplTest {
         assertThatThrownBy(() -> service.requireActiveInternalToolSession("session-1"))
                 .isInstanceOf(AgentSessionAuthenticationException.class)
                 .extracting("status", "errorCode")
-                .containsExactly(403, "AGENT_ROLE_DENIED");
+                .containsExactly(403, "AGENT_ACCESS_DENIED");
     }
 
     @Test

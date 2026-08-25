@@ -75,6 +75,11 @@ export const permissionGroupCatalog = [
     permissions: ['inventory:view', 'document:view', 'record:view', 'record:export', 'record:query', 'log:view']
   },
   {
+    key: 'agent_access',
+    title: 'AI 助手',
+    permissions: ['agent:use', 'agent:finish-inbound:execute']
+  },
+  {
     key: 'agent_review',
     title: 'AI 审查',
     permissions: ['agent:review:view', 'agent:review:update']
@@ -164,6 +169,8 @@ const permissionMeta = {
   'record:export': '记录导出',
   'record:query': '库存/记录查询',
   'log:view': '操作日志查看',
+  'agent:use': 'AI 助手使用',
+  'agent:finish-inbound:execute': 'AI 成品入库执行',
   'agent:review:view': 'AI Review 查看',
   'agent:review:update': 'AI Review 标记',
   'employee:view': '员工查看',

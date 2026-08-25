@@ -41,6 +41,8 @@ class Settings:
         "analytics_expert",
         "pallet_expert",
         "knowledge_expert",
+        "administration_expert",
+        "audit_expert",
     )
     llm_max_tool_calls: int = 3
     llm_max_tool_retries: int = 1
@@ -116,7 +118,18 @@ class Settings:
             planning_mode=planning_mode,  # type: ignore[arg-type]
             llm_allowed_experts=_csv_env(
                 "AGENT_LLM_ALLOWED_EXPERTS",
-                ("inventory_expert", "warehouse_expert", "assay_expert", "logistics_expert", "production_expert", "analytics_expert", "pallet_expert", "knowledge_expert"),
+                (
+                    "inventory_expert",
+                    "warehouse_expert",
+                    "assay_expert",
+                    "logistics_expert",
+                    "production_expert",
+                    "analytics_expert",
+                    "pallet_expert",
+                    "knowledge_expert",
+                    "administration_expert",
+                    "audit_expert",
+                ),
             ),
             llm_max_tool_calls=_bounded_int_env("AGENT_LLM_MAX_TOOL_CALLS", 3, 1, 3),
             llm_max_tool_retries=_bounded_int_env("AGENT_LLM_MAX_TOOL_RETRIES", 1, 0, 1),

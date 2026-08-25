@@ -209,6 +209,8 @@ def test_pallet_expert_is_enabled_after_read_only_lifecycle_rollout() -> None:
     assert "pallet_expert" in Settings().llm_allowed_experts
     assert "logistics_expert" in Settings().llm_allowed_experts
     assert "analytics_expert" in Settings().llm_allowed_experts
+    assert "administration_expert" in Settings().llm_allowed_experts
+    assert "audit_expert" in Settings().llm_allowed_experts
 
 
 def test_llm_limits_are_hard_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1368,6 +1370,43 @@ def test_llm_inventory_level_trend_preserves_simulation_boundary_and_card() -> N
     assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
 
 
+def test_llm_inventory_level_trend_reports_data_gate_in_user_language() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("analytics_expert", "INVENTORY_LEVEL_TREND_ANALYSIS")],
+        [
+            call(
+                "run_registered_report",
+                {
+                    "reportDefinitionId": "inventory_level_trend_v1",
+                    "reportVersion": 1,
+                    "startDate": "2026-07-14",
+                    "endDate": "2026-07-20",
+                },
+            )
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "run_registered_report": ToolGatewayError(
+                "UPSTREAM_BUSINESS_ERROR",
+                "blocked",
+                retryable=False,
+                upstream_status=409,
+            )
+        }
+    )
+    runtime, _ = runtime_for(model, tools, allowed_experts=("analytics_expert",))
+
+    response = runtime.chat(chat_request("最近7天库存变化趋势"))
+
+    assert response.error is not None
+    assert response.error.code == "REPORT_DATA_NOT_READY"
+    assert "连续可信日终数据" in response.answer
+    assert "历史回放模拟" in response.answer
+    assert "该工具错误" not in response.answer
+    assert len(tools.calls) == 1
+
+
 def test_llm_pallet_task_cycle_separates_duration_waiting_and_scope() -> None:
     model = ScriptedLlmModel(
         [main_delegate("analytics_expert", "PROCESS_EFFICIENCY_TREND")],
@@ -2212,6 +2251,8 @@ def test_llm_boiling_batch_selection_rejects_list_rediscovery_and_continues_to_t
     assert response.needsUserSelection is False
     assert "煮糖批次 20260630-01" in response.answer
     assert "缺失的上下游关系不会由 Agent 推断" not in response.answer
+    assert store.get("agt_llm").active_goal_type == "BOILING_BATCH_TRACE"
+    assert response.reviewTrace["goalCompletion"]["status"] == "COMPLETE"
     assert [item["toolName"] for item in tools.calls] == [
         "query_boiling_batches",
         "query_boiling_batch_trace",
@@ -2282,6 +2323,63 @@ def test_llm_production_expert_requires_selection_for_multiple_related_orders() 
     assert [item["toolName"] for item in tools.calls] == [
         "resolve_production_entities",
         "resolve_production_entities",
+    ]
+
+
+def test_llm_explicit_order_overrides_linked_batch_candidates() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("production_expert", "PRODUCTION_ORDER_PROGRESS")],
+        [
+            call(
+                "resolve_production_entities",
+                {"entityType": "PRODUCTION_ORDER", "query": "PO202606300002", "limit": 5},
+            ),
+            call("query_production_order_progress", {"orderRef": "CURRENT_PRODUCTION_ORDER"}),
+            final("生产订单 PO202606300002 的进度与实际产出见下方卡片。", "obs_2"),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "resolve_production_entities": {
+                "resolutionStatus": "EXACT",
+                "needsUserSelection": False,
+                "entityType": "PRODUCTION_ORDER",
+                "candidates": [
+                    {
+                        "entityRef": "aer_order_2",
+                        "entityType": "PRODUCTION_ORDER",
+                        "displayCode": "PO202606300002",
+                        "summary": "SEMI；黄中冰 1板16件",
+                    }
+                ],
+            },
+            "query_production_order_progress": {
+                "orderNo": "PO202606300002",
+                "orderType": "SEMI",
+                "status": "COMPLETED",
+                "materialRecordCount": 0,
+                "outputRecordCount": 1,
+                "boilingSources": [],
+                "outputs": [],
+            },
+        }
+    )
+    runtime, store = runtime_for(model, tools, allowed_experts=("production_expert",))
+    store.get("agt_llm").last_boiling_batch_trace = {
+        "batchNo": "20260630-01",
+        "usages": [
+            {"orderNo": "PO202606300002"},
+            {"orderNo": "PO202606300001"},
+        ],
+    }
+
+    response = runtime.chat(chat_request("生产订单PO202606300002的原料消耗及产出"))
+
+    assert response.error is None
+    assert response.needsUserSelection is False
+    assert [item["toolName"] for item in tools.calls] == [
+        "resolve_production_entities",
+        "query_production_order_progress",
     ]
 
 

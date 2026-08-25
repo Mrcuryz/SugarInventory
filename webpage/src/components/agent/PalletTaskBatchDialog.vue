@@ -43,6 +43,10 @@ const props = defineProps({
   defaultSide: {
     type: String,
     default: ''
+  },
+  canDirectSubmit: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -254,6 +258,10 @@ const prepareDialog = async () => {
 
 const submit = async () => {
   if (!rows.value.length || submitting.value) return
+  if (!props.canDirectSubmit) {
+    ElMessage.warning('当前账号不能使用人工直接提交，请先生成安全预览并确认')
+    return
+  }
   submitting.value = true
   try {
     if (isInbound.value) {
@@ -409,7 +417,13 @@ watch(() => props.modelValue, opened => {
       >
         生成安全预览
       </el-button>
-      <el-button type="primary" :loading="submitting" :disabled="loading || !rows.length" @click="submit">
+      <el-button
+        v-if="canDirectSubmit"
+        type="primary"
+        :loading="submitting"
+        :disabled="loading || !rows.length"
+        @click="submit"
+      >
         {{ canGenerateExactPreview ? '直接提交（人工流程）' : '提交' }}
       </el-button>
     </template>

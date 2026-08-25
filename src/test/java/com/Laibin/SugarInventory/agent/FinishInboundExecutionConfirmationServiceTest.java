@@ -31,7 +31,7 @@ class FinishInboundExecutionConfirmationServiceTest {
     private static final String SECRET = "0123456789abcdef0123456789abcdef";
     private static final Set<String> AUTHORITIES = Set.of("task:view", "task:confirm");
     private static final Set<String> S3_AUTHORITIES = Set.of(
-            "task:view", "task:confirm", "agent:finish-inbound:execute");
+            "task:view", "agent:finish-inbound:execute");
 
     @Test
     void confirmationBindsPreviewUserSessionPermissionAndStoresOnlyCredentialHashes() {
@@ -112,7 +112,7 @@ class FinishInboundExecutionConfirmationServiceTest {
         verify(fixture.confirmationMapper).insert(captor.capture());
         AgentFinishInboundExecutionConfirmation stored = captor.getValue();
         assertThat(stored.getRequiredPermissions()).isEqualTo(
-                "agent:finish-inbound:execute,task:confirm,task:view");
+                "agent:finish-inbound:execute,task:view");
 
         stored.setStatus("CONSUMED");
         when(fixture.confirmationMapper.selectByPreviewRefForUpdate(preview.getPreviewRef()))

@@ -162,6 +162,10 @@ const props = defineProps({
   canExecuteFinishInbound: {
     type: Boolean,
     default: false
+  },
+  canConfirmTasks: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -374,9 +378,16 @@ const isTaskBatchReady = (group) => {
   return group.key === requirement.taskGroupKey && selectedCount === requirement.requestedPalletCount
 }
 
+const canProcessTaskGroup = (group) => {
+  if (group?.key === 'finish_in') {
+    return props.canExecuteFinishInbound || props.canConfirmTasks
+  }
+  return props.canConfirmTasks
+}
+
 const openTaskBatch = (group) => {
   const selected = selectedGroupRecords(group)
-  if (!group.batchAction || !selected.length) return
+  if (!group.batchAction || !selected.length || !canProcessTaskGroup(group)) return
   const requirement = taskSelectionRequirement.value
   if (
     requirement
@@ -850,7 +861,7 @@ const exportRegisteredReport = () => {
           </div>
 
           <div
-            v-if="!isTaskDetail && group.batchAction && selectableGroupRecords(group).length"
+            v-if="!isTaskDetail && group.batchAction && canProcessTaskGroup(group) && selectableGroupRecords(group).length"
             class="task-group-footer"
           >
             <span v-if="taskSelectionRequirement">

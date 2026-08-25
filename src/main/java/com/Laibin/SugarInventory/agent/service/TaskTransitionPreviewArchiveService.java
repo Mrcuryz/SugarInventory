@@ -1,5 +1,6 @@
 package com.Laibin.SugarInventory.agent.service;
 
+import com.Laibin.SugarInventory.agent.security.FinishInboundExecutionPermissionPolicy;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.domain.po.AgentTaskTransitionPreview;
 import com.Laibin.SugarInventory.domain.vo.TaskTransitionPreviewVO;
@@ -35,11 +36,20 @@ public class TaskTransitionPreviewArchiveService {
             "CONFIRM_FINISH_INBOUND",
             "CONFIRM_FINISH_OUTBOUND",
             "CONFIRM_TRANSFER");
-    private static final Set<String> REQUIRED_PERMISSIONS = Set.of("task:view", "task:confirm");
-    private static final String REQUIRED_PERMISSION_SNAPSHOT = "task:confirm,task:view";
+    private static final Set<String> MANUAL_TRANSITION_PERMISSIONS =
+            Set.of("task:view", "task:confirm");
+    private static final String MANUAL_TRANSITION_PERMISSION_SNAPSHOT = "task:confirm,task:view";
 
     private final AgentTaskTransitionPreviewMapper previewMapper;
     private final ObjectMapper objectMapper;
+
+    public void requireTransitionAccess(
+            String transition, Set<String> currentAuthorities) {
+        if (!SUPPORTED_TRANSITIONS.contains(transition)) {
+            throw new BusinessException(400, "任务预览转换类型不受支持");
+        }
+        permissionSnapshotFor(transition, currentAuthorities);
+    }
 
     @Transactional
     public TaskTransitionPreviewVO persistReady(
@@ -77,7 +87,8 @@ public class TaskTransitionPreviewArchiveService {
         stored.setPreviewVersion(preview.getPreviewVersion());
         stored.setTransitionType(preview.getTransition());
         stored.setStatus("READY");
-        stored.setRequiredPermissions(REQUIRED_PERMISSION_SNAPSHOT);
+        stored.setRequiredPermissions(permissionSnapshotFor(
+                preview.getTransition(), currentAuthorities));
         stored.setEntityRefsJson(entityRefsJson);
         stored.setPayloadJson(payloadJson);
         stored.setStateDigest(preview.getStateDigest());
@@ -108,13 +119,10 @@ public class TaskTransitionPreviewArchiveService {
             throw new BusinessException(404, "任务预览不存在、已过期或不属于当前用户");
         }
         verifySession(stored.getAgentSessionId(), agentSessionId);
-        requirePermissions(currentAuthorities);
         if (!"READY".equals(stored.getStatus())) {
             throw new BusinessException(409, "任务预览已失效，请重新预览");
         }
-        if (!REQUIRED_PERMISSION_SNAPSHOT.equals(stored.getRequiredPermissions())) {
-            throw new BusinessException(409, "任务预览权限快照校验失败，请重新预览");
-        }
+        requireStoredPermissionSnapshot(stored, currentAuthorities);
         if (stored.getExpiresAt() == null
                 || !stored.getExpiresAt().isAfter(LocalDateTime.now(BUSINESS_ZONE))) {
             throw new BusinessException(410, "任务预览已过期，请重新预览");
@@ -160,7 +168,7 @@ public class TaskTransitionPreviewArchiveService {
                 || preview.getTasks().size() > 20) {
             throw new BusinessException(409, "任务预览实体范围无效，请重新预览");
         }
-        requirePermissions(currentAuthorities);
+        permissionSnapshotFor(preview.getTransition(), currentAuthorities);
     }
 
     private JsonNode parseVerifiedPayload(AgentTaskTransitionPreview stored) {
@@ -210,11 +218,32 @@ public class TaskTransitionPreviewArchiveService {
         }
     }
 
-    private static void requirePermissions(Set<String> currentAuthorities) {
+    private static String permissionSnapshotFor(
+            String transition, Set<String> currentAuthorities) {
+        if ("CONFIRM_FINISH_INBOUND".equals(transition)) {
+            return FinishInboundExecutionPermissionPolicy.selectPreviewSnapshot(currentAuthorities);
+        }
         Set<String> authorities = currentAuthorities == null ? Set.of() : currentAuthorities;
-        if (!authorities.containsAll(REQUIRED_PERMISSIONS)) {
+        if (!authorities.containsAll(MANUAL_TRANSITION_PERMISSIONS)) {
             throw new BusinessException(403, "当前用户没有查看或继续此任务预览的权限");
         }
+        return MANUAL_TRANSITION_PERMISSION_SNAPSHOT;
+    }
+
+    private static void requireStoredPermissionSnapshot(
+            AgentTaskTransitionPreview stored, Set<String> currentAuthorities) {
+        if (!SUPPORTED_TRANSITIONS.contains(stored.getTransitionType())) {
+            throw new BusinessException(409, "任务预览权限快照校验失败，请重新预览");
+        }
+        if ("CONFIRM_FINISH_INBOUND".equals(stored.getTransitionType())) {
+            FinishInboundExecutionPermissionPolicy.requireStoredPreviewSnapshot(
+                    stored.getRequiredPermissions(), currentAuthorities);
+            return;
+        }
+        if (!MANUAL_TRANSITION_PERMISSION_SNAPSHOT.equals(stored.getRequiredPermissions())) {
+            throw new BusinessException(409, "任务预览权限快照校验失败，请重新预览");
+        }
+        permissionSnapshotFor(stored.getTransitionType(), currentAuthorities);
     }
 
     private static void verifySession(String storedSessionId, String currentSessionId) {

@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.agent.service;
 
 import com.Laibin.SugarInventory.common.BusinessException;
+import com.Laibin.SugarInventory.agent.security.FinishInboundExecutionPermissionPolicy;
 import com.Laibin.SugarInventory.domain.po.AgentFinishInboundExecutionConfirmation;
 import com.Laibin.SugarInventory.domain.po.AgentFinishInboundExecutionPreview;
 import com.Laibin.SugarInventory.domain.po.AgentFinishInboundExecutionRequest;
@@ -36,9 +37,9 @@ public class FinishInboundExecutionCompletionService {
     private final ObjectMapper objectMapper;
 
     private static final String S3_REQUIRED_PERMISSIONS =
-            "agent:finish-inbound:execute,task:confirm,task:view";
-    private static final Set<String> S3_REQUIRED_PERMISSION_SET = Set.of(
-            "agent:finish-inbound:execute", "task:view", "task:confirm");
+            FinishInboundExecutionPermissionPolicy.CONTROLLED_EXECUTION_SNAPSHOT;
+    private static final Set<String> S3_REQUIRED_PERMISSION_SET =
+            FinishInboundExecutionPermissionPolicy.CONTROLLED_EXECUTION_PERMISSIONS;
 
     @Transactional
     public CompletionOutcome executeNoop(Long requestId) {

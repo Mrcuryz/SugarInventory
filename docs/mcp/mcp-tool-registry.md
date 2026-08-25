@@ -1,5 +1,7 @@
 # 智能仓储 MCP 工具登记表
 
+> 2026-08-14 范围调整：写入阶段只推进受控成品入库试点，出库、调拨、半成品入库及其他业务写操作暂停。工作群消息只作为入库候选输入，不在群聊内执行 L3。商业试点保留现有个人微信工作群，首选 Windows 微信客户端视觉采集 + 本地 OCR；当前开发暂缓。候选单仍须经 Web 人工复核，并复用现有精确预览与受控执行链路。详见 `docs/agent/personal-wechat-visual-collection-design-2026-08-14.md` 和 `docs/agent/finish-inbound-group-report-pilot-plan.md`。
+
 生成时间：2026-06-13
 适用项目：LaibinSugarInventory / 智能仓储
 用途：作为 Codex、MCP Server、后续嵌入式 Agent 的工具上下文和开发边界说明。
@@ -648,7 +650,7 @@ M2 工具只做 dry-run，不修改库存主数据。
 * 不得复用现有 `preview_task_transition` 冒充精确执行预览；
 * 不得扩大到半成品入库、出库或调拨。
 
-当前实现使用独立 `fip1_` 引用和独立持久化表，不复用任务资格预览；服务端保存规范化输入和任务、托盘、产品、库位、生产产出、历史用料关系/余额快照，普通 Agent 结果会删除引用、摘要和内部状态。L2 工具本身仍不签发确认或执行权。2026-08-10 完成的 S2 确认、撤销、token/幂等哈希与审计，以及 S3 默认关闭的受控 Web 真实执行候选，都属于用户控制面，不是 MCP Tool。S3 复用既有成品入库领域事务，独立执行权限默认不分配，并已在本地隔离数据库通过一次真实写入和已提交结果重放；`execute_finish_inbound_task` 仍未登记。完整门禁见 `docs/agent/finish-inbound-l3-gate.yaml`。
+当前实现使用独立 `fip1_` 引用和独立持久化表，不复用任务资格预览；服务端保存规范化输入和任务、托盘、产品、库位、生产产出、历史用料关系/余额快照，普通 Agent 结果会删除引用、摘要和内部状态。L2 工具本身仍不签发确认或执行权。2026-08-10 完成的 S2 确认、撤销、token/幂等哈希与审计，以及 S3 默认关闭的受控 Web 真实执行候选，都属于用户控制面，不是 MCP Tool。S3 复用既有成品入库领域事务。研发阶段独立执行权限只分配给 `WAREHOUSE_MANAGER`，不授予会同时放开出库和调拨的通用 `task:confirm`；功能开关仍默认关闭，并已在本地隔离数据库通过一次真实写入和已提交结果重放。`execute_finish_inbound_task` 仍未登记。完整门禁见 `docs/agent/finish-inbound-l3-gate.yaml`。
 
 ---
 

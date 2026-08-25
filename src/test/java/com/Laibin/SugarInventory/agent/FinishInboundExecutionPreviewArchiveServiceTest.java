@@ -30,6 +30,29 @@ class FinishInboundExecutionPreviewArchiveServiceTest {
     private static final Set<String> AUTHORITIES = Set.of("task:view", "task:confirm");
 
     @Test
+    void warehouseDedicatedPermissionCanArchiveAndReloadWithoutGenericTaskConfirm() {
+        AgentFinishInboundExecutionPreviewMapper mapper = mock(
+                AgentFinishInboundExecutionPreviewMapper.class);
+        FinishInboundExecutionPreviewArchiveService service = service(mapper);
+        Set<String> warehouseAuthorities = Set.of(
+                "task:view", "agent:finish-inbound:execute");
+        FinishInboundExecutionPreviewVO preview = readyPreview();
+        when(mapper.insert(any())).thenReturn(1);
+
+        service.persistReady(preview, 7, "session-1", warehouseAuthorities);
+
+        ArgumentCaptor<AgentFinishInboundExecutionPreview> captor =
+                ArgumentCaptor.forClass(AgentFinishInboundExecutionPreview.class);
+        verify(mapper).insert(captor.capture());
+        AgentFinishInboundExecutionPreview stored = captor.getValue();
+        assertThat(stored.getRequiredPermissions())
+                .isEqualTo("agent:finish-inbound:execute,task:view");
+        when(mapper.selectOne(any())).thenReturn(stored);
+        assertThat(service.loadOwnedActive(preview.getPreviewRef(), 7,
+                "session-1", warehouseAuthorities).row()).isSameAs(stored);
+    }
+
+    @Test
     void storesInternalIdsOnlyInServerSnapshotAndKeepsPublicPayloadSafe() {
         AgentFinishInboundExecutionPreviewMapper mapper = mock(AgentFinishInboundExecutionPreviewMapper.class);
         when(mapper.insert(any())).thenReturn(1);

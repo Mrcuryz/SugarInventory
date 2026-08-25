@@ -1,12 +1,12 @@
 version: 1
-as_of: 2026-08-12
+as_of: 2026-08-13
 candidate: FINISH_INBOUND
 overall_status: NO_GO
 design_status: READY
 business_hardening_status: GO
 execution_implementation_status: S3_CONTROLLED_UI_IMPLEMENTED_DEFAULT_OFF
 production_status: NOT_RELEASED
-next_required_slice: FORMAL_ROLE_OWNER_AND_SEPARATE_PRODUCTION_RELEASE_DECISION
+next_required_slice: SEPARATE_PRODUCTION_RELEASE_DECISION_AND_PRE_PRODUCTION_HUMAN_UAT
 
 scope:
   task_type: FINISH_IN
@@ -37,7 +37,8 @@ controlled_domain_candidate:
   feature_flag: agent.finish-inbound.s3-execute-enabled
   default_enabled: false
   dedicated_permission: agent:finish-inbound:execute
-  default_role_assignments: 0
+  assigned_role: WAREHOUSE_MANAGER
+  assigned_role_count: 1
   mcp_execute_registered: false
 
 current_handoff_preview:
@@ -129,8 +130,12 @@ gates:
   dedicated_execute_permission:
     status: GO
     planned_permission: agent:finish-inbound:execute
-    default_role_assignments: 0
-    evidence: migrations/2026-08-10-add-agent-finish-inbound-execute-permission.sql
+    assigned_role: WAREHOUSE_MANAGER
+    generic_task_confirm_granted: false
+    evidence:
+      - migrations/2026-08-10-add-agent-finish-inbound-execute-permission.sql
+      - migrations/2026-08-13-grant-warehouse-manager-controlled-finish-inbound.sql
+      - docs/agent/warehouse-manager-controlled-finish-inbound-permission-2026-08-13.md
   structured_write_errors:
     status: GO
     scope: CONTROLLED_UI_RESULT_AND_BUSINESS_ERRORS
@@ -140,8 +145,14 @@ gates:
     pending: []
   isolated_role_uat:
     status: GO
-    role: TEMPORARY_ADMIN_WITH_EXPLICIT_DEDICATED_PERMISSION
-    evidence: docs/agent/finish-inbound-s3-domain-execution-uat-2026-08-10.md
+    role: WAREHOUSE_MANAGER_WITH_DEDICATED_PERMISSION_WITHOUT_TASK_CONFIRM
+    controlled_finish_inbound: PASS
+    finish_outbound_preview_denied: PASS
+    execute_tool_calls: 0
+    evidence:
+      - docs/agent/warehouse-manager-controlled-finish-inbound-permission-2026-08-13.md
+      - scripts/verify-agent-business-role-uat.ps1
+      - scripts/verify-finish-inbound-s1.ps1
 
 required_tests_before_execute_registration:
   service_lock_contract_and_stable_order: PASS
@@ -194,11 +205,11 @@ completed_release_validation:
       - REAL_DATABASE_STATE_INVALIDATION_PATH
       - COMPLETE_CONTROLLED_BROWSER_EXECUTION
       - DISCONNECT_DUPLICATE_CLICK_EXPIRY_REVOCATION_CROSS_USER_SESSION_AND_PERMISSION_RECOVERY
-      - DEFAULT_OFF_OPENAPI_AND_ZERO_ROLE_ASSIGNMENT_ROLLBACK
+      - DEFAULT_OFF_OPENAPI_AND_TEMPORARY_ADMIN_ASSIGNMENT_ROLLBACK
     unresolved_release_authority:
-      - FORMAL_ROLE_OWNERSHIP_DECISION
+      - PRE_PRODUCTION_HUMAN_WAREHOUSE_UAT
       - SEPARATE_PRODUCTION_RELEASE_APPROVAL
-    release_decision: NO_GO_DEFAULT_OFF_ZERO_ROLE_ASSIGNMENTS
+    release_decision: NO_GO_DEFAULT_OFF_FORMAL_WAREHOUSE_ROLE_ASSIGNED_FOR_R_AND_D
     execute_mcp_registration_review: NOT_STARTED_REMAINS_UNREGISTERED
     evidence: docs/agent/finish-inbound-s4-isolated-release-validation-2026-08-12.md
 

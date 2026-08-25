@@ -125,7 +125,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     @Override
     @Transactional
     public AgentSessionVO createSession(LoginUser loginUser, AgentSessionCreateDTO dto, HttpServletRequest request) {
-        AgentAccessPolicy.requireAdmin(loginUser);
+        AgentAccessPolicy.requireAgentAccess(loginUser);
         List<String> scopes = normalizeRequestedScopes(dto == null ? null : dto.getRequestedScopes());
         LocalDateTime now = LocalDateTime.now();
         cancelPendingInterruptsForReplacedSessions(loginUser.getUser().getId());
@@ -162,7 +162,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
 
     @Override
     public List<AgentSessionVO> listCurrentSessions(LoginUser loginUser) {
-        AgentAccessPolicy.requireAdmin(loginUser);
+        AgentAccessPolicy.requireAgentAccess(loginUser);
         List<AgentSession> sessions = agentSessionMapper.selectList(new LambdaQueryWrapper<AgentSession>()
                 .eq(AgentSession::getUserId, loginUser.getUser().getId())
                 .orderByDesc(AgentSession::getIssuedAt));
@@ -171,7 +171,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
 
     @Override
     public AgentSession requireOwnedActiveSession(LoginUser loginUser, String agentSessionId) {
-        AgentAccessPolicy.requireAdmin(loginUser);
+        AgentAccessPolicy.requireAgentAccess(loginUser);
         AgentSession session = agentSessionMapper.selectById(agentSessionId);
         if (session == null || !Objects.equals(session.getUserId(), loginUser.getUser().getId())) {
             throw new BusinessException(404, "Agent session was not found.");
@@ -212,9 +212,9 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             markLastError(session, "AGENT_USER_INVALID");
             throw auth(HttpServletResponse.SC_UNAUTHORIZED, "AGENT_USER_INVALID", "Agent user is not active.");
         }
-        if (!AgentAccessPolicy.isAdmin(loginUser)) {
-            markLastError(session, "AGENT_ROLE_DENIED");
-            throw auth(HttpServletResponse.SC_FORBIDDEN, "AGENT_ROLE_DENIED", "Agent access is restricted to administrators.");
+        if (!AgentAccessPolicy.canUseAgent(loginUser)) {
+            markLastError(session, "AGENT_ACCESS_DENIED");
+            throw auth(HttpServletResponse.SC_FORBIDDEN, "AGENT_ACCESS_DENIED", "Agent access permission is required.");
         }
 
         session.setLastUsedAt(LocalDateTime.now());
@@ -245,7 +245,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
     @Override
     @Transactional
     public void revokeSession(LoginUser loginUser, String agentSessionId, String revokedReason) {
-        AgentAccessPolicy.requireAdmin(loginUser);
+        AgentAccessPolicy.requireAgentAccess(loginUser);
         AgentSession session = agentSessionMapper.selectById(agentSessionId);
         if (session == null || !Objects.equals(session.getUserId(), loginUser.getUser().getId())) {
             throw new BusinessException(404, "Agent session was not found.");
@@ -293,9 +293,9 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             markLastError(session, "AGENT_USER_INVALID");
             throw auth(HttpServletResponse.SC_UNAUTHORIZED, "AGENT_USER_INVALID", "Agent user is not active.");
         }
-        if (!(userDetails instanceof LoginUser loginUser) || !AgentAccessPolicy.isAdmin(loginUser)) {
-            markLastError(session, "AGENT_ROLE_DENIED");
-            throw auth(HttpServletResponse.SC_FORBIDDEN, "AGENT_ROLE_DENIED", "Agent access is restricted to administrators.");
+        if (!(userDetails instanceof LoginUser loginUser) || !AgentAccessPolicy.canUseAgent(loginUser)) {
+            markLastError(session, "AGENT_ACCESS_DENIED");
+            throw auth(HttpServletResponse.SC_FORBIDDEN, "AGENT_ACCESS_DENIED", "Agent access permission is required.");
         }
         if (!jwtUtils.getScopes(claims).contains(SCOPE_WAREHOUSE_READ)) {
             markLastError(session, "AGENT_SCOPE_DENIED");

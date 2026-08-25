@@ -29,6 +29,10 @@ const props = defineProps({
   canExecuteFinishInbound: {
     type: Boolean,
     default: false
+  },
+  canConfirmTasks: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -133,6 +137,7 @@ const sendFeedback = (feedbackType) => {
         :key="`${card.cardType || 'card'}-${card.title || cardIndex}`"
         :card="card"
         :can-execute-finish-inbound="canExecuteFinishInbound"
+        :can-confirm-tasks="canConfirmTasks"
         @card-action="emit('card-action', $event)"
       />
     </div>

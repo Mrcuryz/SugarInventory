@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 class FinishInboundExecutionCompletionServiceTest {
 
     private static final Set<String> S3_AUTHORITIES = Set.of(
-            "task:view", "task:confirm", "agent:finish-inbound:execute");
+            "task:view", "agent:finish-inbound:execute");
 
     @Test
     void successConsumesConfirmationOnlyAfterNoopAndAuditSucceed() {
@@ -86,7 +86,7 @@ class FinishInboundExecutionCompletionServiceTest {
     void domainWriteAuditAndCredentialConsumptionShareTheCompletionBoundary() {
         Fixture fixture = new Fixture();
         fixture.confirmation.setRequiredPermissions(
-                "agent:finish-inbound:execute,task:confirm,task:view");
+                "agent:finish-inbound:execute,task:view");
         when(fixture.domainAdapter.execute(
                 org.mockito.ArgumentMatchers.eq(fixture.preview), any()))
                 .thenReturn(new FinishInboundExecutionDomainAdapter.AdapterResult(

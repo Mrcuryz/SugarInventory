@@ -14,10 +14,8 @@ import com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.mapper.AutoInboundExecutionMapper;
 import com.Laibin.SugarInventory.mapper.PalletCodeMapper;
-import com.Laibin.SugarInventory.mapper.ProductionConsumptionRecordMapper;
 import com.Laibin.SugarInventory.mapper.ProductionReportRecordMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
-import com.Laibin.SugarInventory.mapper.SemiPreparePoolBalanceMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.AutoInboundParseService;
 import com.Laibin.SugarInventory.service.PalletCodeService;
@@ -81,8 +79,6 @@ class AutoInboundConfirmReliabilityTest {
                 productMapper,
                 warehouseMapper,
                 mock(ProductionReportRecordMapper.class),
-                mock(ProductionConsumptionRecordMapper.class),
-                mock(SemiPreparePoolBalanceMapper.class),
                 executionMapper,
                 redisTemplate,
                 objectMapper);

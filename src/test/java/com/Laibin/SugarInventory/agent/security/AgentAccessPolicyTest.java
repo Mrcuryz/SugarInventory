@@ -4,6 +4,7 @@ import com.Laibin.SugarInventory.SpringSecurity.LoginUser;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.domain.po.User;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.List;
 
@@ -32,6 +33,20 @@ class AgentAccessPolicyTest {
     }
 
     @Test
+    void allowsNonAdminOnlyWithExplicitAgentUsePermission() {
+        LoginUser qualityUser = loginUser("QC", AgentAccessPolicy.AGENT_USE_PERMISSION);
+        assertThat(AgentAccessPolicy.canUseAgent(qualityUser)).isTrue();
+        assertThatCode(() -> AgentAccessPolicy.requireAgentAccess(qualityUser)).doesNotThrowAnyException();
+
+        LoginUser staffUser = loginUser("STAFF");
+        assertThat(AgentAccessPolicy.canUseAgent(staffUser)).isFalse();
+        assertThatThrownBy(() -> AgentAccessPolicy.requireAgentAccess(staffUser))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(403);
+    }
+
+    @Test
     void rejectsMissingAuthentication() {
         assertThatThrownBy(() -> AgentAccessPolicy.requireAdmin(null))
                 .isInstanceOf(BusinessException.class)
@@ -46,9 +61,15 @@ class AgentAccessPolicyTest {
     }
 
     private LoginUser loginUser(String roleCode) {
+        return loginUser(roleCode, new String[0]);
+    }
+
+    private LoginUser loginUser(String roleCode, String... permissionCodes) {
         User user = new User();
         user.setId(7);
         user.setRoleCode(roleCode);
-        return new LoginUser(user, List.of());
+        return new LoginUser(user, List.of(permissionCodes).stream()
+                .map(SimpleGrantedAuthority::new)
+                .toList());
     }
 }

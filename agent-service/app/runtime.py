@@ -1810,6 +1810,24 @@ class WarehouseAgentRuntime:
                     if completion is not None:
                         trace["goalCompletion"] = completion
                     return self._finish_llm_response(response, trace, request)
+                if (
+                    decision.toolName == "run_registered_report"
+                    and arguments.get("reportDefinitionId") == "inventory_level_trend_v1"
+                    and exc.code == "UPSTREAM_BUSINESS_ERROR"
+                ):
+                    response = ChatResponse(
+                        agentSessionId=request.agentSessionId,
+                        answer=(
+                            "库存变化趋势目前还没有满足正式发布所需的连续可信日终数据。"
+                            "你仍可查询当前库存；在本地演示环境中，也可以由管理员明确开启并标注为“历史回放模拟”的趋势数据。"
+                        ),
+                        error=AgentError(
+                            code="REPORT_DATA_NOT_READY",
+                            message="库存变化趋势数据仍在积累。",
+                            retryable=False,
+                        ),
+                    )
+                    return self._finish_llm_response(response, trace, request)
                 continue
 
             if previous_error is not None:
@@ -2195,6 +2213,13 @@ class WarehouseAgentRuntime:
             continuation.get("userMessage") or self._latest_user_message(state)
         )
         if entity_type == "BOILING_BATCH":
+            # The batch-list goal ends at candidate discovery. Once the user has
+            # selected a candidate, the business goal has changed to the batch
+            # trace itself. Keeping BOILING_BATCH_LIST locked here makes its
+            # already-complete contract hide query_boiling_batch_trace from the
+            # expert, so a real model can only return a partial answer from the
+            # USER_SELECTION observation.
+            self._begin_registered_goal(state, "BOILING_BATCH_TRACE")
             selected_label = self._safe_display_label(
                 state.selected_boiling_batch.display_label
                 if state.selected_boiling_batch is not None
@@ -3102,12 +3127,18 @@ class WarehouseAgentRuntime:
             self._production_order_ordinal(user_message) is not None
             or self._requests_all_linked_production_orders(user_message)
         )
+        explicit_order_no = self._explicit_production_order_no(user_message)
         if (
             expert_agent != "production_expert"
             or not (
                 self._requires_single_production_order_context(user_message)
                 or explicit_batch_order_scope
             )
+            # A production order named in the current turn is more specific than
+            # the linked-order set retained from an earlier boiling-batch turn.
+            # Let the expert resolve that exact order instead of interrupting
+            # with all historical candidates again.
+            or explicit_order_no is not None
             or (
                 state.selected_production_order is not None
                 and not explicit_batch_order_scope
@@ -3245,6 +3276,15 @@ class WarehouseAgentRuntime:
         return "订单" in text and any(
             marker in text for marker in ("这两个", "两个", "这些", "全部", "所有", "都")
         )
+
+    @staticmethod
+    def _explicit_production_order_no(user_message: str) -> str | None:
+        match = re.search(
+            r"(?<![A-Za-z0-9_-])PO[A-Za-z0-9_-]{4,}(?![A-Za-z0-9_-])",
+            user_message or "",
+            flags=re.IGNORECASE,
+        )
+        return match.group(0) if match else None
 
     @staticmethod
     def _production_order_ordinal(user_message: str) -> int | None:
@@ -5722,34 +5762,30 @@ class WarehouseAgentRuntime:
     def _format_knowledge_answer(self, data: dict[str, Any]) -> str:
         status = str(data.get("status") or "").upper()
         query_label = self._safe_text(data.get("queryLabel")) or "当前问题"
-        evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+        evidence = self._knowledge_unique_evidence(data)
         if status == RetrievalStatus.NO_DATA.value or not evidence:
             return (
                 f"现行知识材料中没有检索到与“{query_label}”直接相关的内容。"
                 "这只表示本次知识库范围内没有证据，不代表相关事实一定不存在。"
             )
-        lines = ["根据现行知识材料，找到以下相关内容："]
-        for index, item in enumerate(evidence[:5], start=1):
-            if not isinstance(item, dict):
-                continue
-            title = self._safe_display_label(str(item.get("title") or "现行资料"))
-            content = self._safe_text(item.get("content"))
-            citation = item.get("citation") if isinstance(item.get("citation"), dict) else {}
-            source = self._knowledge_citation_label(citation)
-            lines.append(f"{index}. {title}")
-            if content:
-                lines.append(f"   {content}")
-            lines.append(f"   来源：{source}")
+        primary = evidence[0]
+        title = self._safe_display_label(str(primary.get("title") or "现行资料"))
+        content = self._safe_text(primary.get("content"))
+        citation = primary.get("citation") if isinstance(primary.get("citation"), dict) else {}
+        lines = [f"根据现行资料，{title}："]
+        if content:
+            lines.append(content)
+        lines.append(f"来源：{self._knowledge_citation_label(citation)}")
+        if len(evidence) > 1:
+            lines.append(f"另有 {len(evidence) - 1} 条不重复的相关依据，见下方来源卡片。")
         if status == RetrievalStatus.DEGRADED.value:
             lines.append("本次查询使用了可核验的关键词证据；语义检索暂时降级。")
         return "\n".join(lines)
 
     def _knowledge_cards(self, data: dict[str, Any]) -> list[BusinessCard]:
-        evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+        evidence = self._knowledge_unique_evidence(data)
         cards: list[BusinessCard] = []
-        for item in evidence[:5]:
-            if not isinstance(item, dict):
-                continue
+        for item in evidence[:3]:
             citation = item.get("citation") if isinstance(item.get("citation"), dict) else {}
             cards.append(
                 BusinessCard(
@@ -5768,6 +5804,28 @@ class WarehouseAgentRuntime:
                 )
             )
         return cards
+
+    def _knowledge_unique_evidence(self, data: dict[str, Any]) -> list[dict[str, Any]]:
+        raw = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+        unique: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            citation = item.get("citation") if isinstance(item.get("citation"), dict) else {}
+            title = self._safe_text(item.get("title"))
+            step = re.search(r"步骤\s*([0-9]+)", title)
+            section_key = f"step:{step.group(1)}" if step else title
+            key = (
+                self._safe_text(citation.get("documentTitle")),
+                str(citation.get("pageNumber") or ""),
+                section_key,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
 
     def _knowledge_citation_label(self, citation: dict[str, Any]) -> str:
         parts = [

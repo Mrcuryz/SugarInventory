@@ -72,17 +72,19 @@ public class LogisticsAgentReadController {
     }
 
     @PostMapping("/pallet-tasks/transition/preview")
-    @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm')")
+    @PreAuthorize("hasAuthority('task:view') and "
+            + "(hasAuthority('task:confirm') or hasAuthority('agent:finish-inbound:execute'))")
     public Result<TaskTransitionPreviewVO> previewTaskTransition(
             @RequestBody @Valid TaskTransitionPreviewDTO request,
             @AuthenticationPrincipal LoginUser loginUser,
             HttpServletRequest httpRequest) {
-        TaskTransitionPreviewVO preview = service.previewTaskTransition(request, loginUser.getUser());
-        Object sessionAttribute = httpRequest.getAttribute(AgentSecurityContext.ATTR_AGENT_SESSION_ID);
-        String agentSessionId = sessionAttribute == null ? null : String.valueOf(sessionAttribute);
         Set<String> authorities = loginUser.getAuthorities().stream()
                 .map(authority -> authority.getAuthority())
                 .collect(Collectors.toUnmodifiableSet());
+        previewArchiveService.requireTransitionAccess(request.getTransition(), authorities);
+        TaskTransitionPreviewVO preview = service.previewTaskTransition(request, loginUser.getUser());
+        Object sessionAttribute = httpRequest.getAttribute(AgentSecurityContext.ATTR_AGENT_SESSION_ID);
+        String agentSessionId = sessionAttribute == null ? null : String.valueOf(sessionAttribute);
         return Result.success(previewArchiveService.persistReady(
                 preview,
                 loginUser.getUser().getId(),
@@ -91,7 +93,8 @@ public class LogisticsAgentReadController {
     }
 
     @PostMapping("/pallet-tasks/finish-inbound/execution/preview")
-    @PreAuthorize("hasAuthority('task:view') and hasAuthority('task:confirm')")
+    @PreAuthorize("hasAuthority('task:view') and "
+            + "(hasAuthority('task:confirm') or hasAuthority('agent:finish-inbound:execute'))")
     public Result<FinishInboundExecutionPreviewVO> previewFinishInboundExecution(
             @RequestBody @Valid FinishInboundExecutionPreviewDTO request,
             @AuthenticationPrincipal LoginUser loginUser,

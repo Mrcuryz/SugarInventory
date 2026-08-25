@@ -74,10 +74,12 @@ class FinishInboundL3ReadinessContractTest {
                 "status: LOCAL_MYSQL_UAT_GO",
                 "execution_implementation_status: S3_CONTROLLED_UI_IMPLEMENTED_DEFAULT_OFF",
                 "production_status: NOT_RELEASED",
-                "next_required_slice: FORMAL_ROLE_OWNER_AND_SEPARATE_PRODUCTION_RELEASE_DECISION",
+                "next_required_slice: SEPARATE_PRODUCTION_RELEASE_DECISION_AND_PRE_PRODUCTION_HUMAN_UAT",
+                "role: WAREHOUSE_MANAGER_WITH_DEDICATED_PERMISSION_WITHOUT_TASK_CONFIRM",
+                "finish_outbound_preview_denied: PASS",
                 "S4_REAL_DOMAIN_AUDIT_FAILURE_ROLLBACK_AND_RECOVERY_LOCAL_UAT",
                 "status: ISOLATED_UAT_PASS_RELEASE_NO_GO",
-                "release_decision: NO_GO_DEFAULT_OFF_ZERO_ROLE_ASSIGNMENTS",
+                "release_decision: NO_GO_DEFAULT_OFF_FORMAL_WAREHOUSE_ROLE_ASSIGNED_FOR_R_AND_D",
                 "execute_mcp_registration_review: NOT_STARTED_REMAINS_UNREGISTERED");
     }
 

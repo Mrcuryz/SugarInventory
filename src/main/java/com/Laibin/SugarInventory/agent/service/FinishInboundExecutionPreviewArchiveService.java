@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.agent.service;
 
 import com.Laibin.SugarInventory.agent.model.FinishInboundExecutionPreviewSnapshot;
 import com.Laibin.SugarInventory.agent.security.FinishInboundExecutionPreviewRefCodec;
+import com.Laibin.SugarInventory.agent.security.FinishInboundExecutionPermissionPolicy;
 import com.Laibin.SugarInventory.common.BusinessException;
 import com.Laibin.SugarInventory.domain.po.AgentFinishInboundExecutionPreview;
 import com.Laibin.SugarInventory.domain.vo.FinishInboundExecutionPreviewVO;
@@ -33,9 +34,6 @@ import java.util.regex.Pattern;
 public class FinishInboundExecutionPreviewArchiveService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern PREVIEW_REF = Pattern.compile("^fip1_[A-Za-z0-9_-]{43}$");
-    private static final Set<String> REQUIRED_PERMISSIONS = Set.of("task:view", "task:confirm");
-    private static final String REQUIRED_PERMISSION_SNAPSHOT = "task:confirm,task:view";
-
     private final AgentFinishInboundExecutionPreviewMapper previewMapper;
     private final FinishInboundExecutionPreviewRefCodec refCodec;
     private final ObjectMapper objectMapper;
@@ -79,7 +77,8 @@ public class FinishInboundExecutionPreviewArchiveService {
         stored.setAgentSessionId(requireSessionId(agentSessionId));
         stored.setPreviewVersion(preview.getPreviewVersion());
         stored.setStatus("READY");
-        stored.setRequiredPermissions(REQUIRED_PERMISSION_SNAPSHOT);
+        stored.setRequiredPermissions(
+                FinishInboundExecutionPermissionPolicy.selectPreviewSnapshot(currentAuthorities));
         stored.setEntityRefsJson(entityRefsJson);
         stored.setNormalizedInputJson(normalizedInputJson);
         stored.setEntityStateJson(entityStateJson);
@@ -112,13 +111,11 @@ public class FinishInboundExecutionPreviewArchiveService {
             throw new BusinessException(404, "成品入库执行预览不存在、已过期或不属于当前用户");
         }
         verifySession(stored.getAgentSessionId(), requireSessionId(agentSessionId));
-        requirePermissions(currentAuthorities);
         if (!"READY".equals(stored.getStatus())) {
             throw new BusinessException(409, "成品入库执行预览已失效，请重新预览");
         }
-        if (!REQUIRED_PERMISSION_SNAPSHOT.equals(stored.getRequiredPermissions())) {
-            throw new BusinessException(409, "成品入库执行预览权限快照校验失败，请重新预览");
-        }
+        FinishInboundExecutionPermissionPolicy.requireStoredPreviewSnapshot(
+                stored.getRequiredPermissions(), currentAuthorities);
         if (stored.getExpiresAt() == null
                 || !stored.getExpiresAt().isAfter(LocalDateTime.now(BUSINESS_ZONE))) {
             throw new BusinessException(410, "成品入库执行预览已过期，请重新预览");
@@ -147,7 +144,7 @@ public class FinishInboundExecutionPreviewArchiveService {
             throw new BusinessException(401, "当前用户未登录");
         }
         String sessionId = requireSessionId(agentSessionId);
-        requirePermissions(currentAuthorities);
+        FinishInboundExecutionPermissionPolicy.selectPreviewSnapshot(currentAuthorities);
         TreeSet<String> requested = new TreeSet<>();
         if (palletCodes != null) {
             palletCodes.stream().map(this::normalizePalletCode).forEach(requested::add);
@@ -193,7 +190,7 @@ public class FinishInboundExecutionPreviewArchiveService {
                 || preview.getItems().size() != preview.getRequestedItemCount()) {
             throw new BusinessException(409, "成品入库执行预览范围无效，请重新预览");
         }
-        requirePermissions(currentAuthorities);
+        FinishInboundExecutionPermissionPolicy.selectPreviewSnapshot(currentAuthorities);
     }
 
     private void verifyStoredContent(AgentFinishInboundExecutionPreview stored) {
@@ -227,13 +224,6 @@ public class FinishInboundExecutionPreviewArchiveService {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException(message, exception);
-        }
-    }
-
-    private static void requirePermissions(Set<String> currentAuthorities) {
-        Set<String> authorities = currentAuthorities == null ? Set.of() : currentAuthorities;
-        if (!authorities.containsAll(REQUIRED_PERMISSIONS)) {
-            throw new BusinessException(403, "当前用户没有查看或生成成品入库执行预览的权限");
         }
     }
 

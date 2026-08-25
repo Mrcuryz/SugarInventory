@@ -199,6 +199,69 @@ def test_deterministic_knowledge_queries_use_only_process_local_expert_tool(
     assert KNOWLEDGE_TOOL_NAME not in response.answer
 
 
+def test_knowledge_answer_deduplicates_same_document_step_and_limits_cards() -> None:
+    base = evidence_response()
+    evidence = (
+        base.evidence[0].model_copy(
+            update={"title": "单晶黄冰糖工艺流程：步骤 1"}
+        ),
+        KnowledgeEvidence(
+            evidenceId="ev_1123456789abcdef",
+            title="单晶黄冰糖工艺流程：步骤 1 控制参数",
+            content="化糖后依次进行过滤、浓缩和结晶，控制参数见工艺要求。",
+            citation=KnowledgeCitation(
+                documentTitle="单晶黄冰糖工艺流程图24.12",
+                pageNumber=1,
+                sectionLabel="步骤 1 控制参数",
+            ),
+        ),
+        KnowledgeEvidence(
+            evidenceId="ev_2123456789abcdef",
+            title="单晶黄冰糖工艺流程：步骤 2",
+            content="过滤后进入浓缩工序。",
+            citation=KnowledgeCitation(
+                documentTitle="单晶黄冰糖工艺流程图24.12",
+                pageNumber=1,
+                sectionLabel="步骤 2",
+            ),
+        ),
+        KnowledgeEvidence(
+            evidenceId="ev_3123456789abcdef",
+            title="单晶黄冰糖工艺流程：步骤 3",
+            content="浓缩后进入结晶工序。",
+            citation=KnowledgeCitation(
+                documentTitle="单晶黄冰糖工艺流程图24.12",
+                pageNumber=1,
+                sectionLabel="步骤 3",
+            ),
+        ),
+    )
+    duplicate = KnowledgeEvidence(
+        evidenceId="ev_4123456789abcdef",
+        title="单晶黄冰糖工艺流程：步骤 1 工艺说明",
+        content="步骤 1 的同义重复材料。",
+        citation=KnowledgeCitation(
+            documentTitle="单晶黄冰糖工艺流程图24.12",
+            pageNumber=1,
+            sectionLabel="步骤 1 工艺说明",
+        ),
+    )
+    knowledge = StubKnowledgeService(base.model_copy(update={"evidence": evidence + (duplicate,)}))
+    runtime = WarehouseAgentRuntime(
+        tool_client=MockToolClient(),
+        knowledge_service=knowledge,  # type: ignore[arg-type]
+    )
+
+    response = runtime.chat(
+        chat_request("单晶黄冰糖工艺流程是什么", session="agt_knowledge_dedup")
+    )
+
+    assert response.answer.count("化糖后依次进行过滤、浓缩和结晶") == 1
+    assert "同义重复材料" not in response.answer
+    assert "另有 2 条不重复的相关依据" in response.answer
+    assert len(response.cards) == 3
+
+
 def test_authoritative_no_data_completes_but_unavailable_does_not() -> None:
     no_data = StubKnowledgeService(
         KnowledgeSearchResponse(

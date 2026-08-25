@@ -1,0 +1,41 @@
+schemaVersion: 1
+name: agent-performance-slo
+effectiveDate: "2026-08-13"
+policyStatus: APPROVED
+evidenceStatus: PARTIAL
+scope:
+  - inventory
+  - assay
+  - production
+  - registered_report
+hardGates:
+  corpusCompletionRate: 1.0
+  factualConsistencyRate: 1.0
+  unauthorizedToolCalls: 0
+  realtimeRequestsRoutedToRag: 0
+  writesOnFailure: 0
+grayFloor:
+  firstVisibleProgressP95Ms: 1500
+  endToEndP50Ms: 22000
+  endToEndP90Ms: 40000
+  endToEndP95Ms: 50000
+  hardTimeoutMs: 90000
+  toolExecutionP95Ms: 1000
+optimizationTarget:
+  endToEndP50Ms: 18000
+  endToEndP95Ms: 35000
+  maxPerDomainP95RegressionRatio: 0.2
+  resultAnalysisP95Ms: 20000
+  slowestRequestMs: 60000
+latestEvidence:
+  source: agent-four-domain-performance-optimization-review-2026-08-12.md
+  samples: 80
+  successfulSamples: 80
+  endToEndP50Ms: 19953
+  endToEndP95Ms: 46562
+  toolExecutionP95Ms: 187
+  missing:
+    - firstVisibleProgressP95Ms
+    - endToEndP90Ms
+    - perDomainP95RegressionRatio
+    - slowestRequestMs

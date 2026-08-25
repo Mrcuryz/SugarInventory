@@ -9,23 +9,18 @@ import com.Laibin.SugarInventory.domain.enumObject.AutoInboundType;
 import com.Laibin.SugarInventory.domain.po.AutoInboundExecution;
 import com.Laibin.SugarInventory.domain.po.PalletCode;
 import com.Laibin.SugarInventory.domain.po.Product;
-import com.Laibin.SugarInventory.domain.po.ProductionConsumptionRecord;
 import com.Laibin.SugarInventory.domain.po.ProductionReportRecord;
-import com.Laibin.SugarInventory.domain.po.SemiPreparePoolBalance;
 import com.Laibin.SugarInventory.domain.po.User;
 import com.Laibin.SugarInventory.domain.po.Warehouse;
 import com.Laibin.SugarInventory.domain.redis.AutoInboundTask;
 import com.Laibin.SugarInventory.domain.redis.AutoInboundTaskItem;
-import com.Laibin.SugarInventory.domain.redis.ProductionConsumptionEntry;
 import com.Laibin.SugarInventory.domain.redis.ProductionConsumptionItem;
 import com.Laibin.SugarInventory.domain.vo.AutoInboundParseResponse;
 import com.Laibin.SugarInventory.domain.vo.InVO;
 import com.Laibin.SugarInventory.mapper.AutoInboundExecutionMapper;
 import com.Laibin.SugarInventory.mapper.PalletCodeMapper;
-import com.Laibin.SugarInventory.mapper.ProductionConsumptionRecordMapper;
 import com.Laibin.SugarInventory.mapper.ProductionReportRecordMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
-import com.Laibin.SugarInventory.mapper.SemiPreparePoolBalanceMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
 import com.Laibin.SugarInventory.service.AutoInboundConfirmService;
 import com.Laibin.SugarInventory.service.AutoInboundParseService;
@@ -73,8 +68,6 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
     private final ProductionReportRecordMapper productionReportRecordMapper;
-    private final ProductionConsumptionRecordMapper productionConsumptionRecordMapper;
-    private final SemiPreparePoolBalanceMapper semiPreparePoolBalanceMapper;
     private final AutoInboundExecutionMapper autoInboundExecutionMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
@@ -159,7 +152,6 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
 
                     AutoInboundExecution execution = reserveExecution(batchId, taskId, requestHash, user);
                     executeTask(task, prepared, user, "AUTO_INBOUND:" + batchId);
-                    applyProductionConsumption(task, batchId, user);
                     execution.setStatus("COMMITTED");
                     execution.setResultJson(writeTaskJson(task));
                     execution.setUpdatedAt(LocalDateTime.now());
@@ -704,134 +696,6 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
         record.setUpdatedAt(LocalDateTime.now());
         record.setRemark(buildReportRemark(batchId, confirmedTasks));
         productionReportRecordMapper.insert(record);
-    }
-
-    private void applyProductionConsumption(AutoInboundTask task, String batchId, User user) {
-        if (task.getType() != AutoInboundType.FINISHED_PRODUCT) {
-            return;
-        }
-        List<ProductionConsumptionItem> items = task.getProductionConsumptionItems();
-        if (items == null || items.isEmpty()) {
-            return;
-        }
-        List<String> results = items.stream()
-                .map(item -> (item.getMaterialNameRaw() == null || item.getMaterialNameRaw().isBlank()
-                        ? "半成品领用提示"
-                        : item.getMaterialNameRaw()) + "：已留档，请在生产订单中确认实际领用二维码")
-                .toList();
-        task.setProductionConsumptionResults(results);
-        if (!results.isEmpty()) {
-            task.setConsumptionRemark(appendRemark(task.getConsumptionRemark(), String.join("；", results)));
-        }
-    }
-
-    private void consumeProductionItem(AutoInboundTask task, ProductionConsumptionItem item,
-                                       String batchId, User user, List<String> results) {
-        if (item == null) {
-            return;
-        }
-        String materialName = firstNonBlank(item.getProductName(), item.getMaterialNameRaw(), "未识别半成品");
-        if (item.getProductId() == null || Boolean.FALSE.equals(item.getMatchedProduct())) {
-            results.add(materialName + " 未匹配产品，生产消耗仅留档");
-            return;
-        }
-        Product product = productMapper.selectById(item.getProductId());
-        if (product == null) {
-            results.add(materialName + " 产品不存在，生产消耗仅留档");
-            return;
-        }
-        Integer piecesPerPallet = product.getPiecesPerPallet();
-        if (piecesPerPallet == null || piecesPerPallet <= 0) {
-            results.add(product.getProductName() + " 未配置每板件数，生产消耗仅留档");
-            return;
-        }
-        List<ProductionConsumptionEntry> entries = item.getItems() == null ? List.of() : item.getItems();
-        if (entries.isEmpty()) {
-            results.add(product.getProductName() + " 未识别消耗数量，生产消耗仅留档");
-            return;
-        }
-        for (ProductionConsumptionEntry entry : entries) {
-            consumeProductionEntry(task, product, entry, batchId, user, results);
-        }
-    }
-
-    private void consumeProductionEntry(AutoInboundTask task, Product product, ProductionConsumptionEntry entry,
-                                        String batchId, User user, List<String> results) {
-        if (entry == null || entry.getProductionDate() == null) {
-            results.add(product.getProductName() + " 未识别生产日期，生产消耗仅留档");
-            return;
-        }
-        int consumePieces = calculateConsumePieces(product, entry);
-        if (consumePieces <= 0) {
-            results.add(product.getProductName() + " " + entry.getProductionDate() + " 未识别有效消耗数量，生产消耗仅留档");
-            return;
-        }
-        List<SemiPreparePoolBalance> balances = semiPreparePoolBalanceMapper.selectActiveByProductDateForUpdate(
-                product.getId(), entry.getProductionDate());
-        int available = balances.stream().mapToInt(balance -> safeInt(balance.getRemainingPieces())).sum();
-        if (available < consumePieces) {
-            results.add(product.getProductName() + " " + entry.getProductionDate()
-                    + " 半成品历史余额不足，需要" + consumePieces + "件，当前" + available + "件，生产消耗仅留档");
-            return;
-        }
-        int rest = consumePieces;
-        LocalDateTime now = LocalDateTime.now();
-        for (SemiPreparePoolBalance balance : balances) {
-            if (rest <= 0) {
-                break;
-            }
-            int currentRemaining = safeInt(balance.getRemainingPieces());
-            if (currentRemaining <= 0) {
-                continue;
-            }
-            int deducted = Math.min(currentRemaining, rest);
-            int newRemaining = currentRemaining - deducted;
-            balance.setConsumedPieces(safeInt(balance.getConsumedPieces()) + deducted);
-            balance.setRemainingPieces(newRemaining);
-            balance.setRemainingWeight(resolveRemainingWeight(balance, newRemaining));
-            balance.setStatus(newRemaining == 0 ? "CONSUMED" : "ACTIVE");
-            balance.setLastConsumedAt(now);
-            balance.setUpdatedAt(now);
-            semiPreparePoolBalanceMapper.updateById(balance);
-            insertConsumptionRecord(task, product, balance, deducted, batchId, user, entry, now);
-            rest -= deducted;
-        }
-        results.add(product.getProductName() + " " + entry.getProductionDate()
-                + " 已登记半成品历史用量" + consumePieces + "件");
-    }
-
-    private int calculateConsumePieces(Product product, ProductionConsumptionEntry entry) {
-        int boards = entry.getBoardCount() == null ? 0 : entry.getBoardCount();
-        int pieces = entry.getPieceCount() == null ? 0 : entry.getPieceCount();
-        return boards * product.getPiecesPerPallet() + pieces;
-    }
-
-    private java.math.BigDecimal resolveRemainingWeight(SemiPreparePoolBalance balance, int remainingPieces) {
-        java.math.BigDecimal weightPerPiece = balance.getWeightPerPiece();
-        if (weightPerPiece == null) {
-            weightPerPiece = java.math.BigDecimal.ZERO;
-        }
-        return weightPerPiece.multiply(java.math.BigDecimal.valueOf(remainingPieces));
-    }
-
-    private void insertConsumptionRecord(AutoInboundTask task, Product product, SemiPreparePoolBalance balance,
-                                         int deducted, String batchId, User user,
-                                         ProductionConsumptionEntry entry, LocalDateTime now) {
-        ProductionConsumptionRecord record = new ProductionConsumptionRecord();
-        record.setProductId(product.getId());
-        record.setProductNameSnapshot(product.getProductName());
-        record.setProductionDate(entry.getProductionDate());
-        record.setScreenMeshId(balance.getScreenMeshId());
-        record.setAssayId(balance.getAssayId());
-        record.setConsumePieces(deducted);
-        record.setBalanceId(balance.getId());
-        record.setSourceBatchId(batchId);
-        record.setSourceTaskId(task.getTaskId());
-        record.setSourceText(task.getSourceText());
-        record.setCreatedBy(user == null ? null : user.getId());
-        record.setCreatedAt(now);
-        record.setRemark("智能报数成品入库登记半成品历史用量");
-        productionConsumptionRecordMapper.insert(record);
     }
 
     private String buildReportRemark(String batchId, List<AutoInboundTask> confirmedTasks) {

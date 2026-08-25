@@ -15,7 +15,7 @@ import { exportRegisteredReportRunXlsx } from '@/api/analyticsReport'
 import { useAuthStore } from '@/stores/auth'
 import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
 import RegisteredReportHistoryDialog from '@/components/agent/RegisteredReportHistoryDialog.vue'
-import { isAgentAdminRole } from '@/components/agent/agentAccess.mjs'
+import { canUseAgent } from '@/components/agent/agentAccess.mjs'
 import PalletTaskBatchDialog from '@/components/agent/PalletTaskBatchDialog.vue'
 import FinishInboundExecutionConfirmDialog from '@/components/agent/FinishInboundExecutionConfirmDialog.vue'
 import FixedQrTaskCreationDialog from '@/components/agent/FixedQrTaskCreationDialog.vue'
@@ -83,10 +83,14 @@ const sessionStatusClass = computed(() => ({
   active: sessionStatus.value === 'ACTIVE',
   inactive: sessionStatus.value !== 'ACTIVE'
 }))
-const isAdmin = computed(() => isAgentAdminRole(session.value?.roleCode || authStore.roleCode))
+const hasAgentAccess = computed(() => canUseAgent(
+  session.value?.roleCode || authStore.roleCode,
+  session.value?.permissionCodes || authStore.permissionCodes
+))
 const canExecuteFinishInbound = computed(() =>
   authStore.permissionCodes.includes('agent:finish-inbound:execute')
 )
+const canConfirmTasks = computed(() => authStore.permissionCodes.includes('task:confirm'))
 const currentUserName = computed(() => session.value?.name || authStore.name || authStore.employeeId || '当前用户')
 const assistantName = computed(() => '智能仓储助手')
 const userAvatarText = computed(() => avatarText(currentUserName.value, '用'))
@@ -105,7 +109,7 @@ const avatarText = (name, fallback) => {
 }
 
 const open = async () => {
-  if (!isAdmin.value) return
+  if (!hasAgentAccess.value) return
   if (!session.value) {
     await startSession()
   }
@@ -831,6 +835,7 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
               :shadow-compare-mode="shadowCompareMode"
               :sending="sending"
               :can-execute-finish-inbound="canExecuteFinishInbound"
+              :can-confirm-tasks="canConfirmTasks"
               @choose-option="chooseOption($event, item)"
               @feedback="submitMessageFeedback"
               @card-action="handleCardAction"
@@ -888,6 +893,7 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
     :pallet-codes="taskBatchDialog.palletCodes"
     :default-warehouse-name="taskBatchDialog.defaultWarehouseName"
     :default-side="taskBatchDialog.defaultSide"
+    :can-direct-submit="canConfirmTasks"
     @completed="handleTaskBatchCompleted"
     @preview-requested="handleFinishInboundPreviewRequested"
   />

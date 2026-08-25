@@ -26,7 +26,9 @@ class AgentReadPermissionMatrixTest {
         assertPermission(WarehouseAgentReadController.class, "queryMixedStorageFacts", "hasAuthority('warehouse:view')");
         assertPermission(LogisticsAgentReadController.class, "queryPalletTasks", "hasAuthority('task:view')");
         assertPermission(LogisticsAgentReadController.class, "previewTaskTransition",
-                "hasAuthority('task:view') and hasAuthority('task:confirm')");
+                "hasAuthority('task:view') and (hasAuthority('task:confirm') or hasAuthority('agent:finish-inbound:execute'))");
+        assertPermission(LogisticsAgentReadController.class, "previewFinishInboundExecution",
+                "hasAuthority('task:view') and (hasAuthority('task:confirm') or hasAuthority('agent:finish-inbound:execute'))");
         assertPermission(LogisticsAgentReadController.class, "queryStockDocuments", "hasAuthority('document:view')");
         assertPermission(LogisticsAgentReadController.class, "queryAutoInboundBatches", "hasAuthority('task:view')");
         assertPermission(LogisticsAgentReadController.class, "getAutoInboundBatchDetail", "hasAuthority('task:view')");

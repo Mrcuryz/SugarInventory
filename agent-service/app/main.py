@@ -42,12 +42,15 @@ from app.tools.client import ALLOWED_TOOLS, AgentToolClient, JavaGatewayToolClie
 
 logger = logging.getLogger(__name__)
 ADMIN_ROLE_CODES = frozenset({"ADMIN", "SUPER_ADMIN"})
+AGENT_USE_PERMISSION = "agent:use"
 
 
-def require_agent_admin(user: UserSummary | None) -> None:
+def require_agent_access(user: UserSummary | None) -> None:
     role_code = (user.roleCode or "").strip().upper() if user is not None else ""
-    if user is None or user.userId is None or user.userId <= 0 or role_code not in ADMIN_ROLE_CODES:
-        raise HTTPException(status_code=403, detail="Agent access is restricted to administrators.")
+    permission_codes = set(user.permissionCodes or []) if user is not None else set()
+    allowed = role_code in ADMIN_ROLE_CODES or AGENT_USE_PERMISSION in permission_codes
+    if user is None or user.userId is None or user.userId <= 0 or not allowed:
+        raise HTTPException(status_code=403, detail="Agent access permission is required.")
 
 
 def create_app(
@@ -192,7 +195,7 @@ def create_app(
         dependencies=[Depends(authorize_java)],
     )
     def chat(request: ChatRequest) -> ChatResponse:
-        require_agent_admin(request.user)
+        require_agent_access(request.user)
         if isinstance(request.message, CandidateSelectedMessage):
             return runtime.resume(
                 ResumeRequest(
@@ -217,7 +220,7 @@ def create_app(
         dependencies=[Depends(authorize_java)],
     )
     def chat_stream(request: ChatRequest) -> StreamingResponse:
-        require_agent_admin(request.user)
+        require_agent_access(request.user)
         return StreamingResponse(
             sse_for_request(
                 request,
@@ -250,7 +253,7 @@ def create_app(
         dependencies=[Depends(authorize_java)],
     )
     def resume(request: ResumeRequest) -> ChatResponse:
-        require_agent_admin(request.user)
+        require_agent_access(request.user)
         return runtime.resume(request)
 
     @app.delete(

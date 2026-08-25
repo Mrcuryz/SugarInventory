@@ -35,6 +35,9 @@ class FinishInboundExecutionS3ContractTest {
                 "hasAuthority('agent:finish-inbound:execute')",
                 "confirmForDomainExecution",
                 "confirm-and-execute");
+        assertThat(controller).doesNotContain(
+                "hasAuthority('task:confirm')",
+                "AgentAccessPolicy.requireAdmin");
         assertThat(ui).doesNotContain("executionToken", "idempotencyKey", "confirmationRef");
         assertThat(McpInternalAgentToolGatewayService.allowedTools())
                 .doesNotContain("execute_finish_inbound_task")

@@ -82,7 +82,12 @@ class FinishInboundExecutionS4ContractTest {
                 "[string]$LoginPassword = \"lbsp-isolated-uat\"",
                 "pass -PythonExecutable",
                 "$env:PYTHONPATH = $PythonPath",
-                "$env:WEB_LOGIN_PASSWORD = $LoginPassword");
+                "$env:WEB_LOGIN_PASSWORD = $LoginPassword",
+                "[switch]$EnableRag",
+                "[switch]$RequireRag",
+                "[switch]$EnableDatabaseSchemaVerification",
+                "$env:AGENT_RAG_REQUIRED = if ($RequireRag)",
+                "$env:DATABASE_SCHEMA_VERIFICATION_ENABLED = if ($EnableDatabaseSchemaVerification)");
     }
 
     @Test

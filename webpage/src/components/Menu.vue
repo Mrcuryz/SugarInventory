@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import PageTabs from '@/components/PageTabs.vue'
 import AgentAssistant from '@/components/AgentAssistant.vue'
-import { isAgentAdminRole } from '@/components/agent/agentAccess.mjs'
+import { canUseAgent as hasAgentAccess } from '@/components/agent/agentAccess.mjs'
 import { useTabsStore } from '@/stores/tabs'
 import { filterMenuByPermissions, menuList } from '@/utils/navigation'
 import { useAuthStore } from '@/stores/auth'
@@ -34,7 +34,7 @@ const breadcrumbs = computed(() => route.matched
 const activeMenu = computed(() => route.path)
 const visibleMenus = computed(() => filterMenuByPermissions(menuList, authStore.permissionCodes, authStore.roleCode))
 const displayName = computed(() => authStore.name || authStore.employeeId || '当前账号')
-const canUseAgent = computed(() => isAgentAdminRole(authStore.roleCode))
+const canUseAgent = computed(() => hasAgentAccess(authStore.roleCode, authStore.permissionCodes))
 
 watch(
   () => route.fullPath,

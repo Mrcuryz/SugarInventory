@@ -14,6 +14,18 @@ param(
 
     [string]$PythonPath,
 
+    [string]$RagRoot,
+
+    [string]$RagModelPath,
+
+    [switch]$EnableRag,
+
+    [switch]$RequireRag,
+
+    [switch]$EnableDatabaseSchemaVerification,
+
+    [switch]$EnableInventoryTrendSimulation,
+
     [switch]$EnableFinishInboundS2Noop,
 
     [switch]$EnableFinishInboundS3Execute
@@ -67,6 +79,32 @@ if (-not [string]::IsNullOrWhiteSpace($PythonPath)) {
     $env:PYTHONPATH = $PythonPath
 }
 $env:WEB_LOGIN_PASSWORD = $LoginPassword
+if ($RequireRag -and -not $EnableRag) {
+    throw '-RequireRag requires -EnableRag'
+}
+if ($EnableRag) {
+    $effectiveRagRoot = if ([string]::IsNullOrWhiteSpace($RagRoot)) {
+        Join-Path $projectRoot 'deploy\simple\artifacts\rag'
+    } else {
+        $RagRoot
+    }
+    $effectiveRagModelPath = if ([string]::IsNullOrWhiteSpace($RagModelPath)) {
+        Join-Path $projectRoot 'deploy\simple\artifacts\rag-model'
+    } else {
+        $RagModelPath
+    }
+    $env:AGENT_RAG_ENABLED = 'true'
+    $env:AGENT_RAG_REQUIRED = if ($RequireRag) { 'true' } else { 'false' }
+    $env:AGENT_RAG_ROOT = $effectiveRagRoot
+    $env:AGENT_RAG_MODEL_PATH = $effectiveRagModelPath
+} else {
+    $env:AGENT_RAG_ENABLED = 'false'
+    $env:AGENT_RAG_REQUIRED = 'false'
+    Remove-Item Env:AGENT_RAG_ROOT -ErrorAction SilentlyContinue
+    Remove-Item Env:AGENT_RAG_MODEL_PATH -ErrorAction SilentlyContinue
+}
+$env:DATABASE_SCHEMA_VERIFICATION_ENABLED = if ($EnableDatabaseSchemaVerification) { 'true' } else { 'false' }
+$env:INVENTORY_TREND_SIMULATION_ENABLED = if ($EnableInventoryTrendSimulation) { 'true' } else { 'false' }
 
 # Python Agent and the Java fallback client use different environment names for
 # the same model credential. Keep the mapping process-local so the source env

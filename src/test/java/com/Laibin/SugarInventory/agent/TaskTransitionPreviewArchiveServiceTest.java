@@ -133,8 +133,18 @@ class TaskTransitionPreviewArchiveServiceTest {
         assertThatThrownBy(() -> service.loadOwnedActive(
                 stored.getPreviewRef(), 7, "agt-session-1", Set.of("task:view")))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("没有查看或继续");
+                .hasMessageContaining("没有查看或生成成品入库执行预览");
 
+        Set<String> warehouseAuthorities = Set.of(
+                "task:view", "agent:finish-inbound:execute");
+        AgentTaskTransitionPreview dedicatedStored = readyStored(service, mapper, warehouseAuthorities);
+        assertThat(dedicatedStored.getRequiredPermissions())
+                .isEqualTo("agent:finish-inbound:execute,task:view");
+        when(mapper.selectOne(any())).thenReturn(dedicatedStored);
+        assertThat(service.loadOwnedActive(dedicatedStored.getPreviewRef(), 7,
+                "agt-session-1", warehouseAuthorities).row()).isSameAs(dedicatedStored);
+
+        when(mapper.selectOne(any())).thenReturn(stored);
         stored.setExpiresAt(LocalDateTime.now().minusSeconds(1));
         assertThatThrownBy(() -> service.loadOwnedActive(
                 stored.getPreviewRef(), 7, "agt-session-1", AUTHORITIES))
@@ -147,6 +157,40 @@ class TaskTransitionPreviewArchiveServiceTest {
                 stored.getPreviewRef(), 7, "agt-session-1", AUTHORITIES))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("内容校验失败");
+    }
+
+    @Test
+    void dedicatedInboundPermissionCannotPreviewOutboundOrTransfer() {
+        AgentTaskTransitionPreviewMapper mapper = mock(AgentTaskTransitionPreviewMapper.class);
+        TaskTransitionPreviewArchiveService service = service(mapper);
+        Set<String> warehouseAuthorities = Set.of(
+                "task:view", "agent:finish-inbound:execute");
+        TaskTransitionPreviewVO inbound = readyPreview();
+        TaskTransitionPreviewVO outbound = TaskTransitionPreviewVO.builder()
+                .dataScope(inbound.getDataScope())
+                .previewVersion(inbound.getPreviewVersion())
+                .previewStatus(inbound.getPreviewStatus())
+                .previewRef(inbound.getPreviewRef())
+                .stateDigest(inbound.getStateDigest())
+                .previewedAt(inbound.getPreviewedAt())
+                .expiresAt(inbound.getExpiresAt())
+                .transition("CONFIRM_FINISH_OUTBOUND")
+                .transitionLabel("确认成品出库")
+                .canOpenBusinessDialog(true)
+                .requestedTaskCount(inbound.getRequestedTaskCount())
+                .eligibleTaskCount(inbound.getEligibleTaskCount())
+                .tasks(inbound.getTasks())
+                .requiredUserInputs(inbound.getRequiredUserInputs())
+                .blockingIssues(inbound.getBlockingIssues())
+                .warnings(inbound.getWarnings())
+                .limitations(inbound.getLimitations())
+                .build();
+
+        assertThatThrownBy(() -> service.requireTransitionAccess(
+                outbound.getTransition(), warehouseAuthorities))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("没有查看或继续此任务预览的权限");
+        verify(mapper, never()).insert(any());
     }
 
     @Test
@@ -170,6 +214,17 @@ class TaskTransitionPreviewArchiveServiceTest {
         return new TaskTransitionPreviewArchiveService(
                 mapper,
                 new ObjectMapper().findAndRegisterModules());
+    }
+
+    private static AgentTaskTransitionPreview readyStored(
+            TaskTransitionPreviewArchiveService service,
+            AgentTaskTransitionPreviewMapper mapper,
+            Set<String> authorities) {
+        service.persistReady(readyPreview(), 7, "agt-session-1", authorities);
+        ArgumentCaptor<AgentTaskTransitionPreview> captor =
+                ArgumentCaptor.forClass(AgentTaskTransitionPreview.class);
+        verify(mapper, org.mockito.Mockito.atLeastOnce()).insert(captor.capture());
+        return captor.getAllValues().get(captor.getAllValues().size() - 1);
     }
 
     private static TaskTransitionPreviewVO readyPreview() {

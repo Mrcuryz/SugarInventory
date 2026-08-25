@@ -3314,12 +3314,12 @@ def test_java_service_key_is_required_for_real_gateway_mode() -> None:
     [
         None,
         {"userId": 7, "roleCode": "STAFF"},
-        {"userId": 7, "roleCode": "QC"},
+        {"userId": 7, "roleCode": "QC", "permissionCodes": ["assay:view"]},
         {"userId": 7, "roleCode": "WAREHOUSE"},
         {"userId": None, "roleCode": "ADMIN"},
     ],
 )
-def test_internal_chat_rejects_missing_or_non_admin_user_context(user: dict[str, Any] | None) -> None:
+def test_internal_chat_rejects_missing_or_unauthorized_user_context(user: dict[str, Any] | None) -> None:
     app = create_app(
         Settings(tool_mode="mock"),
         tool_client=MockToolClient(),
@@ -3331,7 +3331,7 @@ def test_internal_chat_rejects_missing_or_non_admin_user_context(user: dict[str,
     response = TestClient(app).post("/internal/agent/chat", json=payload)
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Agent access is restricted to administrators."
+    assert response.json()["detail"] == "Agent access permission is required."
 
 
 @pytest.mark.parametrize("role_code", ["ADMIN", "SUPER_ADMIN", " super_admin "])
@@ -3343,6 +3343,22 @@ def test_internal_chat_accepts_admin_role_context(role_code: str) -> None:
     )
     payload = chat_payload("你是谁？")
     payload["user"]["roleCode"] = role_code
+
+    response = TestClient(app).post("/internal/agent/chat", json=payload)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("role_code", ["QC", "WAREHOUSE_MANAGER", "PROD_SUPERVISOR"])
+def test_internal_chat_accepts_explicit_agent_use_permission(role_code: str) -> None:
+    app = create_app(
+        Settings(tool_mode="mock"),
+        tool_client=MockToolClient(),
+        checkpointer=InMemoryCheckpointer(),
+    )
+    payload = chat_payload("你是谁？")
+    payload["user"]["roleCode"] = role_code
+    payload["user"]["permissionCodes"] = ["agent:use"]
 
     response = TestClient(app).post("/internal/agent/chat", json=payload)
 

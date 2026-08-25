@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\wechat-auto-sdk-review\WeChatAuto4_X\WeChatAuto\WeChatAuto.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\wechat-auto-sdk-review\Resources\models\ch_PP-OCRv5_mobile_det.onnx" Link="models\ch_PP-OCRv5_mobile_det.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\wechat-auto-sdk-review\Resources\models\ch_ppocr_mobile_v2.0_cls_infer.onnx" Link="models\ch_ppocr_mobile_v2.0_cls_infer.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\wechat-auto-sdk-review\Resources\models\ch_PP-OCRv5_rec_mobile_infer.onnx" Link="models\ch_PP-OCRv5_rec_mobile_infer.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\wechat-auto-sdk-review\Resources\models\ppocrv5_dict.txt" Link="models\ppocrv5_dict.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

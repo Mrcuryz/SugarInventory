@@ -14,12 +14,12 @@
 
 ## 当前状态
 
-- 最后更新：2026-08-12
-- 总体阶段：Agent v1 只读查询和 v2-A 七个登记报表定义已完成本地工程验收；两个 L2 预览已登记；首个 L3 成品入库候选完成 S0～S4 隔离技术验收，但正式角色与生产发布未获批准，仍默认关闭
+- 最后更新：2026-08-13
+- 总体阶段：Agent v1 只读查询和 v2-A 七个登记报表定义已完成本地工程验收；仓管、质检、生产主管最小助手入口已完成工程和隔离 HTTP UAT；两个 L2 预览已登记；首个 L3 成品入库责任角色已确定为仓管并完成隔离真实写入验收，生产发布仍未批准且功能开关默认关闭
 - 当前实施切片：`PROJECT-HOLISTIC-REAUDIT-AND-READINESS`
-- 当前工作状态：LOCAL_ENGINEERING_BASELINE_PASS / SHADOW_BROWSER_UAT_PASS / PRODUCTION_RELEASE_NO_GO（Python 485、Java 438、MCP 72、Web 91 与构建通过；性能、仓库外部 RAG 材料/正式资产交付、库存历史 0/7、正式角色/真人验收仍阻断生产发布；本轮改动已建立 Git 基线）
-- 当前负责线程：Codex 全项目顺序复审与整改线程（2026-08-12）
-- 当前文件范围：登记报表执行状态分类、三类账号权限矩阵、shadow 浏览器证据与文档；不保存问题/正文/工具参数，不修改业务数据或正式权限
+- 当前工作状态：LOCAL_ENGINEERING_BASELINE_PASS / WAREHOUSE_CONTROLLED_INBOUND_UAT_PASS / PRODUCTION_RELEASE_NO_GO（仓管专用成品入库权限不包含 `task:confirm`，真实隔离写入、重放和出库拒绝通过；正式性能证据、仓库外部 RAG 正式资产、目标环境库存自然连续 7 天和上线前真人验收仍阻断生产发布）
+- 当前负责线程：Codex 全项目顺序复审与整改线程（2026-08-13）
+- 当前文件范围：正式性能标准、三类业务角色与助手入口、库存趋势门禁复核和最终回归；不保存问题正文、工具参数、密码或 env 内容，不自动修改任何现有用户角色
 
 ## 已确认基线
 
@@ -584,6 +584,9 @@
 
 ## 变更日志
 
+- 2026-08-13：完成正式性能口径、三类最小业务角色、库存趋势证据边界和阶段准入封板。性能灰度底线固定为首个进度 P95 ≤ 1.5 秒、端到端 P50/P90/P95 ≤ 22/40/50 秒、硬超时 ≤ 90 秒、工具 P95 ≤ 1 秒；现有证据仍为 `EVIDENCE_PARTIAL`。新增 `agent:use`、`WAREHOUSE_MANAGER` 和 `PROD_SUPERVISOR`，既有 `QC` 只补助手入口；一次性三角色 HTTP UAT 覆盖登录、Agent 会话、岗位只读、跨岗位拒绝和零 Agent 写权限，夹具已精确清理且未改现有账号。库存趋势本地 7 天回放通过，目标环境自然连续 7 天仍为生产门禁。最终回归为 Java 444、warehouse-mcp 72、Python `491 passed, 5 skipped`、Web 92 与前端生产构建通过，迁移 44/44、待执行 0。当前结论为 `LOCAL_BASELINE_PASS / PRODUCTION_RELEASE_NO_GO / L3_EXECUTION_NOT_AUTHORIZED`，详见 `agent-readiness-gate-closure-2026-08-13.md`。
+- 2026-08-13：根据研发阶段暂无真人、仓管应具备入库权限的业务决定，将 `agent:finish-inbound:execute` 正式分配给 `WAREHOUSE_MANAGER`，但没有授予同时覆盖出库和调拨的 `task:confirm`。预览归档按管理员人工路径或仓管受控路径保存实际权限快照；S3 只要求 `task:view + agent:finish-inbound:execute`，仓管前端不显示人工直接提交、出库或调拨处理入口。本地 shadow 迁移推进至 45/45，一次性仓管账号以 18 项权限完成真实成品入库 1 次、3 条审计、同键重放无第二次写入、0 次 MCP execute，并验证出库预览 403；夹具已清理。全量 Java 447、warehouse-mcp 72、Web Node 92 与生产构建通过。研发继续为 GO，但生产开关仍默认关闭、MCP execute 未注册，真人仓管 UAT 延后为上线门禁。
+
 - 2026-08-12：完成 RAG 当前 artifact、部署与运行时重审。源码仍在；RAG 原始材料按项目约定由仓库外部交付，当前 `deploy/simple/artifacts` 只有 `.gitkeep`，尚未取得正式 `current.json`、v1 release 或 `rag-model`，不能沿用 8 月 2～4 日的 `READY` 结论。修复简单部署打包误删整个 build 的风险，新增容器启动前 `validate-runtime` 和 required fail-closed 门禁；LLM 静态知识短问法在模型误路由时被受控纠偏到 `knowledge_expert`，`RAG_UNAVAILABLE` 立即返回专用降级并保留固定 PROCESS 域审计。RAG 专项 `122 passed, 8 skipped`，8 个 skip 均依赖尚未交付的真实资产。真实 Chromium 输入“白砂糖金属检测限值是什么？”显示“检索现行知识材料/知识库暂不可用”，console 0 error；shadow 审计为 `PROCESS_KNOWLEDGE_QUERY / PROCESS / RAG_UNAVAILABLE`，没有业务工具调用。required 模式以 `RAG_ROOT_MISSING` 启动失败。结论为 `SOURCE_PRESENT / EXTERNAL_MATERIAL_NOT_DELIVERED / FORMAL_ARTIFACT_AND_MODEL_MISSING / REQUIRED_FAIL_CLOSED / OPTIONAL_BROWSER_DEGRADED_PASS / PRODUCTION_NO_GO`，接收与恢复清单见 `rag/rag-current-artifact-and-runtime-reaudit-2026-08-12.md`。
 
 - 2026-08-12：完成四领域性能门禁的代码复审、真实模型复测与 Chromium 验收。主路由明确登记 Goal 时，专家只收到 GoalContract `allowedTools`；参数层拒绝同专家内目标漂移；必需事实完整后仍执行模型结果分析，但改用空工具集和专用短提示。新增三阶段输入字节数诊断且不保存 Prompt、问题、业务事实或回答；Python 全量 `480 passed, 8 skipped`。经用户明确确认固定问题与 shadow 查询事实的数据传输边界后，20 个预采样和 80 个正式冷会话全部完成，正式样本 80/80 成功，但整体 P50/P95 从 16.547/39.016 秒恶化至 19.953/46.562 秒，四领域 P95 仍全部超过 15 秒；工具 P95 仅 187 ms。真实 Chromium 的“当前库存缺最近30天化验”两轮问答通过，页面和工具审计均为 33 个产品组、55,522 件，console 0 error。一次性账号、101 个会话、135 条 API 审计、333 条工具审计、2 条消息复核、23 个报表快照和 23 条执行审计均已精确清零，服务与临时日志已停止并删除。结论为 `REAL_MODEL_80_OF_80_SUCCESS / CHROMIUM_UAT_PASS / PERFORMANCE_GATE_FAILED`，证据见 `agent-four-domain-performance-optimization-review-2026-08-12.md`。
@@ -659,3 +662,11 @@
 - 比较结果进入同一个 `ReportRun` 快照、统一业务卡片和 XLSX `跨期比较` 工作表。
 - 修复同一句话包含两组日期时通用日期归一化器错误覆盖本期范围的问题；跨期结构化日期在 Runtime 中继续接受格式、跨度和非重叠校验。
 - 自动化验收见 `docs/agent/registered-report-cross-period-comparison-uat-2026-07-31.md`。
+# 2026-08-13：写入阶段收敛为成品入库试点
+
+- 写入阶段只继续受控成品入库，出库、调拨、半成品入库及其他业务写操作暂停；
+- 新增工作群报数接入方向，但群消息只形成可审核的入库候选单，不直接获得执行权限；
+- 商业演示不再接受手工复制/转发，要求个人微信账号在工作群发送的每条消息自动触发；实现渠道收敛为“企业微信仓管创建/承接客户群 + 会话内容存档按 `seq` 增量拉取”，普通个人微信群 Hook、模拟点击和非官方协议继续排除；
+- 推荐将现有智能报数页面收敛为“入库报数收件箱”，解析前候选与真实待处理任务分层展示；
+- 最终写入继续复用成品入库精确预览、确认、幂等、重检、事务和审计链路；固定二维码创建待入库任务需要另设狭义权限；
+- 详细设计见 `docs/agent/finish-inbound-group-report-pilot-plan.md`。

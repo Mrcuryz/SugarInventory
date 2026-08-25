@@ -56,6 +56,52 @@ class DatabaseSchemaReadinessVerifierTest {
     }
 
     @Test
+    void criticalSchemaContractCoversObservedBackfillAndWriteIdempotencyBoundaries() {
+        assertThat(DatabaseSchemaReadinessVerifier.CRITICAL_COLUMNS).contains(
+                "pallet_task_semi_item.prepare_balance_id",
+                "pallet_task_semi_item.board_count",
+                "pallet_task_semi_item.piece_count",
+                "pallet_task_semi_item.total_pieces",
+                "auto_inbound_execution.request_hash",
+                "agent_finish_inbound_execution_preview.state_digest",
+                "agent_finish_inbound_execution_confirmation.token_sha256",
+                "agent_finish_inbound_execution_request.idempotency_key_sha256");
+        assertThat(DatabaseSchemaReadinessVerifier.CRITICAL_INDEXES).contains(
+                "auto_inbound_execution.uk_auto_inbound_batch_task",
+                "agent_finish_inbound_execution_preview.uk_agent_finish_inbound_preview_ref",
+                "agent_finish_inbound_execution_confirmation.uk_finish_inbound_confirmation_preview",
+                "agent_finish_inbound_execution_request.uk_finish_inbound_request_idempotency");
+        assertThat(DatabaseSchemaReadinessVerifier.CRITICAL_NULLABLE_COLUMNS)
+                .containsExactly("pallet_task_semi_item.semi_pallet_code_id");
+    }
+
+    @Test
+    void criticalSchemaInspectionReportsMissingColumnsAndIndexesInsteadOfTrustingLedgerOnly() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class)))
+                .thenReturn(List.of(
+                        "pallet_task_semi_item.prepare_balance_id",
+                        "AUTO_INBOUND_EXECUTION.REQUEST_HASH"))
+                .thenReturn(List.of("AUTO_INBOUND_EXECUTION.UK_AUTO_INBOUND_BATCH_TASK"))
+                .thenReturn(List.of());
+        DatabaseSchemaReadinessVerifier verifier = new DatabaseSchemaReadinessVerifier(
+                jdbcTemplate,
+                new PathMatchingResourcePatternResolver());
+
+        DatabaseSchemaReadinessVerifier.CriticalSchemaShape shape = verifier.inspectCriticalSchemaShape();
+
+        assertThat(shape.missingColumns())
+                .doesNotContain("pallet_task_semi_item.prepare_balance_id", "auto_inbound_execution.request_hash")
+                .contains("pallet_task_semi_item.board_count",
+                        "agent_finish_inbound_execution_confirmation.token_sha256");
+        assertThat(shape.missingIndexes())
+                .doesNotContain("auto_inbound_execution.uk_auto_inbound_batch_task")
+                .contains("agent_finish_inbound_execution_request.uk_finish_inbound_request_idempotency");
+        assertThat(shape.missingNullableColumns())
+                .containsExactly("pallet_task_semi_item.semi_pallet_code_id");
+    }
+
+    @Test
     void createdTableExtractionHandlesQuotedAndConditionalStatements() {
         Set<String> tables = DatabaseSchemaReadinessVerifier.extractCreatedTables("""
                 CREATE TABLE IF NOT EXISTS first_table (id BIGINT);
