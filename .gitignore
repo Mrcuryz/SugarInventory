@@ -76,6 +76,7 @@ nbdist/
 /.playwright-mcp/
 /output/
 /outputs/
+/webpage/output/
 /.codex/config.toml
 /warehouse-mcp.log*.gz
 /project.private.config.json
