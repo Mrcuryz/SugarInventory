@@ -68,7 +68,10 @@ public class OperationLogAspect {
             "token",
             "secret",
             "openid",
-            "sessionKey"
+            "sessionKey",
+            "contactPerson",
+            "phone",
+            "fax"
     );
 
     @Autowired
@@ -187,7 +190,9 @@ public class OperationLogAspect {
                     }
                 }
                 if (operationType == OperationType.INSERT) {
-                    if (arg instanceof BaseEntity || arg instanceof BaseDTO) {
+                    if (arg instanceof BaseEntity
+                            || arg instanceof BaseDTO
+                            || arg.getClass().getPackageName().contains(".domain.dto")) {
                         newData = arg;
                     } else if (arg instanceof List<?>) {
                         newData = arg; // 直接记录整个批量数据

@@ -46,7 +46,29 @@ export const permissionGroupCatalog = [
       'production:output:view',
       'production:output:create',
       'production:output:bindQr',
-      'production:output:print'
+      'production:output:print',
+      'production:daily-report:view',
+      'production:daily-report:edit',
+      'production:daily-report:export'
+    ]
+  },
+  {
+    key: 'equipment',
+    title: '设备管理',
+    permissions: [
+      'equipment:asset:view',
+      'equipment:asset:create',
+      'equipment:asset:update',
+      'equipment:asset:delete',
+      'equipment:asset:export',
+      'equipment:repair:view',
+      'equipment:repair:create',
+      'equipment:repair:update',
+      'equipment:repair:delete',
+      'equipment:repair:export',
+      'equipment:config:view',
+      'equipment:config:manage',
+      'equipment:code-rule:manage'
     ]
   },
   {
@@ -143,6 +165,22 @@ const permissionMeta = {
   'production:output:create': '添加产出',
   'production:output:bindQr': '历史产出分配二维码',
   'production:output:print': '产出二维码打印',
+  'production:daily-report:view': '生产日报查看',
+  'production:daily-report:edit': '生产日报填写',
+  'production:daily-report:export': '生产日报导出',
+  'equipment:asset:view': '设备台账查看',
+  'equipment:asset:create': '设备台账新增',
+  'equipment:asset:update': '设备台账编辑',
+  'equipment:asset:delete': '设备台账删除',
+  'equipment:asset:export': '设备台账导出',
+  'equipment:repair:view': '修理记录查看',
+  'equipment:repair:create': '修理记录新增',
+  'equipment:repair:update': '修理记录编辑',
+  'equipment:repair:delete': '修理记录删除',
+  'equipment:repair:export': '修理记录导出',
+  'equipment:config:view': '设备基础资料查看',
+  'equipment:config:manage': '设备基础资料维护',
+  'equipment:code-rule:manage': '设备编号规则维护',
   'screen_mesh:view': '筛网查看',
   'screen_mesh:create': '筛网新增',
   'screen_mesh:update': '筛网编辑',

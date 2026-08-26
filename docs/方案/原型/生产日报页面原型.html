@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>生产日报页面原型（甲方确认稿）</title>
+  <style>
+    :root {
+      --primary: #165dff;
+      --primary-hover: #0e4ddb;
+      --primary-light: #eef4ff;
+      --success: #00a870;
+      --success-light: #e8f8f1;
+      --warning: #ff7d00;
+      --warning-light: #fff3e6;
+      --danger: #f53f3f;
+      --bg: #f5f7fb;
+      --panel: #fff;
+      --text: #1d2129;
+      --secondary: #4e5969;
+      --muted: #86909c;
+      --border: #e5e6eb;
+      --soft-border: #edf0f5;
+      --shadow: 0 8px 24px rgba(29, 33, 41, .06);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      font-size: 14px;
+      overflow-x: hidden;
+    }
+
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .app { display: flex; min-height: 100vh; width: 100%; }
+
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: 224px;
+      background: #fff;
+      border-right: 1px solid var(--soft-border);
+      box-shadow: 4px 0 18px rgba(29, 33, 41, .03);
+      z-index: 5;
+    }
+
+    .brand {
+      height: 64px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      border-bottom: 1px solid var(--soft-border);
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .brand img { width: 30px; height: 30px; object-fit: contain; }
+    .nav { padding: 12px 10px; }
+    .nav-group-title { padding: 14px 12px 7px; color: #b0b7c3; font-size: 12px; }
+
+    .nav-item {
+      height: 42px;
+      padding: 0 13px;
+      margin: 2px 0;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      color: var(--secondary);
+      border-radius: 7px;
+    }
+
+    .nav-item svg { width: 18px; height: 18px; color: #768396; }
+    .nav-item.sub { height: 38px; padding-left: 43px; font-size: 13px; }
+    .nav-item.open { color: var(--text); font-weight: 600; }
+    .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+
+    .main { width: calc(100% - 224px); min-width: 0; margin-left: 224px; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      height: 58px;
+      padding: 0 22px;
+      background: rgba(255,255,255,.96);
+      border-bottom: 1px solid var(--soft-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 4;
+      backdrop-filter: blur(8px);
+    }
+
+    .breadcrumb { color: var(--muted); font-size: 13px; }
+    .breadcrumb strong { color: var(--secondary); font-weight: 500; }
+
+    .user { display: flex; align-items: center; gap: 9px; color: var(--secondary); }
+    .avatar { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--primary-light); color: var(--primary); font-weight: 700; }
+
+    .content { width: 100%; max-width: 1580px; padding: 16px 18px 36px; margin: 0 auto; }
+
+    .notice {
+      margin-bottom: 12px;
+      padding: 9px 13px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #3c5b94;
+      background: #f0f6ff;
+      border: 1px solid #d7e7ff;
+      border-radius: 7px;
+      font-size: 13px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--soft-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .page-panel { padding: 16px 18px; margin-bottom: 12px; }
+
+    .page-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .title-wrap { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+    .title-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; color: var(--primary); background: var(--primary-light); flex: 0 0 auto; }
+    .title-icon svg { width: 20px; height: 20px; }
+    h1 { margin: 0; font-size: 19px; line-height: 25px; }
+    .subtitle { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 18px; }
+
+    .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn { min-height: 32px; padding: 6px 13px; border: 1px solid var(--border); border-radius: 6px; color: var(--secondary); background: #fff; transition: .15s ease; }
+    .btn:hover { color: var(--primary); border-color: #a9c4ff; background: var(--primary-light); }
+    .btn.primary { color: #fff; border-color: var(--primary); background: var(--primary); }
+    .btn.primary:hover { border-color: var(--primary-hover); background: var(--primary-hover); }
+    .btn.soft { color: var(--primary); border-color: #bed2ff; background: var(--primary-light); }
+    .btn.text { padding-inline: 7px; color: var(--primary); border-color: transparent; background: transparent; }
+    .btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
+    .btn.small { min-height: 28px; padding: 4px 9px; font-size: 12px; }
+
+    .header-form {
+      display: grid;
+      grid-template-columns: minmax(260px, 1.45fr) minmax(180px, .8fr) minmax(180px, .8fr) minmax(150px, .6fr);
+      gap: 12px;
+      padding-top: 13px;
+      border-top: 1px solid var(--soft-border);
+    }
+
+    .field { min-width: 0; }
+    .label { margin-bottom: 6px; color: var(--secondary); font-size: 12px; font-weight: 500; }
+    .date-stepper { display: grid; grid-template-columns: 32px minmax(130px, 1fr) 32px 48px; gap: 5px; }
+    .control { width: 100%; height: 32px; padding: 0 10px; color: var(--text); background: #fff; border: 1px solid var(--border); border-radius: 6px; outline: none; min-width: 0; }
+    .control:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(22,93,255,.1); }
+    .step { height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--secondary); }
+    .status-box { height: 32px; display: flex; align-items: center; gap: 7px; }
+    .tag { display: inline-flex; align-items: center; height: 25px; padding: 0 9px; border-radius: 4px; font-size: 12px; }
+    .tag.draft { color: #b85a00; background: var(--warning-light); border: 1px solid #ffd7ad; }
+    .tag.saved { color: #007a51; background: var(--success-light); border: 1px solid #b9ead8; }
+    .tag.empty { color: #657183; background: #f2f3f5; border: 1px solid #e5e6eb; }
+
+    .department-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .department-tab {
+      min-width: 0;
+      padding: 11px 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      text-align: left;
+      color: var(--secondary);
+      background: #fff;
+      border: 1px solid var(--soft-border);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 14px rgba(29,33,41,.035);
+    }
+
+    .department-tab:hover { border-color: #bfd2ff; }
+    .department-tab.active { color: var(--primary); border-color: #9ebcff; box-shadow: 0 5px 18px rgba(22,93,255,.09); }
+    .department-name { display: block; font-weight: 700; }
+    .department-desc { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .section-head {
+      min-height: 54px;
+      padding: 11px 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--soft-border);
+    }
+
+    .section-heading { display: flex; align-items: center; gap: 10px; }
+    .section-mark { width: 4px; height: 26px; border-radius: 4px; background: var(--primary); }
+    .section-title { font-size: 16px; font-weight: 700; }
+    .section-meta { margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+    .group { margin: 12px; border: 1px solid var(--soft-border); border-radius: 7px; overflow: hidden; }
+    .group-title {
+      min-height: 41px;
+      padding: 8px 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #fbfcff;
+      border-bottom: 1px solid var(--soft-border);
+    }
+    .group-title strong { font-size: 14px; }
+    .group-hint { margin-left: 7px; color: var(--muted); font-size: 11px; font-weight: 400; }
+    .group-actions { display: flex; align-items: center; gap: 5px; }
+
+    .report-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: minmax(130px, 1.45fr) 54px repeat(5, minmax(68px, .72fr)) minmax(96px, 1fr) 84px;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .grid-head { color: #657183; background: #f7f9fc; font-size: 11px; font-weight: 600; }
+    .grid-cell { min-width: 0; min-height: 37px; padding: 5px 5px; display: flex; align-items: center; border-right: 1px solid var(--soft-border); border-bottom: 1px solid var(--soft-border); }
+    .grid-cell:nth-child(9n) { border-right: 0; }
+    .report-grid .grid-cell:nth-last-child(-n+9) { border-bottom: 0; }
+    .grid-head .grid-cell { min-height: 34px; justify-content: center; text-align: center; }
+    .grid-head .grid-cell:first-child { justify-content: flex-start; padding-left: 10px; }
+    .item-name { padding-left: 10px; font-weight: 500; }
+    .unit { justify-content: center; color: var(--secondary); font-size: 12px; }
+    .cell-input { width: 100%; min-width: 0; height: 27px; padding: 0 6px; border: 1px solid #e1e5eb; border-radius: 5px; outline: none; background: #fff; text-align: right; font-size: 12px; }
+    .cell-input::placeholder { color: #c3c8d0; }
+    .cell-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(22,93,255,.08); }
+    .cell-input.note { text-align: left; }
+    select.cell-input { text-align: left; color: var(--text); }
+    .product-name { padding-left: 7px; }
+    .product-select { width: 100%; height: 28px; border: 1px solid #b9cdf9; border-radius: 5px; background: #fff; color: var(--text); font-size: 12px; min-width: 0; }
+    .unit-edit { text-align: center; }
+    .ops { padding-inline: 2px; justify-content: center; white-space: nowrap; }
+    .row-new .grid-cell { background: #fcfdff; }
+
+    .mini-summary {
+      margin: 0 12px 12px;
+      padding: 9px 11px;
+      color: var(--secondary);
+      background: #fafbfc;
+      border: 1px dashed #d9dee8;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .toast {
+      position: fixed;
+      top: 72px;
+      left: 50%;
+      transform: translate(-50%, -16px);
+      padding: 10px 16px;
+      color: #176f52;
+      background: #edfff7;
+      border: 1px solid #a9e5ce;
+      border-radius: 7px;
+      box-shadow: 0 9px 26px rgba(29,33,41,.12);
+      opacity: 0;
+      pointer-events: none;
+      transition: .22s ease;
+      z-index: 20;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    .prototype-note {
+      margin-top: 12px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 11px;
+    }
+
+    @media (max-width: 1220px) {
+      .sidebar { width: 72px; }
+      .brand { justify-content: center; padding: 0; }
+      .brand span, .nav-item span, .nav-group-title { display: none; }
+      .nav-item { justify-content: center; padding: 0; }
+      .nav-item.sub { display: none; }
+      .main { width: calc(100% - 72px); margin-left: 72px; }
+      .report-grid { grid-template-columns: minmax(120px, 1.35fr) 48px repeat(5, minmax(64px, .7fr)) minmax(88px, .9fr) 72px; }
+    }
+
+    @media (max-width: 920px) {
+      .sidebar { display: none; }
+      .main { width: 100%; margin-left: 0; }
+      .header-form { grid-template-columns: 1fr 1fr; }
+      .department-tabs { grid-template-columns: 1fr 1fr; }
+      .report-grid { display: block; }
+      .grid-head { display: none; }
+      .report-grid:not(.grid-head) { padding: 8px; }
+      .report-grid:not(.grid-head) .grid-cell { border: 0; min-height: 31px; }
+      .report-grid:not(.grid-head) .grid-cell:nth-child(9n+1) { padding-top: 11px; font-weight: 700; border-top: 1px solid var(--soft-border); }
+      .report-grid:not(.grid-head) .grid-cell::before { content: attr(data-label); width: 92px; flex: 0 0 92px; color: var(--muted); font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="../../../webpage/src/assets/logo.png" alt="系统标志" />
+        <span>数字仓储平台</span>
+      </div>
+      <nav class="nav">
+        <div class="nav-group-title">常用功能</div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12 12 3l9 9v8a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+          <span>工作台</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16v13H4zM7 4h10v3H7z"/></svg>
+          <span>库存管理</span>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16v12H4zM8 10h8M8 14h5"/></svg>
+          <span>产品管理</span>
+        </div>
+        <div class="nav-group-title">生产业务</div>
+        <div class="nav-item open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20V9l5 3V8l5 3V4h6v16z"/></svg>
+          <span>生产管理</span>
+        </div>
+        <div class="nav-item sub"><span>煮糖批次</span></div>
+        <div class="nav-item sub"><span>生产订单</span></div>
+        <div class="nav-item sub active"><span>生产日报</span></div>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumb">首页&nbsp;&nbsp;/&nbsp;&nbsp;生产管理&nbsp;&nbsp;/&nbsp;&nbsp;<strong>生产日报</strong></div>
+        <div class="user"><span class="avatar">张</span><span>张主任</span></div>
+      </header>
+
+      <div class="content">
+        <section class="panel page-panel">
+          <div class="page-head">
+            <div class="title-wrap">
+              <div class="title-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5"/></svg>
+              </div>
+              <div>
+                <h1>生产日报</h1>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn" data-action="history">历史日报</button>
+              <button class="btn soft" data-action="export">导出 Excel</button>
+              <button class="btn" data-action="save">保存</button>
+              <button class="btn primary" data-action="submit-all">提交整张日报</button>
+            </div>
+          </div>
+
+          <div class="header-form">
+            <div class="field">
+              <div class="label">日报日期</div>
+              <div class="date-stepper">
+                <button class="step" title="上一日">‹</button>
+                <input class="control" type="date" value="2026-08-26" />
+                <button class="step" title="下一日">›</button>
+                <button class="step">今天</button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="label">制表日期</div>
+              <input class="control" type="date" value="2026-08-26" />
+            </div>
+            <div class="field">
+              <div class="label">制表人</div>
+              <input class="control" value="张主任" placeholder="请输入制表人" />
+            </div>
+            <div class="field">
+              <div class="label">当前状态</div>
+              <div class="status-box"><span class="tag draft">草稿</span><span style="color:var(--muted);font-size:11px">10:28 已保存</span></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="department-tabs" role="tablist">
+          <button class="department-tab active" data-section="poly">
+            <span><span class="department-name">多晶车间</span></span>
+            <span class="tag saved">已保存</span>
+          </button>
+          <button class="department-tab" data-section="brown">
+            <span><span class="department-name">红糖车间</span></span>
+            <span class="tag draft">填写中</span>
+          </button>
+          <button class="department-tab" data-section="mono">
+            <span><span class="department-name">单晶车间</span></span>
+            <span class="tag empty">待填写</span>
+          </button>
+          <button class="department-tab" data-section="factory">
+            <span><span class="department-name">全厂汇总</span></span>
+            <span class="tag empty">待填写</span>
+          </button>
+        </div>
+
+        <section class="panel section active" id="section-poly">
+          <div class="section-head">
+            <div class="section-heading">
+              <span class="section-mark"></span>
+              <div><div class="section-title">多晶车间</div><div class="section-meta">最后修改：张主任&nbsp;&nbsp;2026-08-26 10:28</div></div>
+            </div>
+            <div class="actions"><button class="btn" data-action="save-section">保存草稿</button><button class="btn primary" data-action="submit-section">提交本车间</button></div>
+          </div>
+
+          <div class="group">
+            <div class="group-title"><div><strong>原料及在制品</strong></div></div>
+            <div class="report-grid grid-head">
+              <div class="grid-cell">项目</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计(件)</div><div class="grid-cell">月累计(吨)</div><div class="grid-cell">年累计(吨)</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div>
+            </div>
+            <div class="report-grid fixed-rows">
+              <div class="grid-cell item-name" data-label="项目">出糖油</div><div class="grid-cell unit" data-label="单位">桶</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="18" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" value="2.16" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" value="426" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="51.12" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="468.32" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" placeholder="可留空" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">化糖</div><div class="grid-cell unit" data-label="单位">锅</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="7" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" value="166" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">白糖用量</div><div class="grid-cell unit" data-label="单位">包</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="520" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" value="26" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" value="12360" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="618" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="5912" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">冰糖回煮</div><div class="grid-cell unit" data-label="单位">吨</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">糖油回煮</div><div class="grid-cell unit" data-label="单位">吨</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">糖浆用量</div><div class="grid-cell unit" data-label="单位">吨</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="3.4" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" value="3.4" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="76.8" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="703.6" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">煮冰糖</div><div class="grid-cell unit" data-label="单位">锅</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="6" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" value="142" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">放糖桶数</div><div class="grid-cell unit" data-label="单位">桶</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="项目">脱模</div><div class="grid-cell unit" data-label="单位">车</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="12" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" value="287" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+            </div>
+          </div>
+
+          <div class="group product-group">
+            <div class="group-title"><div><strong>半成品</strong></div><div class="group-actions"><button class="btn small soft add-product">＋ 新增产品</button></div></div>
+            <div class="report-grid grid-head"><div class="grid-cell">产品</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计(件)</div><div class="grid-cell">月累计(吨)</div><div class="grid-cell">年累计(吨)</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div></div>
+            <div class="report-grid product-rows">
+              <div class="grid-cell product-name" data-label="产品"><select class="product-select"><option>黄冰糖半成品</option><option>白冰糖半成品</option></select></div><div class="grid-cell" data-label="单位"><input class="cell-input unit-edit" value="件" /></div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="462" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" value="5.082" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" value="1089" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="43.56" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="30.756" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作"><button class="btn text small">↑</button><button class="btn danger small delete-row">删除</button></div>
+            </div>
+          </div>
+
+          <div class="group product-group">
+            <div class="group-title"><div><strong>直接成品</strong></div><div class="group-actions"><button class="btn small soft add-product">＋ 新增产品</button></div></div>
+            <div class="report-grid grid-head"><div class="grid-cell">产品</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计(件)</div><div class="grid-cell">月累计(吨)</div><div class="grid-cell">年累计(吨)</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div></div>
+            <div class="report-grid product-rows">
+              <div class="grid-cell product-name" data-label="产品"><select class="product-select"><option>小粒黄冰糖</option><option>小粒白冰糖</option></select></div><div class="grid-cell" data-label="单位"><input class="cell-input unit-edit" value="500g×20包" /></div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="886" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" value="8.86" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" value="16020" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="160.2" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="1482.5" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作"><button class="btn text small">↑</button><button class="btn danger small delete-row">删除</button></div>
+            </div>
+          </div>
+
+          <div class="group product-group">
+            <div class="group-title"><div><strong>装包或二次加工成品</strong></div><div class="group-actions"><button class="btn small soft add-product">＋ 新增产品</button></div></div>
+            <div class="report-grid grid-head"><div class="grid-cell">产品</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计(件)</div><div class="grid-cell">月累计(吨)</div><div class="grid-cell">年累计(吨)</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div></div>
+            <div class="report-grid product-rows">
+              <div class="grid-cell product-name" data-label="产品"><select class="product-select"><option value="">请选择成品</option><option>老冰糖礼盒</option><option>黄冰糖袋装</option></select></div><div class="grid-cell" data-label="单位"><input class="cell-input unit-edit" placeholder="自动带出" /></div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作"><button class="btn danger small delete-row">删除</button></div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-title"><div><strong>综合指标</strong></div></div>
+            <div class="report-grid grid-head"><div class="grid-cell">指标</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计(件)</div><div class="grid-cell">月累计(吨)</div><div class="grid-cell">年累计(吨)</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div></div>
+            <div class="report-grid fixed-rows">
+              <div class="grid-cell item-name" data-label="指标">冰糖产量</div><div class="grid-cell unit" data-label="单位">吨</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="13.942" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="203.76" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="1513.26" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="指标">冰糖汽耗</div><div class="grid-cell unit" data-label="单位">吨</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="42.6" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="812.4" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="指标">冰糖结晶率</div><div class="grid-cell unit" data-label="单位">%</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="53.62" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="52.98" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="51.76" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+              <div class="grid-cell item-name" data-label="指标">冰糖产率</div><div class="grid-cell unit" data-label="单位">%</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" value="52.11" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" value="51.36" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" value="50.92" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel section" id="section-brown">
+          <div class="section-head"><div class="section-heading"><span class="section-mark"></span><div><div class="section-title">红糖车间</div></div></div><div class="actions"><button class="btn" data-action="save-section">保存草稿</button><button class="btn primary" data-action="submit-section">提交本车间</button></div></div>
+          <div class="group"><div class="group-title"><div><strong>原料及在制品</strong></div></div></div>
+          <div class="group product-group"><div class="group-title"><div><strong>产品</strong></div><button class="btn small soft add-product">＋ 新增产品</button></div><div class="report-grid grid-head"><div class="grid-cell">产品</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计数量</div><div class="grid-cell">月累计吨</div><div class="grid-cell">年累计吨</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div></div><div class="report-grid product-rows"></div></div>
+          <div class="group"><div class="group-title"><div><strong>综合指标</strong></div></div></div>
+        </section>
+
+        <section class="panel section" id="section-mono">
+          <div class="section-head"><div class="section-heading"><span class="section-mark"></span><div><div class="section-title">单晶车间</div></div></div><div class="actions"><button class="btn" data-action="save-section">保存草稿</button><button class="btn primary" data-action="submit-section">提交本车间</button></div></div>
+          <div class="group"><div class="group-title"><div><strong>原料及在制品</strong></div></div></div>
+          <div class="group product-group"><div class="group-title"><div><strong>产品</strong></div><button class="btn small soft add-product">＋ 新增产品</button></div><div class="report-grid grid-head"><div class="grid-cell">产品</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计数量</div><div class="grid-cell">月累计吨</div><div class="grid-cell">年累计吨</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div></div><div class="report-grid product-rows"></div></div>
+          <div class="group"><div class="group-title"><div><strong>综合指标</strong></div></div></div>
+        </section>
+
+        <section class="panel section" id="section-factory">
+          <div class="section-head"><div class="section-heading"><span class="section-mark"></span><div><div class="section-title">全厂汇总</div></div></div><div class="actions"><button class="btn" data-action="save-section">保存草稿</button><button class="btn primary" data-action="submit-section">提交汇总</button></div></div>
+          <div class="group"><div class="group-title"><div><strong>全厂综合指标</strong></div></div><div class="report-grid grid-head"><div class="grid-cell">指标</div><div class="grid-cell">单位</div><div class="grid-cell">当日实绩</div><div class="grid-cell">折成吨</div><div class="grid-cell">月累计数量</div><div class="grid-cell">月累计吨</div><div class="grid-cell">年累计吨</div><div class="grid-cell">备注</div><div class="grid-cell">操作</div></div><div class="report-grid fixed-rows">
+            <div class="grid-cell item-name" data-label="指标">总用糖量（折白糖）</div><div class="grid-cell unit" data-label="单位">件</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+            <div class="grid-cell item-name" data-label="指标">总产量</div><div class="grid-cell unit" data-label="单位">件</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+            <div class="grid-cell item-name" data-label="指标">混合成品产率</div><div class="grid-cell unit" data-label="单位">%</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+            <div class="grid-cell item-name" data-label="指标">总耗汽</div><div class="grid-cell unit" data-label="单位">吨</div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作">—</div>
+          </div></div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast">已保存</div>
+
+  <template id="product-row-template">
+    <div class="grid-cell product-name" data-label="产品"><select class="product-select"><option value="">请选择产品</option><option>小粒黄冰糖</option><option>白冰糖半成品</option><option>红糖块</option><option>咖啡糖</option></select></div><div class="grid-cell" data-label="单位"><input class="cell-input unit-edit" placeholder="自动带出，可修改" /></div><div class="grid-cell" data-label="当日实绩"><input class="cell-input" /></div><div class="grid-cell" data-label="折成吨"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计数量"><input class="cell-input" /></div><div class="grid-cell" data-label="月累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="年累计吨"><input class="cell-input" /></div><div class="grid-cell" data-label="备注"><input class="cell-input note" /></div><div class="grid-cell ops" data-label="操作"><button class="btn text small">↑</button><button class="btn danger small delete-row">删除</button></div>
+  </template>
+
+  <script>
+    const toast = document.querySelector('#toast');
+    let toastTimer;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    document.querySelectorAll('.product-rows').forEach(rows => {
+      if (!rows.children.length) {
+        rows.append(document.querySelector('#product-row-template').content.cloneNode(true));
+      }
+    });
+
+    document.querySelectorAll('.department-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.department-tab').forEach(item => item.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(item => item.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelector('#section-' + tab.dataset.section).classList.add('active');
+      });
+    });
+
+    document.addEventListener('click', event => {
+      const action = event.target.closest('[data-action]')?.dataset.action;
+      const messageMap = {
+        history: '原型提示：实施后这里打开历史日报',
+        export: '原型提示：实施后将导出与样表一致的 Excel',
+        save: '顶部信息已保存（原型演示）',
+        'save-section': '本车间数据已保存（原型演示）',
+        'submit-section': '本部门已提交，仍可继续修改（原型演示）',
+        'submit-all': '整张日报已提交，仍可继续修改（原型演示）'
+      };
+      if (action) showToast(messageMap[action]);
+
+      const addButton = event.target.closest('.add-product');
+      if (addButton) {
+        const group = addButton.closest('.product-group');
+        const rows = group.querySelector('.product-rows');
+        rows.append(document.querySelector('#product-row-template').content.cloneNode(true));
+        showToast('已增加一条空白产品行');
+      }
+
+      const deleteButton = event.target.closest('.delete-row');
+      if (deleteButton) {
+        const rowContainer = deleteButton.closest('.product-rows');
+        const cells = [...rowContainer.children];
+        const clickedCell = deleteButton.closest('.grid-cell');
+        const start = Math.floor(cells.indexOf(clickedCell) / 9) * 9;
+        cells.slice(start, start + 9).forEach(cell => cell.remove());
+        if (!rowContainer.children.length) {
+          rowContainer.append(document.querySelector('#product-row-template').content.cloneNode(true));
+        }
+        showToast('产品行已删除；无产品时保留一条空行');
+      }
+    });
+
+    document.addEventListener('change', event => {
+      if (event.target.matches('.product-select') && event.target.value) {
+        const cells = [...event.target.closest('.product-rows').children];
+        const productCell = event.target.closest('.grid-cell');
+        const index = cells.indexOf(productCell);
+        const unitInput = cells[index + 1]?.querySelector('input');
+        if (unitInput && !unitInput.value) unitInput.value = '件';
+      }
+    });
+  </script>
+</body>
+</html>

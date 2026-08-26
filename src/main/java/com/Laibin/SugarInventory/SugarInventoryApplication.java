@@ -16,7 +16,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         "com.Laibin.SugarInventory.mapper",
         "com.Laibin.SugarInventory.production.mapper",
         "com.Laibin.SugarInventory.analytics.mapper",
-        "com.Laibin.SugarInventory.inventoryhistory.mapper"
+        "com.Laibin.SugarInventory.inventoryhistory.mapper",
+        "com.Laibin.SugarInventory.equipment.mapper"
 })
 @EnableAspectJAutoProxy(proxyTargetClass = true)
 @EnableScheduling

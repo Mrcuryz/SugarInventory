@@ -34,7 +34,22 @@ public enum ErrorCode {
     SCREEN_MESH_NOT_FOUND(1028, "找不到关联筛网"),
     PRODUCT_SPECIFICATION_LOCKED_BY_INVENTORY(1029, "产品已有库存，不能修改每板件数或单件重量；不同规格请新建产品"),
     INVALID_PALLET_CODE(1030, "托盘码格式或校验位无效"),
-    PALLET_CODE_NOT_FOUND(1031, "托盘码不存在");
+    PALLET_CODE_NOT_FOUND(1031, "托盘码不存在"),
+    PRODUCTION_DAILY_REPORT_CONFLICT(1032, "生产日报已被其他用户更新，请刷新后重试"),
+    PRODUCTION_DAILY_REPORT_SECTION_INVALID(1033, "生产日报车间分区无效"),
+    PRODUCTION_DAILY_REPORT_METRIC_INVALID(1034, "生产日报固定指标无效"),
+    PRODUCTION_DAILY_REPORT_PRODUCT_INVALID(1035, "生产日报产品行无效"),
+    PRODUCTION_DAILY_REPORT_IMPORT_INVALID(1036, "生产日报Excel格式无效"),
+    EQUIPMENT_NOT_FOUND(1041, "设备不存在"),
+    EQUIPMENT_REFERENCE_INVALID(1042, "设备关联数据无效"),
+    EQUIPMENT_CODE_RULE_NOT_FOUND(1043, "找不到可用的设备编号规则"),
+    EQUIPMENT_CODE_RANGE_EXHAUSTED(1044, "设备编号区间已用完"),
+    EQUIPMENT_DATA_IN_USE(1045, "设备数据已被引用，不能删除"),
+    EQUIPMENT_CONCURRENT_MODIFICATION(1046, "设备数据已被其他用户修改，请刷新后重试"),
+    EQUIPMENT_BASIC_DATA_NOT_FOUND(1047, "设备基础资料不存在"),
+    EQUIPMENT_DUPLICATE_DATA(1048, "设备基础资料已存在"),
+    EQUIPMENT_REPAIR_NOT_FOUND(1049, "设备修理记录不存在"),
+    EQUIPMENT_CODE_RULE_AMBIGUOUS(1050, "同一设备单位和类别存在多条启用的编号规则");
 
     private final int code;
     private final String message;

@@ -82,3 +82,43 @@ export const cancelBoilingBatch = id => request.post(`/production/boiling-batche
 export const getBoilingBatchTrace = id => request.get(`/production/boiling-batches/${id}/trace`)
 
 export const getBoilingBatchTraceGraph = id => request.get(`/production/boiling-batches/${id}/graph`)
+
+export const getProductionDailyReport = reportDate => {
+  return request.get(`/production/daily-reports/${reportDate}`)
+}
+
+export const pageProductionDailyReports = params => {
+  return request.get('/production/daily-reports', { params })
+}
+
+export const listProductionDailyReportProducts = params => {
+  return request.get('/production/daily-reports/product-options', { params })
+}
+
+export const saveProductionDailyReportHeader = (reportDate, params) => {
+  return request.put(`/production/daily-reports/${reportDate}/header`, params)
+}
+
+export const saveProductionDailyReportSection = (reportDate, departmentCode, params) => {
+  return request.put(`/production/daily-reports/${reportDate}/sections/${departmentCode}`, params)
+}
+
+export const submitProductionDailyReportSection = (reportDate, departmentCode) => {
+  return request.post(`/production/daily-reports/${reportDate}/sections/${departmentCode}/submit`, {})
+}
+
+export const submitProductionDailyReport = reportDate => {
+  return request.post(`/production/daily-reports/${reportDate}/submit`, {})
+}
+
+export const exportProductionDailyReport = reportDate => {
+  return request.get(`/production/daily-reports/${reportDate}/export`, { responseType: 'blob' })
+}
+
+export const importProductionDailyReport = formData => {
+  return request.post('/production/daily-reports/import', formData)
+}
+
+export const confirmProductionDailyReportImport = params => {
+  return request.post('/production/daily-reports/import/confirm', params)
+}

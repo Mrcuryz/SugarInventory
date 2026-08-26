@@ -13,12 +13,14 @@ import {
   ShoppingCart,
   Switch,
   Tickets,
+  Tools,
   User
 } from '@element-plus/icons-vue'
 
 export const menuList = [
   { path: '/home', title: '首页', icon: House, permCode: 'dashboard:view' },
   { path: '/operationlogs', title: '操作日志', icon: Document, permCode: 'log:view' },
+  { path: '/production/daily-reports', title: '生产日报', icon: Document, permCode: 'production:daily-report:view' },
   { path: '/agent-review', title: 'AI Review Lite', icon: Document, permCode: 'agent:review:view' },
   { path: '/product', title: '产品管理', icon: Histogram, permCode: 'product:view' },
   {
@@ -78,6 +80,16 @@ export const menuList = [
       { path: '/production/orders', title: '生产订单', icon: List, permCode: 'production:order:view' },
       { path: '/production/material-pick', title: '半成品领用', icon: Box, permCode: 'production:material:view' },
       { path: '/production/output-bind', title: '产出贴码', icon: Tickets, permCode: 'production:output:view' }
+    ]
+  },
+  {
+    path: '/equipment',
+    title: '设备管理',
+    icon: Tools,
+    children: [
+      { path: '/equipment/assets', title: '设备台账', icon: List, permCode: 'equipment:asset:view' },
+      { path: '/equipment/repairs', title: '修理记录', icon: Document, permCode: 'equipment:repair:view' },
+      { path: '/equipment/basic-data', title: '基础资料', icon: Tools, permCode: 'equipment:config:view' }
     ]
   },
   { path: '/screenMesh', title: '筛网管理', icon: Filter, permCode: 'screen_mesh:view' },

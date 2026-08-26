@@ -101,6 +101,9 @@ class OperationLogAspectTest {
         raw.put("qualifiedStandards", "[\"无\"]");
         raw.put("appliedStandardId", null);
         raw.put("standardSnapshotJson", null);
+        raw.put("contactPerson", "测试联系人");
+        raw.put("phone", "13800000000");
+        raw.put("fax", "0772-0000000");
         raw.put("version", 1);
 
         Map<String, Object> normalized = aspect.normalizeDisplayFields(raw);
@@ -112,6 +115,9 @@ class OperationLogAspectTest {
         assertFalse(normalized.containsKey("testedBy"));
         assertFalse(normalized.containsKey("appliedStandardId"));
         assertFalse(normalized.containsKey("standardSnapshotJson"));
+        assertFalse(normalized.containsKey("contactPerson"));
+        assertFalse(normalized.containsKey("phone"));
+        assertFalse(normalized.containsKey("fax"));
         assertEquals("黄中冰", normalized.get("productName"));
         assertEquals("40目", normalized.get("screenMeshName"));
         assertEquals("一号仓", normalized.get("warehouseName"));
