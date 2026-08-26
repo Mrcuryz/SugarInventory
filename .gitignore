@@ -66,3 +66,16 @@ nbdist/
 *.msi
 *.exe
 *.jar
+
+######################################################################
+# Local Agent / Browser / Generated Artifacts
+
+/.codex-tmp/
+/.tmp/
+/.playwright-cli/
+/.playwright-mcp/
+/output/
+/outputs/
+/.codex/config.toml
+/warehouse-mcp.log*.gz
+/project.private.config.json

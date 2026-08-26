@@ -1,8 +1,0 @@
-{
-  "description": "项目私有配置文件。",
-  "projectname": "LaibinSugarInventory",
-  "miniprogramRoot": "LaibinSugarInventoryWxAPP/",
-  "setting": {
-    "compileHotReLoad": true
-  }
-}
