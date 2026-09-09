@@ -34,16 +34,20 @@ public class LlmParseServiceImpl implements LlmParseService {
     private final ObjectMapper objectMapper;
     private final WarehouseMapper warehouseMapper;
     private static final Logger log = LoggerFactory.getLogger(LlmParseServiceImpl.class);
+    private volatile LlmSession cachedSession;
 
     @Override
     public LlmParseResult parseReport(AutoInboundParseRequest request) {
         String productsJson = buildProductsJson(request);
         String warehousesJson = buildWarehousesJson();
+        String catalogHash = buildCatalogHash(productsJson, warehousesJson);
 
         String systemMessage = buildSystemPrompt();
-        String userMessage = buildUserPrompt(request, productsJson, warehousesJson);
+        String userMessage = buildUserPrompt(request);
 
-        String llmText = callOpenAi(systemMessage, userMessage);
+        LlmSession session = ensureSession(systemMessage, productsJson, warehousesJson, catalogHash);
+
+        String llmText = callOpenAi(userMessage, session.responseId());
         log.info("LLM raw output: {}", llmText);
         try {
             String jsonText = extractJsonBlock(llmText);
@@ -150,10 +154,10 @@ public class LlmParseServiceImpl implements LlmParseService {
        
        
                **可选产品列表 productCatalog（必须从中选择 product_id）：**
-               {PRODUCTS_JSON}
-       
+               将在“初始化阶段”提供一次，后续解析时沿用。
+
                **可选库位列表 warehouseCatalog（必须从中选择 warehouse_id）：**
-               {WAREHOUSES_JSON}
+               将在“初始化阶段”提供一次，后续解析时沿用。
        
                **解析要求：**
        
@@ -296,16 +300,10 @@ public class LlmParseServiceImpl implements LlmParseService {
                """;
     }
 
-    private String buildUserPrompt(AutoInboundParseRequest req, String productsJson, String warehousesJson) {
+    private String buildUserPrompt(AutoInboundParseRequest req) {
         return """
         入库日期：%s
         解析类型：%s  （SEMI_PRODUCT / FINISHED_PRODUCT / MIXED）
-
-        【产品列表（productCatalog）】
-        %s
-
-        【库位列表（warehouseCatalog）】
-        %s
 
         【报数原文】
         %s
@@ -314,18 +312,15 @@ public class LlmParseServiceImpl implements LlmParseService {
         """.formatted(
                 req.getEntryDate(),
                 req.getParseType(),
-                productsJson,
-                warehousesJson,
                 req.getRawText()
         );
     }
 
-    private String callOpenAi(String systemMessage, String userMessage) {
+    private String callOpenAi(String userMessage, String previousResponseId) {
         ResponseCreateParams params = ResponseCreateParams.builder()
                 // 直连 OpenAI 用官方模型名
                 .model("gpt-4o-mini")
-                // system prompt 单独放在 instructions 字段
-                .instructions(systemMessage)
+                .previousResponseId(previousResponseId)
                 // 用户真实输入
                 .input(ResponseCreateParams.Input.ofText(userMessage))
                 .temperature(0.1)
@@ -365,5 +360,69 @@ public class LlmParseServiceImpl implements LlmParseService {
         }
         return sb.toString();
     }
-}
 
+    private LlmSession ensureSession(String systemMessage, String productsJson, String warehousesJson, String catalogHash) {
+        LlmSession session = cachedSession;
+        if (session != null && session.catalogHash().equals(catalogHash)) {
+            return session;
+        }
+
+        synchronized (this) {
+            session = cachedSession;
+            if (session != null && session.catalogHash().equals(catalogHash)) {
+                return session;
+            }
+            String setupMessage = buildSessionSetupMessage(productsJson, warehousesJson);
+            String responseId = initSession(systemMessage, setupMessage);
+            LlmSession newSession = new LlmSession(responseId, catalogHash);
+            cachedSession = newSession;
+            return newSession;
+        }
+    }
+
+    private String initSession(String systemMessage, String setupMessage) {
+        ResponseCreateParams params = ResponseCreateParams.builder()
+                .model("gpt-4o-mini")
+                .instructions(systemMessage)
+                .input(ResponseCreateParams.Input.ofText(setupMessage))
+                .temperature(0.0)
+                .build();
+
+        try {
+            Response resp = openAIClient.responses().create(params);
+            return resp.getId();
+        } catch (Exception e) {
+            log.error("初始化 LLM 会话失败: {}", e.getMessage(), e);
+            throw new BusinessException("初始化大模型失败：" + e.getClass().getSimpleName() + " - " + e.getMessage());
+        }
+    }
+
+    private String buildSessionSetupMessage(String productsJson, String warehousesJson) {
+        return """
+        【初始化：产品列表（productCatalog）】
+        %s
+
+        【初始化：库位列表（warehouseCatalog）】
+        %s
+
+        请牢记上述 productCatalog 与 warehouseCatalog，后续解析只会提供报数原文与解析条件。
+        如已准备好，请仅回复 "READY"。
+        """.formatted(productsJson, warehousesJson);
+    }
+
+    private String buildCatalogHash(String productsJson, String warehousesJson) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest((productsJson + "|" + warehousesJson).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new RuntimeException("计算 catalog hash 失败", e);
+        }
+    }
+
+    private record LlmSession(String responseId, String catalogHash) {}
+}
