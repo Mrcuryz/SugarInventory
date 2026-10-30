@@ -77,15 +77,15 @@ class OutStockServiceImplLegacyBoundaryTest {
         Product product = new Product();
         product.setId(request.getProductId());
         when(productMapper.selectById(request.getProductId())).thenReturn(product);
-        when(inventoryMapper.getLastLegacyInventoryForUpdate(
-                request.getWarehouseId(), request.getProductId())).thenReturn(null);
+        when(inventoryMapper.selectLegacyInventoryForProductForUpdate(
+                request.getProductId(), request.getWarehouseId())).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.processOutStock(request, 9))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("传统出库仅处理无二维码库存");
 
-        verify(inventoryMapper).getLastLegacyInventoryForUpdate(
-                request.getWarehouseId(), request.getProductId());
+        verify(inventoryMapper).selectLegacyInventoryForProductForUpdate(
+                request.getProductId(), request.getWarehouseId());
     }
 
     private OutStockRequestDTO request() {

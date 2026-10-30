@@ -30,16 +30,13 @@ public class WarehouseMapSlotInboundDTO {
     @Schema(description = "目标仓库名称")
     private String warehouseName;
 
-    @NotBlank
-    @Schema(description = "目标侧：左/右")
+    @Schema(hidden = true, description = "数据库兼容字段；库位内不再区分左右")
     private String side;
 
-    @NotNull
-    @Schema(description = "目标排号")
+    @Schema(hidden = true, description = "数据库兼容字段；不再表达物理排号")
     private Integer rowNumber;
 
-    @NotNull
-    @Schema(description = "目标层数")
+    @Schema(hidden = true, description = "数据库兼容字段；不再表达物理层数")
     private Integer layer;
 
     @Schema(description = "备注")

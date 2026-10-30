@@ -29,13 +29,13 @@ public class BaseInStockDTO {
     @Schema(description = "单位0板1件（板/件）", example = "30")
     private String unit;
 
-    @Schema(description = "库位左/右列，默认为左", example = "左")
-    private String side = "左";  // 默认左侧
+    @Schema(description = "兼容字段，后端统一按库位级库存处理", hidden = true)
+    private String side = "左";
 
-    @Schema(description = "指定排号；为空时按现有规则自动分配")
+    @Schema(description = "兼容字段，不再表示真实位置", hidden = true)
     private Integer rowNumber;
 
-    @Schema(description = "指定层数；为空时按现有规则自动分配")
+    @Schema(description = "兼容字段，不再表示真实位置", hidden = true)
     private Integer layer;
 
     @Schema(description = "筛网规格ID", example = "2")

@@ -22,7 +22,6 @@ public class FinishInboundExecutionPendingVO {
         private String productName;
         private String warehouseName;
         private LocalDate entryDate;
-        private String side;
         private Integer quantity;
         private String unitLabel;
         private String remark;

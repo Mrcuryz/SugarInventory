@@ -90,22 +90,6 @@
           <el-button text type="primary" @click="assayDialogVisible=true;getAssayInfo(item)">查看化验</el-button>
         </div>
       </div>
-      <div class="location-layout-container" v-if="selectedLocation.status === 'filtered' && selectedLocation.id < 1000">
-        <div class="columns-wrapper">
-          <div class="column">
-            <div class="rows-container">
-              <div v-for="row in maxRowNum" :key="`left-${row}`" class="cell" :class="getCellClass('左', row)">{{ row }}</div>
-            </div>
-            <div class="column-title">左</div>
-          </div>
-          <div class="column">
-            <div class="rows-container">
-              <div v-for="row in maxRowNum" :key="`right-${row}`" class="cell" :class="getCellClass('右', row)">{{ row }}</div>
-            </div>
-            <div class="column-title">右</div>
-          </div>
-        </div>
-      </div>
     </el-card>
 
     <el-dialog
@@ -166,12 +150,6 @@
               <el-option label="件" value="1"/>
             </el-select>
           </div>
-        </el-form-item>
-        <el-form-item label="位置" prop="side" v-if="selectedLocation.id < 1000">
-          <el-radio-group v-model="submitForm.side">
-            <el-radio label="左" value="左">左</el-radio>
-            <el-radio label="右" value="右">右</el-radio>
-          </el-radio-group>
         </el-form-item>
         <el-form-item label="半成品信息" v-if="firstLevelValues === '成品'">
           <div v-for="(item, index) in submitForm.semiRecords" :key="index">
@@ -317,12 +295,6 @@
             </el-select>
           </div>
         </el-form-item>
-        <el-form-item label="出库位置" prop="side" v-if="selectedLocation.id < 1000">
-          <el-radio-group v-model="submitForm.side">
-            <el-radio label="左" value="左">左</el-radio>
-            <el-radio label="右" value="右">右</el-radio>
-          </el-radio-group>
-        </el-form-item>
         <el-form-item v-if="operationTypeLabel === '调拨出库'"
                       label="入库仓库"
                       prop="inWarehouseName"
@@ -431,9 +403,7 @@ import {throttle} from 'lodash-es'
 import {
   getWarehouseInfo,
   queryWarehouseLedger,
-  getWarehouseList,
-  getWarehouseById,
-  getMaxRowNum
+  getWarehouseList
 } from '@/api/warehouseinfo'
 import {ElMessage} from 'element-plus'
 import {getStandard} from "@/api/standard";
@@ -523,17 +493,6 @@ const handleReset = () => {
   }
   filteredInfo.value = []
   getAll()
-}
-const filterLocations = ref([])
-const maxRowNum = ref(0)
-// 样式计算函数
-const getCellClass = (side, row) => {
-  const hasGoods = filterLocations.value.some(
-      loc => loc.side === side && loc.rowNumber === row
-  )
-  return hasGoods
-      ? 'bg-blue-500 cursor-pointer'
-      : 'bg-gray-200 cursor-not-allowed'
 }
 // 时间数据
 const time = ref(new Date())
@@ -1529,15 +1488,6 @@ const handleSelectLocation = async (location) => {
   }
   if (isFiltered) {
     selectedLocation.value.status = 'filtered'
-    let res = await getWarehouseById(location.id, filteredInfo.value)
-    if (res.code === 200) {
-      filterLocations.value = res.data
-      // 获取最大行数
-      const result = await getMaxRowNum(selectedLocation.value.warehouseId)
-      if (result.code === 200) {
-        maxRowNum.value = result.data.maxRows
-      }
-    }
   }
   loading.value = false
   //颜色变深
@@ -1679,7 +1629,6 @@ const handleClose = () => {
     productId: '',
     warehouseName: '',
     quantity: '',
-    side: '',
     screenMeshId: '',
     outType: '0',
     unit: '0',
@@ -1698,7 +1647,6 @@ const submitForm = ref({
   warehouseName: '',
   inWarehouseName: '',
   quantity: '',
-  side: '',
   screenMeshId: '',
   entryDate: '',
   semiRecords: []
@@ -1709,7 +1657,6 @@ const rule = {
   productId: [{required: true, message: '请输入产品名称', trigger: 'blur'}],
   warehouseName: [{required: true, message: '请输入仓库名称', trigger: 'blur'}],
   quantity: [{required: true, message: '请输入数量', trigger: 'blur'}],
-  side: [{required: true, message: '请选择位置', trigger: 'blur'}],
   entryDate: [{required: true, message: '请选择入库日期', trigger: 'blur'}]
 }
 const rules = reactive({
@@ -1721,8 +1668,7 @@ const rules = reactive({
   productionDate: {type: 'date', required: true, message: '请选择生产日期'},
 })
 const ruless = reactive({
-  quantity: {required: true, message: '请输入数量'},
-  side: [{required: true, message: '请选择位置', trigger: 'blur'}]
+  quantity: {required: true, message: '请输入数量'}
 })
 const addSemi = () => {
   if (!submitForm.value.semiRecords) {
@@ -1772,7 +1718,6 @@ const transferOut = async () => {
     productId: submitForm.value.productId,
     warehouseId: selectedLocation.value.warehouseId,
     inWarehouseName: submitForm.value.inWarehouseName,
-    side: submitForm.value.side,
     unit: submitForm.value.unit,
     outType: submitForm.value.outType,
     quantity: submitForm.value.quantity
@@ -1793,9 +1738,6 @@ const handleOut = async () => {
   if (!submitForm.value.outType || submitForm.value.outType === '') {
     ElMessage.error('请选择出库方式')
   }
-  if (submitForm.value.side === '' && selectedLocation.value.warehouseId < 1000) {
-    ElMessage.error('请选择位置')
-  }
   if (operationTypeLabel.value === '调拨出库') {
     await transferOut()
     return
@@ -1815,7 +1757,6 @@ const handleOut = async () => {
     let params = {
       productId: submitForm.value.productId,
       warehouseId: selectedLocation.value.warehouseId,
-      side: submitForm.value.side,
       unit: submitForm.value.unit,
       outType: submitForm.value.outType,
       quantity: submitForm.value.quantity
@@ -1843,10 +1784,6 @@ const handleNew = async () => {
   }
   if (!submitForm.value.unit || submitForm.value.unit === '') {
     ElMessage.error('请选择入库数量单位')
-    return
-  }
-  if (submitForm.value.side === '' && selectedLocation.value.warehouseId < 1000) {
-    ElMessage.error('请选择位置')
     return
   }
   if (submitForm.value.entryDate === '') {
@@ -1897,7 +1834,6 @@ const handleNew = async () => {
         productId: submitForm.value.productId,
         warehouseName: submitForm.value.warehouseName,
         quantity: submitForm.value.quantity,
-        side: submitForm.value.side,
         unit: submitForm.value.unit,
         screenMeshId: submitForm.value.screenMeshId,
         returnInStockFlag: returnInStockFlag.value,
@@ -1939,7 +1875,6 @@ const handleNew = async () => {
         warehouseName: '',
         quantity: '',
         unit: '0',
-        side: '',
         meshName: ''
       }
     } else {

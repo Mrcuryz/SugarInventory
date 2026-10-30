@@ -10,7 +10,11 @@ import lombok.EqualsAndHashCode;
 public class WarehouseDTO extends BaseDTO {
     @Schema(description = "库位名称")
     private String warehouseName;
-    @Schema(description = "最大排数")
+
+    @Schema(description = "最大容量（托盘）")
+    private Integer maxCapacity;
+
+    @Schema(description = "兼容字段；未填写最大容量时用于换算", hidden = true)
     private Integer maxRows;
 
     @Override

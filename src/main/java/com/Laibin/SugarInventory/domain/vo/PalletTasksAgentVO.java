@@ -27,7 +27,6 @@ public class PalletTasksAgentVO {
         String code;
         String operationBatchNo;
         String targetWarehouseName;
-        String targetSide;
         String productName;
         String productType;
         String productStatus;

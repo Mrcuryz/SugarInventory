@@ -36,15 +36,6 @@ public class OutProductVO {
     @Schema(description = "筛网名称")
     private String meshName;
 
-    @Schema(description = "库位左/右侧")
-    private String side;
-
-    @Schema(description = "排数")
-    private Integer rowNumber;
-
-    @Schema(description = "层数")
-    private Integer layer;
-
     @Schema(description = "库存板数")
     private Integer quantity;
 

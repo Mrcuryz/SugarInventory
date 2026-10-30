@@ -17,7 +17,6 @@ public class PalletTaskPageVO {
     private String code;
     private Integer targetWarehouseId;
     private String targetWarehouseName;
-    private String targetSide;
     private Integer productId;
     private String productName;
     private String productType;

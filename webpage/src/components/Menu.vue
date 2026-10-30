@@ -1,4 +1,5 @@
 <script setup>
+import { demoMode } from '@/config/branding'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
@@ -196,7 +197,7 @@ const handleLogout = async () => {
         </router-view>
       </el-main>
 
-      <footer class="icp-footer">
+      <footer v-if="!demoMode" class="icp-footer">
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂 ICP 备 2025058642 号-2</a>
       </footer>
       <AgentAssistant v-if="canUseAgent" ref="agentAssistantRef" />

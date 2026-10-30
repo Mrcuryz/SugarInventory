@@ -1,4 +1,5 @@
 <script setup>
+import {demoMode} from '@/config/branding'
 import {ref, reactive} from 'vue'
 import {useRouter} from 'vue-router'
 import {ElMessage} from 'element-plus'
@@ -122,7 +123,7 @@ const handleSubmit = async () => {
           </el-form>
         </el-card>
       </div>
-      <footer class="icp-footer">
+      <footer v-if="!demoMode" class="icp-footer">
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂ICP备2025058642号-2</a>
       </footer>
     </div>

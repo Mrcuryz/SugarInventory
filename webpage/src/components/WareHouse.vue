@@ -90,7 +90,6 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="maxRows" label="最大行数" width="100"/>
         <el-table-column prop="currentPalletCount" label="当前板位数" width="120"/>
         <el-table-column prop="currentProductCount" label="当前产品数" width="120"/>
         <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip>
@@ -152,8 +151,8 @@
         <el-form-item label="库位名称" required>
           <el-input v-model="editForm.warehouseName" clearable placeholder="请输入库位名称"/>
         </el-form-item>
-        <el-form-item label="最大行数" required>
-          <el-input-number v-model="editForm.maxRows" :min="1" :step="1" :precision="0" style="width: 100%"/>
+        <el-form-item label="最大容量" required>
+          <el-input-number v-model="editForm.maxCapacity" :min="1" :step="1" :precision="0" style="width: 100%"/>
         </el-form-item>
         <el-form-item label="库位状态">
           <div class="maintenance-switch-row">
@@ -206,7 +205,7 @@ const editInitialMaintenance = ref(false)
 const editForm = ref({
   id: null,
   warehouseName: '',
-  maxRows: 1,
+  maxCapacity: 1,
   maintenance: false
 })
 
@@ -361,7 +360,7 @@ const openEditDialog = (row) => {
   editForm.value = {
     id: row.warehouseId,
     warehouseName: row.warehouseName || '',
-    maxRows: Number(row.maxRows || 1),
+    maxCapacity: Number(row.maxCapacity || 1),
     maintenance: row.status === '维护'
   }
   editInitialMaintenance.value = row.status === '维护'
@@ -372,7 +371,7 @@ const resetEditForm = () => {
   editForm.value = {
     id: null,
     warehouseName: '',
-    maxRows: 1,
+    maxCapacity: 1,
     maintenance: false
   }
   editInitialMaintenance.value = false
@@ -383,8 +382,8 @@ const submitEdit = async () => {
     ElMessage.warning('请输入库位名称')
     return
   }
-  if (!editForm.value.maxRows || editForm.value.maxRows < 1) {
-    ElMessage.warning('请输入正确的最大行数')
+  if (!editForm.value.maxCapacity || editForm.value.maxCapacity < 1) {
+    ElMessage.warning('请输入正确的最大容量')
     return
   }
   editSubmitting.value = true
@@ -392,7 +391,7 @@ const submitEdit = async () => {
     const updateRes = await changeWarehouse({
       id: editForm.value.id,
       warehouseName: editForm.value.warehouseName.trim(),
-      maxRows: editForm.value.maxRows
+      maxCapacity: editForm.value.maxCapacity
     })
     if (updateRes.code !== 200) {
       ElMessage.error(updateRes.msg || '库位信息更新失败')

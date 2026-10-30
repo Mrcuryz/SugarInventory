@@ -26,6 +26,7 @@ import com.Laibin.SugarInventory.service.AutoInboundConfirmService;
 import com.Laibin.SugarInventory.service.AutoInboundParseService;
 import com.Laibin.SugarInventory.service.PalletCodeService;
 import com.Laibin.SugarInventory.service.model.AutoInboundQuantityNormalizer;
+import com.Laibin.SugarInventory.service.model.WarehouseLocationGranularityPolicy;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -223,9 +224,7 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
         if (update.getEntryDate() != null) {
             task.setEntryDate(update.getEntryDate());
         }
-        if (update.getSide() != null) {
-            task.setSide(update.getSide().trim());
-        }
+        task.setSide(WarehouseLocationGranularityPolicy.INTERNAL_SIDE);
         if (update.getRemark() != null) {
             task.setRemark(truncate(update.getRemark().trim(), PALLET_TASK_REMARK_MAX_LENGTH));
         }
@@ -312,9 +311,7 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
     }
 
     private void validateAndCanonicalizeTask(AutoInboundTask task, Product product, Warehouse warehouse) {
-        if (!Objects.equals(task.getSide(), "左") && !Objects.equals(task.getSide(), "右")) {
-            throw new BusinessException(400, "侧别只能为左或右");
-        }
+        task.setSide(WarehouseLocationGranularityPolicy.INTERNAL_SIDE);
         if (task.getEntryDate() == null) {
             throw new BusinessException(400, "请先补全入库日期");
         }
@@ -339,7 +336,6 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
         canonical.put("productId", prepared.product().getId());
         canonical.put("warehouseId", prepared.warehouse().getId());
         canonical.put("entryDate", task.getEntryDate());
-        canonical.put("side", task.getSide());
         canonical.put("boardQuantity", getBoardQuantity(task));
         canonical.put("pieceQuantity", getPieceQuantity(task));
         canonical.put("remark", task.getRemark());
@@ -542,13 +538,11 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
                 createAndConfirm(task, item, palletCode, product, warehouse, entryDate, operator, operationBatchNo);
                 item.setCode(palletCode.getCode());
                 item.setWarehouseName(warehouse.getWarehouseName());
-                item.setSide(task.getSide());
                 item.setStatus("SUCCESS");
                 item.setMessage("入库成功");
             } catch (RuntimeException e) {
                 item.setCode(palletCode.getCode());
                 item.setWarehouseName(warehouse.getWarehouseName());
-                item.setSide(task.getSide());
                 item.setStatus("FAILED");
                 item.setMessage(e.getMessage());
                 throw e;
@@ -577,7 +571,7 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
         ConfirmPalletInItemDTO confirmDTO = new ConfirmPalletInItemDTO();
         confirmDTO.setWarehouseName(warehouse.getWarehouseName());
         confirmDTO.setEntryDate(entryDate);
-        confirmDTO.setSide(normalizeSide(task.getSide()));
+        confirmDTO.setSide(WarehouseLocationGranularityPolicy.INTERNAL_SIDE);
         confirmDTO.setQuantity(item.getQuantity());
         confirmDTO.setUnit(item.getUnit());
         confirmDTO.setRemark(remark);
@@ -633,10 +627,6 @@ public class AutoInboundConfirmServiceImpl implements AutoInboundConfirmService 
 
     private Integer getPieceQuantity(AutoInboundTask task) {
         return task.getType() == AutoInboundType.SEMI_PRODUCT ? task.getSemiPieceQuantity() : task.getFinishedPieceQuantity();
-    }
-
-    private String normalizeSide(String side) {
-        return Objects.equals(side, "右") ? "右" : "左";
     }
 
     private String appendRemark(String base, String extra) {

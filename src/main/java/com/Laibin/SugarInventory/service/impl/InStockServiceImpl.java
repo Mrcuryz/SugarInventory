@@ -14,7 +14,7 @@ import com.Laibin.SugarInventory.inventoryhistory.service.StockMovementEventServ
 import com.Laibin.SugarInventory.domain.vo.VInventorySummary;
 import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.*;
-import com.Laibin.SugarInventory.service.model.AssayJudgeOutcome;
+import com.Laibin.SugarInventory.service.model.WarehouseLocationGranularityPolicy;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -77,7 +77,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
     private StockMovementActionContext stockMovementActionContext;
 
     @Autowired
-    private AssayStandardJudgeService assayStandardJudgeService;
+    private AssayWriteService assayWriteService;
 
     private final Integer page = 1;
     private final Integer size = 10;
@@ -136,32 +136,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
                 dtoAssay.setSucrose(semiAssay.getSucrose());
                 dtoAssay.setConductivityAsh(semiAssay.getConductivityAsh());
 
-                AssayJudgeOutcome judgeOutcome = assayStandardJudgeService.judge(product, dtoAssay);
-                assay = new Assay();
-                BeanUtils.copyProperties(dtoAssay, assay);
-                assay.setTestedBy(operatorId);
-                assay.setQualifiedStandards(judgeOutcome.getQualifiedStandardsJson());
-                assay.setIsQualified(judgeOutcome.getCompatibleConclusion());
-                assay.setAppliedStandardId(judgeOutcome.getAppliedStandardId());
-                assay.setAppliedStandardName(judgeOutcome.getAppliedStandardName());
-                assay.setAppliedStandardVersion(judgeOutcome.getAppliedStandardVersion());
-                assay.setJudgeResult(judgeOutcome.getJudgeResult());
-                assay.setJudgeMessage(judgeOutcome.getJudgeMessage());
-                assay.setFailedMetricCount(judgeOutcome.getFailedMetricCount());
-                assay.setFailedMetricsJson(judgeOutcome.getFailedMetricsJson());
-                assay.setStandardSnapshotJson(judgeOutcome.getStandardSnapshotJson());
-
-                Assay todaysAssay = getAssayByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
-                if (todaysAssay != null) {
-                    int version = todaysAssay.getVersion() + 1;
-                    assay.setVersion(version);
-                } else {
-                    assay.setVersion(1);
-                }
-                assay.setCreatedAt(LocalDateTime.now());
-
-                assayMapper.insert(assay);
-                assay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getEntryDate());
+                assay = assayWriteService.append(dtoAssay, operatorId);
             }
         } else {
             // 闂傚倷绀侀幖顐ょ矓閻戞枻缍栧璺猴功閺嗐倕銆掑锝呬壕濡ょ姷鍋涢澶愮嵁閸ヮ剦鏁嗗ù锝囨嚀閸撶悂D闂傚倷绀侀幉锛勫垝瀹€鍕殣妞ゆ牜鍋涢惌妤呮煕閳╁叐鎴﹀磿閻斿吋鐓欓柟顖嗗懏鎲奸梺鎸庣☉椤︾敻寮婚敓鐘查唶闁靛繒濮甸悗楣冩⒑缂佹ɑ鎯堢紒杈ㄦ礋楠炲繘鎮╃拠宸綂闂佺粯锚濡﹪宕靛▎鎰箚闁靛牆娲ゅ瓭闂佹椿鍘虹欢姘躲€佸▎鎾崇倞妞ゅ繐鍊峰Ч?
@@ -184,25 +159,7 @@ public class InStockServiceImpl extends ServiceImpl<InStockMapper, InStock> impl
             inStock.setSemiProductRecords(semiProductRecordsJson);
         }
 
-        int maxRows = warehouse.getMaxRows();
-        int remainingQuantity = dto.getQuantity();
-        String currentSide = dto.getSide(); // 婵犳鍠楃敮妤冪矙閹烘せ鈧箓宕奸妷顔芥櫍缂傚倷鐒﹂…鍥€呴悜钘夌缂侇喖鍘滈崑鎾绘嚑椤掑鏁告繝鐢靛仦閹稿鎯冨鍫濈妞ゅ繐鎳忛崰鏍⒒娴ｅ鈧偓闁?
-        boolean canStack = product.getCanStack(); // 闂傚倷绀侀幖顐も偓姘卞厴瀹曡瀵奸弶鎴犵暰婵炴挻鍩冮崑鎾垛偓瑙勬穿缂嶄線銆佸☉姗嗘僵闁告鍋熸导鍕磽?
-
-        // **3. 婵犵妲呴崑鍛熆濡皷鍋撳鐓庣仸闁绘侗鍠涚粻娑樷槈濡偐鍘梻浣告惈鐠囩偤宕ㄩ鍜佷邯濮婃椽宕ㄦ繝鍐ㄧ缂備礁顦顓㈡嚍鏉堛劍缍囬柕濠忕畱椤庢捇鎮楅獮鍨姎婵炶绠撻幃楣冩焼瀹ュ棗鈧灚绻涢幋鐑嗕痪妞ゅ繐鐗嗙壕鑽も偓骞垮劚椤︻垳绮诲鑸电厱婵炴垵宕獮鏍煛?*
-        int leftUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "\u5DE6", 1);
-        int rightUsedRowsLayer1 = inventoryMapper.getUsedRows(warehouse.getId(), "\u53F3", 1);
-        int leftUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "\u5DE6", 2);
-        int rightUsedRowsLayer2 = inventoryMapper.getUsedRows(warehouse.getId(), "\u53F3", 2);
-
-        int currentLayer = (leftUsedRowsLayer2 > 0 || rightUsedRowsLayer2 > 0) ? 2 : 1;
-
-        int remainingCapacity = 2 * maxRows - leftUsedRowsLayer1 - rightUsedRowsLayer1;
-        if (product.getCanStack() && currentLayer == 1) {
-            remainingCapacity += 2 * maxRows;
-        }
-
-        if (remainingCapacity <= 0) {
+        if (WarehouseLocationGranularityPolicy.remainingCapacity(warehouse) <= 0) {
             throw new BusinessException(ErrorCode.WAREHOUSE_FULL);
         }
 

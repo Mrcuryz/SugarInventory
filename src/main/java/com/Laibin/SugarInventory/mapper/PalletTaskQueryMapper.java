@@ -18,7 +18,6 @@ public interface PalletTaskQueryMapper {
             " t.pallet_code_id AS palletCodeId, pc.code AS code,",
             " COALESCE(t.target_warehouse_id, fr.to_warehouse_id) AS targetWarehouseId,",
             " COALESCE(tw.warehouse_name, fw.warehouse_name) AS targetWarehouseName,",
-            " COALESCE(t.target_side, fr.to_side) AS targetSide,",
             " t.product_id AS productId, p.product_name AS productName, p.product_type AS productType,",
             " t.product_status AS productStatus,",
             " CASE",

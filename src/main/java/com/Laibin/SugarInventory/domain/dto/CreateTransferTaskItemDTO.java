@@ -15,7 +15,7 @@ public class CreateTransferTaskItemDTO {
     @Schema(description = "目标仓库名称")
     private String targetWarehouseName;
 
-    @Schema(description = "目标侧，左/右，默认左")
+    @Schema(description = "兼容字段，后端固定为左", hidden = true)
     private String targetSide;
 
     @Schema(description = "备注，可选")

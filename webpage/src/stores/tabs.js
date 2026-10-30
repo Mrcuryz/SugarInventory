@@ -20,6 +20,7 @@ export const KEEP_ALIVE_TAB_NAMES = [
   'WarehouseMap',
   'PalletCodeList',
   'FixedProductQrPool',
+  'WarehouseLocationCodePrint',
   'PalletTaskOverview',
   'SemiInTaskPage',
   'SemiOutTaskPage',

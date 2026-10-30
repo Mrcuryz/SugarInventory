@@ -24,3 +24,19 @@ export const changeWarehouse = (params) => {
 export const changeWarehouseStatus = (id) => {
     return request.put('/warehouse/maintain/' + id)
 }
+
+export const getWarehouseLocationCodes = (warehouseIds) => {
+    return request.post('/warehouse/location-codes/query', {warehouseIds})
+}
+
+export const downloadWarehouseLocationQrPng = (warehouseId) => {
+    return request.get(`/warehouse/${warehouseId}/location-qrcode.png`, {responseType: 'blob'})
+}
+
+export const downloadWarehouseLocationLabelPdf = (warehouseId) => {
+    return request.get(`/warehouse/${warehouseId}/location-qrcode-label.pdf`, {responseType: 'blob'})
+}
+
+export const batchDownloadWarehouseLocationLabelsPdf = (warehouseIds) => {
+    return request.post('/warehouse/location-qrcode-labels/pdf', {warehouseIds}, {responseType: 'blob'})
+}

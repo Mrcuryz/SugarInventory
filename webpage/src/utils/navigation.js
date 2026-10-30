@@ -40,7 +40,8 @@ export const menuList = [
     icon: Tickets,
     children: [
       { path: '/pallet-code/list', title: '二维码管理', icon: Tickets, permCode: 'qrcode:view' },
-      { path: '/pallet-code/fixed-product', title: '固定产品二维码池', icon: Tickets, permCode: 'qrcode:pool_view' }
+      { path: '/pallet-code/fixed-product', title: '固定产品二维码池', icon: Tickets, permCode: 'qrcode:pool_view' },
+      { path: '/pallet-code/warehouse-location', title: '库位码打印', icon: Location, permCode: 'qrcode:print' }
     ]
   },
   {

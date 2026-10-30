@@ -109,7 +109,6 @@
         <el-table-column v-if="hasColumn('productStatus')" prop="productStatus" label="产品状态" width="100"/>
         <el-table-column prop="productionDate" label="生产日期" width="120"/>
         <el-table-column v-if="hasColumn('targetWarehouse')" prop="targetWarehouseName" label="目标库位" width="130"/>
-        <el-table-column v-if="hasColumn('targetWarehouse')" prop="targetSide" label="目标侧" width="80"/>
         <el-table-column v-if="hasColumn('semiItemCount')" prop="semiItemCount" label="半成品数" width="100"/>
         <el-table-column v-if="hasColumn('hasSemiItems')" label="已登记用量" width="120">
           <template #default="{ row }">
@@ -162,11 +161,6 @@
         <el-form-item label="入库日期">
           <el-date-picker v-model="confirmInForm.entryDate" value-format="YYYY-MM-DD" type="date" style="width: 100%"/>
         </el-form-item>
-        <el-form-item label="侧">
-          <el-radio-group v-model="confirmInForm.side">
-            <el-radio v-for="item in SIDE_OPTIONS" :key="item.value" :label="item.value">{{ item.label }}</el-radio>
-          </el-radio-group>
-        </el-form-item>
         <el-form-item label="单位">
           <el-radio-group v-model="confirmInForm.unit" :disabled="confirmInForm.quantityLocked" @change="handleConfirmInUnitChange">
             <el-radio v-for="item in UNIT_OPTIONS" :key="item.value" :label="item.value">{{ item.label }}</el-radio>
@@ -206,13 +200,6 @@
         <el-table-column label="入库日期" width="155">
           <template #default="{ row }">
             <el-date-picker v-model="row.entryDate" value-format="YYYY-MM-DD" type="date" style="width: 100%"/>
-          </template>
-        </el-table-column>
-        <el-table-column label="侧" width="95">
-          <template #default="{ row }">
-            <el-select v-model="row.side">
-              <el-option v-for="item in SIDE_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
-            </el-select>
           </template>
         </el-table-column>
         <el-table-column label="单位" width="95">
@@ -309,13 +296,6 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="目标侧" width="100">
-            <template #default="{ row }">
-              <el-select v-model="row.targetSide">
-                <el-option v-for="item in SIDE_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
-              </el-select>
-            </template>
-          </el-table-column>
           <el-table-column label="备注" min-width="150">
             <template #default="{ row }">
               <el-input v-model="row.remark" placeholder="备注"/>
@@ -360,7 +340,6 @@ import {
   BIZ_SCENE_MAP,
   PRODUCT_STATUS_OPTIONS,
   PRODUCT_TYPE_OPTIONS,
-  SIDE_OPTIONS,
   TASK_STATUS_MAP,
   TASK_TYPE_MAP,
   UNIT_OPTIONS,
@@ -518,7 +497,6 @@ function defaultConfirmInForm() {
     code: '',
     warehouseName: '',
     entryDate: dayjs().format('YYYY-MM-DD'),
-    side: '左',
     quantity: 1,
     unit: '0',
     remark: '',
@@ -530,7 +508,6 @@ function defaultTransferItem() {
   return {
     code: '',
     targetWarehouseName: '',
-    targetSide: '左',
     remark: ''
   }
 }
@@ -707,7 +684,6 @@ const openConfirmInDialog = (row) => {
     ...defaultConfirmInForm(),
     code: row.code,
     entryDate: row.productionDate || dayjs().format('YYYY-MM-DD'),
-    side: row.targetSide || '左',
     quantity: quantityLocked ? productionOutputQuantity(row) : 1,
     unit: quantityLocked ? productionOutputUnit(row) : '0',
     quantityLocked,
@@ -792,7 +768,6 @@ const openBatchConfirmInDialog = () => {
       productName: row.productName,
       warehouseName: row.targetWarehouseName || '',
       entryDate: row.productionDate || dayjs().format('YYYY-MM-DD'),
-      side: row.targetSide || '左',
       quantity: quantityLocked ? productionOutputQuantity(row) : 1,
       unit: quantityLocked ? productionOutputUnit(row) : '0',
       quantityLocked,
@@ -824,7 +799,6 @@ const submitBatchConfirmIn = async () => {
     code: row.code,
     warehouseName: row.warehouseName,
     entryDate: row.entryDate,
-    side: row.side,
     quantity: row.quantity,
     unit: row.unit,
     remark: row.remark

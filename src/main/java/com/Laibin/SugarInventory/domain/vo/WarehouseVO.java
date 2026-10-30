@@ -16,5 +16,4 @@ public class WarehouseVO extends BaseVO {
     private LocalDateTime updatedAt;
     private Integer maxCapacity;
     private Integer curCapacity;
-    private Integer maxRows;
 }

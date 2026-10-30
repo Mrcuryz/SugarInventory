@@ -527,16 +527,10 @@ const formatNumber = (value) => {
 const formatWeight = (value) => `${formatNumber(value)} kg`
 const formatInventoryLocation = (info) => {
   if (!info) return '-'
-  const position = [info.side && `${info.side}侧`, info.rowNumber != null && `${info.rowNumber}排`, info.layer != null && `${info.layer}层`]
-      .filter(Boolean)
-      .join(' ')
-  return `${info.warehouseName || '-'}${position ? ` ${position}` : ''}`
+  return info.warehouseName || '-'
 }
 const formatMaterialLocation = (row) => {
-  const position = [row.side && `${row.side}侧`, row.rowNumber != null && `${row.rowNumber}排`, row.layer != null && `${row.layer}层`]
-      .filter(Boolean)
-      .join(' ')
-  return `${row.warehouseName || '-'}${position ? ` ${position}` : ''}`
+  return row.warehouseName || '-'
 }
 const formatMaterialQuantity = (row) => {
   if (row.unit === '1') {

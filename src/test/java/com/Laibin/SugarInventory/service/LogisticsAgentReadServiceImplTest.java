@@ -146,8 +146,7 @@ class LogisticsAgentReadServiceImplTest {
         pallet.setProductionDate(java.time.LocalDate.of(2026, 5, 7));
         when(palletCodeService.parseAndFind("BT00135D")).thenReturn(pallet);
         var inventory = new com.Laibin.SugarInventory.domain.vo.PalletInventoryVO();
-        inventory.setWarehouseName("2"); inventory.setSide("LEFT");
-        inventory.setRowNumber(2); inventory.setLayer(1); inventory.setQuantity(1); inventory.setUnit(false);
+        inventory.setWarehouseName("2"); inventory.setQuantity(1); inventory.setUnit(false);
         when(palletCodeService.getInventoryByCode("BT00135D")).thenReturn(inventory);
         LogisticsAgentReadServiceImpl service = new LogisticsAgentReadServiceImpl(
                 palletCodeService, mock(InStockService.class), mock(OutStockService.class),
@@ -169,7 +168,6 @@ class LogisticsAgentReadServiceImplTest {
         assertThat(result.getTasks()).singleElement().satisfies(task -> {
             assertThat(task.getPalletCode()).isEqualTo("BT00135D");
             assertThat(task.getCurrentWarehouseName()).isEqualTo("2");
-            assertThat(task.getCurrentSide()).isEqualTo("LEFT");
             assertThat(task.getCurrentInventoryQuantity()).isEqualTo(1);
             assertThat(task.getCurrentInventoryUnit()).isEqualTo("板");
         });
@@ -188,11 +186,9 @@ class LogisticsAgentReadServiceImplTest {
         var eligibility = com.Laibin.SugarInventory.domain.vo.TransferTaskPreviewVO.builder()
                 .items(List.of(com.Laibin.SugarInventory.domain.vo.TransferTaskPreviewVO.Item.builder()
                         .palletCode("BT0016LC")
-                        .currentWarehouseName("2").currentSide("左")
-                        .currentRowNumber(3).currentLayer(1)
+                        .currentWarehouseName("2")
                         .currentInventoryQuantity(1).currentInventoryUnit("板")
-                        .targetWarehouseName("3").targetSide("右")
-                        .plannedTargetRowNumber(1).plannedTargetLayer(1)
+                        .targetWarehouseName("3")
                         .build()))
                 .blockingIssues(List.of())
                 .build();
@@ -216,9 +212,6 @@ class LogisticsAgentReadServiceImplTest {
         assertThat(result.getTasks()).singleElement().satisfies(task -> {
             assertThat(task.getCurrentWarehouseName()).isEqualTo("2");
             assertThat(task.getTargetWarehouseName()).isEqualTo("3");
-            assertThat(task.getTargetSide()).isEqualTo("右");
-            assertThat(task.getPlannedTargetRowNumber()).isEqualTo(1);
-            assertThat(task.getPlannedTargetLayer()).isEqualTo(1);
         });
         org.mockito.Mockito.verify(palletCodeService, org.mockito.Mockito.never())
                 .confirmTransferTasks(any(), any());

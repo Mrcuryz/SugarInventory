@@ -436,7 +436,7 @@ public class PalletCodeController {
         return Result.success(null);
     }
 
-    @Operation(summary = "仓库平面图批量创建任务", description = "按库位、侧别和前N板创建出库或调拨任务；传入 codes 时按指定托盘码精确创建")
+    @Operation(summary = "仓库平面图批量创建任务", description = "按库位和前N板创建出库或调拨任务；传入 codes 时按指定托盘码精确创建")
     @PostMapping("/warehouse-map/tasks/create")
     @PreAuthorize("hasAuthority('task:create')")
     @LogOperation(value = "pallet_task", type = OperationType.INSERT)

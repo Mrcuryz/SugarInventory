@@ -35,4 +35,16 @@ class LabelRenderServiceTest {
                 () -> labelRenderService.renderLabels("unsupported_template", List.of(new PrintLabelRequest("BT001", "测试")))
         );
     }
+
+    @Test
+    void renderLabelsShouldCreateWarehouseLocationImages() {
+        List<BufferedImage> images = labelRenderService.renderLabels(
+                LabelRenderService.WAREHOUSE_LOCATION_QRCODE_TEMPLATE,
+                List.of(new PrintLabelRequest("LSI|WAREHOUSE|1|3", "3号库位"))
+        );
+
+        assertEquals(1, images.size());
+        assertEquals(900, images.get(0).getWidth());
+        assertEquals(675, images.get(0).getHeight());
+    }
 }

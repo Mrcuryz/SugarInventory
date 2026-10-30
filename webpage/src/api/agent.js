@@ -7,6 +7,16 @@ export const getCurrentAgentSessions = () => request.get('/agent/sessions/curren
 
 export const sendAgentMessage = (agentSessionId, data) => request.post(`/agent/sessions/${agentSessionId}/messages`, data)
 
+const assayEntryPath = (sessionId, ref = '') =>
+  `/agent/sessions/${encodeURIComponent(sessionId)}/assay-entry/previews${ref ? `/${encodeURIComponent(ref)}` : ''}`
+export const createAssayEntryPreview = (sessionId, data) => request.post(`${assayEntryPath(sessionId)}/from-product`, data, { timeout: 30000 })
+export const createAssayGroupEntryPreview = (sessionId, data) => request.post(`${assayEntryPath(sessionId)}/from-group`, data, { timeout: 30000 })
+export const confirmAssayEntry = (sessionId, ref) => request.post(`${assayEntryPath(sessionId, ref)}/confirm`, null, { timeout: 30000 })
+export const executeAssayEntry = (sessionId, ref, credentials) => request.post(`${assayEntryPath(sessionId, ref)}/execute`, credentials, { timeout: 30000 })
+export const getAssayEntryResult = (sessionId, ref) => request.get(`${assayEntryPath(sessionId, ref)}/result`, { timeout: 15000 })
+export const cancelAssayEntry = (sessionId, ref) => request.post(`${assayEntryPath(sessionId, ref)}/cancel`, null, { timeout: 15000 })
+export const recoverAssayEntry = (sessionId, ref) => request.post(`${assayEntryPath(sessionId, ref)}/recover`, null, { timeout: 30000 })
+
 export const cancelAgentMessage = (agentSessionId, messageId) =>
   request.post(`/agent/sessions/${agentSessionId}/messages/${messageId}/cancel`)
 

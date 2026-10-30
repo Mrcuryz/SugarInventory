@@ -14,6 +14,7 @@ import com.Laibin.SugarInventory.mapper.*;
 import com.Laibin.SugarInventory.service.LoggableService;
 import com.Laibin.SugarInventory.service.SemiProductRecordService;
 import com.Laibin.SugarInventory.service.model.PalletInventoryOccupancyRule;
+import com.Laibin.SugarInventory.service.model.WarehouseLocationGranularityPolicy;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -131,175 +132,47 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
     @Override
     public InVO handlerInStock(BaseInStockDTO dto, Product product, Warehouse warehouse,
                                Assay assay, Boolean isPieces, Integer piecesNum) {
-        if (dto.getRowNumber() != null || dto.getLayer() != null) {
-            return handlerSpecifiedLocationInStock(dto, product, warehouse, assay, isPieces, piecesNum);
-        }
         int remainingQuantity = dto.getQuantity();
         int insertedCount = 0;
         int conflictCount = 0;
-        String preferredSide = dto.getSide();
         while (remainingQuantity > 0) {
-            warehouse = warehouseMapper.selectById(warehouse.getId());
-            List<InventoryLocationCandidate> candidates = findAvailableLocationCandidates(
-                    warehouse.getId(),
-                    preferredSide,
-                    warehouse.getMaxRows(),
-                    Boolean.TRUE.equals(product.getCanStack())
-            );
-            if (candidates.isEmpty()) {
+            warehouse = warehouseMapper.selectByIdForUpdate(warehouse.getId());
+            if (WarehouseLocationGranularityPolicy.remainingCapacity(warehouse) <= insertedCount) {
                 break;
             }
-
-            boolean inserted = false;
-            for (InventoryLocationCandidate candidate : candidates) {
-                Inventory inventory = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
-                try {
+            InventoryLocationCandidate candidate = findAvailableTechnicalLocation(warehouse);
+            Inventory inventory = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
+            try {
                 inventoryMapper.insert(inventory);
                 remainingQuantity--;
-                    insertedCount++;
-                    preferredSide = candidate.side();
-                    inserted = true;
-                    break;
-                } catch (DuplicateKeyException e) {
-                    conflictCount++;
-                    if (conflictCount >= MAX_LOCATION_RETRY) {
-                        throw new BusinessException("库位分配冲突，请重试");
-                    }
-                    break;
+                insertedCount++;
+            } catch (DuplicateKeyException e) {
+                conflictCount++;
+                if (conflictCount >= MAX_LOCATION_RETRY) {
+                    throw new BusinessException("库位分配冲突，请重试");
                 }
-            }
-            if (!inserted && candidates.isEmpty()) {
-                break;
             }
         }
 
-        // **6. 同步更新库位信息**
         warehouseMapper.updateCurCapacity(
                 warehouse.getId(), warehouse.getCurCapacity() + insertedCount);
-        if (product.getCanStack() && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2)
-            warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
-        // **7. 返回入库信息**
         InVO inVO = new InVO();
         inVO.setRemainingQuantity(remainingQuantity);
         inVO.setMessage("入库成功！");
         return inVO;
     }
 
-    private InVO handlerSpecifiedLocationInStock(BaseInStockDTO dto, Product product, Warehouse warehouse,
-                                                Assay assay, Boolean isPieces, Integer piecesNum) {
-        if (dto.getRowNumber() == null || dto.getLayer() == null) {
-            throw new BusinessException("指定入库位置必须同时包含层数和排号");
-        }
-        if (!Integer.valueOf(1).equals(dto.getQuantity())) {
-            throw new BusinessException("指定位置入库仅支持单板操作");
-        }
-        if (dto.getRowNumber() < 1 || dto.getRowNumber() > warehouse.getMaxRows()) {
-            throw new BusinessException("目标排号超出库位范围");
-        }
-        if (dto.getLayer() < 1 || dto.getLayer() > 2) {
-            throw new BusinessException("目标层数非法");
-        }
-        if (dto.getLayer() == 2 && !Boolean.TRUE.equals(product.getCanStack())) {
-            throw new BusinessException("当前产品不支持二层堆放");
-        }
-        List<Integer> usedRows = inventoryMapper.getUsedRowListForUpdate(warehouse.getId(), dto.getSide(), dto.getLayer());
-        if (usedRows.contains(dto.getRowNumber())) {
-            throw new BusinessException("目标位置已有库存，不能入库");
-        }
-
-        InventoryLocationCandidate candidate = new InventoryLocationCandidate(dto.getSide(), dto.getRowNumber(), dto.getLayer());
-        Inventory inventory = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
-        try {
-            inventoryMapper.insert(inventory);
-        } catch (DuplicateKeyException e) {
-            throw new BusinessException("目标位置已被占用，请刷新后重试");
-        }
-        warehouseMapper.updateCurCapacity(warehouse.getId(), warehouse.getCurCapacity() + 1);
-        if (Boolean.TRUE.equals(product.getCanStack()) && warehouse.getMaxCapacity() != warehouse.getMaxRows() * 2 * 2) {
-            warehouseMapper.updateMaxCapacity(warehouse.getId(), warehouse.getMaxRows() * 2 * 2);
-        }
-        InVO inVO = InVO.createDefault();
-        inVO.setRemainingQuantity(0);
-        inVO.setMessage("入库成功！");
-        return inVO;
-    }
-
-    private Integer createRowNumber(List<Integer> leftUsedRowList,
-                                    List<Integer> rightUsedRowList,
-                                    List<Integer> leftUsedRow2List,
-                                    List<Integer> rightUsedRow2List,
-                                    String currentSide, Integer currentLayer) {
-        if (currentSide.equals("左")) {
-            if (currentLayer == 1) {
-                if (leftUsedRowList.isEmpty()) {
-                    return null;
-                }
-                Integer rowNumber = leftUsedRowList.get(0);
-                leftUsedRowList.remove(0);
-                return rowNumber;
-            } else {
-                if (leftUsedRow2List.isEmpty()) {
-                    return null;
-                }
-                Integer rowNumber = leftUsedRow2List.get(0);
-                leftUsedRow2List.remove(0);
-                return rowNumber;
-            }
-        } else {
-            if (currentLayer == 1) {
-                if (rightUsedRowList.isEmpty()) {
-                    return null;
-                }
-                Integer rowNumber = rightUsedRowList.get(0);
-                rightUsedRowList.remove(0);
-                return rowNumber;
-            } else {
-                if (rightUsedRow2List.isEmpty()) {
-                    return null;
-                }
-                Integer rowNumber = rightUsedRow2List.get(0);
-                rightUsedRow2List.remove(0);
-                return rowNumber;
-            }
-        }
-    }
-
-    private List<Integer> getUnusedRowNumbers(List<Integer> usedRowNumbers, int maxRows) {
-        List<Integer> unusedRowNumbers = new ArrayList<>();
-        for (int i = 1; i <= maxRows; i++) {
-            if (!usedRowNumbers.contains(i)) {
-                unusedRowNumbers.add(i);
-            }
-        }
-        return unusedRowNumbers;
-    }
-
-    private List<InventoryLocationCandidate> findAvailableLocationCandidates(Integer warehouseId, String preferredSide,
-                                                                             int maxRows, boolean canStack) {
-        List<InventoryLocationCandidate> candidates = new ArrayList<>();
-        List<String> sides = preferredSides(preferredSide);
-        addAvailableLocationCandidates(candidates, warehouseId, sides, maxRows, 1);
-        if (canStack) {
-            addAvailableLocationCandidates(candidates, warehouseId, sides, maxRows, 2);
-        }
-        return candidates;
-    }
-
-    private void addAvailableLocationCandidates(List<InventoryLocationCandidate> candidates, Integer warehouseId,
-                                                List<String> sides, int maxRows, int layer) {
-        for (String side : sides) {
-            List<Integer> usedRows = inventoryMapper.getUsedRowListForUpdate(warehouseId, side, layer);
-            for (Integer rowNumber : getUnusedRowNumbers(usedRows, maxRows)) {
-                candidates.add(new InventoryLocationCandidate(side, rowNumber, layer));
-            }
-        }
-    }
-
-    private List<String> preferredSides(String preferredSide) {
-        if ("右".equals(preferredSide)) {
-            return List.of("右", "左");
-        }
-        return List.of("左", "右");
+    private InventoryLocationCandidate findAvailableTechnicalLocation(Warehouse warehouse) {
+        int maxCapacity = WarehouseLocationGranularityPolicy.requireCapacity(warehouse);
+        List<Integer> usedRows = inventoryMapper.getUsedRowListForUpdate(
+                warehouse.getId(),
+                WarehouseLocationGranularityPolicy.INTERNAL_SIDE,
+                WarehouseLocationGranularityPolicy.INTERNAL_LAYER);
+        int rowNumber = WarehouseLocationGranularityPolicy.nextTechnicalRow(usedRows, maxCapacity);
+        return new InventoryLocationCandidate(
+                WarehouseLocationGranularityPolicy.INTERNAL_SIDE,
+                rowNumber,
+                WarehouseLocationGranularityPolicy.INTERNAL_LAYER);
     }
 
     private int convertLoosePiecesRemaining(InVO inVO, int requestedPieces) {
@@ -457,40 +330,22 @@ public class SemiProductRecordServiceImpl extends ServiceImpl<SemiProductRecordM
         int remaining = dto.getQuantity();
         int insertedCount = 0;
         int conflictCount = 0;
-        String preferredSide = dto.getSide();
-
         while (remaining > 0) {
-            warehouse = warehouseMapper.selectById(warehouse.getId());
-            List<InventoryLocationCandidate> candidates = findAvailableLocationCandidates(
-                    warehouse.getId(),
-                    preferredSide,
-                    warehouse.getMaxRows(),
-                    false
-            );
-            if (candidates.isEmpty()) {
+            warehouse = warehouseMapper.selectByIdForUpdate(warehouse.getId());
+            if (WarehouseLocationGranularityPolicy.remainingCapacity(warehouse) <= insertedCount) {
                 break;
             }
-
-            boolean inserted = false;
-            for (InventoryLocationCandidate candidate : candidates) {
-                Inventory inv = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
-                try {
+            InventoryLocationCandidate candidate = findAvailableTechnicalLocation(warehouse);
+            Inventory inv = buildInventory(dto, product, warehouse, assay, isPieces, piecesNum, candidate);
+            try {
                     inventoryMapper.insert(inv);
                     insertedCount++;
                     remaining--;
-                    preferredSide = candidate.side();
-                    inserted = true;
-                    break;
-                } catch (DuplicateKeyException e) {
-                    conflictCount++;
-                    if (conflictCount >= MAX_LOCATION_RETRY) {
-                        throw new BusinessException("库位分配冲突，请重试");
-                    }
-                    break;
+            } catch (DuplicateKeyException e) {
+                conflictCount++;
+                if (conflictCount >= MAX_LOCATION_RETRY) {
+                    throw new BusinessException("库位分配冲突，请重试");
                 }
-            }
-            if (!inserted && candidates.isEmpty()) {
-                break;
             }
         }
 

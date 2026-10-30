@@ -64,10 +64,9 @@ public class InventoryAgentReadServiceImpl implements InventoryAgentReadService 
     }
 
     private InventoryLedgerAgentVO.Row ledgerRow(InventoryLedgerAgentRow item) {
-        String location = (item.getSide() == null ? "" : item.getSide()) + (item.getRowNumber() == null ? "" : "-" + item.getRowNumber()) + (item.getLayer() == null ? "" : "-" + item.getLayer());
         return InventoryLedgerAgentVO.Row.builder().warehouseName(item.getWarehouseName()).productName(item.getProductName())
                 .productType(item.getProductType()).productStatus(item.getProductStatus()).screenMeshName(item.getScreenMeshName())
-                .palletCode(item.getPalletCode()).location(location.isBlank() ? null : location).palletQuantity(item.getPalletQuantity())
+                .palletCode(item.getPalletCode()).location(null).palletQuantity(item.getPalletQuantity())
                 .pieces(item.getPieces()).entryDate(item.getEntryDate()).productionDate(item.getProductionDate()).recordedAt(item.getRecordedAt()).build();
     }
     private PreparePoolBalanceAgentVO.Row balanceRow(SemiPreparePoolBalanceVO item) {

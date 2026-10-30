@@ -17,6 +17,9 @@ import java.util.List;
 
 @Mapper
 public interface ProductMapper extends BaseMapper<Product> {
+    @Select("SELECT * FROM product WHERE id = #{id} FOR UPDATE")
+    Product selectForAssayUpdate(@Param("id") Integer id);
+
     @Select("SELECT COUNT(*) FROM product WHERE product_name = #{name}")
     boolean existsByName(@Param("name") String name);
 

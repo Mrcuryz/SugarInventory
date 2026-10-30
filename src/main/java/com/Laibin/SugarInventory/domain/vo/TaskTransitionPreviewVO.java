@@ -39,17 +39,10 @@ public class TaskTransitionPreviewVO {
         LocalDate productionDate;
         BigDecimal totalWeight;
         String presetWarehouseName;
-        String presetSide;
         boolean quantityLockedByProductionOutput;
         String currentWarehouseName;
-        String currentSide;
-        Integer currentRowNumber;
-        Integer currentLayer;
         Integer currentInventoryQuantity;
         String currentInventoryUnit;
         String targetWarehouseName;
-        String targetSide;
-        Integer plannedTargetRowNumber;
-        Integer plannedTargetLayer;
     }
 }

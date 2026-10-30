@@ -24,7 +24,6 @@ public class AutoInboundBatchDetailAgentVO {
         AutoInboundRiskLevel riskLevel;
         String riskReason;
         LocalDate entryDate;
-        String side;
         Boolean hasAssay;
         String productName;
         String warehouseName;

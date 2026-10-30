@@ -26,8 +26,6 @@ public class VWarehouseCapacity {
     private BigDecimal capacityPercentage;
     @Schema(description = "最早入库日期")
     private LocalDate firstEntryDate;
-    @Schema(description = "最大排数")
-    private Integer maxRows;
     @Schema(description = "当前托盘数")
     private Integer currentPalletCount;
     @Schema(description = "当前产品数")

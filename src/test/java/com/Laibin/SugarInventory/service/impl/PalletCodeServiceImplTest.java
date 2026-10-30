@@ -52,7 +52,7 @@ class PalletCodeServiceImplTest {
     }
 
     @Test
-    void previewsTransferBatchWithReservedDistinctTargetRowsAndNoWrites() {
+    void previewsTransferBatchWithWarehouseCapacityAndNoWrites() {
         PalletCodeServiceImpl service = spy(new PalletCodeServiceImpl());
         InventoryMapper inventoryMapper = mock(InventoryMapper.class);
         PalletTaskMapper taskMapper = mock(PalletTaskMapper.class);
@@ -81,15 +81,6 @@ class PalletCodeServiceImplTest {
         Warehouse target = warehouse(2, "2", 3);
         when(warehouseMapper.selectById(1)).thenReturn(source);
         when(warehouseMapper.selectById(2)).thenReturn(target);
-        when(inventoryMapper.getUsedRowList(anyInt(), any(), anyInt())).thenAnswer(invocation -> {
-            int warehouseId = invocation.getArgument(0);
-            String side = invocation.getArgument(1);
-            int layer = invocation.getArgument(2);
-            if (warehouseId == 1 && "左".equals(side) && layer == 1) {
-                return List.of(1, 2);
-            }
-            return List.of();
-        });
         Product product = new Product();
         product.setCanStack(false);
         when(productMapper.selectById(84)).thenReturn(product);
@@ -97,11 +88,10 @@ class PalletCodeServiceImplTest {
         var result = service.previewTransferTasks(List.of("BT000001", "BT000002"));
 
         assertThat(result.getBlockingIssues()).isEmpty();
-        assertThat(result.getItems()).extracting("plannedTargetRowNumber").containsExactly(1, 2);
         assertThat(result.getItems()).allSatisfy(item -> {
+            assertThat(item.getCurrentWarehouseName()).isEqualTo("1");
             assertThat(item.getTargetWarehouseName()).isEqualTo("2");
-            assertThat(item.getTargetSide()).isEqualTo("左");
-            assertThat(item.getPlannedTargetLayer()).isEqualTo(1);
+            assertThat(item.getCurrentInventoryQuantity()).isEqualTo(1);
         });
         verify(inventoryMapper, never()).updateLocation(anyInt(), anyInt(), any(), anyInt(), anyInt());
         verify(taskMapper, never()).insert(any());
@@ -356,11 +346,12 @@ class PalletCodeServiceImplTest {
         return inventory;
     }
 
-    private static Warehouse warehouse(int id, String name, int maxRows) {
+    private static Warehouse warehouse(int id, String name, int maxCapacity) {
         Warehouse warehouse = new Warehouse();
         warehouse.setId(id);
         warehouse.setWarehouseName(name);
-        warehouse.setMaxRows(maxRows);
+        warehouse.setMaxCapacity(maxCapacity);
+        warehouse.setCurCapacity(0);
         return warehouse;
     }
 }

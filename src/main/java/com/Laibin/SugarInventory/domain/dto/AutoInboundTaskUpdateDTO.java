@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.domain.dto;
 
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
 
@@ -12,6 +13,7 @@ import java.time.LocalDate;
 public class AutoInboundTaskUpdateDTO {
     private String taskId;
     private LocalDate entryDate;
+    @Schema(hidden = true, description = "数据库兼容字段；库位内不再区分左右")
     private String side;
     private Integer semiProductId;
     private Integer semiWarehouseId;

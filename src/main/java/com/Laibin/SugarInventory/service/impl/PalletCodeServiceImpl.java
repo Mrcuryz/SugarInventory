@@ -92,6 +92,7 @@ import com.Laibin.SugarInventory.service.SemiProductRecordService;
 import com.Laibin.SugarInventory.service.model.PalletInventoryOccupancyRule;
 import com.Laibin.SugarInventory.service.model.ProductionPrepareLedgerSnapshot;
 import com.Laibin.SugarInventory.service.model.ProductionPrepareLedgerSnapshotCalculator;
+import com.Laibin.SugarInventory.service.model.WarehouseLocationGranularityPolicy;
 import com.Laibin.SugarInventory.util.PalletCodeGenerator;
 import com.Laibin.SugarInventory.util.PalletQrLabelPdfRenderer;
 import com.Laibin.SugarInventory.util.QrCodeUtils;
@@ -136,8 +137,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     private static final int MAX_TASK_TRANSITION_BATCH_SIZE = 20;
     private static final int MAX_LOCATION_RETRY = 3;
     private static final int FLOW_RETENTION_DAYS = 180;
-    private static final String LEFT_SIDE = "左";
-    private static final String RIGHT_SIDE = "右";
     private static final String BATCH_REMARK_PREFIX = "平面图操作批次";
     private static final String FIXED_PRODUCT_ACTIVATE_REMARK = "固定产品二维码打印并启用";
 
@@ -477,9 +476,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         }
         PalletInventoryVO vo = new PalletInventoryVO();
         vo.setWarehouseName(warehouse != null ? warehouse.getWarehouseName() : null);
-        vo.setSide(inventory.getSide());
-        vo.setRowNumber(inventory.getRowNumber());
-        vo.setLayer(inventory.getLayer());
         // unit: false -> 板, true -> 件
         if (inventory.getPieces() != null && inventory.getPieces() > 0) {
             vo.setUnit(Boolean.TRUE);
@@ -934,7 +930,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             throw new BusinessException("无法确定入库日期");
         }
         // 3) 标准化侧、单位、数量
-        String side = normalizeSide(dto.getSide());
+        String side = WarehouseLocationGranularityPolicy.INTERNAL_SIDE;
         String unit = productionOutputCode == null ? normalizeUnit(dto.getUnit()) : normalizeUnit(productionOutputCode.getUnit());
         int quantity = productionOutputCode == null ? normalizeQuantity(dto.getQuantity()) : normalizeQuantity(productionOutputCode.getQuantity());
         Warehouse warehouse = warehouseMapper.selectByWarehouseName(dto.getWarehouseName());
@@ -953,10 +949,10 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         InVO result;
         if ("SEMI_IN".equals(task.getTaskType())) {
             result = handleSemiInTask(dto.getRemark(), palletCode, task, warehouse, entryDate, side,
-                    dto.getRowNumber(), dto.getLayer(), unit, quantity, operatorId);
+                    null, null, unit, quantity, operatorId);
         } else if ("FINISH_IN".equals(task.getTaskType())) {
             result = handleFinishInTask(dto.getRemark(), palletCode, task, warehouse, entryDate, side,
-                    dto.getRowNumber(), dto.getLayer(), unit, quantity, operatorId);
+                    null, null, unit, quantity, operatorId);
         } else {
             throw new BusinessException("任务类型不支持入库确认");
         }
@@ -1112,7 +1108,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             validatePalletForTransfer(palletCode);
             Inventory inventory = requireInventoryByPallet(palletCode, false);
             Warehouse targetWarehouse = requireTargetWarehouse(item.getTargetWarehouseName());
-            String targetSide = normalizeAndValidateSide(item.getTargetSide());
+            String targetSide = WarehouseLocationGranularityPolicy.INTERNAL_SIDE;
 
             int cycleNo = getCurrentCycleNo(palletCode);
             if (palletTaskMapper.countPendingOutTasks(palletCode.getId(), cycleNo) > 0) {
@@ -1156,8 +1152,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             if (targetWarehouse == null) {
                 throw new BusinessException("目标仓库不存在");
             }
-            String targetSide = normalizeAndValidateSide(task.getTargetSide());
-
             Product product = productMapper.selectById(palletCode.getProductId());
             if (product == null) {
                 throw new BusinessException("产品不存在");
@@ -1169,7 +1163,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                     inventory.getRowNumber(),
                     inventory.getLayer()
             );
-            TransferTargetLocation targetLocation = moveInventoryForTransferWithRetry(inventory, targetWarehouse, targetSide, product);
+            TransferTargetLocation targetLocation = moveInventoryForTransferWithRetry(inventory, targetWarehouse);
             insertTransferFlow(palletCode, task, sourceLocation, targetLocation, operatorId, dto.getRemark());
             recordPalletTransferEvent(
                     palletCode,
@@ -1191,7 +1185,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         List<String> codes = normalizeAndValidateUniqueCodes(rawCodes);
         List<TransferTaskPreviewVO.Item> items = new ArrayList<>();
         List<String> blockingIssues = new ArrayList<>();
-        Map<Integer, TransferOccupancy> occupancyByWarehouse = new java.util.HashMap<>();
+        Map<Integer, Integer> reservedByWarehouse = new java.util.HashMap<>();
 
         for (String code : codes) {
             try {
@@ -1204,46 +1198,22 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                     throw new BusinessException("原仓库不存在");
                 }
                 Warehouse targetWarehouse = requireTargetWarehouse(task.getTargetWarehouseId());
-                String targetSide = normalizeAndValidateSide(task.getTargetSide());
-                Product product = productMapper.selectById(palletCode.getProductId());
-                if (product == null) {
-                    throw new BusinessException("产品不存在");
+                if (Objects.equals(inventory.getWarehouseId(), targetWarehouse.getId())) {
+                    throw new BusinessException("目标库位与当前库位相同，无需调拨");
                 }
-
-                TransferOccupancy targetOccupancy = occupancyByWarehouse.computeIfAbsent(
-                        targetWarehouse.getId(),
-                        ignored -> loadTransferOccupancy(targetWarehouse)
-                );
-                TransferTargetLocation targetLocation = allocateTransferTargetLocation(
-                        targetWarehouse, targetSide, product, targetOccupancy
-                );
-                if (Objects.equals(inventory.getWarehouseId(), targetLocation.warehouseId())
-                        && Objects.equals(inventory.getSide(), targetLocation.side())
-                        && Objects.equals(inventory.getRowNumber(), targetLocation.rowNumber())
-                        && Objects.equals(inventory.getLayer(), targetLocation.layer())) {
-                    throw new BusinessException("目标库位与当前库存位置相同，不能确认调拨");
+                int alreadyReserved = reservedByWarehouse.getOrDefault(targetWarehouse.getId(), 0);
+                if (WarehouseLocationGranularityPolicy.remainingCapacity(targetWarehouse) <= alreadyReserved) {
+                    throw new BusinessException("目标库位容量不足，无法调拨");
                 }
-
-                TransferOccupancy sourceOccupancy = occupancyByWarehouse.computeIfAbsent(
-                        sourceWarehouse.getId(),
-                        ignored -> loadTransferOccupancy(sourceWarehouse)
-                );
-                targetOccupancy.reserve(targetLocation.side(), targetLocation.layer(), targetLocation.rowNumber());
-                sourceOccupancy.release(inventory.getSide(), inventory.getLayer(), inventory.getRowNumber());
+                reservedByWarehouse.put(targetWarehouse.getId(), alreadyReserved + 1);
 
                 boolean pieces = inventory.getPieces() != null && inventory.getPieces() > 0;
                 items.add(TransferTaskPreviewVO.Item.builder()
                         .palletCode(code)
                         .currentWarehouseName(sourceWarehouse.getWarehouseName())
-                        .currentSide(inventory.getSide())
-                        .currentRowNumber(inventory.getRowNumber())
-                        .currentLayer(inventory.getLayer())
                         .currentInventoryQuantity(pieces ? inventory.getPieces() : inventory.getQuantity())
                         .currentInventoryUnit(pieces ? "件" : "板")
                         .targetWarehouseName(targetWarehouse.getWarehouseName())
-                        .targetSide(targetSide)
-                        .plannedTargetRowNumber(targetLocation.rowNumber())
-                        .plannedTargetLayer(targetLocation.layer())
                         .build());
             } catch (BusinessException e) {
                 blockingIssues.add("托盘 " + code + " 当前不满足调拨确认条件：" + e.getMessage() + "。");
@@ -1260,7 +1230,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     @Transactional
     public WarehouseMapTaskCreateResultVO createWarehouseMapTasks(WarehouseMapBatchOperationDTO dto, Integer operatorId) {
         String operationType = dto.getOperationType() == null ? "" : dto.getOperationType().trim().toUpperCase();
-        String side = normalizeAndValidateSide(dto.getSide());
+        String side = WarehouseLocationGranularityPolicy.INTERNAL_SIDE;
         boolean hasExplicitCodes = dto.getCodes() != null && !dto.getCodes().isEmpty();
         int quantity = hasExplicitCodes ? dto.getCodes().size() : (dto.getQuantity() == null ? 0 : dto.getQuantity());
         if (quantity <= 0) {
@@ -1275,7 +1245,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         Warehouse sourceWarehouse = requireTargetWarehouse(dto.getWarehouseId());
         List<Inventory> inventories = hasExplicitCodes
                 ? resolveInventoriesByCodesForWarehouse(dto.getCodes(), sourceWarehouse.getId(), side, dto.getRowNumber(), dto.getLayer())
-                : inventoryMapper.selectFrontPalletsForOperation(sourceWarehouse.getId(), side, quantity);
+                : inventoryMapper.selectPalletsForWarehouseOperation(sourceWarehouse.getId(), quantity);
         if (inventories.size() < quantity) {
             throw new BusinessException("当前侧可操作托盘数量不足");
         }
@@ -1286,7 +1256,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         String targetSide = null;
         if ("TRANSFER".equals(operationType)) {
             targetWarehouse = requireTargetWarehouse(dto.getTargetWarehouseName());
-            targetSide = normalizeAndValidateSide(dto.getTargetSide());
+            targetSide = WarehouseLocationGranularityPolicy.INTERNAL_SIDE;
         }
 
         WarehouseMapTaskCreateResultVO result = new WarehouseMapTaskCreateResultVO();
@@ -1315,21 +1285,9 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
     @Override
     @Transactional
     public InVO createWarehouseMapSlotInbound(WarehouseMapSlotInboundDTO dto, Integer operatorId) {
-        String side = normalizeAndValidateSide(dto.getSide());
+        String side = WarehouseLocationGranularityPolicy.INTERNAL_SIDE;
         Warehouse warehouse = requireTargetWarehouse(dto.getWarehouseName());
-        if (dto.getRowNumber() < 1 || dto.getRowNumber() > warehouse.getMaxRows()) {
-            throw new BusinessException("目标排号超出库位范围");
-        }
-        if (dto.getLayer() < 1 || dto.getLayer() > 2) {
-            throw new BusinessException("目标层数非法");
-        }
-        List<Integer> usedRows = inventoryMapper.getUsedRowListForUpdate(warehouse.getId(), side, dto.getLayer());
-        if (usedRows.contains(dto.getRowNumber())) {
-            throw new BusinessException("目标位置已有库存，不能入库");
-        }
-
-        String locationRemark = "平面图单板入库目标位置：" + dto.getLayer() + "层 " + side + "侧 " + dto.getRowNumber() + "排";
-        String remark = appendTraceRemark(dto.getRemark(), locationRemark);
+        String remark = appendTraceRemark(dto.getRemark(), "库位级入库：" + warehouse.getWarehouseName());
         BindPalletTaskDTO bindDTO = new BindPalletTaskDTO();
         bindDTO.setCode(dto.getCode());
         bindDTO.setProductId(dto.getProductId());
@@ -1345,8 +1303,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         confirmDTO.setWarehouseName(dto.getWarehouseName());
         confirmDTO.setEntryDate(dto.getProductionDate());
         confirmDTO.setSide(side);
-        confirmDTO.setRowNumber(dto.getRowNumber());
-        confirmDTO.setLayer(dto.getLayer());
         confirmDTO.setQuantity(1);
         confirmDTO.setUnit("0");
         confirmDTO.setRemark(remark);
@@ -1360,14 +1316,8 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         for (String code : codes) {
             PalletCode palletCode = parseAndFind(code);
             Inventory inventory = requireInventoryByPallet(palletCode, false);
-            if (!Objects.equals(inventory.getWarehouseId(), warehouseId) || !side.equals(inventory.getSide())) {
-                throw new BusinessException("托盘[" + code + "]不在当前库位侧别中");
-            }
-            if (rowNumber != null && !Objects.equals(inventory.getRowNumber(), rowNumber)) {
-                throw new BusinessException("托盘[" + code + "]不在当前指定排号中");
-            }
-            if (layer != null && !Objects.equals(inventory.getLayer(), layer)) {
-                throw new BusinessException("托盘[" + code + "]不在当前指定层数中");
+            if (!Objects.equals(inventory.getWarehouseId(), warehouseId)) {
+                throw new BusinessException("托盘[" + code + "]不在当前库位中");
             }
             inventories.add(inventory);
         }
@@ -1868,14 +1818,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         return warehouse;
     }
 
-    private String normalizeAndValidateSide(String side) {
-        String normalized = normalizeSide(side);
-        if (!LEFT_SIDE.equals(normalized) && !RIGHT_SIDE.equals(normalized)) {
-            throw new BusinessException("侧向仅支持左或右");
-        }
-        return normalized;
-    }
-
     private SemiPreparePool findActivePreparePool(PalletCode palletCode, boolean forUpdate) {
         int cycleNo = getCurrentCycleNo(palletCode);
         return forUpdate
@@ -1899,82 +1841,21 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         return preparePool;
     }
 
-    private TransferTargetLocation allocateTransferTargetLocation(Warehouse targetWarehouse, String targetSide, Product product) {
-        int warehouseId = targetWarehouse.getId();
-        List<Integer> leftUsedRowsLayer1 = inventoryMapper.getUsedRowListForUpdate(warehouseId, LEFT_SIDE, 1);
-        List<Integer> rightUsedRowsLayer1 = inventoryMapper.getUsedRowListForUpdate(warehouseId, RIGHT_SIDE, 1);
-        return allocateTransferTargetLocation(
-                warehouseId,
-                targetWarehouse.getMaxRows(),
-                targetSide,
-                product,
-                leftUsedRowsLayer1,
-                rightUsedRowsLayer1,
-                () -> {
-                    List<Integer> leftUsedRowsLayer2 = inventoryMapper.getUsedRowListForUpdate(warehouseId, LEFT_SIDE, 2);
-                    List<Integer> rightUsedRowsLayer2 = inventoryMapper.getUsedRowListForUpdate(warehouseId, RIGHT_SIDE, 2);
-                    return LEFT_SIDE.equals(targetSide) ? leftUsedRowsLayer2 : rightUsedRowsLayer2;
-                }
-        );
-    }
-
-    private TransferOccupancy loadTransferOccupancy(Warehouse warehouse) {
-        if (warehouse.getMaxRows() == null || warehouse.getMaxRows() <= 0) {
-            throw new BusinessException("目标仓库未配置有效排数");
+    private TransferTargetLocation allocateTransferTargetLocation(Warehouse targetWarehouse) {
+        int maxCapacity = WarehouseLocationGranularityPolicy.requireCapacity(targetWarehouse);
+        if (WarehouseLocationGranularityPolicy.remainingCapacity(targetWarehouse) <= 0) {
+            throw new BusinessException("目标库位容量不足，无法调拨");
         }
-        int warehouseId = warehouse.getId();
-        return new TransferOccupancy(
-                warehouse.getMaxRows(),
-                inventoryMapper.getUsedRowList(warehouseId, LEFT_SIDE, 1),
-                inventoryMapper.getUsedRowList(warehouseId, RIGHT_SIDE, 1),
-                inventoryMapper.getUsedRowList(warehouseId, LEFT_SIDE, 2),
-                inventoryMapper.getUsedRowList(warehouseId, RIGHT_SIDE, 2)
-        );
-    }
-
-    private TransferTargetLocation allocateTransferTargetLocation(Warehouse targetWarehouse, String targetSide,
-                                                                    Product product, TransferOccupancy occupancy) {
-        return allocateTransferTargetLocation(
+        List<Integer> usedRows = inventoryMapper.getUsedRowListForUpdate(
                 targetWarehouse.getId(),
-                occupancy.maxRows(),
-                targetSide,
-                product,
-                occupancy.usedRows(LEFT_SIDE, 1),
-                occupancy.usedRows(RIGHT_SIDE, 1),
-                () -> occupancy.usedRows(targetSide, 2)
-        );
-    }
-
-    private TransferTargetLocation allocateTransferTargetLocation(int warehouseId, int maxRows, String targetSide,
-                                                                    Product product,
-                                                                    List<Integer> leftUsedRowsLayer1,
-                                                                    List<Integer> rightUsedRowsLayer1,
-                                                                    java.util.function.Supplier<List<Integer>> targetLayerTwoRows) {
-        List<Integer> targetUnusedRowsLayer1 = getUnusedRowNumbers(
-                LEFT_SIDE.equals(targetSide) ? leftUsedRowsLayer1 : rightUsedRowsLayer1,
-                maxRows
-        );
-
-        boolean layerOneFull = leftUsedRowsLayer1.size() >= maxRows && rightUsedRowsLayer1.size() >= maxRows;
-        if (!layerOneFull) {
-            if (targetUnusedRowsLayer1.isEmpty()) {
-                throw new BusinessException("目标仓库指定侧第一层已满，无法调拨");
-            }
-            return new TransferTargetLocation(warehouseId, targetSide, targetUnusedRowsLayer1.get(0), 1);
-        }
-
-        if (!Boolean.TRUE.equals(product.getCanStack())) {
-            throw new BusinessException("目标仓库已满，无法调拨");
-        }
-
-        List<Integer> targetUnusedRowsLayer2 = getUnusedRowNumbers(
-                targetLayerTwoRows.get(),
-                maxRows
-        );
-        if (targetUnusedRowsLayer2.isEmpty()) {
-            throw new BusinessException("目标仓库指定侧已满，无法调拨");
-        }
-        return new TransferTargetLocation(warehouseId, targetSide, targetUnusedRowsLayer2.get(0), 2);
+                WarehouseLocationGranularityPolicy.INTERNAL_SIDE,
+                WarehouseLocationGranularityPolicy.INTERNAL_LAYER);
+        int rowNumber = WarehouseLocationGranularityPolicy.nextTechnicalRow(usedRows, maxCapacity);
+        return new TransferTargetLocation(
+                targetWarehouse.getId(),
+                WarehouseLocationGranularityPolicy.INTERNAL_SIDE,
+                rowNumber,
+                WarehouseLocationGranularityPolicy.INTERNAL_LAYER);
     }
 
     private Map<Integer, Warehouse> lockWarehousesForTransfer(Integer sourceWarehouseId, Integer targetWarehouseId) {
@@ -1996,26 +1877,12 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
         return warehouses;
     }
 
-    private List<Integer> getUnusedRowNumbers(List<Integer> usedRowNumbers, int maxRows) {
-        List<Integer> unusedRowNumbers = new ArrayList<>();
-        for (int i = 1; i <= maxRows; i++) {
-            if (!usedRowNumbers.contains(i)) {
-                unusedRowNumbers.add(i);
-            }
+    private TransferTargetLocation moveInventoryForTransferWithRetry(Inventory inventory, Warehouse targetWarehouse) {
+        if (Objects.equals(inventory.getWarehouseId(), targetWarehouse.getId())) {
+            throw new BusinessException("目标库位与当前库位相同，无需调拨");
         }
-        return unusedRowNumbers;
-    }
-
-    private TransferTargetLocation moveInventoryForTransferWithRetry(Inventory inventory, Warehouse targetWarehouse,
-                                                                     String targetSide, Product product) {
         for (int retry = 0; retry < MAX_LOCATION_RETRY; retry++) {
-            TransferTargetLocation targetLocation = allocateTransferTargetLocation(targetWarehouse, targetSide, product);
-            if (Objects.equals(inventory.getWarehouseId(), targetWarehouse.getId())
-                    && Objects.equals(inventory.getSide(), targetLocation.side())
-                    && Objects.equals(inventory.getRowNumber(), targetLocation.rowNumber())
-                    && Objects.equals(inventory.getLayer(), targetLocation.layer())) {
-                throw new BusinessException("目标库位与当前库存位置相同，不能确认调拨");
-            }
+            TransferTargetLocation targetLocation = allocateTransferTargetLocation(targetWarehouse);
             try {
                 moveInventoryForTransfer(inventory, targetWarehouse, targetLocation);
                 return targetLocation;
@@ -2042,7 +1909,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
             if (sourceWarehouse == null) {
                 throw new BusinessException("原仓库不存在");
             }
-            warehouseMapper.updateCurCapacity(sourceWarehouse.getId(), sourceWarehouse.getCurCapacity() - 1);
+            warehouseMapper.updateCurCapacity(sourceWarehouse.getId(), Math.max(sourceWarehouse.getCurCapacity() - 1, 0));
             warehouseMapper.updateCurCapacity(targetWarehouse.getId(), targetWarehouse.getCurCapacity() + 1);
         }
         inventory.setWarehouseId(targetWarehouse.getId());
@@ -2303,10 +2170,7 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
 
     private String buildPrepareOutRemark(PalletCode palletCode, PalletTask task, Inventory inventory,
                                          ProductionPrepareLedgerSnapshot snapshot, String remark) {
-        String sourceLocation = "来源库位ID=" + inventory.getWarehouseId()
-                + "，侧别=" + firstNonBlank(inventory.getSide(), "-")
-                + "，排=" + (inventory.getRowNumber() == null ? "-" : inventory.getRowNumber())
-                + "，层=" + (inventory.getLayer() == null ? "-" : inventory.getLayer());
+        String sourceLocation = "来源库位ID=" + inventory.getWarehouseId();
         String trace = "托盘[" + palletCode.getCode() + "]历史生产占用，任务ID=" + task.getId()
                 + "；已视为仓库出库，二维码已释放"
                 + "；折算数量：" + snapshot.totalPieces() + "件"
@@ -2454,53 +2318,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
 
         private Integer layer() {
             return layer;
-        }
-    }
-
-    private static final class TransferOccupancy {
-        private final int maxRows;
-        private final Set<Integer> leftLayerOne;
-        private final Set<Integer> rightLayerOne;
-        private final Set<Integer> leftLayerTwo;
-        private final Set<Integer> rightLayerTwo;
-
-        private TransferOccupancy(int maxRows,
-                                  List<Integer> leftLayerOne,
-                                  List<Integer> rightLayerOne,
-                                  List<Integer> leftLayerTwo,
-                                  List<Integer> rightLayerTwo) {
-            this.maxRows = maxRows;
-            this.leftLayerOne = new LinkedHashSet<>(leftLayerOne == null ? List.of() : leftLayerOne);
-            this.rightLayerOne = new LinkedHashSet<>(rightLayerOne == null ? List.of() : rightLayerOne);
-            this.leftLayerTwo = new LinkedHashSet<>(leftLayerTwo == null ? List.of() : leftLayerTwo);
-            this.rightLayerTwo = new LinkedHashSet<>(rightLayerTwo == null ? List.of() : rightLayerTwo);
-        }
-
-        private int maxRows() {
-            return maxRows;
-        }
-
-        private List<Integer> usedRows(String side, int layer) {
-            return new ArrayList<>(rows(side, layer));
-        }
-
-        private void reserve(String side, int layer, Integer rowNumber) {
-            rows(side, layer).add(rowNumber);
-        }
-
-        private void release(String side, Integer layer, Integer rowNumber) {
-            if (side == null || layer == null || rowNumber == null) {
-                return;
-            }
-            rows(side, layer).remove(rowNumber);
-        }
-
-        private Set<Integer> rows(String side, int layer) {
-            boolean left = LEFT_SIDE.equals(side);
-            if (layer == 1) {
-                return left ? leftLayerOne : rightLayerOne;
-            }
-            return left ? leftLayerTwo : rightLayerTwo;
         }
     }
 
@@ -2765,10 +2582,6 @@ public class PalletCodeServiceImpl extends ServiceImpl<PalletCodeMapper, PalletC
                 writeBack
         );
         return result.hasAssay() ? result.getAssay().getId() : null;
-    }
-
-    private String normalizeSide(String side) {
-        return (side == null || side.isBlank()) ? "左" : side;
     }
 
     private String normalizeUnit(String unit) {

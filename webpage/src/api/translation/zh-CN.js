@@ -54,7 +54,6 @@ export default {
         warehouseName: "仓库名称",
         maxCapacity: "最大容量",
         curCapacity: "当前存量",
-        maxRows: "最大存放排数"
         //库存表字段翻译
 
         //

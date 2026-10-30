@@ -469,7 +469,7 @@ function normalizeTransferTask(row) {
     quantityText: '1板',
     unitName: '板',
     fromLocation: '当前库存位置',
-    toLocation: formatLocation(row.targetWarehouseName, row.targetSide),
+    toLocation: formatLocation(row.targetWarehouseName),
     taskId: row.taskId,
     status,
     statusName: getTaskStatusName(status)
@@ -535,8 +535,8 @@ function createDocumentNo(prefix, row, id) {
   return `${prefix}-${seed || 'UNTRACKED'}`
 }
 
-function formatLocation(warehouseName, side) {
-  return [warehouseName, side].filter(Boolean).join(' / ') || '无'
+function formatLocation(warehouseName) {
+  return warehouseName || '无'
 }
 
 function formatWeight(value) {

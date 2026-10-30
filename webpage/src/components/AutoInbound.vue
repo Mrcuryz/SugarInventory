@@ -796,7 +796,7 @@
         <div class="draft-overview-card warning">
           <div class="overview-label">需要用户确认</div>
           <strong>{{ semiTaskSummary.risk }} 项风险，{{ semiTaskSummary.blocked }} 项暂不可入库</strong>
-          <span>请确认产品、生产日期、库位、侧别和数量后再执行入库。</span>
+          <span>请确认产品、生产日期、库位和数量后再执行入库。</span>
         </div>
       </div>
 
@@ -1111,15 +1111,6 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="侧别" min-width="110">
-          <template #default="{ row }">
-            <el-select v-model="row.side" size="small" style="width: 86px">
-              <el-option label="左" value="左" />
-              <el-option label="右" value="右" />
-            </el-select>
-          </template>
-        </el-table-column>
-
         <el-table-column label="板/件数" min-width="230">
           <template #default="{ row }">
             <div class="quantity-edit">
@@ -1215,10 +1206,6 @@
             <div class="info-card">
               <span>库位</span>
               <strong>{{ getDetailWarehouseName(detailTask) }}</strong>
-            </div>
-            <div class="info-card">
-              <span>侧别</span>
-              <strong>{{ detailTask.side || '-' }}</strong>
             </div>
             <div class="info-card">
               <span>板/件数</span>
@@ -1652,7 +1639,6 @@ const semiTaskSummary = computed(() => {
       !item.semiProductId
       || !item.entryDate
       || !item.semiWarehouseName
-      || !item.side
       || (Number(item.semiBoardQuantity || 0) <= 0 && Number(item.semiPieceQuantity || 0) <= 0)
   ).length
   return {
@@ -2197,10 +2183,7 @@ const orderStatusTagType = value => ({
 const orderOptionLabel = item => `${item.orderNo} / 成品生产订单 / ${item.productionDate || '-'} / ${orderStatusLabel(item.status)}`
 
 const candidateLocationText = row => {
-  const location = [row.warehouseName, row.side, row.rowNumber ? `${row.rowNumber}排` : '', row.layer ? `${row.layer}层` : '']
-      .filter(Boolean)
-      .join(' ')
-  return location || '暂无'
+  return row.warehouseName || '暂无'
 }
 
 const normalizeOutputItem = (task, index) => ({
@@ -2822,7 +2805,6 @@ const buildConfirmTaskUpdate = (task) => {
   const common = {
     taskId: task.taskId,
     entryDate: task.entryDate,
-    side: task.side,
     remark: task.remark
   }
   if (task.type === 'SEMI_PRODUCT') {

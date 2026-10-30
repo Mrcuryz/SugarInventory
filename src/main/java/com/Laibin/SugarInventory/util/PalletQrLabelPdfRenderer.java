@@ -191,6 +191,10 @@ public final class PalletQrLabelPdfRenderer {
         return createLabelImage(code, title, code);
     }
 
+    public static BufferedImage renderLabelImage(String code, String title, String displayText) {
+        return createLabelImage(code, title, displayText);
+    }
+
     private static BufferedImage createLabelImage(String code, String title, String displayText) {
         BufferedImage canvas = new BufferedImage(LABEL_IMAGE_WIDTH, LABEL_IMAGE_HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = canvas.createGraphics();

@@ -60,10 +60,11 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
 
         Warehouse warehouse = new Warehouse();
         warehouse.setWarehouseName(dto.getWarehouseName());
-        // 计算最大库存量，需要根据库位中已存放的产品类型来计算
-        warehouse.setMaxCapacity(dto.getMaxRows() * 2);
+        int maxCapacity = resolveMaxCapacity(dto.getMaxCapacity(), dto.getMaxRows());
+        warehouse.setMaxCapacity(maxCapacity);
         warehouse.setStatus("空置");
-        warehouse.setMaxRows(dto.getMaxRows());
+        // 数据库字段保留用于兼容；不再表示真实排数。
+        warehouse.setMaxRows(maxCapacity);
         warehouse.setCurCapacity(0);
         warehouse.setCreatedAt(LocalDateTime.now());
 
@@ -101,14 +102,14 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         }
         newWarehouse.setWarehouseName(warehouse.getWarehouseName());
 
-        // 如果修改了最大排数，需重新计算最大库存量，即maxCapacity = maxRows * 2。
-        if (warehouse.getMaxRows() != null && !warehouse.getMaxRows().equals(oldWarehouse.getMaxRows())) {
-            newWarehouse.setMaxCapacity(warehouse.getMaxRows() * 2);
-        } else {
-            newWarehouse.setMaxCapacity(oldWarehouse.getMaxCapacity());
+        int maxCapacity = warehouse.getMaxCapacity() == null && warehouse.getMaxRows() == null
+                ? oldWarehouse.getMaxCapacity()
+                : resolveMaxCapacity(warehouse.getMaxCapacity(), warehouse.getMaxRows());
+        if (oldWarehouse.getCurCapacity() != null && maxCapacity < oldWarehouse.getCurCapacity()) {
+            throw new BusinessException("最大容量不能小于当前库存量");
         }
-        newWarehouse.setMaxRows(warehouse.getMaxRows() == null ?
-                oldWarehouse.getMaxRows() : warehouse.getMaxRows());
+        newWarehouse.setMaxCapacity(maxCapacity);
+        newWarehouse.setMaxRows(maxCapacity);
         newWarehouse.setCurCapacity(oldWarehouse.getCurCapacity());
         newWarehouse.setStatus(oldWarehouse.getStatus());
         newWarehouse.setCreatedAt(oldWarehouse.getCreatedAt());
@@ -150,5 +151,16 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
     @Override
     public String getTableName() {
         return "库位";
+    }
+
+    private int resolveMaxCapacity(Integer maxCapacity, Integer legacyMaxRows) {
+        Integer resolved = maxCapacity;
+        if (resolved == null && legacyMaxRows != null) {
+            resolved = legacyMaxRows * 2;
+        }
+        if (resolved == null || resolved <= 0) {
+            throw new BusinessException("最大容量必须大于0");
+        }
+        return resolved;
     }
 }

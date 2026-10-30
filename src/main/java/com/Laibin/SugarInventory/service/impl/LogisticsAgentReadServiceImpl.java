@@ -116,7 +116,7 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
         return PalletTasksAgentVO.Row.builder()
                 .taskType(row.getTaskType()).bizScene(row.getBizScene()).taskStatus(row.getTaskStatus())
                 .code(row.getCode()).operationBatchNo(row.getOperationBatchNo())
-                .targetWarehouseName(row.getTargetWarehouseName()).targetSide(row.getTargetSide())
+                .targetWarehouseName(row.getTargetWarehouseName())
                 .productName(row.getProductName()).productType(row.getProductType()).productStatus(row.getProductStatus())
                 .totalWeight(row.getTotalWeight()).productionDate(row.getProductionDate())
                 .screenMeshName(row.getScreenMeshName()).semiItemCount(row.getSemiItemCount())
@@ -314,10 +314,9 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                         .productionDate(row.getProductionDate())
                         .totalWeight(row.getTotalWeight())
                         .presetWarehouseName(row.getTargetWarehouseName())
-                        .presetSide(row.getTargetSide())
                         .quantityLockedByProductionOutput(row.getProductionOutputCodeId() != null)
                         .build()).toList())
-                .requiredUserInputs(List.of("入库库位", "入库日期", "存放侧", "单位与数量", "可选备注"))
+                .requiredUserInputs(List.of("入库库位", "入库日期", "单位与数量", "可选备注"))
                 .blockingIssues(blockingIssues)
                 .warnings(warnings)
                 .limitations(List.of(
@@ -376,9 +375,6 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                         .totalWeight(row.getTotalWeight())
                         .quantityLockedByProductionOutput(false)
                         .currentWarehouseName(inventory.getWarehouseName())
-                        .currentSide(inventory.getSide())
-                        .currentRowNumber(inventory.getRowNumber())
-                        .currentLayer(inventory.getLayer())
                         .currentInventoryQuantity(inventory.getQuantity())
                         .currentInventoryUnit(Boolean.TRUE.equals(inventory.getUnit()) ? "件" : "板")
                         .build());
@@ -476,15 +472,9 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                     .totalWeight(row.getTotalWeight())
                     .quantityLockedByProductionOutput(false)
                     .currentWarehouseName(item.getCurrentWarehouseName())
-                    .currentSide(item.getCurrentSide())
-                    .currentRowNumber(item.getCurrentRowNumber())
-                    .currentLayer(item.getCurrentLayer())
                     .currentInventoryQuantity(item.getCurrentInventoryQuantity())
                     .currentInventoryUnit(item.getCurrentInventoryUnit())
                     .targetWarehouseName(item.getTargetWarehouseName())
-                    .targetSide(item.getTargetSide())
-                    .plannedTargetRowNumber(item.getPlannedTargetRowNumber())
-                    .plannedTargetLayer(item.getPlannedTargetLayer())
                     .build());
         }
 
@@ -513,7 +503,7 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                 .requiredUserInputs(List.of("可选备注"))
                 .blockingIssues(List.copyOf(blockingIssues))
                 .warnings(List.of(
-                        "预览中的目标排号和层数按当前库存占用情况模拟；业务弹窗提交时会重新分配并校验。",
+                        "业务弹窗提交时会重新校验目标库位容量。",
                         "任务或库存变化后，原预览可能失效，需要重新预览。"))
                 .limitations(List.of(
                         "本预览只读取当前调拨待处理任务、托盘、库存和目标仓库容量，不修改任何业务数据。",
@@ -558,15 +548,9 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
                     .forEach(task -> canonical
                             .append("|inventory|").append(task.getPalletCode())
                             .append('|').append(task.getCurrentWarehouseName())
-                            .append('|').append(task.getCurrentSide())
-                            .append('|').append(task.getCurrentRowNumber())
-                            .append('|').append(task.getCurrentLayer())
                             .append('|').append(task.getCurrentInventoryQuantity())
                             .append('|').append(task.getCurrentInventoryUnit())
-                            .append('|').append(task.getTargetWarehouseName())
-                            .append('|').append(task.getTargetSide())
-                            .append('|').append(task.getPlannedTargetRowNumber())
-                            .append('|').append(task.getPlannedTargetLayer()));
+                            .append('|').append(task.getTargetWarehouseName()));
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(digest);
@@ -586,7 +570,7 @@ public class LogisticsAgentReadServiceImpl implements LogisticsAgentReadService 
         boolean semi = task.getType() != null && "SEMI_PRODUCT".equals(task.getType().name());
         return AutoInboundBatchDetailAgentVO.Task.builder()
                 .type(task.getType()).riskLevel(task.getRiskLevel()).riskReason(task.getRiskReason())
-                .entryDate(task.getEntryDate()).side(task.getSide()).hasAssay(task.getHasAssay())
+                .entryDate(task.getEntryDate()).hasAssay(task.getHasAssay())
                 .productName(semi ? task.getSemiProductName() : task.getProductName())
                 .warehouseName(semi ? task.getSemiWarehouseName() : task.getWarehouseName())
                 .boardQuantity(semi ? task.getSemiBoardQuantity() : task.getFinishedBoardQuantity())

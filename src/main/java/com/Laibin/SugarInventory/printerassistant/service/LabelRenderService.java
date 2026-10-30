@@ -12,13 +12,27 @@ import java.util.List;
 public class LabelRenderService {
 
     public static final String FIXED_PRODUCT_QRCODE_TEMPLATE = "fixed_product_qrcode";
+    public static final String WAREHOUSE_LOCATION_QRCODE_TEMPLATE = "warehouse_location_qrcode";
 
     public List<BufferedImage> renderLabels(String template, List<PrintLabelRequest> labels) {
-        if (!FIXED_PRODUCT_QRCODE_TEMPLATE.equals(template)) {
+        if (!FIXED_PRODUCT_QRCODE_TEMPLATE.equals(template)
+                && !WAREHOUSE_LOCATION_QRCODE_TEMPLATE.equals(template)) {
             throw new IllegalArgumentException("暂不支持的标签模板: " + template);
         }
         if (labels == null || labels.isEmpty()) {
             throw new IllegalArgumentException("打印标签不能为空");
+        }
+        if (WAREHOUSE_LOCATION_QRCODE_TEMPLATE.equals(template)) {
+            return labels.stream()
+                    .map(label -> {
+                        String warehouseName = normalizeTitle(label.title());
+                        return PalletQrLabelPdfRenderer.renderLabelImage(
+                                normalizeCode(label.code()),
+                                "库位 " + warehouseName,
+                                warehouseName
+                        );
+                    })
+                    .toList();
         }
         return labels.stream()
                 .map(label -> PalletQrLabelPdfRenderer.renderLabelImage(

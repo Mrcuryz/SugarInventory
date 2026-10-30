@@ -175,7 +175,6 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
                 w.cur_capacity AS cur_capacity,
                 ROUND(CASE WHEN w.max_capacity > 0 THEN w.cur_capacity / w.max_capacity * 100 ELSE 0 END, 2) AS capacity_percentage,
                 w.status,
-                w.max_rows,
                 w.created_at,
                 w.updated_at,
                 COALESCE(vc.current_pallet_count, 0) AS current_pallet_count,
@@ -204,7 +203,6 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             " w.max_capacity AS max_capacity, " +
             " ROUND(CASE WHEN w.max_capacity > 0 THEN w.cur_capacity / w.max_capacity * 100 ELSE 0 END, 2) AS capacity_percentage, " +
             " MIN(i.entry_date) AS first_entry_date, " +
-            " w.max_rows AS max_rows, " +
             " w.created_at AS created_at, " +
             " w.updated_at AS updated_at, " +
             " COUNT(DISTINCT i.pallet_code_id) AS current_pallet_count, " +
@@ -241,7 +239,7 @@ public interface InventorySummaryMapper extends BaseMapper<VInventorySummary> {
             "       AND w.cur_capacity &lt; w.max_capacity " +
             "   </if> " +
             "</where>" +
-            " GROUP BY w.id, w.warehouse_name, w.status, w.cur_capacity, w.max_capacity, w.max_rows, w.created_at, w.updated_at " +
+            " GROUP BY w.id, w.warehouse_name, w.status, w.cur_capacity, w.max_capacity, w.created_at, w.updated_at " +
             "<choose>" +
             "   <when test='sortField == \"namePinyin\"'> ORDER BY CONVERT(w.warehouse_name USING gbk) </when>" +
             "   <when test='sortField == \"createdAt\"'> ORDER BY w.created_at </when>" +

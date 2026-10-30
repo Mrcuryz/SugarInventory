@@ -24,10 +24,6 @@ public class FinishInboundExecutionPreviewItemDTO {
     @Schema(description = "入库日期；为空时沿用现有任务/托盘生产日期规则")
     private LocalDate entryDate;
 
-    @Size(max = 1)
-    @Schema(description = "存放侧：左或右")
-    private String side = "左";
-
     @Min(1)
     @Schema(description = "本次入库数量")
     private Integer quantity = 1;

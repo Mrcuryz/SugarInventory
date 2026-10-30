@@ -30,6 +30,6 @@ public class OutStockRequestDTO {
     @Schema(description = "0整版优先1散件优先", example = "0")
     private Integer outType;
 
-    @Schema(description = "先从左/右侧出库，默认为左", example = "LEFT")
+    @Schema(description = "兼容字段，出库不再按侧别排序", hidden = true)
     private String side = "左";
 }

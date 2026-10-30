@@ -7,6 +7,7 @@ import {useTokenStore} from '@/stores/token'
 import {useAuthStore} from '@/stores/auth'
 import rememberMeStore from '@/stores/rememberMe'
 import appLogo from '@/assets/logo.png'
+import {companyName, demoMode} from '@/config/branding'
 
 const router = useRouter()
 const tokenStore = useTokenStore()
@@ -101,7 +102,7 @@ const handleSubmit = async () => {
           <div class="brand-icon">
             <img :src="appLogo" alt="数字仓储平台" class="brand-logo-image">
           </div>
-          <span>广西糖罐子食品有限公司</span>
+          <span>{{ companyName }}</span>
         </div>
 
         <div class="brand-copy">
@@ -227,7 +228,7 @@ const handleSubmit = async () => {
       </el-card>
     </section>
 
-    <footer class="icp-footer">
+    <footer v-if="!demoMode" class="icp-footer">
       <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">桂ICP备2025058642号-2</a>
     </footer>
   </main>

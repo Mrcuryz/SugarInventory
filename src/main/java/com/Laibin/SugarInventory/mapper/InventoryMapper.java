@@ -24,7 +24,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "WHERE warehouse_id = #{warehouseId} " +
             "AND product_id = #{productId} " +
             "AND pallet_code_id IS NULL " +
-            "ORDER BY CASE side WHEN '右' THEN 1 ELSE 2 END, `row_number` DESC, id ASC " +
+            "ORDER BY entry_date ASC, id ASC " +
             "FOR UPDATE")
     List<Inventory> getLegacyInventoryStackOrderForUpdate(@Param("warehouseId") Integer warehouseId,
                                                            @Param("productId") Integer productId);
@@ -102,6 +102,14 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
                                                    @Param("side") String side,
                                                    @Param("limit") Integer limit);
 
+    @Select("SELECT * FROM inventory " +
+            "WHERE warehouse_id = #{warehouseId} " +
+            "AND pallet_code_id IS NOT NULL " +
+            "ORDER BY entry_date ASC, id ASC " +
+            "LIMIT #{limit}")
+    List<Inventory> selectPalletsForWarehouseOperation(@Param("warehouseId") Integer warehouseId,
+                                                       @Param("limit") Integer limit);
+
     // **查询库存（按先进后出）**
     @Select("SELECT * FROM inventory " +
             "WHERE warehouse_id = #{warehouseId} " +
@@ -169,7 +177,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "SELECT i.id AS inventoryId, i.product_id AS productId, p.product_name AS productName, " +
             "       w.warehouse_name AS warehouseName, i.entry_date AS sampleDate, p.product_type AS productType, " +
             "       i.product_status AS productStatus, JSON_UNQUOTE(JSON_EXTRACT(a.qualified_standards, '$')) AS standardNames, " +
-            "       sm.mesh_name AS meshName, i.side AS side, i.row_number AS rowNumber, i.layer AS layer, " +
+            "       sm.mesh_name AS meshName, " +
             "       i.quantity AS quantity, i.pieces AS pieces, pc.code AS palletCode, i.created_at AS createdAt " +
             "FROM inventory i " +
             "INNER JOIN warehouse w ON i.warehouse_id = w.id " +
@@ -199,7 +207,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
             "<if test='query.endDate != null'>" +
             "   AND i.entry_date &lt;= #{query.endDate} " +
             "</if> " +
-            "ORDER BY i.entry_date DESC, w.warehouse_name, i.side, i.`row_number` ASC " +
+            "ORDER BY i.entry_date DESC, w.warehouse_name, i.id ASC " +
             "</script>")
     List<OutProductVO> findInventoryByWarehouse(@Param("warehouseId") Integer warehouseId,
                                                 @Param("query") OutProductQueryDTO query);

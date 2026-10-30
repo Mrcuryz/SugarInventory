@@ -20,6 +20,7 @@ import com.Laibin.SugarInventory.service.AutoInboundParseService;
 import com.Laibin.SugarInventory.service.LlmParseService;
 import com.Laibin.SugarInventory.service.model.AutoInboundSourcePostProcessor;
 import com.Laibin.SugarInventory.service.model.AutoInboundQuantityNormalizer;
+import com.Laibin.SugarInventory.service.model.WarehouseLocationGranularityPolicy;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -483,10 +484,7 @@ public class AutoInboundParseServiceImpl implements AutoInboundParseService {
 
     private void refreshTaskValidation(AutoInboundTask task, List<String> missingFields,
                                        List<String> warnings, List<String> reasons) {
-        if (!notBlank(task.getSide())) {
-            missingFields.add("侧别");
-            reasons.add("缺少侧别信息");
-        }
+        task.setSide(WarehouseLocationGranularityPolicy.INTERNAL_SIDE);
         Product product = resolveTaskProduct(task);
         Warehouse warehouse = resolveTaskWarehouse(task);
         if (product != null) {

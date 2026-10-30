@@ -32,6 +32,7 @@ const routes = [
       { path: 'warehouse-map', name: 'WarehouseMap', meta: { title: '仓库平面图', keepAlive: true, permCode: 'warehouse_map:view' }, component: () => import('@/components/WarehouseMap.vue') },
       { path: 'pallet-code/list', name: 'PalletCodeList', meta: { title: '二维码管理', keepAlive: true, permCode: 'qrcode:view' }, component: () => import('@/components/PalletCodeList.vue') },
       { path: 'pallet-code/fixed-product', name: 'FixedProductQrPool', meta: { title: '固定产品二维码池', keepAlive: true, permCode: 'qrcode:pool_view' }, component: () => import('@/components/FixedProductQrPool.vue') },
+      { path: 'pallet-code/warehouse-location', name: 'WarehouseLocationCodePrint', meta: { title: '库位码打印', keepAlive: true, permCode: 'qrcode:print' }, component: () => import('@/components/WarehouseLocationCodePrint.vue') },
       { path: 'pallet-code/task-center', redirect: '/pallet-task/overview' },
       { path: 'pallet-task/overview', name: 'PalletTaskOverview', meta: { title: '任务中心', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/PalletTaskOverview.vue') },
       { path: 'pallet-task/semi/in', name: 'SemiInTaskPage', meta: { title: '半成品入库任务', keepAlive: true, permCode: 'task:view' }, component: () => import('@/components/SemiInTaskPage.vue') },

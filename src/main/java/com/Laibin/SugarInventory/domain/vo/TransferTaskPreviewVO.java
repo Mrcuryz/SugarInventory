@@ -19,14 +19,8 @@ public class TransferTaskPreviewVO {
     public static class Item {
         String palletCode;
         String currentWarehouseName;
-        String currentSide;
-        Integer currentRowNumber;
-        Integer currentLayer;
         Integer currentInventoryQuantity;
         String currentInventoryUnit;
         String targetWarehouseName;
-        String targetSide;
-        Integer plannedTargetRowNumber;
-        Integer plannedTargetLayer;
     }
 }

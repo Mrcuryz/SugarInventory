@@ -73,51 +73,18 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
     }
 
     private List<BatchInfo> outStock(OutStockRequestDTO dto, Integer operatorId) {
-        // 1. 获取库存记录（按先进后出排序）
-        int remainingQuantity = dto.getQuantity(); // 需出库的总数量
-        String currentSide = dto.getSide(); // 当前出库侧
-
         Product product = productMapper.selectById(dto.getProductId());
         if (product == null) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
-        Inventory curInventory = inventoryMapper.getLastLegacyInventoryForUpdate(
-                dto.getWarehouseId(), dto.getProductId());
-        if (curInventory == null) {
+        List<Inventory> inventoryList = inventoryMapper.selectLegacyInventoryForProductForUpdate(
+                dto.getProductId(), dto.getWarehouseId());
+        if (inventoryList.isEmpty()) {
             throw legacyInventoryNotFound();
         }
-        int curLayer = curInventory.getLayer(); // 当前堆积层数
-        int curCapacity;
-        List<Inventory> inventoryList = new ArrayList<>();
-        String nextSide; // 下一个出库侧
-        if (currentSide.equals("左"))
-            nextSide = "右";
-        else
-            nextSide = "左";
-        // **1. 可堆积产品：先查找第二层**
-        if (curLayer == 2 && remainingQuantity > 0) {
-            inventoryList.addAll(inventoryMapper.
-                    getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), currentSide, 2, dto.getProductId()));
-            inventoryList.addAll(inventoryMapper.
-                    getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), nextSide, 2, dto.getProductId()));
-        }
-
-        // **2. 查找第一层**
-        inventoryList.addAll(inventoryMapper.
-                getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), currentSide, 1, dto.getProductId()));
-        inventoryList.addAll(inventoryMapper.
-                getLegacyInventoryForOutStockForUpdate(dto.getWarehouseId(), nextSide, 1, dto.getProductId()));
-
-        curCapacity = inventoryList.size();
-
-        if (curCapacity == 0) {
-            throw legacyInventoryNotFound();
-        }
-
-        // 出库规则修改
         return this.outStock(inventoryList, product, dto.getWarehouseId(), null,
                 dto.getQuantity(), dto.getUnit(),
-                operatorId, dto.getOutType(), currentSide);
+                operatorId, dto.getOutType(), null);
     }
 
     @Transactional
@@ -344,7 +311,8 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
             }
         }
         // **6. 同步更新库位信息**
-        warehouseMapper.updateCurCapacity(warehouseId, warehouse.getCurCapacity() - totalOutQuantity);
+        warehouseMapper.updateCurCapacity(warehouseId,
+                Math.max((warehouse.getCurCapacity() == null ? 0 : warehouse.getCurCapacity()) - totalOutQuantity, 0));
         return new ArrayList<>(batchMap.values());
     }
 
@@ -354,34 +322,17 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
      * 1 散件优先
      */
     private List<Inventory> sortInventory(List<Inventory> inventoryList, Integer outType, String currentSide) {
-        // 整版数据
+        Comparator<Inventory> warehouseOrder = Comparator
+                .comparing(Inventory::getEntryDate, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(Inventory::getId, Comparator.nullsLast(Comparator.naturalOrder()));
         List<Inventory> inventories = new ArrayList<>(inventoryList.stream()
-                .filter(s -> s.getPieces() == 0)
-                .sorted(Comparator.comparingInt(Inventory::getLayer)
-                        .reversed()).toList());
-        // 散件数据
+                .filter(s -> s.getPieces() == null || s.getPieces() == 0)
+                .sorted(warehouseOrder).toList());
         inventoryList.removeAll(inventories);
-        // 判断左右
-        if (currentSide != null) {
-            if (currentSide.equals("左")) {
-                inventories.sort(Comparator.comparingInt(Inventory::getLayer).reversed()
-                        .thenComparing(Inventory::getSide).reversed());
-                inventoryList.sort(
-                        Comparator.comparingInt(Inventory::getPieces).reversed()
-                                .thenComparingInt(Inventory::getLayer).reversed()
-                                .thenComparing(Inventory::getSide).reversed());
-            } else {
-
-                inventories.sort(Comparator.comparingInt(Inventory::getLayer).reversed()
-                        .thenComparing(Inventory::getSide));
-
-                inventoryList.sort(
-                        Comparator.comparingInt(Inventory::getPieces).reversed()
-                                .thenComparingInt(Inventory::getLayer).reversed()
-                                .thenComparing(Inventory::getSide));
-            }
-        }
-        // 整版优先
+        inventoryList.sort(Comparator
+                .comparingInt((Inventory item) -> item.getPieces() == null ? 0 : item.getPieces())
+                .reversed()
+                .thenComparing(warehouseOrder));
         if (outType == 0) {
             inventories.addAll(inventoryList);
             return inventories;
@@ -491,12 +442,7 @@ public class OutStockServiceImpl implements OutStockService, LoggableService<Out
             recordOutStockEvent(outStock, product);
         }
         warehouseMapper.updateCurCapacity(warehouseId,
-                warehouse.getCurCapacity() - totalOutQuantity);
-
-        // 处理最大容量字段自动修正（如果历史有异常）
-        if (warehouse.getMaxRows() * 2 != warehouse.getMaxCapacity()) {
-            warehouseMapper.updateMaxCapacity(warehouseId, warehouse.getMaxRows() * 2);
-        }
+                Math.max((warehouse.getCurCapacity() == null ? 0 : warehouse.getCurCapacity()) - totalOutQuantity, 0));
 
         OutVO vo = new OutVO();
         vo.setRemainingQuantity(0);

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="operation-logs">
     <el-card class="search-card">
       <el-form :model="searchForm" inline>
@@ -29,7 +29,7 @@
           <div class="section-subtitle">维护产品基础资料，并为产品配置正式化验标准关系。</div>
         </div>
         <div class="table-toolbar-left">
-          <el-button v-if="canCreate" type="primary" @click="openCreate">新增产品</el-button>
+          <el-button v-if="canCreate" type="primary" @click="openCreate()">新增产品</el-button>
           <el-button @click="exportExcel">导出 Excel</el-button>
         </div>
       </div>
@@ -183,7 +183,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { addProduct, changeProduct, getProductList, removeProduct } from '@/api/product'
@@ -196,8 +197,11 @@ import {
   setDefaultProductStandardRelation
 } from '@/api/productQualityStandard'
 import { useAuthStore } from '@/stores/auth'
+import { productCreatePrefillFromQuery } from '@/utils/productSelection'
 
 const authStore = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const canCreate = computed(() => authStore.hasPermission('product:create'))
 const canUpdate = computed(() => authStore.hasPermission('product:update'))
 const canDelete = computed(() => authStore.hasPermission('product:delete'))
@@ -288,10 +292,31 @@ function handleReset() {
   handleSearch()
 }
 
-function openCreate() {
+function openCreate(prefilledName = '') {
   operationType.value = '新增产品'
   productForm.value = createProductForm()
+  productForm.value.productName = String(prefilledName || '').trim()
   dialogVisible.value = true
+}
+
+function clearQuickCreateQuery() {
+  const nextQuery = { ...route.query }
+  delete nextQuery.createProduct
+  delete nextQuery.productName
+  delete nextQuery.source
+  router.replace({ name: 'Product', query: nextQuery })
+}
+
+function consumeQuickCreateQuery() {
+  if (route.name !== 'Product' || String(route.query.createProduct || '') !== '1') return
+  const prefilledName = productCreatePrefillFromQuery(route.query)
+  if (!canCreate.value) {
+    ElMessage.warning('当前账号没有新增产品权限')
+    clearQuickCreateQuery()
+    return
+  }
+  if (prefilledName) openCreate(prefilledName)
+  clearQuickCreateQuery()
 }
 
 function editProduct(row) {
@@ -454,6 +479,12 @@ onMounted(async () => {
   await loadMeshList()
   await handleSearch()
 })
+
+watch(
+  () => [route.name, route.query.createProduct, route.query.productName],
+  consumeQuickCreateQuery,
+  { immediate: true }
+)
 </script>
 
 <style scoped>

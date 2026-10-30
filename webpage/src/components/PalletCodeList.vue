@@ -237,12 +237,9 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="库存位置" v-model="inventoryDialogVisible" width="520px">
+    <el-dialog title="库存库位" v-model="inventoryDialogVisible" width="520px">
       <el-descriptions v-if="inventoryInfo" :column="1" border>
-        <el-descriptions-item label="仓库">{{ inventoryInfo.warehouseName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="侧别">{{ inventoryInfo.side || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="排">{{ inventoryInfo.rowNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="层">{{ inventoryInfo.layer || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="库位">{{ inventoryInfo.warehouseName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="数量">{{ formatInventoryOccupancy(inventoryInfo) }}</el-descriptions-item>
         <el-descriptions-item label="入库时间">{{ formatDateTime(inventoryInfo.inStockTime) }}</el-descriptions-item>
       </el-descriptions>
@@ -911,10 +908,7 @@ const formatLocation = (row, prefix, emptyText = '-') => {
   if (!warehouse) {
     return emptyText
   }
-  const side = row[`${prefix}Side`] || '-'
-  const rowNumber = row[`${prefix}RowNumber`] ?? '-'
-  const layer = row[`${prefix}Layer`] ?? '-'
-  return `${warehouse} ${side}侧 ${rowNumber}排 ${layer}层`
+  return warehouse
 }
 
 const loadProducts = async () => {
