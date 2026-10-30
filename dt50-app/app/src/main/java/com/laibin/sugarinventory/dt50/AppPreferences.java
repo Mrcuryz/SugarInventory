@@ -7,9 +7,11 @@ import java.util.List;
 
 final class AppPreferences {
     private static final String FILE_NAME = "dt50_scanner";
+    private final Context context;
     private final SharedPreferences preferences;
 
     AppPreferences(Context context) {
+        this.context = context.getApplicationContext();
         preferences = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE);
     }
 
@@ -54,6 +56,10 @@ final class AppPreferences {
                 .remove("token")
                 .remove("permission_codes")
                 .apply();
+    }
+
+    void clearDailyDrafts() {
+        new ProductionDailyDraftStore(context).clearAll();
     }
 
     static String normalizeServerUrl(String value) {

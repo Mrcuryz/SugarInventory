@@ -18,6 +18,7 @@ public class WorkbenchActivity extends Activity {
     private View historyButton;
     private View outboundButton;
     private View transferButton;
+    private View dailyReportButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,6 +38,7 @@ public class WorkbenchActivity extends Activity {
         historyButton = findViewById(R.id.historyButton);
         outboundButton = findViewById(R.id.outboundButton);
         transferButton = findViewById(R.id.transferButton);
+        dailyReportButton = findViewById(R.id.dailyReportButton);
 
         inboundButton.setOnClickListener(view -> openActivity(MainActivity.class));
         warehouseOverviewButton.setOnClickListener(view -> openActivity(WarehouseOverviewActivity.class));
@@ -45,6 +47,7 @@ public class WorkbenchActivity extends Activity {
         historyButton.setOnClickListener(view -> openActivity(HistoryActivity.class));
         outboundButton.setOnClickListener(view -> openActivity(OutboundActivity.class));
         transferButton.setOnClickListener(view -> openActivity(TransferActivity.class));
+        dailyReportButton.setOnClickListener(view -> openActivity(ProductionDailyReportActivity.class));
         findViewById(R.id.logoutButton).setOnClickListener(view -> confirmLogout());
 
         renderPermissions();
@@ -95,6 +98,7 @@ public class WorkbenchActivity extends Activity {
         setAccess(outboundButton, canCreateAndConfirm);
         setAccess(transferButton,
                 canCreateAndConfirm && preferences.hasPermission("warehouse:view"));
+        setAccess(dailyReportButton, preferences.hasPermission("production:daily-report:view"));
     }
 
     private void setAccess(View entry, boolean enabled) {
@@ -109,6 +113,7 @@ public class WorkbenchActivity extends Activity {
                 .setMessage("退出后需要重新输入姓名和登录口令。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("退出", (dialog, which) -> {
+                    preferences.clearDailyDrafts();
                     preferences.clearToken();
                     returnToLogin();
                 })

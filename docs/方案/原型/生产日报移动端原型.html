@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>生产日报 · DT50 移动端交互原型</title>
+  <link rel="stylesheet" href="./production-daily-mobile.css">
+</head>
+<body>
+  <div class="review-shell">
+    <aside class="review-notes">
+      <div class="review-kicker">LAIBIN · ANDROID PROTOTYPE</div>
+      <h1>生产日报<br>移动端交互原型</h1>
+      <p>基于 DT50 App 现有的蓝白视觉体系，重点演示大量日报字段在窄屏上的录入方式。</p>
+      <div class="review-steps">
+        <div><span>01</span><strong>选日期与车间</strong><small>整张日报先看状态，再进入具体分区。</small></div>
+        <div><span>02</span><strong>按列连续录入</strong><small>一次显示一种字段，避免横向滚动。</small></div>
+        <div><span>03</span><strong>逐项展开补全</strong><small>项目详情显示五个数值和备注。</small></div>
+      </div>
+      <p class="review-disclaimer">演示数据 · 本地模拟交互 · 不连接后端</p>
+    </aside>
+    <div class="phone" aria-label="DT50 竖屏原型">
+      <div class="phone-status" aria-hidden="true"><span>09:41</span><span class="phone-signals">
+        <svg viewBox="0 0 16 16"><path d="M2 13h2V9H2Zm4 0h2V6H6Zm4 0h2V3h-2Z"/></svg>
+        <svg viewBox="0 0 16 16"><path d="M2 6c3.3-2.9 8.7-2.9 12 0M4.5 8.5c2-1.7 5-1.7 7 0M7.2 11c.5-.5 1.1-.5 1.6 0"/></svg>
+        <svg viewBox="0 0 18 16"><rect x="1" y="3" width="14" height="10" rx="2"/><path d="M17 6v4M4 5h8v6H4Z"/></svg>
+      </span></div>
+      <div id="app" class="app"></div>
+      <div class="phone-navigation" aria-hidden="true"><span></span></div>
+    </div>
+  </div>
+  <script src="./production-daily-mobile.js"></script>
+</body>
+</html>

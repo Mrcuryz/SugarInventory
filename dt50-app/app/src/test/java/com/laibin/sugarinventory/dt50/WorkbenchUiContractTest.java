@@ -39,6 +39,14 @@ public class WorkbenchUiContractTest {
         assertFalse(readLayout("activity_pallet_operation.xml").contains("可以开始扫码"));
     }
 
+    @Test
+    public void workbenchIncludesNativeDailyReportEntry() throws IOException {
+        String xml = readLayout("activity_workbench.xml");
+        assertTrue(xml.contains("@+id/dailyReportButton"));
+        assertTrue(xml.contains("@drawable/ic_daily_calendar"));
+        assertTrue(readLayout("activity_production_daily_report.xml").contains("@+id/dailyTabs"));
+    }
+
     private String readLayout(String fileName) throws IOException {
         Path base = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         for (Path candidate : List.of(

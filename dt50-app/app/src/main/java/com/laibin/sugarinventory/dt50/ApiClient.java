@@ -8,6 +8,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -19,6 +20,8 @@ import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -85,6 +88,50 @@ final class ApiClient {
                     data.optString("name", ""),
                     stringList(data.optJSONArray("permissionCodes")));
         });
+    }
+
+    void loadProductionDailyReport(String date, Callback<JSONObject> callback) {
+        run(callback, () -> request("GET", "/api/production/daily-reports/" + urlEncode(date), null));
+    }
+
+    void loadProductionDailyHistory(String startDate, String endDate, Callback<JSONObject> callback) {
+        run(callback, () -> request("GET", "/api/production/daily-reports?page=1&size=100&startDate="
+                + urlEncode(startDate) + "&endDate=" + urlEncode(endDate), null));
+    }
+
+    void loadProductionDailyProducts(Callback<JSONArray> callback) {
+        run(callback, () -> requestArray("GET", "/api/production/daily-reports/product-options", null));
+    }
+
+    void saveProductionDailyHeader(String date, JSONObject body, Callback<JSONObject> callback) {
+        run(callback, () -> request("PUT", "/api/production/daily-reports/" + urlEncode(date) + "/header", body));
+    }
+
+    void saveProductionDailySection(String date, String departmentCode, JSONObject body,
+                                    Callback<JSONObject> callback) {
+        run(callback, () -> request("PUT", "/api/production/daily-reports/" + urlEncode(date)
+                + "/sections/" + urlEncode(departmentCode), body));
+    }
+
+    void submitProductionDailySection(String date, String departmentCode, Callback<JSONObject> callback) {
+        run(callback, () -> request("POST", "/api/production/daily-reports/" + urlEncode(date)
+                + "/sections/" + urlEncode(departmentCode) + "/submit", null));
+    }
+
+    void submitProductionDailyReport(String date, Callback<JSONObject> callback) {
+        run(callback, () -> request("POST", "/api/production/daily-reports/" + urlEncode(date) + "/submit", null));
+    }
+
+    void exportProductionDailyReport(String date, Callback<byte[]> callback) {
+        run(callback, () -> requestBinary("/api/production/daily-reports/" + urlEncode(date) + "/export"));
+    }
+
+    void importProductionDailyReport(String filename, byte[] file, Callback<JSONObject> callback) {
+        run(callback, () -> uploadProductionDailyFile(filename, file));
+    }
+
+    void confirmProductionDailyImport(JSONObject body, Callback<JSONObject> callback) {
+        run(callback, () -> request("POST", "/api/production/daily-reports/import/confirm", body));
     }
 
     void resolveWarehouse(String rawCode, Callback<WarehouseLocation> callback) {
@@ -454,13 +501,102 @@ final class ApiClient {
         if (response.trim().isEmpty()) {
             throw new ApiFailure("服务器未返回内容", status);
         }
+        return decodeEnvelope(response, status);
+    }
+
+    private Object decodeEnvelope(String response, int status) throws JSONException, ApiFailure {
         JSONObject envelope = new JSONObject(response);
         int businessCode = envelope.optInt("code", status);
         if (status < 200 || status >= 300 || businessCode != 200) {
-            throw new ApiFailure(envelope.optString("msg", "请求失败"), status);
+            int failureCode = status >= 200 && status < 300 ? businessCode : status;
+            throw new ApiFailure(envelope.optString("msg", "请求失败"), failureCode);
         }
         Object data = envelope.opt("data");
         return data == null ? JSONObject.NULL : data;
+    }
+
+    private byte[] requestBinary(String path) throws IOException, JSONException, ApiFailure {
+        if (baseUrl.isEmpty()) throw new ApiFailure("系统连接配置无效，请联系管理员", 0);
+        HttpURLConnection connection = (HttpURLConnection) new java.net.URL(baseUrl + path).openConnection();
+        try {
+            connection.setConnectTimeout(10_000);
+            connection.setReadTimeout(30_000);
+            connection.setRequestProperty("Accept",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json");
+            connection.setRequestProperty("Authorization", "Bearer " + token);
+            int status = connection.getResponseCode();
+            if (status >= 200 && status < 300) {
+                String contentType = connection.getContentType();
+                if (contentType != null && contentType.toLowerCase(Locale.ROOT).contains("application/json")) {
+                    decodeEnvelope(read(connection.getInputStream()), status);
+                    throw new ApiFailure("服务器未返回 Excel 文件", status);
+                }
+                byte[] content = readBytes(connection.getInputStream());
+                if (content.length < 4 || content[0] != 'P' || content[1] != 'K') {
+                    throw new ApiFailure("服务器未返回有效的 Excel 文件", status);
+                }
+                return content;
+            }
+            throw responseFailure(read(connection.getErrorStream()), status);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private JSONObject uploadProductionDailyFile(String filename, byte[] file)
+            throws IOException, JSONException, ApiFailure {
+        if (baseUrl.isEmpty()) throw new ApiFailure("系统连接配置无效，请联系管理员", 0);
+        String boundary = "LaibinDaily" + UUID.randomUUID().toString().replace("-", "");
+        String safeName = filename.replaceAll("[\\r\\n\\\"\\\\]", "_");
+        byte[] prefix = ("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"" + safeName + "\"\r\n"
+                + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        byte[] suffix = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
+        HttpURLConnection connection = (HttpURLConnection) new java.net.URL(baseUrl
+                + "/api/production/daily-reports/import").openConnection();
+        try {
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(10_000);
+            connection.setReadTimeout(45_000);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Authorization", "Bearer " + token);
+            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+            connection.setDoOutput(true);
+            connection.setFixedLengthStreamingMode(prefix.length + file.length + suffix.length);
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(prefix);
+                output.write(file);
+                output.write(suffix);
+            }
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 200 && status < 300
+                    ? connection.getInputStream() : connection.getErrorStream();
+            String response = read(stream);
+            if (response.trim().isEmpty()) throw new ApiFailure("服务器未返回内容", status);
+            Object data = decodeEnvelope(response, status);
+            if (!(data instanceof JSONObject)) throw new ApiFailure("服务器返回的数据格式不正确", status);
+            return (JSONObject) data;
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private ApiFailure responseFailure(String response, int status) {
+        try {
+            JSONObject envelope = new JSONObject(response);
+            return new ApiFailure(envelope.optString("msg", "请求失败"), status);
+        } catch (JSONException exception) {
+            return new ApiFailure("请求失败（" + status + "）", status);
+        }
+    }
+
+    private byte[] readBytes(InputStream stream) throws IOException {
+        try (InputStream input = stream; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return output.toByteArray();
+        }
     }
 
     private String read(InputStream stream) throws IOException {
