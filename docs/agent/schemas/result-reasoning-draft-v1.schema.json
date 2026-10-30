@@ -34,6 +34,9 @@
     "missingFacts": {
       "items": {
         "enum": [
+          "ASSAY_ENTRY_PREVIEW",
+          "PRODUCTION_DAILY_REPORT_ANALYSIS",
+          "PRODUCTION_DAILY_REPORT_RECORDS",
           "CURRENT_PRODUCT_INVENTORY",
           "PRODUCT_INVENTORY_DISTRIBUTION",
           "WAREHOUSE_INVENTORY_DISTRIBUTION",
@@ -104,6 +107,9 @@
     "failedFacts": {
       "items": {
         "enum": [
+          "ASSAY_ENTRY_PREVIEW",
+          "PRODUCTION_DAILY_REPORT_ANALYSIS",
+          "PRODUCTION_DAILY_REPORT_RECORDS",
           "CURRENT_PRODUCT_INVENTORY",
           "PRODUCT_INVENTORY_DISTRIBUTION",
           "WAREHOUSE_INVENTORY_DISTRIBUTION",

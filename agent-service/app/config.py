@@ -13,6 +13,20 @@ PlanningMode = Literal["deterministic", "llm"]
 DEFAULT_MODEL_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
 
+CONTROLLED_LLM_EXPERTS: tuple[str, ...] = (
+    "inventory_expert",
+    "warehouse_expert",
+    "assay_expert",
+    "logistics_expert",
+    "production_expert",
+    "analytics_expert",
+    "pallet_expert",
+    "knowledge_expert",
+    "master_data_expert",
+    "administration_expert",
+    "audit_expert",
+)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -32,18 +46,7 @@ class Settings:
     model_timeout_ms: int = 45000
     goal_draft_shadow_enabled: bool = False
     planning_mode: PlanningMode = "deterministic"
-    llm_allowed_experts: tuple[str, ...] = (
-        "inventory_expert",
-        "warehouse_expert",
-        "assay_expert",
-        "logistics_expert",
-        "production_expert",
-        "analytics_expert",
-        "pallet_expert",
-        "knowledge_expert",
-        "administration_expert",
-        "audit_expert",
-    )
+    llm_allowed_experts: tuple[str, ...] = CONTROLLED_LLM_EXPERTS
     llm_max_tool_calls: int = 3
     llm_max_tool_retries: int = 1
     allow_insecure_mock_auth: bool = True
@@ -118,18 +121,7 @@ class Settings:
             planning_mode=planning_mode,  # type: ignore[arg-type]
             llm_allowed_experts=_csv_env(
                 "AGENT_LLM_ALLOWED_EXPERTS",
-                (
-                    "inventory_expert",
-                    "warehouse_expert",
-                    "assay_expert",
-                    "logistics_expert",
-                    "production_expert",
-                    "analytics_expert",
-                    "pallet_expert",
-                    "knowledge_expert",
-                    "administration_expert",
-                    "audit_expert",
-                ),
+                CONTROLLED_LLM_EXPERTS,
             ),
             llm_max_tool_calls=_bounded_int_env("AGENT_LLM_MAX_TOOL_CALLS", 3, 1, 3),
             llm_max_tool_retries=_bounded_int_env("AGENT_LLM_MAX_TOOL_RETRIES", 1, 0, 1),

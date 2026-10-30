@@ -27,6 +27,28 @@ class ProductionDailyReportXlsxExporterTest {
     private final ProductionDailyReportXlsxExporter exporter = new ProductionDailyReportXlsxExporter();
 
     @Test
+    void demoExportOmitsCompanyIdentityAndPrivateNotes() throws Exception {
+        org.springframework.test.util.ReflectionTestUtils.setField(exporter, "demoPrivacyEnabled", true);
+        byte[] exported = exporter.export(reportFixture());
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(new ByteArrayInputStream(exported))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.getName().endsWith(".xml")) {
+                    assertThat(new String(zip.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
+                            .doesNotContain("来冰", "柳冰", "糖罐子");
+                }
+            }
+        }
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(exported))) {
+            assertThat(workbook.getSheetAt(0).getRow(0).getCell(0).getStringCellValue())
+                    .isEqualTo("示例企业20260825生产日报表");
+            assertThat(String.join("\n", cellTexts(workbook.getSheetAt(0))))
+                    .doesNotContain("来冰", "柳冰", "糖油桶")
+                    .contains("演示数据仅用于展示系统功能");
+        }
+    }
+
+    @Test
     void exportUsesTemplateLayoutWorkshopWordingAndEditableProductRows() throws Exception {
         ProductionDailyReportVO report = reportFixture();
 

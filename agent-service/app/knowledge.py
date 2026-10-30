@@ -22,6 +22,12 @@ def classify_knowledge_query(text: str) -> str | None:
     normalized = "".join((text or "").split())
     if not normalized:
         return None
+    # A software workflow is not a manufacturing process. Leave this intent to
+    # the main model instead of forcibly recovering it as a process lookup.
+    if any(marker in normalized for marker in (
+        "系统操作", "软件操作", "页面操作", "操作界面", "扫码操作", "按钮", "菜单",
+    )):
+        return None
     if any(
         marker in normalized
         for marker in ("领料", "原料消耗", "材料消耗", "实际消耗", "产出", "入库去向")

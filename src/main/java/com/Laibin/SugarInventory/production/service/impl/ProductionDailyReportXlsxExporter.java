@@ -32,6 +32,12 @@ import java.util.List;
 
 @Component
 public class ProductionDailyReportXlsxExporter {
+    @org.springframework.beans.factory.annotation.Value("${demo.privacy.enabled:false}")
+    private boolean demoPrivacyEnabled;
+
+    public String reportCompanyName() {
+        return demoPrivacyEnabled ? "示例企业" : "来冰公司";
+    }
     private static final String TEMPLATE_PATH = "templates/production-daily-report-template.xlsx";
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final List<String> NOTES = List.of(
@@ -44,7 +50,7 @@ public class ProductionDailyReportXlsxExporter {
     public byte[] export(ProductionDailyReportVO report) {
         ClassPathResource resource = new ClassPathResource(TEMPLATE_PATH);
         try (InputStream input = resource.getInputStream();
-             XSSFWorkbook workbook = new XSSFWorkbook(input);
+             XSSFWorkbook workbook = demoPrivacyEnabled ? new XSSFWorkbook() : new XSSFWorkbook(input);
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             XSSFSheet sheet = workbook.getNumberOfSheets() == 0
                     ? workbook.createSheet("生产日报")
@@ -103,7 +109,7 @@ public class ProductionDailyReportXlsxExporter {
     private void writeTitleAndHeader(XSSFSheet sheet, Styles styles, ProductionDailyReportVO report) {
         Row titleRow = row(sheet, 0, 34);
         mergedText(sheet, titleRow, 0, 19,
-                "来冰公司" + report.getReportDate().format(DateTimeFormatter.BASIC_ISO_DATE) + "生产日报表",
+                reportCompanyName() + report.getReportDate().format(DateTimeFormatter.BASIC_ISO_DATE) + "生产日报表",
                 styles.title);
 
         Row metaRow = row(sheet, 1, 24);
@@ -211,7 +217,7 @@ public class ProductionDailyReportXlsxExporter {
     }
 
     private int writeNotes(XSSFSheet sheet, Styles styles, int rowIndex, int startColumn) {
-        for (String note : NOTES) {
+        for (String note : demoPrivacyEnabled ? List.of("演示数据仅用于展示系统功能。") : NOTES) {
             Row row = row(sheet, rowIndex, 22);
             mergedText(sheet, row, startColumn, startColumn + 9, note, styles.note);
             rowIndex++;

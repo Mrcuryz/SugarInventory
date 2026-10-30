@@ -11,6 +11,9 @@ import java.util.List;
 
 @Mapper
 public interface QualityStandardItemMapper extends BaseMapper<QualityStandardItem> {
+    @Select("SELECT * FROM quality_standard_item WHERE quality_standard_id = #{qualityStandardId} ORDER BY sort_order ASC, id ASC FOR UPDATE")
+    List<QualityStandardItem> selectForAssayUpdate(@Param("qualityStandardId") Integer qualityStandardId);
+
     @Select("SELECT * FROM quality_standard_item WHERE quality_standard_id = #{qualityStandardId} ORDER BY sort_order ASC, id ASC")
     List<QualityStandardItem> selectByQualityStandardId(@Param("qualityStandardId") Integer qualityStandardId);
 

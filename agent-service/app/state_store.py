@@ -221,6 +221,7 @@ def deserialize_state(payload: str) -> WarehouseAgentState:
         raise StateVersionConflict("state payload schema version is unsupported")
     values = dict(envelope.get("state") or {})
     selected_product = _selected_entity(values.pop("selected_product", None))
+    selected_assay_group = _selected_entity(values.pop("selected_assay_group", None))
     selected_warehouse = _selected_entity(values.pop("selected_warehouse", None))
     selected_production_order = _selected_entity(values.pop("selected_production_order", None))
     selected_pallet = _selected_entity(values.pop("selected_pallet", None))
@@ -230,6 +231,7 @@ def deserialize_state(payload: str) -> WarehouseAgentState:
         if hasattr(state, key):
             setattr(state, key, value)
     state.selected_product = selected_product
+    state.selected_assay_group = selected_assay_group
     state.selected_warehouse = selected_warehouse
     state.selected_production_order = selected_production_order
     state.selected_pallet = selected_pallet

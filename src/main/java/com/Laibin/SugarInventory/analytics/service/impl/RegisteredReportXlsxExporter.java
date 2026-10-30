@@ -32,6 +32,20 @@ public class RegisteredReportXlsxExporter {
     };
 
     private static final Map<String, String> LABELS = Map.ofEntries(
+            Map.entry("summaryType", "统计口径"),
+            Map.entry("departmentName", "车间"),
+            Map.entry("label", "项目"),
+            Map.entry("quantity", "已记录数量"),
+            Map.entry("convertedTons", "已记录折吨（吨）"),
+            Map.entry("recordCount", "已保存行数"),
+            Map.entry("quantityRows", "数量已记录行数"),
+            Map.entry("tonnageRows", "折吨已记录行数"),
+            Map.entry("observedDays", "数量覆盖天数"),
+            Map.entry("tonnageObservedDays", "折吨覆盖天数"),
+            Map.entry("draftRows", "未提交行数"),
+            Map.entry("coverageLabel", "记录覆盖情况"),
+            Map.entry("requestedDays", "查询天数"),
+            Map.entry("truncated", "统计系列是否截断"),
             Map.entry("outputRecordCount", "产出记录数"),
             Map.entry("productionOrderCount", "生产订单数"),
             Map.entry("totalWeightKg", "登记重量（kg）"),
@@ -235,6 +249,45 @@ public class RegisteredReportXlsxExporter {
     }
 
     private void writeReportData(Workbook workbook, Styles styles, RegisteredReportRunVO report) {
+        if (report.getComparison() != null) {
+            writeTable(workbook, styles, "跨期比较", report.getComparison().getMetrics(), List.of(
+                    "metricLabel", "unit", "currentValue", "comparisonValue",
+                    "absoluteChange", "percentChange", "currentDailyAverage",
+                    "comparisonDailyAverage", "dailyAverageAbsoluteChange",
+                    "dailyAveragePercentChange", "note"));
+        }
+        if (report.getProductionDailyReport() != null) {
+            var summary = new java.util.ArrayList<Map<String, Object>>();
+            var points = new java.util.ArrayList<Map<String, Object>>();
+            for (var series : report.getProductionDailyReport().getSeries()) {
+                var item = toMap(series);
+                if (!series.isTonnageApplicable()) {
+                    item.put("convertedTons", "不适用");
+                    item.put("tonnageRows", "不适用");
+                    item.put("tonnageObservedDays", "不适用");
+                }
+                summary.add(item);
+                for (var point : series.getPoints()) {
+                    var row = toMap(point);
+                    row.put("businessDate", point.getBusinessDate().toString());
+                    row.put("summaryType", series.getSummaryType());
+                    row.put("departmentName", series.getDepartmentName());
+                    row.put("label", series.getLabel());
+                    row.put("unit", series.getUnit());
+                    if (!series.isTonnageApplicable()) {
+                        row.put("convertedTons", "不适用");
+                        row.put("tonnageRows", "不适用");
+                    }
+                    points.add(row);
+                }
+            }
+            writeTable(workbook, styles, "日报汇总", summary, List.of("summaryType", "departmentName", "label", "unit",
+                    "quantity", "convertedTons", "recordCount", "quantityRows", "tonnageRows", "observedDays",
+                    "tonnageObservedDays", "draftRows", "coverageLabel"));
+            writeTable(workbook, styles, "日报按日趋势", points, List.of("businessDate", "summaryType", "departmentName",
+                    "label", "unit", "quantity", "convertedTons", "recordCount", "quantityRows", "tonnageRows", "draftRows"));
+            return;
+        }
         if (report.getOperationsOverview() != null) {
             writeVertical(workbook, styles, "今日产出",
                     toMap(report.getOperationsOverview().getProductionOutput()), List.of(
@@ -263,13 +316,6 @@ public class RegisteredReportXlsxExporter {
                     "cohortTaskCount", "completedTaskCount", "inProgressTaskCount",
                     "canceledTaskCount", "currentPendingTaskCount"));
             return;
-        }
-        if (report.getComparison() != null) {
-            writeTable(workbook, styles, "跨期比较", report.getComparison().getMetrics(), List.of(
-                    "metricLabel", "unit", "currentValue", "comparisonValue",
-                    "absoluteChange", "percentChange", "currentDailyAverage",
-                    "comparisonDailyAverage", "dailyAverageAbsoluteChange",
-                    "dailyAveragePercentChange", "note"));
         }
         if (report.getMetrics() != null) {
             writeVertical(workbook, styles, "核心指标", toMap(report.getMetrics()), List.of(
@@ -380,6 +426,17 @@ public class RegisteredReportXlsxExporter {
             Workbook workbook,
             Styles styles,
             RegisteredReportRunVO report) {
+        if (report.getComparison() != null) {
+            writeTextList(workbook, styles, "比较说明", report.getComparison().getNotes());
+        }
+        if (report.getProductionDailyReport() != null) {
+            var quality = toMap(report.getProductionDailyReport());
+            quality.put("partial", report.getDataQuality() != null && report.getDataQuality().isPartial());
+            writeVertical(workbook, styles, "数据质量", quality, List.of("partial", "requestedDays", "truncated"));
+            if (report.getDataQuality() != null) writeTextList(workbook, styles, "数据质量提示", report.getDataQuality().getNotes());
+            writeTextList(workbook, styles, "口径与限制", report.getLimitations());
+            return;
+        }
         if (report.getDataQuality() != null) {
             Map<String, Object> quality = toMap(report.getDataQuality());
             writeVertical(workbook, styles, "数据质量", quality, List.of(
@@ -485,6 +542,8 @@ public class RegisteredReportXlsxExporter {
             case "taskScope" -> "任务类型范围";
             case "inventoryScope" -> "库存范围";
             case "dataSource" -> "数据来源";
+            case "sourceLabel" -> "数据来源";
+            case "departmentScope" -> "车间范围";
             default -> "筛选条件";
         };
     }

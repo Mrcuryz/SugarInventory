@@ -9,6 +9,7 @@ import re
 import time
 
 from app.agents import MAIN_AGENT, AgentHandoff, AgentHandoffRouter
+from app.assay_entry_preview import SCHEMA as ASSAY_ENTRY_PREVIEW_SCHEMA, validate_preview_arguments
 from app.business_time import BusinessClock
 from app.cancellation import RunCancelledError
 from app.context import ContextBuilder
@@ -67,6 +68,19 @@ DATE_RANGE_SCHEMA: dict[str, Any] = {
 
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
+    "preview_assay_entry": ASSAY_ENTRY_PREVIEW_SCHEMA,
+    "query_production_daily_reports": {
+        "type": "object", "additionalProperties": False,
+        "required": ["startDate", "endDate"],
+        "properties": {
+            "startDate": {"type": "string", "format": "date"},
+            "endDate": {"type": "string", "format": "date"},
+            "departmentName": {"type": "string", "enum": ["多晶车间", "红糖车间", "单晶车间", "全厂汇总"]},
+            "itemQuery": {"type": "string", "maxLength": 100},
+            "page": {"type": "integer", "minimum": 1, "maximum": 10000},
+            "size": {"type": "integer", "minimum": 1, "maximum": 50},
+        },
+    },
     KNOWLEDGE_TOOL_NAME: {
         "type": "object",
         "additionalProperties": False,
@@ -460,6 +474,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "reportDefinitionId": {
                 "type": "string",
                 "enum": [
+                    "production_daily_report_analysis_v1",
                     "daily_production_overview_v1",
                     "quality_assay_result_trend_v1",
                     "quality_metric_trend_v1",
@@ -470,6 +485,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 ],
             },
             "reportVersion": {"type": "integer", "const": 1},
+            "departmentName": {"type": "string", "minLength": 1, "maxLength": 100, "description": "仅生产日报分析支持，使用生产日报车间名称"},
             "startDate": {"type": "string", "format": "date"},
             "endDate": {"type": "string", "format": "date"},
             "productQuery": {"type": "string", "minLength": 1, "maxLength": 100},
@@ -581,7 +597,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "type": "object", "additionalProperties": False,
         "required": ["previewVersion", "items"],
         "properties": {
-            "previewVersion": {"type": "integer", "const": 1},
+            "previewVersion": {"type": "integer", "const": 2},
             "items": {
                 "type": "array", "minItems": 1, "maxItems": 20,
                 "items": {
@@ -592,7 +608,6 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                                  "pattern": "^[A-Za-z0-9-]+$"},
                         "warehouseName": {"type": "string", "minLength": 1, "maxLength": 100},
                         "entryDate": {"type": "string", "format": "date"},
-                        "side": {"type": "string", "enum": ["左", "右"]},
                         "quantity": {"type": "integer", "minimum": 1},
                         "unit": {"type": "string", "enum": ["0", "1"]},
                         "remark": {"type": "string", "maxLength": 255},
@@ -741,6 +756,8 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 
 
 LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
+    "preview_assay_entry": "对已确认具体产品或已选择化验组、明确采样日期和用户实测值生成化验录入预览，不保存。productRef=CURRENT_PRODUCT 与 groupRef=CURRENT_ASSAY_GROUP 二选一；整组使用同一组实测值，各产品分别判定。未填项保持空，0有效，不从旧记录或标准补数，修改后重新预览。",
+    "query_production_daily_reports": "根据生产日报查询产量、生产概况和明细，非订单登记产出。必填开始/结束日期，最多31天；可选车间名称和产品/指标名称包含查询；明细分页最多50条，overview为后端按完整范围汇总的当日数量与已保存折吨。直接使用汇总值，不由模型重算，不相加不同阶段或月年累计。包括已保存草稿；空值不是0。全部车间/产品应省略对应筛选。改变范围默认从第1页查询。",
     KNOWLEDGE_TOOL_NAME: (
         "查询已发布且通过校验的现行静态知识材料。PROCESS 只用于工艺，"
         "COMPANY/PRODUCT_MARKETING/CERTIFICATION/SALES 只用于企业资料；"
@@ -759,12 +776,12 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_warehouse_recent_operations": "查询已登记的近期库位操作。用户指定具体库位时先解析并使用 CURRENT_WAREHOUSE；用户未指定或明确查询全部库位时省略 warehouseRef，直接查询当前可见全局范围。日志缺失不代表没有发生。",
     "query_warehouse_mixed_storage_facts": "查询库位混放事实和风险标签。用户问‘哪些库位’或‘全部仓库’时省略 warehouseRef，直接查询当前可见全局范围；只有用户明确指定一个库位时才解析并使用 CURRENT_WAREHOUSE。只依据已登记规则。",
     "get_assay_status": "查询一个已确认产品在指定生产日期的化验状态；未提供日期时不得声称是最新化验。",
-    "query_assay_records": "按受控产品范围和日期查询化验记录列表；按 sampleDate 降序 size=1 可取最新产品化验。",
+    "query_assay_records": "按受控产品范围和日期范围查询化验记录列表。普通产品名称先用 resolve_products 解析，不得用 EXACT_PRODUCT_NAME_GROUP 绕过产品确认；名称组仅用于已确认的名称组或用户明确要求同名全部规格。产品名保持原文完整，不把名称中含有的化验、组等字样删掉。单个已确认产品加明确单日的化验情况应使用 get_assay_status，不使用本工具；明确要求全部/历史版本时例外。未给日期而要最新化验时，按 sampleDate 降序 size=1 取得报告引用，再读详情。",
     "get_assay_report_detail": "使用上一查询返回的受控 recordRef 查看一份化验报告详情。",
     "query_assay_abnormalities": "按产品范围、日期和异常类型统计化验异常；区分不合格、无标准和标准多候选。",
     "query_products_without_recent_assay": "查询当前在库产品中指定日期范围缺少化验的分组。用户未指定产品或仓库时使用 productScope=ALL、warehouseScope=ALL；‘最近N天’使用 dateRange.type=LAST_DAYS。不能证明库存批次是否合格。",
     "query_assay_standard_coverage": "查询产品质量标准覆盖情况。用户问哪些当前库存没有适用标准时使用 productScope=ALL、coverageType=PRODUCT_WITHOUT_STANDARD，不要添加仓库范围。",
-    "query_assay_groups": "查询已登记化验分组目录，不查询具体产品化验结果。",
+    "query_assay_groups": "查询已登记化验分组目录。化验组录入时先查询并让用户选择，选择后可使用 CURRENT_ASSAY_GROUP 进行整组预览；目录本身不是化验结果。",
     "query_quality_standard_catalog": "查询质量标准目录，不代表某产品或批次已经适用该标准。",
     "get_quality_standard_detail": "使用受控标准引用查询质量标准详情。",
     "query_product_standard_relations": "按产品规范名查询当前产品与质量标准的配置关系。",
@@ -778,14 +795,14 @@ LLM_TOOL_DESCRIPTIONS: dict[str, str] = {
     "query_fixed_product_qr_pool": "查询固定产品二维码池当前状态；不打印、启用、作废或恢复二维码。",
     "query_pallet_tasks": "查询当前托盘任务记录；用户问待处理任务时使用 status=PENDING。入库引导目标中的具体产品范围由 Runtime 从已确认产品注入。只读返回分类和状态，不执行确认、取消、入库、出库或调拨。",
     "preview_task_transition": "对用户已明确选择的成品入库、成品出库或调拨待处理托盘码生成第 1 版短期预览。transition 只能是 CONFIRM_FINISH_INBOUND、CONFIRM_FINISH_OUTBOUND 或 CONFIRM_TRANSFER，且必须传 1~20 个 palletCodes。预览不执行任务、不修改库存。",
-    "preview_finish_inbound_execution": "对用户已经填写完成的成品入库表单生成第 1 版精确短期预览。每项只允许 code、warehouseName、entryDate、side、quantity、unit、remark；禁止内部 ID、排号和层数。有关联生产产出码时最终数量和单位以后端为准。预览不执行入库、不确认任务、不修改库存，也不签发执行令牌。",
+    "preview_finish_inbound_execution": "对用户已经填写完成的成品入库表单生成第 2 版库位级精确短期预览。每项只允许 code、warehouseName、entryDate、quantity、unit、remark；禁止内部 ID、侧别、排号和层数。有关联生产产出码时最终数量和单位以后端为准。预览不执行入库、不确认任务、不修改库存，也不签发执行令牌。",
     "query_stock_documents": "查询指定类型和日期范围的入库单、出库单或半成品单据；相对日期以 BUSINESS_TIME 为准。",
     "query_auto_inbound_batches": "查询最近登记的自动报数入库批次；无须先提供产品或批次。返回空 records 或 count=0 时就是权威无数据结果，应引用该次观察直接回答。",
     "get_auto_inbound_batch_detail": "使用上一查询返回的受控批次引用查询自动报数入库批次详情；不得猜测内部引用。",
     "search_operation_logs": "查询经过字段级脱敏的业务操作日志摘要；不返回变更前后值、请求正文或凭据。",
     "query_agent_tool_audit": "查询经过字段级脱敏的 Agent 工具调用审计；不返回参数、Prompt、模型上下文或内部 ID。",
     "query_agent_answer_reviews": "查询 Agent 回答复核安全摘要。复核进度“待复核”使用 reviewStatus=OPEN；answerStatus 是另一维度。最终回答必须把所有枚举转换成用户可读中文。",
-    "run_registered_report": "运行已登记报表。今日整体运营使用 today_operations_overview_v1，开始和结束日期必须都是 BUSINESS_TIME 中的北京时间今天，首版不传 productQuery、metricKey、taskType 或 comparisonMode；生产产量使用 daily_production_overview_v1（最长 31 天）；库存水平变化使用 inventory_level_trend_v1（最长 31 天），正常环境只读取已通过守恒对账的日终快照，本地历史回放会明确标记为模拟，模型不得把模拟说成正式趋势；生产领料与稳定登记产出使用 production_input_output_flow_v1（最长 366 天），两条每日序列不得直接相除；化验整体判定趋势使用 quality_assay_result_trend_v1；单项化验指标变化使用 quality_metric_trend_v1，并必须传入 metricKey；系统已登记托盘任务耗时使用 pallet_task_cycle_time_v1，可选 taskType，完成耗时、进行中等待和取消数量必须分开。版本均固定为 1。除今日运营概览外，需要环比时传 comparisonMode=PREVIOUS_PERIOD；用户明确指定不重叠对比期时传 CUSTOM 及两个对比日期。两期始终复用同一报表定义、版本和筛选条件。相对日期必须按 BUSINESS_TIME 转成明确日期。未指定产品时省略 productQuery。模型不得自行计算权威指标、产耗比、收率、损耗率、SLA 逾期、员工绩效或因果结论。",
+    "run_registered_report": "运行已登记报表。今日整体运营使用 today_operations_overview_v1，开始和结束日期必须都是 BUSINESS_TIME 中的北京时间今天，首版不传 productQuery、metricKey、taskType 或 comparisonMode；生产日报趋势、产量及能耗分析使用 production_daily_report_analysis_v1（最长31天，可选departmentName/productQuery，只支持两个等长期间比较）；明确按生产订单登记产出分析时使用 daily_production_overview_v1（最长 31 天）；库存水平变化使用 inventory_level_trend_v1（最长 31 天），正常环境只读取已通过守恒对账的日终快照，本地历史回放会明确标记为模拟，模型不得把模拟说成正式趋势；生产领料与稳定登记产出使用 production_input_output_flow_v1（最长 366 天），两条每日序列不得直接相除；化验整体判定趋势使用 quality_assay_result_trend_v1；单项化验指标变化使用 quality_metric_trend_v1，并必须传入 metricKey；系统已登记托盘任务耗时使用 pallet_task_cycle_time_v1，可选 taskType，完成耗时、进行中等待和取消数量必须分开。版本均固定为 1。除今日运营概览外，需要环比时传 comparisonMode=PREVIOUS_PERIOD；用户明确指定不重叠对比期时传 CUSTOM 及两个对比日期。两期始终复用同一报表定义、版本和筛选条件。相对日期必须按 BUSINESS_TIME 转成明确日期。未指定产品时省略 productQuery。模型不得自行计算权威指标、产耗比、收率、损耗率、SLA 逾期、员工绩效或因果结论。",
 }
 
 
@@ -924,6 +941,20 @@ class ToolArgumentBuilder:
         self._reject_model_generated_ids(arguments)
         self._reject_display_label_execution(tool_name, arguments, state, user_message)
         materialized = self._materialize_state_refs(arguments, state)
+        if tool_name == "resolve_products":
+            from app.assay_entry_grounding import validate_product_qualifiers
+            validate_product_qualifiers(str(materialized.get("query") or ""), user_message)
+        if tool_name == "preview_assay_entry":
+            selected = state.selected_product
+            group = state.selected_assay_group
+            product_bound = (selected is not None and selected.metadata.get("scopeType", "SINGLE_PRODUCT") == "SINGLE_PRODUCT"
+                             and arguments.get("productRef") == "CURRENT_PRODUCT" and "groupRef" not in arguments)
+            group_bound = (group is not None and arguments.get("groupRef") == "CURRENT_ASSAY_GROUP" and "productRef" not in arguments)
+            if state.active_goal_type != "ASSAY_ENTRY_PREVIEW" or not (product_bound or group_bound):
+                raise ValueError("化验预览必须绑定录入目标下已确认的具体产品或化验组")
+            from app.assay_entry_grounding import grounded_sample_date
+            materialized["sampleDate"] = grounded_sample_date(
+                state.messages, user_message, materialized.get("sampleDate"), self.business_clock)
         registered_report_periods = None
         if tool_name == "run_registered_report" and materialized.get("comparisonMode"):
             registered_report_periods = {
@@ -1002,6 +1033,8 @@ class ToolArgumentBuilder:
             materialized.update(registered_report_periods)
         if tool_name == "query_boiling_batches":
             materialized = self._normalize_boiling_batch_scope(materialized, user_message)
+        if tool_name == "query_production_daily_reports":
+            materialized = self._normalize_daily_report_scope(materialized)
         if tool_name == "query_agent_answer_reviews":
             materialized = self._normalize_agent_answer_review_filters(materialized)
         if tool_name == "query_pallet_flow_records":
@@ -1041,12 +1074,28 @@ class ToolArgumentBuilder:
             )
             product_scope = materialized.get("productScope")
             date_range = materialized.get("dateRange")
+            if isinstance(product_scope, dict) and product_scope.get("type") == "EXACT_PRODUCT_NAME_GROUP":
+                selected = state.selected_product
+                name = str(product_scope.get("productName") or "").strip()
+                bound_group = (
+                    selected is not None
+                    and selected.metadata.get("scopeType") == "EXACT_PRODUCT_NAME_GROUP"
+                    and name == str(selected.metadata.get("productName") or "").strip()
+                )
+                # An exact-name group is not a fuzzy product lookup. Do not allow a
+                # model to silently broaden a normal product question into this scope.
+                explicit_group = name and name in user_message and any(
+                    phrase in user_message for phrase in ("全部规格", "所有规格", "各个规格", "各规格", "同名产品")
+                )
+                if not bound_group and not explicit_group:
+                    raise ValueError("assay exact-name group requires confirmed scope or explicit all-specification request")
             if (
                 isinstance(product_scope, dict)
                 and product_scope.get("type") == "SINGLE_PRODUCT"
                 and isinstance(date_range, dict)
                 and date_range.get("type") == "EXACT"
                 and self._prefers_single_assay_report(user_message)
+                and state.active_goal_type != "PRODUCT_ASSAY_HISTORY"
             ):
                 raise ValueError(
                     "single-product exact-date assay query must use get_assay_status"
@@ -1087,7 +1136,42 @@ class ToolArgumentBuilder:
                     "CURRENT_INVENTORY_STANDARD_GAPS",
                 ),
             )
-        return self._validate(tool_name, materialized)
+        validated = self._validate(tool_name, materialized)
+        if tool_name == "query_production_daily_reports" and state.last_daily_report_query:
+            previous = state.last_daily_report_query
+            # A changed scope starts a new page sequence, not the old query's page N.
+            # Preserve explicitly requested page numbers; leave scope decisions to the expert.
+            scope_changed = any(
+                validated.get(key) != previous.get(key, 20 if key == "size" else None)
+                for key in ("startDate", "endDate", "departmentName", "itemQuery", "size")
+            )
+            explicit_page = re.search(r"第\s*[0-9一二三四五六七八九十百千万零两]+\s*页", user_message or "")
+            if scope_changed and not explicit_page:
+                validated["page"] = 1
+        if tool_name == "query_production_daily_reports" and state.goal_query_items:
+            if validated.get("itemQuery") not in state.goal_query_items:
+                raise ValueError("daily report query must match a declared goal item")
+            prior = next((f for f in state.fact_envelopes if f.get("goalType") == "PRODUCTION_DAILY_REPORT_RECORDS"), None)
+            if prior is not None:
+                scope = prior.get("scope") or {}
+                if any(str(validated.get(key, "")) != scope.get(key, "")
+                       for key in ("startDate", "endDate", "departmentName", "page", "size")):
+                    raise ValueError("daily report goal items must use the same date, department and page scope")
+        return validated
+
+    @staticmethod
+    def _normalize_daily_report_scope(arguments: dict[str, Any]) -> dict[str, Any]:
+        """Normalize only unbounded aliases; never infer a product or department."""
+        result = dict(arguments)
+        aliases = {
+            "departmentName": {"全部车间", "所有车间", "不限车间", "全部车间及全厂汇总"},
+            "itemQuery": {"全部产品", "所有产品", "全部品种", "所有品种", "不限产品"},
+        }
+        for key, values in aliases.items():
+            raw = result.get(key)
+            if isinstance(raw, str) and raw.strip() in values:
+                result.pop(key)
+        return result
 
     @staticmethod
     def _normalize_agent_answer_review_filters(
@@ -1179,6 +1263,9 @@ class ToolArgumentBuilder:
                         "const": "CURRENT_PRODUCT",
                         "description": "Runtime 绑定的当前已确认产品；不是数据库 ID。",
                     }
+                elif replacement == "groupRef":
+                    translated[replacement] = {"type": "string", "const": "CURRENT_ASSAY_GROUP",
+                                               "description": "Runtime 绑定的当前已选择化验组；与 productRef 二选一，不是组 ID。"}
                 elif replacement == "warehouseRef":
                     translated[replacement] = {
                         "type": "string",
@@ -1234,6 +1321,14 @@ class ToolArgumentBuilder:
             return value
         result: dict[str, Any] = {}
         for key, item in value.items():
+            if key == "groupRef":
+                from app.assay_entry_preview import valid_group_ref
+                selected = state.selected_assay_group
+                reference = selected.metadata.get("groupRef") if selected else None
+                if item != "CURRENT_ASSAY_GROUP" or not valid_group_ref(reference):
+                    raise ValueError("CURRENT_ASSAY_GROUP is not available")
+                result["groupRef"] = reference
+                continue
             if key == "productRef":
                 if item != "CURRENT_PRODUCT" or state.selected_product is None or state.selected_product.internal_id is None:
                     raise ValueError("CURRENT_PRODUCT is not available")
@@ -1809,7 +1904,7 @@ class ToolArgumentBuilder:
             if not items:
                 return ModelPlanDecision(
                     action="ask_user",
-                    prompt="请先在成品入库弹窗中填写库位、日期、存放侧、数量和单位，再生成精确预览。",
+                    prompt="请先在成品入库弹窗中填写库位、日期、数量和单位，再生成精确预览。",
                     intent=route.intent_subtype,
                     responseMode="finish_inbound_execution_preview",
                     routeSnapshot=snapshot,
@@ -1818,7 +1913,7 @@ class ToolArgumentBuilder:
                 action="call_tool",
                 toolName="preview_finish_inbound_execution",
                 arguments=self._validate("preview_finish_inbound_execution", {
-                    "previewVersion": 1,
+                    "previewVersion": 2,
                     "items": items,
                 }),
                 intent=route.intent_subtype,
@@ -2574,6 +2669,8 @@ class ToolArgumentBuilder:
         return self._validate("query_qr_batch_inbound_completion", self._qr_batch_inbound_arguments(arguments, user_message))
 
     def _validate(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if tool_name == "preview_assay_entry":
+            return validate_preview_arguments(arguments)
         if tool_name == KNOWLEDGE_TOOL_NAME:
             query = str(arguments.get("query") or "").strip()
             if not 1 <= len(query) <= 500:
@@ -2672,6 +2769,7 @@ class ToolArgumentBuilder:
                 arguments.get("reportDefinitionId"), 80
             )
             if definition_id not in {
+                "production_daily_report_analysis_v1",
                 "daily_production_overview_v1",
                 "quality_assay_result_trend_v1",
                 "quality_metric_trend_v1",
@@ -2693,6 +2791,13 @@ class ToolArgumentBuilder:
                 raise ValueError("startDate and endDate are required")
             if start > end:
                 raise ValueError("startDate must not be after endDate")
+            if arguments.get("departmentName") is not None and definition_id != "production_daily_report_analysis_v1":
+                raise ValueError("departmentName is only supported by production_daily_report_analysis_v1")
+            if definition_id == "production_daily_report_analysis_v1":
+                if any(arguments.get(key) is not None for key in ("metricKey", "taskType")):
+                    raise ValueError("daily report analysis does not support metric or task filters")
+                if end > self.business_clock.today().isoformat():
+                    raise ValueError("daily report analysis cannot query future dates")
             if definition_id == "today_operations_overview_v1":
                 today = self.business_clock.today().isoformat()
                 if start != end or start != today:
@@ -2722,6 +2827,7 @@ class ToolArgumentBuilder:
             max_range_days = (
                 31
                 if definition_id in {
+                    "production_daily_report_analysis_v1",
                     "daily_production_overview_v1",
                     "inventory_level_trend_v1",
                 }
@@ -2758,6 +2864,8 @@ class ToolArgumentBuilder:
                 result["productQuery"] = self._required_text(
                     arguments.get("productQuery"), 100
                 )
+            if arguments.get("departmentName") is not None:
+                result["departmentName"] = self._required_text(arguments.get("departmentName"), 100)
             if definition_id == "quality_metric_trend_v1":
                 if arguments.get("metricKey") is None:
                     raise ValueError("quality metricKey is required")
@@ -2825,6 +2933,11 @@ class ToolArgumentBuilder:
                         raise ValueError(
                             f"comparison range must not exceed {max_range_days} days"
                         )
+                    if definition_id == "production_daily_report_analysis_v1":
+                        if comparison_days != (date.fromisoformat(end) - date.fromisoformat(start)).days + 1:
+                            raise ValueError("daily report comparison requires equal periods")
+                        if comparison_end > self.business_clock.today().isoformat():
+                            raise ValueError("daily report comparison cannot query future dates")
                     overlaps = not (
                         comparison_end < start or comparison_start > end
                     )
@@ -2835,6 +2948,26 @@ class ToolArgumentBuilder:
                     result["comparisonEndDate"] = comparison_end
                 else:
                     raise ValueError("unsupported comparisonMode")
+            return result
+        if tool_name == "query_production_daily_reports":
+            start = self._optional_date(arguments.get("startDate"))
+            end = self._optional_date(arguments.get("endDate"))
+            if not start or not end or start > end:
+                raise ValueError("日报需要有效的开始和结束日期")
+            if (date.fromisoformat(end) - date.fromisoformat(start)).days >= 31:
+                raise ValueError("日报查询范围不能超过31天")
+            page = arguments.get("page", 1)
+            size = arguments.get("size", 20)
+            if type(page) is not int or type(size) is not int or not 1 <= page <= 10000 or not 1 <= size <= 50:
+                raise ValueError("日报分页条件无效")
+            result = {"startDate": start, "endDate": end, "page": page, "size": size}
+            if arguments.get("departmentName") is not None:
+                department = self._required_text(arguments["departmentName"], 30)
+                if department not in {"多晶车间", "红糖车间", "单晶车间", "全厂汇总"}:
+                    raise ValueError("请选择有效车间")
+                result["departmentName"] = department
+            if arguments.get("itemQuery") is not None:
+                result["itemQuery"] = self._required_text(arguments["itemQuery"], 100)
             return result
         if tool_name == "query_boiling_batches":
             result: dict[str, Any] = {}
@@ -2944,8 +3077,8 @@ class ToolArgumentBuilder:
                 "palletCodes": codes,
             }
         if tool_name == "preview_finish_inbound_execution":
-            if arguments.get("previewVersion") != 1:
-                raise ValueError("previewVersion must be 1")
+            if arguments.get("previewVersion") != 2:
+                raise ValueError("previewVersion must be 2")
             raw_items = arguments.get("items")
             if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 20:
                 raise ValueError("items must contain 1 to 20 entries")
@@ -2954,7 +3087,7 @@ class ToolArgumentBuilder:
             for raw_item in raw_items:
                 if not isinstance(raw_item, dict):
                     raise ValueError("invalid finish inbound preview item")
-                allowed_keys = {"code", "warehouseName", "entryDate", "side", "quantity", "unit", "remark"}
+                allowed_keys = {"code", "warehouseName", "entryDate", "quantity", "unit", "remark"}
                 if set(raw_item) - allowed_keys:
                     raise ValueError("unsupported finish inbound preview field")
                 code = self._required_text(raw_item.get("code"), 100).upper()
@@ -2970,10 +3103,6 @@ class ToolArgumentBuilder:
                     if entry_date is None:
                         raise ValueError("invalid entry date")
                     item["entryDate"] = entry_date
-                side = raw_item.get("side", "左")
-                if side not in {"左", "右"}:
-                    raise ValueError("unsupported side")
-                item["side"] = side
                 quantity = int(raw_item.get("quantity", 1))
                 if quantity < 1:
                     raise ValueError("quantity must be positive")
@@ -2989,7 +3118,7 @@ class ToolArgumentBuilder:
                     if remark:
                         item["remark"] = remark
                 clean_items.append(item)
-            return {"previewVersion": 1, "items": clean_items}
+            return {"previewVersion": 2, "items": clean_items}
         if tool_name == "query_stock_documents":
             doc_type = arguments.get("documentType")
             if doc_type not in {"INBOUND", "OUTBOUND", "SEMI_PRODUCT"}: raise ValueError("unsupported documentType")
@@ -4014,8 +4143,6 @@ class ToolArgumentBuilder:
             entry_date = values.get("日期") or values.get("entryDate")
             if entry_date:
                 item["entryDate"] = entry_date
-            if values.get("侧") or values.get("side"):
-                item["side"] = values.get("侧") or values.get("side")
             if values.get("数量") or values.get("quantity"):
                 item["quantity"] = int(values.get("数量") or values.get("quantity") or 1)
             unit = values.get("单位") or values.get("unit")

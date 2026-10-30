@@ -59,9 +59,13 @@ public class RegisteredReportServiceImpl implements RegisteredReportService {
     private final InventoryDistributionService inventoryDistributionService;
     private final LogisticsAgentReadService logisticsAgentReadService;
     private final RegisteredReportComparisonAssembler comparisonAssembler;
+    private final ProductionDailyRegisteredReportService productionDailyReportService;
 
     @Override
     @PreAuthorize("""
+            (#query != null and #query.reportDefinitionId == 'production_daily_report_analysis_v1'
+                and hasAuthority('production:daily-report:view'))
+            or
             (#query != null and #query.reportDefinitionId == 'daily_production_overview_v1'
                 and hasAuthority('production:order:view'))
             or
@@ -94,6 +98,12 @@ public class RegisteredReportServiceImpl implements RegisteredReportService {
     }
 
     private RegisteredReportRunVO runSingle(RegisteredReportRunQueryDTO query) {
+        if (query != null && ProductionDailyRegisteredReportService.REPORT_ID.equals(query.getReportDefinitionId())) {
+            return productionDailyReportService.run(query);
+        }
+        if (query != null && query.getDepartmentName() != null) {
+            throw new BusinessException(400, "车间筛选仅适用于生产日报分析");
+        }
         if (query != null
                 && TODAY_OPERATIONS_OVERVIEW_REPORT_ID.equals(
                 trimToNull(query.getReportDefinitionId()))) {
@@ -214,6 +224,7 @@ public class RegisteredReportServiceImpl implements RegisteredReportService {
                         .build())
                 .limitations(List.of(
                         "产量仅统计状态为已绑定、部分入库或已入库的稳定登记产出；草稿和已取消记录不计入。",
+                        "来源为生产订单登记产出，不包含生产日报填报量，两种来源不得相加。",
                         "标签生成、二维码绑定和入库数量仅作为后续流程进度，不计入产量。",
                         "当前数据库没有正式日产计划版本、班次归属及返工、报废或损耗事实，因此不计算计划达成率、班次对比或良率。"
                 ))
@@ -300,6 +311,7 @@ public class RegisteredReportServiceImpl implements RegisteredReportService {
                         .build())
                 .limitations(List.of(
                         "概览只支持北京时间今天；产出和化验按业务日期统计，当前库存与当前待处理任务是报表生成时快照。",
+                        "产出来源为生产订单登记记录，不包含生产日报填报量；查看填报明细请查询生产日报。",
                         "确认领用按领料发生时间统计，稳定登记产出按生产日期统计，两条序列独立展示，不能直接相除。",
                         "当前库存只表示生成时的在库水平，不表示今天的库存变化；库存变化必须使用已通过发布门禁的库存趋势报表。",
                         "当日托盘任务按创建日期形成队列；当前待处理任务是全量当前状态，两者不是同一范围。",

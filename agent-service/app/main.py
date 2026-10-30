@@ -9,7 +9,7 @@ import re
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.config import Settings
+from app.config import CONTROLLED_LLM_EXPERTS, Settings
 from app.cancellation import AgentRunRegistry
 from app.graph.state import InMemoryCheckpointer
 from app.agents import AgentHandoffRouter
@@ -45,6 +45,43 @@ ADMIN_ROLE_CODES = frozenset({"ADMIN", "SUPER_ADMIN"})
 AGENT_USE_PERMISSION = "agent:use"
 
 
+def validate_runtime_configuration(settings: Settings) -> None:
+    if settings.planning_mode == "llm" and settings.model_mode != "openai_compatible":
+        raise RuntimeError("LLM planning mode requires an OpenAI-compatible model client.")
+    if settings.deployment_environment != "production":
+        return
+
+    problems: list[str] = []
+    if settings.planning_mode != "llm":
+        problems.append("AGENT_PLANNING_MODE must be llm")
+    if settings.model_mode != "openai_compatible":
+        problems.append("AGENT_PYTHON_MODEL_MODE must be openai_compatible")
+    if settings.tool_mode != "java_gateway":
+        problems.append("AGENT_TOOL_MODE must be java_gateway")
+    if settings.state_backend != "redis":
+        problems.append("AGENT_STATE_BACKEND must be redis")
+    if settings.allow_insecure_mock_auth:
+        problems.append("AGENT_ALLOW_INSECURE_MOCK_AUTH must be false")
+    if not settings.model_base_url or not settings.model_name or not settings.model_api_key:
+        problems.append("model endpoint, model name and model API key must be configured")
+    if not settings.agent_internal_tool_service_key or not settings.python_service_key:
+        problems.append("Agent internal service keys must be configured")
+    if settings.llm_max_tool_calls != 3 or settings.llm_max_tool_retries != 1:
+        problems.append("controlled LLM budgets must remain 3 tool calls and 1 retry")
+
+    configured_experts = set(settings.llm_allowed_experts)
+    approved_experts = set(CONTROLLED_LLM_EXPERTS)
+    missing_experts = sorted(approved_experts - configured_experts)
+    unknown_experts = sorted(configured_experts - approved_experts)
+    if missing_experts:
+        problems.append("missing approved experts: " + ", ".join(missing_experts))
+    if unknown_experts:
+        problems.append("unapproved experts: " + ", ".join(unknown_experts))
+
+    if problems:
+        raise RuntimeError("Invalid production Agent configuration: " + "; ".join(problems))
+
+
 def require_agent_access(user: UserSummary | None) -> None:
     role_code = (user.roleCode or "").strip().upper() if user is not None else ""
     permission_codes = set(user.permissionCodes or []) if user is not None else set()
@@ -60,10 +97,7 @@ def create_app(
     knowledge_service: ApprovedKnowledgeService | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
-    if settings.deployment_environment == "production" and settings.planning_mode == "llm":
-        raise RuntimeError("Experimental LLM planning mode is forbidden in production.")
-    if settings.planning_mode == "llm" and settings.model_mode != "openai_compatible":
-        raise RuntimeError("LLM planning mode requires an OpenAI-compatible model client.")
+    validate_runtime_configuration(settings)
     tool_client = tool_client or _build_tool_client(settings)
     metrics = MetricsRegistry()
     knowledge_service = knowledge_service or build_approved_knowledge_service(

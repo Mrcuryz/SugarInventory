@@ -28,7 +28,9 @@ param(
 
     [switch]$EnableFinishInboundS2Noop,
 
-    [switch]$EnableFinishInboundS3Execute
+    [switch]$EnableFinishInboundS3Execute,
+
+    [switch]$EnableAssayEntryExecute
 )
 
 $ErrorActionPreference = "Stop"
@@ -105,6 +107,7 @@ if ($EnableRag) {
 }
 $env:DATABASE_SCHEMA_VERIFICATION_ENABLED = if ($EnableDatabaseSchemaVerification) { 'true' } else { 'false' }
 $env:INVENTORY_TREND_SIMULATION_ENABLED = if ($EnableInventoryTrendSimulation) { 'true' } else { 'false' }
+$env:AGENT_ASSAY_ENTRY_EXECUTE_ENABLED = if ($EnableAssayEntryExecute) { 'true' } else { 'false' }
 
 # Python Agent and the Java fallback client use different environment names for
 # the same model credential. Keep the mapping process-local so the source env

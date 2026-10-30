@@ -94,6 +94,59 @@ class AgentMessageReviewServiceImplTest {
     }
 
     @Test
+    void terminalTimeoutCannotBeCompletedEvenWithSuccessfulTool() {
+        AgentMessageReviewRecordDTO dto = new AgentMessageReviewRecordDTO();
+        dto.setMessageId("msg-timeout");
+        dto.setUserQuestion("查看生产概况");
+        dto.setAssistantAnswerTextSafe("模型响应超时。");
+        dto.setActualToolNames(List.of("query_production_daily_reports"));
+        dto.setFinishReason("timeout");
+        dto.setAnswerStatus("COMPLETED");
+        service.recordAssistantTurn(loginUser, "session-1", dto);
+        ArgumentCaptor<AgentMessageReview> captor = ArgumentCaptor.forClass(AgentMessageReview.class);
+        verify(reviewMapper).insert(captor.capture());
+        assertThat(captor.getValue().getAnswerStatus()).isEqualTo("FAILED");
+        assertThat(captor.getValue().getFailureCategory()).isEqualTo("RESPONSE_TIMEOUT");
+    }
+
+    @Test
+    void messageMatchedModelFailureOverridesReportedCompletion() {
+        AgentToolAuditLog audit = new AgentToolAuditLog();
+        audit.setToolName("agent_runtime");
+        audit.setResultCode("MODEL_ERROR");
+        when(toolAuditLogMapper.selectList(any())).thenReturn(List.of(audit));
+        AgentMessageReviewRecordDTO dto = new AgentMessageReviewRecordDTO();
+        dto.setMessageId("msg-error");
+        dto.setUserQuestion("下一页");
+        dto.setAssistantAnswerTextSafe("暂时无法完成查询。");
+        dto.setFinishReason("completed");
+        service.recordAssistantTurn(loginUser, "session-1", dto);
+        ArgumentCaptor<AgentMessageReview> captor = ArgumentCaptor.forClass(AgentMessageReview.class);
+        verify(reviewMapper).insert(captor.capture());
+        assertThat(captor.getValue().getAnswerStatus()).isEqualTo("FAILED");
+        assertThat(captor.getValue().getFailureDomain()).isEqualTo("MODEL");
+        assertThat(captor.getValue().getFailureCategory()).isEqualTo("MODEL_ERROR");
+    }
+
+    @Test
+    void weakTimeWindowFailureDoesNotOverrideSuccessfulTurn() {
+        AgentToolAuditLog audit = new AgentToolAuditLog();
+        audit.setToolName("agent_runtime");
+        audit.setResultCode("MODEL_TIMEOUT");
+        when(toolAuditLogMapper.selectList(any())).thenReturn(List.of(), List.of(audit));
+        AgentMessageReviewRecordDTO dto = new AgentMessageReviewRecordDTO();
+        dto.setMessageId("msg-success");
+        dto.setUserQuestion("查看生产概况");
+        dto.setAssistantAnswerTextSafe("已记录产量300件。");
+        dto.setFinishReason("completed");
+        dto.setActualToolNames(List.of("query_production_daily_reports"));
+        service.recordAssistantTurn(loginUser, "session-1", dto);
+        ArgumentCaptor<AgentMessageReview> captor = ArgumentCaptor.forClass(AgentMessageReview.class);
+        verify(reviewMapper).insert(captor.capture());
+        assertThat(captor.getValue().getAnswerStatus()).isEqualTo("COMPLETED");
+    }
+
+    @Test
     void recordAssistantTurnStoresActualToolsForSuccessfulBusinessAnswer() {
         when(reviewMapper.selectOne(any())).thenReturn(null);
         AgentMessageReviewRecordDTO dto = new AgentMessageReviewRecordDTO();

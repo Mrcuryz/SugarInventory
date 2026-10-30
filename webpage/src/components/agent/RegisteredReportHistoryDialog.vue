@@ -25,7 +25,8 @@ const visible = computed({
 const reportTypes = Object.freeze([
   { value: '', label: '全部报表' },
   { value: 'today_operations_overview_v1', label: '今日运营概览' },
-  { value: 'daily_production_overview_v1', label: '生产产量' },
+  { value: 'production_daily_report_analysis_v1', label: '生产日报分析' },
+  { value: 'daily_production_overview_v1', label: '订单登记产出' },
   { value: 'quality_assay_result_trend_v1', label: '化验判定趋势' },
   { value: 'quality_metric_trend_v1', label: '单项指标趋势' },
   { value: 'production_input_output_flow_v1', label: '生产领料与登记产出' },

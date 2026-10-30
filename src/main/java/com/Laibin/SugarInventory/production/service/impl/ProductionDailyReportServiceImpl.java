@@ -206,7 +206,7 @@ public class ProductionDailyReportServiceImpl implements ProductionDailyReportSe
     @Override
     public ExportedFile exportReport(LocalDate reportDate) {
         ProductionDailyReportVO report = getReport(reportDate);
-        return new ExportedFile("来冰公司" + FILE_DATE.format(reportDate) + "生产日报表.xlsx",
+        return new ExportedFile(xlsxExporter.reportCompanyName() + FILE_DATE.format(reportDate) + "生产日报表.xlsx",
                 xlsxExporter.export(report));
     }
 

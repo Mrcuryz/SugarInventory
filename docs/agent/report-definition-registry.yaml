@@ -1,5 +1,5 @@
 version: "1.1"
-updated_at: "2026-08-03"
+updated_at: "2026-09-24"
 runtime_contract:
   runner_tool: run_registered_report
   owner_expert: analytics_expert
@@ -12,10 +12,11 @@ runtime_contract:
     invariants:
       - "本期与对比期必须复用同一 reportDefinitionId、reportVersion、metricDefinitionVersion、dataScope 和领域筛选。"
       - "只比较 registry 中登记的指标；模型不得临时选择更有利的基准或自行重算权威指标。"
-      - "两期天数不同时，可累加指标同时返回日均值；不可累加指标不做日均换算。"
+      - "旧报表两期天数不同时，可累加指标同时返回日均值；不可累加指标不做日均换算。生产日报分析只支持等长期间。"
       - "正负变化只表示登记数值差异，不自动解释为改善、恶化或因果关系。"
       - "比较结果与本期完整事实保存在同一个 ReportRun 快照，并进入同快照 XLSX 导出。"
     metrics_by_definition:
+      production_daily_report_analysis_v1: "按稳定系列维度分别比较quantity与适用的convertedTons，最多40项；C2已接入Agent/卡片/历史并本地验收。"
       daily_production_overview_v1: [totalWeightKg, outputRecordCount, productionOrderCount, totalPieces]
       inventory_level_trend_v1: [closingPieces, closingWeightKg, netChangePieces, netChangeWeightKg]
       quality_assay_result_trend_v1: [assayRecordCount, passRatePercent, failCount, noStandardCount]
@@ -24,6 +25,37 @@ runtime_contract:
       pallet_task_cycle_time_v1: [completedTaskCount, medianDurationSeconds, p90DurationSeconds, inProgressTaskCount]
 
 definitions:
+  production_daily_report_analysis_v1:
+    status: LOCAL_C2_COMPARISON_ACCEPTED_OPERATIONS_ALIGNMENT_PENDING
+    version: 1
+    goal_type: PRODUCTION_DAILY_REPORT_ANALYSIS
+    display_name: 生产日报分析
+    data_scope: SAVED_PRODUCTION_DAILY_REPORT
+    metric_definition_version: saved_daily_actual_and_tonnage_v1
+    permission: production:daily-report:view
+    additional_export_permission: production:daily-report:export
+    implementation_note: "C2比较对话、卡片、历史及同快照导出本地验收通过；模型3轮18项、Python596通过/5跳过、Web7通过。运营入口来源对齐及日报整体验收待C3；见production-daily-comparison-agent-acceptance-2026-09-24.md。未部署。"
+    business_time:
+      timezone: Asia/Shanghai
+      business_date_field: production_daily_report.report_date
+      maximum_days: 31
+      future_dates: REJECTED
+    query:
+      required: [reportDefinitionId, reportVersion, startDate, endDate]
+      optional: [departmentName, productQuery, comparisonMode, comparisonStartDate, comparisonEndDate]
+      agent_comparison: "PREVIOUS_PERIOD或CUSTOM；后者须明确两端日期且等长、不重叠。Runtime核对响应与请求范围一致。"
+      unsupported: [metricKey, taskType]
+    fact_selection:
+      - "全厂总产量、总耗电量、总耗汽量、总耗水量与多晶产量使用登记指标白名单。"
+      - "产品数量按车间代码及名称快照、分类代码及名称快照、产品状态快照和单位分组；不混合环节或单位。"
+      - "产品筛选只匹配产品名称快照，不匹配指标名称；指定产品时不返回无关全厂指标。"
+      - "包含已保存草稿；只使用daily_actual与适用产量的converted_tons，不汇总月年累计或产率。"
+      - "最多10个系列；先选系列再取完整日期序列；超限显式truncated，导出相同范围。"
+    response_field: productionDailyReport
+    coverage: "每个系列和日期分别保留记录行数、数量行数、折吨行数及未提交行数；数量/折吨覆盖天数独立。缺日与全空保持null，0保持0。"
+    snapshot: "复用ReportRun所有者、当前查看权限、内容哈希和30天有效期；导出额外校验日报导出权限。"
+    comparison: "支持PREVIOUS_PERIOD或CUSTOM非重叠等长期间，每期最多31天；相同筛选和维度，不把缺失系列当0；数量/折吨覆盖独立，缺日/空值/截断或基期不大于0均不计算变化率。本期无记录而基期有记录时保留基期事实与比较卡。"
+
   today_operations_overview_v1:
     status: CURRENT
     version: 1

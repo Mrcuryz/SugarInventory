@@ -12,7 +12,11 @@ import org.springframework.web.bind.annotation.*;
 public class QualityCatalogAgentReadController {
     private final QualityCatalogAgentReadService service;
     @PostMapping("/assay-groups/query") @PreAuthorize("hasAuthority('assay:view')")
-    public Result<QualityCatalogAgentVO.AssayGroups> groups(@RequestBody QualityCatalogAgentQueries.AssayGroups q) { return Result.success(service.queryAssayGroups(q)); }
+    public Result<QualityCatalogAgentVO.AssayGroups> groups(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.Laibin.SugarInventory.SpringSecurity.LoginUser user,
+            @RequestBody QualityCatalogAgentQueries.AssayGroups q) {
+        return Result.success(service.queryAssayGroups(q, user.getUser().getId()));
+    }
     @PostMapping("/standards/query") @PreAuthorize("hasAuthority('quality_standard:view')")
     public Result<QualityCatalogAgentVO.Standards> standards(@RequestBody QualityCatalogAgentQueries.Standards q) { return Result.success(service.queryStandards(q)); }
     @PostMapping("/standards/detail/query") @PreAuthorize("hasAuthority('quality_standard:view')")

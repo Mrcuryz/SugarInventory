@@ -17,10 +17,8 @@ import com.Laibin.SugarInventory.mapper.AssayMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.service.AssayGroupService;
 import com.Laibin.SugarInventory.service.AssayService;
-import com.Laibin.SugarInventory.service.AssayStandardJudgeService;
+import com.Laibin.SugarInventory.service.AssayWriteService;
 import com.Laibin.SugarInventory.service.LoggableService;
-import com.Laibin.SugarInventory.service.ProductService;
-import com.Laibin.SugarInventory.service.model.AssayJudgeOutcome;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -33,14 +31,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements AssayService, LoggableService<Assay> {
@@ -51,34 +45,33 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
     private ProductMapper productMapper;
 
     @Autowired
-    private ProductService productService;
-
-    @Autowired
     private ObjectMapper objectMapper;
 
     @Resource
     private AssayGroupService assayGroupService;
 
     @Autowired
-    private AssayStandardJudgeService assayStandardJudgeService;
+    private AssayWriteService assayWriteService;
 
     @Override
     @Transactional
     public void importAssays(List<AssaySubmitDTO> dtos, Integer operatorId) {
-        if (dtos == null || dtos.isEmpty()) {
+        if (dtos == null || dtos.isEmpty() || dtos.stream().anyMatch(java.util.Objects::isNull)) {
             throw new BusinessException("化验导入数据不能为空");
         }
         if (dtos.get(0).getSelectType() == null || dtos.get(0).getSelectType() == 1) {
-            List<Assay> assays = dtos.stream()
-                    .map(dto -> createAndInsertAssay(dto, dto.getProductId(), operatorId, false))
-                    .toList();
-            if (assays.isEmpty()) {
-                throw new BusinessException(ErrorCode.DATA_IMPORT_FAILED);
+            if (dtos.stream().anyMatch(dto -> dto.getSelectType() != null && dto.getSelectType() != 1)) {
+                throw new BusinessException(ErrorCode.ASSAY_ENTRY_INPUT_INVALID);
             }
+            assayWriteService.lockProducts(dtos.stream().map(AssaySubmitDTO::getProductId).toList());
+            dtos.forEach(dto -> assayWriteService.append(dto, operatorId));
             return;
         }
 
         AssaySubmitDTO dto = dtos.get(0);
+        if (dtos.size() != 1) {
+            throw new BusinessException(ErrorCode.ASSAY_ENTRY_INPUT_INVALID.getCode(), "批量化验组请一次提交一组检测值");
+        }
         if (dto.getSelectType() != 2 || dto.getRelatedId() == null) {
             throw new BusinessException("请选择批量化验组");
         }
@@ -87,14 +80,21 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
             throw new BusinessException("批量化验组不存在");
         }
         if (StringUtils.isBlank(assayGroup.getRelatedProducts())) {
-            return;
+            throw new BusinessException(ErrorCode.ASSAY_ENTRY_INPUT_INVALID.getCode(), "批量化验组没有产品，无法录入");
         }
-        Collection<Product> products = productService.getMapByIds(Arrays.stream(assayGroup.getRelatedProducts().split(","))
-                        .map(Integer::valueOf)
-                        .collect(Collectors.toList()))
-                .values();
-        for (Product product : products) {
-            createAndInsertAssay(dto, product.getId(), operatorId, false);
+        List<Integer> productIds;
+        try {
+            productIds = Arrays.stream(assayGroup.getRelatedProducts().split(",", -1))
+                    .map(String::trim).map(Integer::valueOf).distinct().sorted().toList();
+        } catch (NumberFormatException exception) {
+            throw new BusinessException(ErrorCode.ASSAY_ENTRY_INPUT_INVALID.getCode(), "批量化验组产品信息异常，请核对后重试");
+        }
+        assayWriteService.lockProducts(productIds);
+        for (Integer productId : productIds) {
+            AssaySubmitDTO item = new AssaySubmitDTO();
+            BeanUtils.copyProperties(dto, item);
+            item.setProductId(productId);
+            assayWriteService.append(item, operatorId);
         }
     }
 
@@ -116,18 +116,16 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
     @Override
     @Transactional
     public AssayVO updateAssay(Integer id, AssaySubmitDTO dto, User operator) throws JsonProcessingException {
-        Assay latestAssay;
-        try {
-            latestAssay = assayMapper.selectByProductIdAndDate(dto.getProductId(), dto.getSampleDate());
-        } catch (Exception e) {
+        if (dto == null || dto.getProductId() == null || dto.getSampleDate() == null) {
+            throw new BusinessException(ErrorCode.ASSAY_ENTRY_INPUT_INVALID);
+        }
+        assayWriteService.lockProducts(List.of(dto.getProductId()));
+        Assay target = assayMapper.selectById(id);
+        if (target == null || !java.util.Objects.equals(target.getProductId(), dto.getProductId())
+                || !java.util.Objects.equals(target.getSampleDate(), dto.getSampleDate())) {
             throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
         }
-        if (latestAssay == null) {
-            throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
-        }
-        Assay newAssay = createAndInsertAssay(dto, dto.getProductId(), operator.getId(), true);
-        newAssay.setVersion(latestAssay.getVersion() + 1);
-        assayMapper.updateById(newAssay);
+        Assay newAssay = assayWriteService.append(dto, operator.getId());
 
         AssayVO assayVO = new AssayVO();
         BeanUtils.copyProperties(newAssay, assayVO);
@@ -171,7 +169,11 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
     }
 
     @Override
+    @Transactional
     public void deleteAssay(Integer id) {
+        Assay target = assayMapper.selectById(id);
+        if (target == null) throw new BusinessException(ErrorCode.ASSAY_RECORD_NOT_FOUND);
+        assayWriteService.lockProducts(List.of(target.getProductId()));
         try {
             int rows = assayMapper.deleteById(id);
             if (rows == 0) {
@@ -195,50 +197,6 @@ public class AssayServiceImpl extends ServiceImpl<AssayMapper, Assay> implements
     @Override
     public String getTableName() {
         return "化验数据";
-    }
-
-    private Assay createAndInsertAssay(AssaySubmitDTO dto, Integer productId, Integer operatorId, boolean forceNextVersion) {
-        if (productId == null) {
-            throw new BusinessException("请选择产品");
-        }
-        Product product = productMapper.selectById(productId);
-        if (product == null) {
-            throw new BusinessException("产品不存在");
-        }
-        AssayJudgeOutcome outcome = assayStandardJudgeService.judge(product, dto);
-        Assay assay = new Assay();
-        BeanUtils.copyProperties(dto, assay);
-        assay.setProductId(productId);
-        assay.setTestedBy(operatorId);
-        assay.setCreatedAt(LocalDateTime.now());
-        applyJudgeOutcome(assay, outcome);
-        assay.setVersion(resolveVersion(productId, dto, forceNextVersion));
-        assayMapper.insert(assay);
-        return assay;
-    }
-
-    private Integer resolveVersion(Integer productId, AssaySubmitDTO dto, boolean forceNextVersion) {
-        Assay latestAssay = assayMapper.selectByProductIdAndDate(productId, dto.getSampleDate());
-        if (latestAssay == null) {
-            return 1;
-        }
-        if (forceNextVersion) {
-            return latestAssay.getVersion() + 1;
-        }
-        return latestAssay.getVersion() + 1;
-    }
-
-    private void applyJudgeOutcome(Assay assay, AssayJudgeOutcome outcome) {
-        assay.setQualifiedStandards(outcome.getQualifiedStandardsJson());
-        assay.setIsQualified(outcome.getCompatibleConclusion());
-        assay.setAppliedStandardId(outcome.getAppliedStandardId());
-        assay.setAppliedStandardName(outcome.getAppliedStandardName());
-        assay.setAppliedStandardVersion(outcome.getAppliedStandardVersion());
-        assay.setJudgeResult(outcome.getJudgeResult());
-        assay.setJudgeMessage(outcome.getJudgeMessage());
-        assay.setFailedMetricCount(outcome.getFailedMetricCount());
-        assay.setFailedMetricsJson(outcome.getFailedMetricsJson());
-        assay.setStandardSnapshotJson(outcome.getStandardSnapshotJson());
     }
 
     private void enrichAssayVO(AssayVO vo) {

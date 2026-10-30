@@ -1,6 +1,10 @@
 # Agent V1.1 Experimental LLM Tool Loop
 
-状态：`LOCAL_UAT_ONLY`
+状态：`SUPERSEDED_BY_CONTROLLED_PRODUCTION_ROLLOUT`
+
+> 本文记录 2026-07-16 的实验边界。经过后续库存、化验、生产、报表和其他只读专家验收后，
+> 生产运行决策已由 `docs/agent/controlled-llm-production-rollout-2026-08-29.md` 取代。
+> 本文中的“production 启用时启动失败”不再是当前部署要求。
 
 默认模式：`AGENT_PLANNING_MODE=deterministic`
 

@@ -35,7 +35,8 @@ class QualityCatalogAgentReadServiceImplTest {
                 assayGroupService,
                 mock(QualityStandardService.class),
                 productService,
-                relationService);
+                relationService,
+                mock(com.Laibin.SugarInventory.agent.service.AssayEntryReferenceService.class));
     }
 
     @Test

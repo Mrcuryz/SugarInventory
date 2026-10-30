@@ -36,7 +36,7 @@ public class AnalyticsAgentReadController {
     private final RegisteredReportArchiveService reportArchiveService;
 
     @PostMapping("/reports/run")
-    @PreAuthorize("hasAnyAuthority('production:order:view', 'assay:view', 'task:view', 'inventory:view')")
+    @PreAuthorize("hasAnyAuthority('production:daily-report:view', 'production:order:view', 'assay:view', 'task:view', 'inventory:view')")
     public Result<RegisteredReportRunVO> runRegisteredReport(
             @RequestBody RegisteredReportRunQueryDTO query,
             @AuthenticationPrincipal LoginUser loginUser) {
@@ -47,7 +47,7 @@ public class AnalyticsAgentReadController {
     }
 
     @GetMapping("/reports/{reportRunId}")
-    @PreAuthorize("hasAnyAuthority('production:order:view', 'assay:view', 'task:view', 'inventory:view')")
+    @PreAuthorize("hasAnyAuthority('production:daily-report:view', 'production:order:view', 'assay:view', 'task:view', 'inventory:view')")
     public Result<RegisteredReportRunVO> getRegisteredReport(
             @PathVariable String reportRunId,
             @AuthenticationPrincipal LoginUser loginUser) {
@@ -58,7 +58,7 @@ public class AnalyticsAgentReadController {
     }
 
     @GetMapping("/reports")
-    @PreAuthorize("hasAnyAuthority('production:order:view', 'assay:view', 'task:view', 'inventory:view')")
+    @PreAuthorize("hasAnyAuthority('production:daily-report:view', 'production:order:view', 'assay:view', 'task:view', 'inventory:view')")
     public Result<PageResult<RegisteredReportHistoryItemVO>> listRegisteredReports(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
@@ -73,7 +73,7 @@ public class AnalyticsAgentReadController {
     }
 
     @GetMapping("/reports/{reportRunId}/export.xlsx")
-    @PreAuthorize("hasAnyAuthority('production:order:view', 'assay:view', 'task:view', 'inventory:view')")
+    @PreAuthorize("hasAnyAuthority('production:daily-report:view', 'production:order:view', 'assay:view', 'task:view', 'inventory:view')")
     public ResponseEntity<byte[]> exportRegisteredReport(
             @PathVariable String reportRunId,
             @AuthenticationPrincipal LoginUser loginUser) {

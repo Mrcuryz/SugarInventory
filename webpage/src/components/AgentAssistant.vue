@@ -1,9 +1,11 @@
 <script setup>
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cancelAgentMessage,
+  cancelAssayEntry,
+  getAssayEntryResult,
   createAgentSession,
   recordAgentMessageReview,
   revokeAgentSession,
@@ -16,8 +18,12 @@ import { useAuthStore } from '@/stores/auth'
 import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
 import RegisteredReportHistoryDialog from '@/components/agent/RegisteredReportHistoryDialog.vue'
 import { canUseAgent } from '@/components/agent/agentAccess.mjs'
+import { canSendAgentMessage, effectiveAgentSessionStatus } from '@/components/agent/agentSessionState.mjs'
 import PalletTaskBatchDialog from '@/components/agent/PalletTaskBatchDialog.vue'
 import FinishInboundExecutionConfirmDialog from '@/components/agent/FinishInboundExecutionConfirmDialog.vue'
+import AssayEntryConfirmDialog from '@/components/agent/AssayEntryConfirmDialog.vue'
+import AssayEntryRecovery from '@/components/agent/AssayEntryRecovery.vue'
+import { hasAssayEntryPermission, applyAssayEntryResult, invalidateAssayEntryCards } from '@/components/agent/assayEntryPresentation.mjs'
 import FixedQrTaskCreationDialog from '@/components/agent/FixedQrTaskCreationDialog.vue'
 import { cleanOptionLabel } from '@/components/agent/agentDisplay'
 import { appendProcessStep } from '@/components/agent/agentProcessTrace.mjs'
@@ -52,24 +58,35 @@ const taskBatchDialog = reactive({
   taskGroupLabel: '',
   palletCodes: [],
   defaultWarehouseName: '',
-  defaultSide: ''
 })
 const finishInboundExecutionDialog = reactive({
   visible: false,
   palletCodes: []
 })
+const assayEntryDialog = reactive({ visible: false, card: null })
+const preparingAssayEntry = ref(false)
+const assayRecoveryPending = ref(false)
+const canSaveAssay = computed(() => hasAssayEntryPermission(authStore.permissionCodes))
 const fixedQrTaskCreationDialog = reactive({
   visible: false,
   palletCodes: [],
   productLabel: '',
   defaultWarehouseName: '',
-  defaultSide: '左'
 })
 let activeStreamController = null
 let activeAssistantMessage = null
 let sessionStartPromise = null
 
-const sessionStatus = computed(() => session.value?.status || '未启动')
+const sessionClock = ref(Date.now())
+let sessionClockTimer = null
+watch(visible, (isVisible) => {
+  clearInterval(sessionClockTimer)
+  sessionClock.value = Date.now()
+  sessionClockTimer = isVisible ? setInterval(() => { sessionClock.value = Date.now() }, 1000) : null
+})
+onBeforeUnmount(() => clearInterval(sessionClockTimer))
+const sessionStatus = computed(() => effectiveAgentSessionStatus(session.value, sessionClock.value))
+const sessionNeedsRestart = computed(() => Boolean(session.value?.agentSessionId) && sessionStatus.value !== 'ACTIVE')
 const sessionStatusLabel = computed(() => {
   const labels = {
     ACTIVE: '已连接',
@@ -118,8 +135,8 @@ const open = async () => {
   visible.value = true
 }
 
-const startSession = async () => {
-  if (session.value?.agentSessionId) return session.value
+const startSession = async ({ replace = false } = {}) => {
+  if (session.value?.agentSessionId && !replace) return session.value
   if (sessionStartPromise) return sessionStartPromise
 
   loadingSession.value = true
@@ -129,7 +146,16 @@ const startSession = async () => {
       requestedScopes: ['mcp:warehouse:read'],
       mcpTransport: 'STDIO'
     })
+    if (replace) {
+      // A new session must not inherit old selections, confirmation tokens or history.
+      messages.value = []
+      pendingSelection.value = null
+      taskBatchDialog.visible = false
+      finishInboundExecutionDialog.visible = false
+      fixedQrTaskCreationDialog.visible = false
+    }
     session.value = result.data
+    sessionClock.value = Date.now()
     messages.value.push({
       role: 'assistant',
       content: 'AI 助手已连接当前登录用户。你可以直接问库存、库位、托盘、化验、生产情况和运营报表。'
@@ -145,13 +171,55 @@ const startSession = async () => {
   }
 }
 
+const restartSession = async () => {
+  if (sending.value || loadingSession.value) return
+  try {
+    await startSession({ replace: true })
+    ElMessage.success('新会话已开始，请重新描述查询条件')
+  } catch {
+    ElMessage.error('未能连接，请稍后重试')
+  }
+}
+
+const requireActiveSession = () => {
+  sessionClock.value = Date.now()
+  if (canSendAgentMessage(session.value, sessionClock.value)) return true
+  ElMessage.warning('会话已失效，请开始新会话后重新查询')
+  return false
+}
+
+watch(sessionStatus, (status) => {
+  if (status === 'ACTIVE') return
+  // Once expired, a wall-clock adjustment must not revive old confirmations.
+  if (status === 'EXPIRED' && session.value?.status === 'ACTIVE') session.value.status = 'EXPIRED'
+  pendingSelection.value = null
+  taskBatchDialog.visible = false
+  finishInboundExecutionDialog.visible = false
+  fixedQrTaskCreationDialog.visible = false
+})
+
 const send = async (options = {}) => {
+  if (assayRecoveryPending.value) { ElMessage.warning('请先核实上一份化验的保存结果，避免重复录入。'); return }
+  if (assayEntryDialog.visible || preparingAssayEntry.value) return
   const text = (options.message || input.value).trim()
   if (!text || (sending.value && !options.allowWhileSending)) return
   if (!session.value?.agentSessionId) {
     await startSession()
   }
+  if (!requireActiveSession()) return 'session_expired'
+  preparingAssayEntry.value = true
+  try {
+    const id = session.value.agentSessionId
+    await invalidateAssayEntryCards(messages.value, {
+      result: ref => getAssayEntryResult(id, ref).then(response => response.data),
+      cancel: ref => cancelAssayEntry(id, ref).then(response => response.data)
+    })
+  } catch {
+    ElMessage.warning('请先核实上一份化验的保存结果，再继续对话。')
+    return
+  } finally { preparingAssayEntry.value = false }
   await markPreviousAssistantIfCorrection(text, options)
+  if (!requireActiveSession()) return 'session_expired'
   const selectedOption = options.selectedOption || null
   if (options.showUserMessage !== false) {
     messages.value.push({ role: 'user', content: text })
@@ -222,7 +290,10 @@ const send = async (options = {}) => {
       assistantMessage.finishReason = 'cancelled'
     } else {
       assistantMessage.progress = ''
-      assistantMessage.content = 'AI 助手暂时不可用，请稍后重试。本次未执行任何业务操作。'
+      sessionClock.value = Date.now()
+      assistantMessage.content = canSendAgentMessage(session.value, sessionClock.value)
+        ? 'AI 助手暂时不可用，请稍后重试。本次未执行任何业务操作。'
+        : '会话已失效，请开始新会话后重新查询。本次请求不会自动重发。'
       assistantMessage.finishReason = 'error'
     }
   } finally {
@@ -474,6 +545,7 @@ const cancelStream = async () => {
 }
 
 const chooseOption = async (option, sourceMessage) => {
+  if (!requireActiveSession()) return
   if (!option?.displayLabel || option.supported === false) return
   if (!sourceMessage?.interruptId || !sourceMessage?.resumeToken || sourceMessage.optionSubmitting || sourceMessage.selectionCompleted) {
     return
@@ -494,10 +566,10 @@ const chooseOption = async (option, sourceMessage) => {
   if (sourceMessage) {
     sourceMessage.optionSubmitting = true
     sourceMessage.needsUserSelection = false
-    sourceMessage.progress = '正在继续查询……'
+    sourceMessage.progress = '正在继续处理……'
     sourceMessage.processSteps = appendProcessStep(sourceMessage.processSteps, {
       stage: 'continuing',
-      text: '正在根据你的选择继续查询。'
+      text: '正在根据你的选择继续处理。'
     })
     sourceMessage.selectedOption = {
       displayLabel: selectedOption.displayLabel,
@@ -612,6 +684,13 @@ const scrollToBottom = async () => {
 
 defineExpose({ open })
 const handleCardAction = async (action) => {
+  if (!requireActiveSession()) return
+  if (action?.actionKind === 'open_assay_entry_confirmation') {
+    if (!canSaveAssay.value || sending.value || assayEntryDialog.visible || assayRecoveryPending.value) return
+    assayEntryDialog.card = action.card
+    assayEntryDialog.visible = true
+    return
+  }
   if (action?.actionKind === 'export_report_run') {
     const reportRunId = String(action.reportRunId || '').trim()
     if (!/^report_run_[a-f0-9]{16}$/.test(reportRunId)) {
@@ -681,7 +760,6 @@ const handleCardAction = async (action) => {
     taskBatchDialog.taskGroupLabel = action.taskGroupLabel || '任务'
     taskBatchDialog.palletCodes = palletCodes
     taskBatchDialog.defaultWarehouseName = String(action.defaultWarehouseName || '').trim()
-    taskBatchDialog.defaultSide = ['左', '右'].includes(action.defaultSide) ? action.defaultSide : ''
     taskBatchDialog.visible = true
     return
   }
@@ -700,7 +778,6 @@ const handleCardAction = async (action) => {
     fixedQrTaskCreationDialog.palletCodes = palletCodes
     fixedQrTaskCreationDialog.productLabel = String(action.productLabel || '').trim()
     fixedQrTaskCreationDialog.defaultWarehouseName = String(action.defaultWarehouseName || '').trim()
-    fixedQrTaskCreationDialog.defaultSide = ['左', '右'].includes(action.defaultSide) ? action.defaultSide : '左'
     fixedQrTaskCreationDialog.visible = true
     return
   }
@@ -727,6 +804,7 @@ const handleTaskBatchCompleted = ({ palletCodes = [] } = {}) => {
     message.cards = message.cards.map(card => applyTaskBatchCompletion(card, palletCodes).card)
   })
 }
+const handleAssayEntryCompleted = ({ card, result }) => applyAssayEntryResult(card, result)
 
 const handleFixedQrTasksCreated = async ({ palletCodes = [], defaultWarehouseName = '' } = {}) => {
   messages.value.forEach(message => {
@@ -752,7 +830,7 @@ const handleFinishInboundExecutionCompleted = ({ palletCodes = [], completedAt =
   })
 }
 
-const handleFinishInboundPreviewRequested = async ({ previewVersion = 1, items = [] } = {}) => {
+const handleFinishInboundPreviewRequested = async ({ previewVersion = 2, items = [] } = {}) => {
   const request = createFinishInboundExecutionPreviewRequest({ previewVersion, items })
   if (!request) {
     ElMessage.warning('成品入库表单不完整，无法生成安全预览')
@@ -811,6 +889,7 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
 
     <div class="assistant-shell" v-loading="loadingSession">
       <el-scrollbar ref="scrollRef" class="message-list">
+        <AssayEntryRecovery :owner="String(authStore.employeeId || '')" @pending="assayRecoveryPending = $event" />
         <div
           v-for="(item, index) in messages"
           :key="index"
@@ -830,10 +909,11 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
               </template>
             </div>
             <AgentMessageBubble
+              :can-save-assay="canSaveAssay"
               :item="item"
               :debug-mode="debugMode"
               :shadow-compare-mode="shadowCompareMode"
-              :sending="sending"
+              :sending="sending || sessionNeedsRestart"
               :can-execute-finish-inbound="canExecuteFinishInbound"
               :can-confirm-tasks="canConfirmTasks"
               @choose-option="chooseOption($event, item)"
@@ -863,6 +943,10 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
       </div>
 
       <div class="composer">
+        <div v-if="sessionNeedsRestart" class="session-restart-notice" role="status">
+          <span>会话已失效。开始新会话后，请重新描述查询条件；旧选择和确认不再沿用。</span>
+          <el-button link type="primary" :disabled="sending || loadingSession" @click="restartSession">开始新会话</el-button>
+        </div>
         <el-input
           v-model="input"
           type="textarea"
@@ -878,7 +962,7 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
           <button v-if="sending" type="button" class="plain-action" :disabled="cancelling" @click="cancelStream">
             {{ cancelling ? '取消中' : '取消' }}
           </button>
-          <button type="button" class="send-action" :disabled="sending || !input.trim()" @click="send">
+          <button type="button" class="send-action" :disabled="sending || preparingAssayEntry || assayEntryDialog.visible || loadingSession || sessionNeedsRestart || !input.trim()" @click="send">
             <span>{{ sending ? '发送中' : '发送' }}</span>
             <el-icon><Promotion /></el-icon>
           </button>
@@ -892,7 +976,6 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
     :task-group-label="taskBatchDialog.taskGroupLabel"
     :pallet-codes="taskBatchDialog.palletCodes"
     :default-warehouse-name="taskBatchDialog.defaultWarehouseName"
-    :default-side="taskBatchDialog.defaultSide"
     :can-direct-submit="canConfirmTasks"
     @completed="handleTaskBatchCompleted"
     @preview-requested="handleFinishInboundPreviewRequested"
@@ -903,12 +986,14 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
     :pallet-codes="finishInboundExecutionDialog.palletCodes"
     @completed="handleFinishInboundExecutionCompleted"
   />
+  <AssayEntryConfirmDialog v-model="assayEntryDialog.visible" :agent-session-id="session?.agentSessionId || ''"
+    :recovery-owner="String(authStore.employeeId || '')"
+    :card="assayEntryDialog.card" @completed="handleAssayEntryCompleted" />
   <FixedQrTaskCreationDialog
     v-model="fixedQrTaskCreationDialog.visible"
     :pallet-codes="fixedQrTaskCreationDialog.palletCodes"
     :product-label="fixedQrTaskCreationDialog.productLabel"
     :default-warehouse-name="fixedQrTaskCreationDialog.defaultWarehouseName"
-    :default-side="fixedQrTaskCreationDialog.defaultSide"
     @created="handleFixedQrTasksCreated"
   />
   <RegisteredReportHistoryDialog
@@ -918,6 +1003,15 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
 </template>
 
 <style scoped lang="scss">
+.session-restart-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
 :deep(.agent-assistant-drawer) {
   --assistant-border: #e6eaf2;
   --assistant-border-strong: #d8e1ef;

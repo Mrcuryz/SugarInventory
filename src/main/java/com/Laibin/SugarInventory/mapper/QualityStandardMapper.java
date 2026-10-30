@@ -10,6 +10,9 @@ import java.util.List;
 
 @Mapper
 public interface QualityStandardMapper extends BaseMapper<QualityStandard> {
+    @Select("SELECT * FROM quality_standards WHERE id = #{id} FOR UPDATE")
+    QualityStandard selectForAssayUpdate(@Param("id") Integer id);
+
     @Select("""
             <script>
             SELECT * FROM quality_standards

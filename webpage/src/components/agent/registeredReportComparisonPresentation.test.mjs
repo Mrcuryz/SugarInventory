@@ -9,6 +9,7 @@ import {
 
 test('extracts one common comparison from every registered report summary shape', () => {
   for (const kind of [
+    'daily_analysis_summary',
     'daily_production_summary',
     'quality_assay_trend_summary',
     'quality_metric_trend_summary',

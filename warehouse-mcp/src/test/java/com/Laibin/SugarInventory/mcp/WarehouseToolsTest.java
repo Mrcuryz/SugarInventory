@@ -98,6 +98,30 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void queriesSavedDailyReportsWithoutLosingZeroOrNull() throws InterruptedException {
+        backend.enqueue(json(result("""
+            {"sourceLabel":"生产日报填报记录","dateRangeLabel":"2026-09-08","scopeLabel":"多晶车间",
+             "isEmpty":false,"page":2,"size":20,"total":21,"hasMore":false,
+             "reports":[{"reportDate":"2026-09-08","statusLabel":"草稿"}],
+             "records":[{"itemName":"黄冰糖","dailyActual":0,"convertedTons":null}],"limitations":[],
+             "requestedDays":1,"overviewTruncated":false,
+             "overview":[{"summaryType":"全厂产量","label":"总产量","quantity":120,"unit":"件","quantityRows":1,"recordCount":1,"observedDays":1}]}
+            """)));
+        var response = tools.queryProductionDailyReports(LocalDate.of(2026, 9, 8), LocalDate.of(2026, 9, 8),
+                "多晶车间", "黄冰糖", 2, 20);
+        assertThat(response.error()).isNull();
+        assertThat(response.isEmpty()).isFalse();
+        assertThat(response.records().getFirst().dailyActual()).isEqualByComparingTo("0");
+        assertThat(response.records().getFirst().convertedTons()).isNull();
+        assertThat(response.overview().getFirst().quantity()).isEqualByComparingTo("120");
+        assertThat(response.overview().getFirst().label()).isEqualTo("总产量");
+        assertThat(response.requestedDays()).isEqualTo(1);
+        var request = backend.takeRequest();
+        assertThat(request.getPath()).isEqualTo("/api/production/agent-read/daily-reports/query");
+        assertThat(request.getBody().readUtf8()).contains("\"page\":2", "黄冰糖");
+    }
+
+    @Test
     void resolveProductsStripsInventoryOverviewIntentSuffix() throws InterruptedException {
         backend.enqueue(json(result("""
                 [{"id":1,"productName":"黄冰糖（袋）25kg/件40件/板","status":"成品"}]
@@ -121,6 +145,35 @@ class WarehouseToolsTest {
 
         assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.NOT_FOUND);
         assertThat(response.candidates()).isEmpty();
+    }
+
+    @Test
+    void genericBoxPackagingDoesNotHideWeightQualifiedBoxes() throws InterruptedException {
+        backend.enqueue(json(result("""
+                [
+                  {"id":1,"productName":"黄冰糖（箱）净","status":"成品"},
+                  {"id":2,"productName":"黄冰糖（9.6箱装）","status":"成品"},
+                  {"id":3,"productName":"黄冰糖14.5（箱装）","status":"成品"},
+                  {"id":4,"productName":"黄冰糖（袋）","status":"成品"}
+                ]
+                """)));
+        var response = tools.resolveProducts(new ResolveProductsRequest("黄冰糖（箱）", null, null, 10));
+        assertThat(backend.takeRequest().getRequestUrl().queryParameter("name")).isEqualTo("黄冰糖");
+        assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.AMBIGUOUS);
+        assertThat(response.candidates()).hasSize(3);
+        assertThat(response.candidates()).allMatch(candidate -> candidate.productName().contains("箱"));
+    }
+
+    @Test
+    void spokenBagPackagingFiltersOutBoxes() throws InterruptedException {
+        backend.enqueue(json(result("""
+                [{"id":1,"productName":"黄冰糖（袋）","status":"成品"},
+                 {"id":2,"productName":"黄冰糖（9.6箱装）","status":"成品"}]
+                """)));
+        var response = tools.resolveProducts(new ResolveProductsRequest("黄冰糖袋装", null, null, 10));
+        assertThat(backend.takeRequest().getRequestUrl().queryParameter("name")).isEqualTo("黄冰糖");
+        assertThat(response.candidates()).hasSize(1);
+        assertThat(response.candidates().getFirst().productName()).isEqualTo("黄冰糖（袋）");
     }
 
     @Test
@@ -1075,6 +1128,27 @@ class WarehouseToolsTest {
     }
 
     @Test
+    void dailyReportTrendPreservesDepartmentAndNestedZeroNullFacts() throws InterruptedException {
+        backend.enqueue(json(result("""
+                {"dataScope":"SAVED_PRODUCTION_DAILY_REPORT","reportDefinitionId":"production_daily_report_analysis_v1",
+                 "reportVersion":1,"productionDailyReport":{"requestedDays":2,"series":[
+                   {"quantity":0,"convertedTons":null,"points":[{"businessDate":"2026-07-01","quantity":null},{"businessDate":"2026-07-02","quantity":0}]}]}}
+                """)));
+        var response = tools.runRegisteredReport("production_daily_report_analysis_v1", 1,
+                LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 2), " 黄冰糖 ",
+                null, null, null, null, null, " 多晶车间 ");
+        assertThat(response.error()).isNull();
+        var row = response.productionDailyReport().path("series").get(0);
+        assertThat(row.path("quantity").intValue()).isZero();
+        assertThat(row.path("convertedTons").isNull()).isTrue();
+        assertThat(row.path("points").get(0).path("quantity").isNull()).isTrue();
+        assertThat(row.path("points").get(1).path("quantity").intValue()).isZero();
+        var request = backend.takeRequest(100, TimeUnit.MILLISECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getBody().readUtf8()).contains("\"departmentName\":\"多晶车间\"", "\"productQuery\":\"黄冰糖\"");
+    }
+
+    @Test
     void preservesTodayOperationsOverviewThroughReadOnlyEndpoint() throws InterruptedException {
         backend.enqueue(json(result("""
                 {
@@ -1364,7 +1438,7 @@ class WarehouseToolsTest {
         backend.enqueue(json(result("""
                 {
                   "dataScope":"CURRENT_FINISH_INBOUND_TASK_TRANSITION_PREVIEW",
-                  "previewVersion":1,
+                  "previewVersion":2,
                   "previewStatus":"READY",
                   "previewRef":"tpr1_signature",
                   "stateDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -1451,7 +1525,7 @@ class WarehouseToolsTest {
                   "readyForUserConfirmation":true,
                   "requestedItemCount":1,
                   "eligibleItemCount":1,
-                  "items":[{"palletCode":"BT0019N1","productName":"黄冰糖（袋）","warehouseName":"1号库位","entryDate":"2026-08-09","side":"左","quantity":1,"unitLabel":"板"}],
+                  "items":[{"palletCode":"BT0019N1","productName":"黄冰糖（袋）","warehouseName":"1号库位","entryDate":"2026-08-09","quantity":1,"unitLabel":"板"}],
                   "blockingIssues":[],
                   "warnings":[],
                   "limitations":["本预览不执行入库。"]
@@ -1459,9 +1533,9 @@ class WarehouseToolsTest {
                 """)));
 
         var response = tools.previewFinishInboundExecution(new FinishInboundExecutionPreviewRequest(
-                1,
+                2,
                 List.of(new FinishInboundExecutionPreviewItem(
-                        "BT0019N1", "1号库位", "2026-08-09", "左", 1, "0", "验收预览"))));
+                        "BT0019N1", "1号库位", "2026-08-09", 1, "0", "验收预览"))));
 
         assertThat(response.error()).isNull();
         assertThat(response.readyForUserConfirmation()).isTrue();
@@ -1480,9 +1554,9 @@ class WarehouseToolsTest {
     @Test
     void rejectsForbiddenOrIncompleteExactPreviewArgumentsBeforeCallingBackend() {
         var response = tools.previewFinishInboundExecution(new FinishInboundExecutionPreviewRequest(
-                1,
+                2,
                 List.of(new FinishInboundExecutionPreviewItem(
-                        "BT0019N1", "", "2026-08-09", "左", 1, "0", null))));
+                        "BT0019N1", "", "2026-08-09", 1, "0", null))));
 
         assertThat(response.error()).isNotNull();
         assertThat(response.error().code()).isEqualTo("INVALID_ARGUMENT");

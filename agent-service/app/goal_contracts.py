@@ -12,6 +12,9 @@ from app.task_transition_previews import TASK_TRANSITION_PREVIEW_BY_TRANSITION
 
 
 CoreGoalTypeV1 = Literal[
+    "ASSAY_ENTRY_PREVIEW",
+    "PRODUCTION_DAILY_REPORT_ANALYSIS",
+    "PRODUCTION_DAILY_REPORT_RECORDS",
     "CURRENT_PRODUCT_INVENTORY",
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
@@ -72,6 +75,9 @@ CoreGoalTypeV1 = Literal[
     "TODAY_OPERATIONS_OVERVIEW",
 ]
 CoreFactTypeV1 = Literal[
+    "ASSAY_ENTRY_PREVIEW",
+    "PRODUCTION_DAILY_REPORT_ANALYSIS",
+    "PRODUCTION_DAILY_REPORT_RECORDS",
     "CURRENT_PRODUCT_INVENTORY",
     "PRODUCT_INVENTORY_DISTRIBUTION",
     "WAREHOUSE_INVENTORY_DISTRIBUTION",
@@ -182,6 +188,7 @@ class GoalContractV1(BaseModel):
         "knowledge_expert",
     ]
     requiredEntityTypes: tuple[Literal["PRODUCT", "WAREHOUSE", "PALLET", "PALLET_TASK", "PRODUCTION_ORDER", "BOILING_BATCH"], ...]
+    requiredAnyEntityTypes: tuple[Literal["PRODUCT", "ASSAY_GROUP"], ...] = ()
     requiredFactTypes: tuple[CoreFactTypeV1, ...]
     allowedTools: tuple[str, ...]
     evidenceTools: tuple[str, ...]
@@ -218,10 +225,26 @@ class GoalCompletionV1(BaseModel):
     missingEntityTypes: list[str] = Field(default_factory=list, max_length=4)
     missingFactTypes: list[str] = Field(default_factory=list, max_length=10)
     failedFactTypes: list[str] = Field(default_factory=list, max_length=10)
+    missingQueries: list[str] = Field(default_factory=list, max_length=3)
     limitations: list[str] = Field(default_factory=list, max_length=20)
 
 
 GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
+    "PRODUCTION_DAILY_REPORT_RECORDS": GoalContractV1(
+        goalType="PRODUCTION_DAILY_REPORT_RECORDS",
+        ownerExpert="production_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("PRODUCTION_DAILY_REPORT_RECORDS",),
+        allowedTools=("query_production_daily_reports",),
+        evidenceTools=("query_production_daily_reports",),
+        factValidation=FactValidationRuleV1(
+            factLabel="根据生产日报查看产量、生产概况与明细",
+            requiredFields=("sourceLabel", "dateRangeLabel", "scopeLabel", "reports", "records", "overview", "requestedDays", "total", "page", "hasMore", "isEmpty"),
+            listFields=("reports", "records", "overview"),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=("日报填报值不是订单登记产出；分页明细不可推算总量，累计值不可跨日相加。",),
+    ),
     "CURRENT_PRODUCT_INVENTORY": GoalContractV1(
         goalType="CURRENT_PRODUCT_INVENTORY",
         ownerExpert="inventory_expert",
@@ -349,6 +372,23 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
             "预览只重查当前成品入库待处理任务并生成短期摘要，不执行入库或任务确认。",
             "previewRef 不是 executionToken，最终提交仍在既有业务弹窗中完成。",
         ),
+    ),
+    "ASSAY_ENTRY_PREVIEW": GoalContractV1(
+        goalType="ASSAY_ENTRY_PREVIEW", ownerExpert="assay_expert",
+        requiredEntityTypes=(), requiredAnyEntityTypes=("PRODUCT", "ASSAY_GROUP"), requiredFactTypes=("ASSAY_ENTRY_PREVIEW",),
+        allowedTools=("resolve_products", "query_assay_groups", "preview_assay_entry"), evidenceTools=("preview_assay_entry",),
+        factValidation=FactValidationRuleV1(
+            factLabel="化验录入预览",
+            requiredFields=("previewOnly", "productName", "sampleDate", "proposedVersion", "metrics", "judgementLabel"),
+            listFields=("metrics",),
+            alternativeShapes=(FactValidationShapeV1(
+                requiredFields=("previewOnly", "entryKind", "groupName", "sampleDate", "productCount", "products"),
+                listFields=("products",),
+                noDataWhenEmptyList="products",
+            ),),
+        ),
+        noDataCompletesGoal=False,
+        limitations=("仅预览未保存，检测值不由模型补全或判定。", "仅绑定当前已确认具体产品或化验组和采样日期，修改输入后须重新预览。"),
     ),
     "FINISH_INBOUND_EXECUTION_PREVIEW": GoalContractV1(
         goalType="FINISH_INBOUND_EXECUTION_PREVIEW",
@@ -486,7 +526,12 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         ownerExpert="assay_expert",
         requiredEntityTypes=(),
         requiredFactTypes=("PRODUCT_ASSAY_REPORT",),
-        allowedTools=("resolve_products", "get_assay_status", "get_assay_report_detail"),
+        allowedTools=(
+            "resolve_products",
+            "get_assay_status",
+            "query_assay_records",
+            "get_assay_report_detail",
+        ),
         evidenceTools=("get_assay_status", "get_assay_report_detail"),
         factValidation=FactValidationRuleV1(
             factLabel="化验报告",
@@ -1035,6 +1080,20 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         ),
         limitations=("回答复核记录是治理依据，不替代业务数据源本身。",),
     ),
+    "PRODUCTION_DAILY_REPORT_ANALYSIS": GoalContractV1(
+        goalType="PRODUCTION_DAILY_REPORT_ANALYSIS",
+        ownerExpert="analytics_expert",
+        requiredEntityTypes=(),
+        requiredFactTypes=("PRODUCTION_DAILY_REPORT_ANALYSIS",),
+        allowedTools=("run_registered_report",),
+        evidenceTools=("run_registered_report",),
+        factValidation=FactValidationRuleV1(
+            factLabel="生产日报来源的产量与能耗按日趋势、汇总及报表导出",
+            requiredFields=("dataScope", "reportDefinitionId", "reportVersion", "isEmpty", "productionDailyReport", "dataQuality"),
+            noDataBooleanField="isEmpty",
+        ),
+        limitations=("只使用已保存生产日报，包含草稿；不与订单产出相加。", "缺日与空值不是0；数量与折吨覆盖分别说明。", "不预测、不计算产率；跨期比较仅引用后端等长期间的已记录值差异，不自行计算增长率。"),
+    ),
     "DAILY_PRODUCTION_ANALYSIS": GoalContractV1(
         goalType="DAILY_PRODUCTION_ANALYSIS",
         ownerExpert="analytics_expert",
@@ -1432,6 +1491,8 @@ def registered_goal_for_plan(
         return definition.goal_type if definition is not None else None
     if tool_name == "preview_finish_inbound_execution":
         return "FINISH_INBOUND_EXECUTION_PREVIEW"
+    if tool_name == "preview_assay_entry" or (tool_name == "resolve_products" and intent == "assay_entry_preview"):
+        return "ASSAY_ENTRY_PREVIEW"
     if tool_name == "resolve_production_entities":
         entity_type = str(arguments.get("entityType") or "").upper()
         if entity_type == "BOILING_BATCH":
@@ -1460,6 +1521,8 @@ def registered_goal_for_plan(
         return "PRODUCT_ASSAY_REPORT"
     if tool_name == "query_assay_records":
         return "PRODUCT_ASSAY_HISTORY"
+    if tool_name == "query_production_daily_reports":
+        return "PRODUCTION_DAILY_REPORT_RECORDS"
     if tool_name == "query_boiling_batches":
         return "BOILING_BATCH_LIST"
     if tool_name == "query_unqualified_inventory":
@@ -1471,6 +1534,8 @@ def registered_goal_for_plan(
     if tool_name == "query_products_without_recent_assay":
         return "CURRENT_INVENTORY_ASSAY_GAPS"
     if tool_name == "run_registered_report":
+        if arguments.get("reportDefinitionId") == "production_daily_report_analysis_v1":
+            return "PRODUCTION_DAILY_REPORT_ANALYSIS"
         if arguments.get("reportDefinitionId") == "today_operations_overview_v1":
             return "TODAY_OPERATIONS_OVERVIEW"
         if arguments.get("reportDefinitionId") == "inventory_level_trend_v1":
@@ -1518,7 +1583,7 @@ def build_fact_envelope(
     entity_refs = [
         context.entity_ref
         for entity_type, context in entity_contexts.items()
-        if entity_type in contract.requiredEntityTypes and context.entity_ref
+        if entity_type in (*contract.requiredEntityTypes, *contract.requiredAnyEntityTypes) and context.entity_ref
     ]
     scope = _safe_scope(arguments or {})
     fingerprint_input = {
@@ -1555,6 +1620,7 @@ class GoalCompletionEvaluator:
         facts: list[FactEnvelopeV1],
         needs_clarification: bool = False,
         unsupported: bool = False,
+        required_query_items: list[str] | None = None,
     ) -> GoalCompletionV1:
         contract = GOAL_CONTRACTS[goal_type]
         if unsupported:
@@ -1565,6 +1631,9 @@ class GoalCompletionEvaluator:
             for entity_type in contract.requiredEntityTypes
             if not _resolved_entity(entity_contexts.get(entity_type))
         ]
+        if contract.requiredAnyEntityTypes and not any(
+                _resolved_entity(entity_contexts.get(kind)) for kind in contract.requiredAnyEntityTypes):
+            missing_entities.extend(contract.requiredAnyEntityTypes)
         if needs_clarification or missing_entities:
             return GoalCompletionV1(
                 goalType=goal_type,
@@ -1574,6 +1643,8 @@ class GoalCompletionEvaluator:
             )
 
         relevant = [fact for fact in facts if fact.goalType == goal_type]
+        if goal_type == "PRODUCTION_DAILY_REPORT_RECORDS" and required_query_items:
+            return self._evaluate_daily_queries(contract, relevant, required_query_items)
         latest_by_type: dict[str, FactEnvelopeV1] = {}
         for fact in relevant:
             current = latest_by_type.get(fact.factType)
@@ -1608,6 +1679,32 @@ class GoalCompletionEvaluator:
             missingFactTypes=missing_facts,
             failedFactTypes=failed_facts,
             limitations=_unique(limitations),
+        )
+
+    @staticmethod
+    def _evaluate_daily_queries(contract: GoalContractV1, facts: list[FactEnvelopeV1], items: list[str]) -> GoalCompletionV1:
+        # Query scopes are model-declared requirements, not keyword-derived routing.
+        matching = [fact for fact in facts if fact.scope.get("itemQuery") in items]
+        anchor = matching[0].scope if matching else {}
+        scope_keys = ("startDate", "endDate", "departmentName", "page", "size")
+        latest: dict[str, FactEnvelopeV1] = {}
+        for fact in matching:
+            if any(fact.scope.get(key, "") != anchor.get(key, "") for key in scope_keys):
+                continue
+            item = fact.scope["itemQuery"]
+            if item not in latest or fact.observedAt >= latest[item].observedAt:
+                latest[item] = fact
+        missing = [item for item in items if item not in latest or latest[item].status not in {"AVAILABLE", "NO_DATA"}]
+        evidence = [fact.factRef for fact in latest.values() if fact.status in {"AVAILABLE", "NO_DATA"}]
+        failed = any(fact.status in {"INVALID", "TOOL_ERROR"} for fact in latest.values())
+        return GoalCompletionV1(
+            goalType=contract.goalType,
+            status="FAILED" if failed and not evidence else "PARTIAL" if missing else "COMPLETE",
+            evidenceRefs=evidence, missingQueries=missing,
+            missingFactTypes=[contract.goalType] if missing else [],
+            failedFactTypes=[contract.goalType] if failed else [],
+            limitations=_unique([*contract.limitations, *[note for fact in latest.values() for note in fact.limitations],
+                *(["尚缺同日期、车间和分页范围的查询：" + "、".join(missing)] if missing else [])]),
         )
 
 
@@ -1701,6 +1798,10 @@ def _safe_scope(arguments: dict[str, Any]) -> dict[str, str]:
         "reportDefinitionId",
         "reportVersion",
         "productQuery",
+        "itemQuery",
+        "departmentName",
+        "page",
+        "size",
     ):
         value = arguments.get(key)
         if value is not None:

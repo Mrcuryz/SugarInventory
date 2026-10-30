@@ -2,9 +2,15 @@ package com.Laibin.SugarInventory.mcp.tool;
 
 import java.time.LocalDate;
 import java.util.List;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionDailyReportsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionDailyReportsResponse;
 
 import com.Laibin.SugarInventory.mcp.client.WarehouseApiException;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayRecordsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayEntryPreviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayEntryPreviewResponse;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayGroupEntryPreviewRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayGroupEntryPreviewResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayRecordsResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayReportDetailRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayReportDetailResponse;
@@ -411,6 +417,14 @@ public class WarehouseTools {
             String comparisonMode,
             LocalDate comparisonStartDate,
             LocalDate comparisonEndDate) {
+        return runRegisteredReport(reportDefinitionId, reportVersion, startDate, endDate, productQuery,
+                metricKey, taskType, comparisonMode, comparisonStartDate, comparisonEndDate, null);
+    }
+
+    public RegisteredReportRunResponse runRegisteredReport(
+            String reportDefinitionId, Integer reportVersion, LocalDate startDate, LocalDate endDate,
+            String productQuery, String metricKey, String taskType, String comparisonMode,
+            LocalDate comparisonStartDate, LocalDate comparisonEndDate, String departmentName) {
         try {
             return WarehouseToolCallContext.withToolName(
                     "run_registered_report",
@@ -424,7 +438,7 @@ public class WarehouseTools {
                             taskType,
                             comparisonMode,
                             comparisonStartDate == null ? null : comparisonStartDate.toString(),
-                            comparisonEndDate == null ? null : comparisonEndDate.toString())));
+                            comparisonEndDate == null ? null : comparisonEndDate.toString(), departmentName)));
         } catch (WarehouseApiException e) {
             return RegisteredReportRunResponse.error(ErrorMapper.upstream(e));
         } catch (RuntimeException e) {
@@ -434,6 +448,20 @@ public class WarehouseTools {
                     e.getClass().getSimpleName(),
                     safeLogValue(e.getMessage()));
             return RegisteredReportRunResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public ProductionDailyReportsResponse queryProductionDailyReports(LocalDate startDate, LocalDate endDate,
+            String departmentName, String itemQuery, Integer page, Integer size) {
+        try {
+            return WarehouseToolCallContext.withToolName("query_production_daily_reports",
+                    () -> readService.queryProductionDailyReports(new ProductionDailyReportsRequest(
+                            startDate == null ? null : startDate.toString(),
+                            endDate == null ? null : endDate.toString(), departmentName, itemQuery, page, size)));
+        } catch (WarehouseApiException e) {
+            return ProductionDailyReportsResponse.error(ErrorMapper.upstream(e));
+        } catch (RuntimeException e) {
+            return ProductionDailyReportsResponse.error(ErrorMapper.unexpected());
         }
     }
 
@@ -533,6 +561,34 @@ public class WarehouseTools {
         } catch (RuntimeException e) {
             log.warn("query_pallet_tasks failed; errorType={}, message={}", e.getClass().getSimpleName(), safeLogValue(e.getMessage()));
             return PalletTasksResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public AssayEntryPreviewResponse previewAssayEntry(AssayEntryPreviewRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("preview_assay_entry",
+                    () -> readService.previewAssayEntry(request));
+        } catch (WarehouseApiException exception) {
+            return AssayEntryPreviewResponse.error(ErrorMapper.upstream(exception));
+        } catch (IllegalArgumentException exception) {
+            return AssayEntryPreviewResponse.error(ErrorMapper.invalid("input", "请选择具体产品并提供采样日期。"));
+        } catch (RuntimeException exception) {
+            log.warn("preview_assay_entry failed; errorType={}", exception.getClass().getSimpleName());
+            return AssayEntryPreviewResponse.error(ErrorMapper.unexpected());
+        }
+    }
+
+    public AssayGroupEntryPreviewResponse previewAssayGroupEntry(AssayGroupEntryPreviewRequest request) {
+        try {
+            return WarehouseToolCallContext.withToolName("preview_assay_entry",
+                    () -> readService.previewAssayGroupEntry(request));
+        } catch (WarehouseApiException exception) {
+            return AssayGroupEntryPreviewResponse.error(ErrorMapper.upstream(exception));
+        } catch (IllegalArgumentException exception) {
+            return AssayGroupEntryPreviewResponse.error(ErrorMapper.invalid("input", "请选择化验组并提供采样日期。"));
+        } catch (RuntimeException exception) {
+            log.warn("preview_assay_entry group failed; errorType={}", exception.getClass().getSimpleName());
+            return AssayGroupEntryPreviewResponse.error(ErrorMapper.unexpected());
         }
     }
 

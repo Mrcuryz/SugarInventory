@@ -379,17 +379,7 @@ public class ProductionAgentReadServiceImpl implements ProductionAgentReadServic
     }
 
     private String joinPosition(String side, Integer row, Integer layer) {
-        List<String> parts = new java.util.ArrayList<>();
-        if (side != null && !side.isBlank()) {
-            parts.add(side + "侧");
-        }
-        if (row != null) {
-            parts.add(row + "排");
-        }
-        if (layer != null) {
-            parts.add(layer + "层");
-        }
-        return parts.isEmpty() ? null : String.join("", parts);
+        return null;
     }
 
     @Override

@@ -178,7 +178,7 @@ public class FinishInboundExecutionPreviewArchiveService {
         if (ownerUserId == null || ownerUserId <= 0) {
             throw new BusinessException(401, "当前用户未登录");
         }
-        if (preview.getPreviewVersion() != 1 || preview.getServerSnapshot() == null) {
+        if (preview.getPreviewVersion() != 2 || preview.getServerSnapshot() == null) {
             throw new BusinessException(409, "成品入库执行预览协议或服务端快照无效");
         }
         if (preview.getPreviewedAt() == null || preview.getExpiresAt() == null

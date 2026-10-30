@@ -25,8 +25,8 @@ export const selectedOptionKindLabel = (optionType) => {
 }
 
 export const optionHint = (option) => option.supported === false
-  ? '暂不支持直接查询'
-  : '点击选择并继续查询'
+  ? '此选项暂不可用'
+  : '点击选择并继续'
 
 export const optionCardClass = (option) => ({
   disabled: option.supported === false,

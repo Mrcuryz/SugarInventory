@@ -63,12 +63,14 @@ class WarehouseAgentState:
     orchestration_plan: dict[str, Any] | None = None
     orchestration_step_results: dict[str, dict[str, Any]] = field(default_factory=dict)
     selected_product: SelectedEntity | None = None
+    selected_assay_group: SelectedEntity | None = None
     selected_warehouse: SelectedEntity | None = None
     selected_production_order: SelectedEntity | None = None
     selected_boiling_batch: SelectedEntity | None = None
     selected_pallet: SelectedEntity | None = None
     active_goal_type: str | None = None
     goal_contract_locked: bool = False
+    goal_query_items: list[str] = field(default_factory=list)
     fact_envelopes: list[dict[str, Any]] = field(default_factory=list)
     last_goal_completion: dict[str, Any] | None = None
     last_inventory_result: dict[str, Any] | None = None
@@ -96,6 +98,8 @@ class WarehouseAgentState:
     last_production_material_trace: dict[str, Any] | None = None
     last_boiling_batch_trace: dict[str, Any] | None = None
     last_report_context: dict[str, Any] | None = None
+    last_daily_report_query: dict[str, Any] | None = None
+    last_daily_report_queries: list[dict[str, Any]] = field(default_factory=list)
     last_knowledge_result: dict[str, Any] | None = None
     last_auto_inbound_batches: dict[str, Any] | None = None
     last_orchestration: dict[str, Any] | None = None

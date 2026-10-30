@@ -209,6 +209,7 @@ def test_pallet_expert_is_enabled_after_read_only_lifecycle_rollout() -> None:
     assert "pallet_expert" in Settings().llm_allowed_experts
     assert "logistics_expert" in Settings().llm_allowed_experts
     assert "analytics_expert" in Settings().llm_allowed_experts
+    assert "master_data_expert" in Settings().llm_allowed_experts
     assert "administration_expert" in Settings().llm_allowed_experts
     assert "audit_expert" in Settings().llm_allowed_experts
 
@@ -252,20 +253,53 @@ def test_expert_action_accepts_empty_optional_values_and_non_authorizing_call_ci
     assert decision.citedObservationIds == ["obs_1"]
 
 
-def test_production_environment_rejects_experimental_llm_mode() -> None:
-    from app.main import create_app
+def _production_llm_settings(**overrides: Any) -> Settings:
+    values: dict[str, Any] = {
+        "tool_mode": "java_gateway",
+        "model_mode": "openai_compatible",
+        "planning_mode": "llm",
+        "deployment_environment": "production",
+        "state_backend": "redis",
+        "allow_insecure_mock_auth": False,
+        "model_base_url": "https://model.example/v1",
+        "model_api_key": "configured-for-test",
+        "model_name": "controlled-test-model",
+        "agent_internal_tool_service_key": "gateway-test-key",
+        "python_service_key": "python-test-key",
+    }
+    values.update(overrides)
+    return Settings(**values)
 
-    with pytest.raises(RuntimeError, match="forbidden in production"):
-        create_app(
-            Settings(
-                tool_mode="mock",
-                model_mode="openai_compatible",
-                planning_mode="llm",
-                deployment_environment="production",
-            ),
-            tool_client=MockToolClient(),
-            checkpointer=InMemoryCheckpointer(),
-        )
+
+def test_production_environment_accepts_controlled_llm_mode() -> None:
+    from app.main import validate_runtime_configuration
+
+    validate_runtime_configuration(_production_llm_settings())
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"planning_mode": "deterministic"}, "AGENT_PLANNING_MODE must be llm"),
+        ({"state_backend": "memory"}, "AGENT_STATE_BACKEND must be redis"),
+        ({"model_api_key": ""}, "model API key must be configured"),
+        ({"allow_insecure_mock_auth": True}, "AGENT_ALLOW_INSECURE_MOCK_AUTH must be false"),
+        (
+            {"llm_allowed_experts": tuple(
+                expert for expert in Settings().llm_allowed_experts if expert != "analytics_expert"
+            )},
+            "missing approved experts: analytics_expert",
+        ),
+    ],
+)
+def test_production_environment_rejects_incomplete_controlled_llm_configuration(
+    overrides: dict[str, Any],
+    message: str,
+) -> None:
+    from app.main import validate_runtime_configuration
+
+    with pytest.raises(RuntimeError, match=message):
+        validate_runtime_configuration(_production_llm_settings(**overrides))
 
 
 def test_model_visible_schema_replaces_database_ids_with_state_refs() -> None:
@@ -613,6 +647,7 @@ def test_analytics_expert_only_runs_registered_report_with_fixed_definition() ->
     assert any("折算后的总件数" in instruction for instruction in profile.instructions)
     assert set(schemas) == {"run_registered_report"}
     assert schemas["run_registered_report"]["properties"]["reportDefinitionId"]["enum"] == [
+        "production_daily_report_analysis_v1",
         "daily_production_overview_v1",
         "quality_assay_result_trend_v1",
         "quality_metric_trend_v1",
@@ -1579,6 +1614,8 @@ def test_registered_report_model_observation_is_compact_but_card_keeps_full_rows
     )[0]
 
     assert model_observation["data"]["productionFlowDailySeriesTotalCount"] == 20
+    assert model_observation["data"]["productionFlowDailySeriesShownCount"] == 6
+    assert model_observation["data"]["productionFlowDailySeriesSampled"] is True
     assert len(model_observation["data"]["productionFlowDailySeries"]) == 6
     assert model_observation["data"]["productionFlowDailySeries"][0]["businessDate"] == (
         "2026-07-01"
@@ -1610,6 +1647,20 @@ def test_registered_report_model_observation_is_compact_but_card_keeps_full_rows
     )
     assert sparse_compact["productionFlowDailySeriesTotalCount"] == 180
     assert sparse_compact["productionFlowDailySeries"] == [sparse_daily_rows[100]]
+    assert sparse_compact["productionFlowDailySeriesShownCount"] == 1
+    assert sparse_compact["productionFlowDailySeriesSampled"] is True
+
+    quality_rows = [{"periodLabel": f"2026-09-{day}", "assayRecordCount": 0}
+                    for day in range(18, 25)]
+    quality_compact = runtime._compact_registered_report_model_data({"qualitySeries": quality_rows})
+    assert quality_compact["qualitySeriesTotalCount"] == 7
+    assert quality_compact["qualitySeriesShownCount"] == 6
+    assert quality_compact["qualitySeriesSampled"] is True
+    assert "不表示源报表缺行" in quality_compact["modelObservationNote"]
+    assert len(quality_rows) == 7  # Never trim source rows used by cards/export.
+    small = runtime._compact_registered_report_model_data({"qualitySeries": quality_rows[:2]})
+    assert small["qualitySeriesTotalCount"] == small["qualitySeriesShownCount"] == 2
+    assert small["qualitySeriesSampled"] is False
 
     card = runtime._production_input_output_flow_card(report_data)
     assert sum(
@@ -3463,7 +3514,7 @@ def test_guided_finish_inbound_resolves_scope_and_requires_exact_qr_selection() 
     assert selection["availablePalletCount"] == 3
     assert selection["productLabel"] == "黄冰糖（袋） 25kg/件 40件/板"
     assert selection["warehouseName"] == "3号库位"
-    assert selection["defaultSide"] == "左"
+    assert "defaultSide" not in selection
     assert selection["taskGroupKey"] == "finish_in"
     assert selection["canSelectRequestedCount"] is True
     state = store.get("agt_llm")
@@ -3918,15 +3969,49 @@ def test_mismatched_recipe_proposal_for_product_filter_gets_one_safe_reroute() -
 
 
 def test_mismatched_recipe_proposal_for_assay_followup_gets_one_safe_reroute() -> None:
+    report_ref = "assay_report_latest_001"
     model = ScriptedLlmModel(
-        [main_recipe(), main_delegate("assay_expert")],
+        [main_recipe(), main_delegate("assay_expert", "PRODUCT_ASSAY_REPORT")],
         [
-            call("get_assay_status", {"productRef": "CURRENT_PRODUCT"}),
-            final("黄冰糖（袋）没有查询到对应日期的化验记录。", "obs_1"),
+            call(
+                "query_assay_records",
+                {
+                    "productScope": {
+                        "type": "SINGLE_PRODUCT",
+                        "productRef": "CURRENT_PRODUCT",
+                    },
+                    "sortBy": "sampleDate",
+                    "sortDirection": "DESC",
+                    "page": 1,
+                    "size": 1,
+                },
+            ),
+            call("get_assay_report_detail", {"reportRef": "CURRENT_ASSAY_REPORT"}),
         ],
     )
     tools = MockToolClient(
-        {"get_assay_status": {"status": "NO_DATA", "productLabel": "黄冰糖（袋）"}}
+        {
+            "query_assay_records": {
+                "scopeLabel": "黄冰糖（袋）",
+                "total": 1,
+                "records": [
+                    {
+                        "recordRef": report_ref,
+                        "productLabel": "黄冰糖（袋）",
+                        "sampleDate": "2026-07-17",
+                        "judgeLabel": "合格",
+                    }
+                ],
+            },
+            "get_assay_report_detail": {
+                "reportRef": report_ref,
+                "productLabel": "黄冰糖（袋）",
+                "sampleDate": "2026-07-17",
+                "judgeLabel": "合格",
+                "standardLabel": "黄冰糖 v1",
+                "metrics": [],
+            },
+        }
     )
     runtime, store = runtime_for(model, tools)
     store.get("agt_llm").selected_product = SelectedEntity(
@@ -3941,8 +4026,78 @@ def test_mismatched_recipe_proposal_for_assay_followup_gets_one_safe_reroute() -
     assert response.error is None
     assert len(model.main_requests) == 2
     assert model.main_requests[1].registeredRecipes == []
-    assert [item["toolName"] for item in tools.calls] == ["get_assay_status"]
-    assert tools.calls[0]["arguments"] == {"productId": 84}
+    assert [item["toolName"] for item in tools.calls] == [
+        "query_assay_records",
+        "get_assay_report_detail",
+    ]
+    assert tools.calls[0]["arguments"]["productScope"] == {
+        "type": "SINGLE_PRODUCT",
+        "productId": 84,
+    }
+    assert tools.calls[0]["arguments"]["size"] == 1
+    assert tools.calls[1]["arguments"]["reportRef"] == report_ref
+
+
+def test_exact_date_assay_query_recovers_history_goal_to_single_report_goal() -> None:
+    model = ScriptedLlmModel(
+        [main_delegate("assay_expert", "PRODUCT_ASSAY_HISTORY")],
+        [
+            call("resolve_products", {"query": "黄冰糖（袋）", "limit": 10}),
+            call(
+                "get_assay_status",
+                {
+                    "productRef": "CURRENT_PRODUCT",
+                    "productionDate": "2026-07-17",
+                },
+            ),
+        ],
+    )
+    tools = MockToolClient(
+        {
+            "resolve_products": {
+                "resolutionStatus": "UNIQUE",
+                "candidates": [
+                    {
+                        "productId": 84,
+                        "productName": "黄冰糖（袋）",
+                        "displayLabel": "黄冰糖（袋） 25kg/件 40件/板",
+                    }
+                ],
+            },
+            "get_assay_status": {
+                "judgeResult": "NO_STANDARD",
+                "assay": {
+                    "productName": "黄冰糖（袋）",
+                    "sampleDate": "2026-07-17",
+                    "judgeResult": "NO_STANDARD",
+                    "colorValue": 12,
+                },
+            },
+        }
+    )
+    runtime, store = runtime_for(model, tools)
+
+    response = runtime.chat(chat_request("查询黄冰糖（袋）2026-07-17的化验情况"))
+
+    assert response.error is None
+    assert response.reviewTrace["mainRouteGuard"] == {
+        "status": "RECOVERED_AS_ASSAY_DELEGATE",
+        "rejectedAction": "DELEGATE",
+        "rejectedExpertAgent": "assay_expert",
+        "rejectedGoalType": "PRODUCT_ASSAY_HISTORY",
+        "expertAgent": "assay_expert",
+        "goalType": "PRODUCT_ASSAY_REPORT",
+        "reason": "BOUNDED_ASSAY_QUERY",
+    }
+    assert [item["toolName"] for item in tools.calls] == [
+        "resolve_products",
+        "get_assay_status",
+    ]
+    assert tools.calls[1]["arguments"] == {
+        "productId": 84,
+        "productionDate": "2026-07-17",
+    }
+    assert store.get("agt_llm").active_goal_type == "PRODUCT_ASSAY_REPORT"
 
 
 def test_matching_compound_request_keeps_registered_recipe_without_reroute() -> None:
@@ -4383,7 +4538,8 @@ def test_llm_pending_task_journey_keeps_filters_and_reuses_safe_detail_without_t
     assert tools.calls[1]["arguments"]["taskType"] == "OUT"
     assert second.reviewTrace["mainRouteOptimization"]["modelCallSkipped"] is True
     assert detail.cards[0].cardType == "pallet_task_detail"
-    assert "2号库位 左侧" in detail.answer
+    assert "2号库位" in detail.answer
+    assert "左侧" not in detail.answer
     assert detail.reviewTrace["stateReuse"]["toolCalled"] is False
     assert len(tools.calls) == 2
     assert len(model.expert_requests) == 1
@@ -4779,7 +4935,7 @@ def test_llm_finish_outbound_preview_uses_expert_tool_and_opens_only_controlled_
     task = response.cards[0].fields[1]
     assert summary["batchAction"] == "finishOutConfirm"
     assert summary["taskGroupLabel"] == "成品出库"
-    assert task["currentLocationLabel"] == "2号库位 左侧 第2行 第1层"
+    assert task["currentLocationLabel"] == "2号库位"
     assert task["currentInventoryQuantityText"] == "1 板"
     rendered = json.dumps(response.cards[0].model_dump(), ensure_ascii=False)
     assert "tpr1_hidden_outbound_signature" not in rendered
@@ -4846,8 +5002,8 @@ def test_llm_transfer_preview_uses_logistics_expert_and_opens_transfer_dialog() 
     task = response.cards[0].fields[1]
     assert summary["batchAction"] == "transferConfirm"
     assert summary["taskGroupLabel"] == "调拨"
-    assert task["currentLocationLabel"] == "2号库位 左侧 第3行 第1层"
-    assert task["targetLocationLabel"] == "3号库位 右侧 第1行 第1层"
+    assert task["currentLocationLabel"] == "2号库位"
+    assert task["targetLocationLabel"] == "3号库位"
     rendered = json.dumps(response.cards[0].model_dump(), ensure_ascii=False)
     assert "tpr1_hidden_transfer_signature" not in rendered
     assert "c" * 64 not in rendered

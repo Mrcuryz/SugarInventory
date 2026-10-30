@@ -52,7 +52,7 @@ public class AssayStandardJudgeServiceImpl implements AssayStandardJudgeService 
             return buildNoStandardOutcome();
         }
 
-        List<CandidateResult> candidates = new ArrayList<>();
+        List<QualityStandard> standards = new ArrayList<>();
         for (ProductQualityStandardRelation relation : relations) {
             QualityStandard standard = qualityStandardMapper.selectById(relation.getQualityStandardId());
             if (standard == null) {
@@ -60,8 +60,14 @@ public class AssayStandardJudgeServiceImpl implements AssayStandardJudgeService 
             }
             List<QualityStandardItem> items = qualityStandardItemMapper.selectByQualityStandardId(standard.getId());
             standard.setItems(items);
-            candidates.add(evaluateCandidate(standard, dto));
+            standards.add(standard);
         }
+        return judgeStandards(standards, dto);
+    }
+
+    @Override
+    public AssayJudgeOutcome judgeStandards(List<QualityStandard> standards, AssaySubmitDTO dto) {
+        List<CandidateResult> candidates = standards.stream().map(standard -> evaluateCandidate(standard, dto)).toList();
         if (candidates.isEmpty()) {
             return buildNoStandardOutcome();
         }

@@ -27,7 +27,7 @@ class FinishInboundExecutionDomainAdapterTest {
         AgentFinishInboundExecutionPreview preview = new AgentFinishInboundExecutionPreview();
         preview.setNormalizedInputJson("""
                 [{"code":"bt0014lu","warehouseName":"2","entryDate":"2026-08-10",
-                  "side":"左","quantity":1,"unit":"0","remark":"受控确认"}]
+                  "quantity":1,"unit":"0","remark":"受控确认"}]
                 """);
         User user = new User();
         user.setId(7);
@@ -47,6 +47,7 @@ class FinishInboundExecutionDomainAdapterTest {
                 org.mockito.ArgumentMatchers.eq(7));
         var item = captor.getValue().getItems().get(0);
         assertThat(item.getWarehouseName()).isEqualTo("2");
+        assertThat(item.getSide()).isEqualTo("左");
         assertThat(item.getRowNumber()).isNull();
         assertThat(item.getLayer()).isNull();
     }

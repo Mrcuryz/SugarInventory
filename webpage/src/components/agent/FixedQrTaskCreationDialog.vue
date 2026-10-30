@@ -7,8 +7,7 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   palletCodes: { type: Array, default: () => [] },
   productLabel: { type: String, default: '' },
-  defaultWarehouseName: { type: String, default: '' },
-  defaultSide: { type: String, default: '左' }
+  defaultWarehouseName: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue', 'created'])
@@ -73,8 +72,7 @@ const submit = async () => {
       palletCodes: normalizedCodes.value,
       productLabel: props.productLabel,
       productionDate: form.productionDate,
-      defaultWarehouseName: props.defaultWarehouseName,
-      defaultSide: props.defaultSide
+      defaultWarehouseName: props.defaultWarehouseName
     })
   } finally {
     form.submitting = false

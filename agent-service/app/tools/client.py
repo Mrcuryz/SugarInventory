@@ -12,6 +12,7 @@ from app.config import Settings
 
 
 ALLOWED_TOOLS = {
+    "preview_assay_entry",
     "resolve_products",
     "resolve_warehouses",
     "get_inventory_overview",
@@ -31,6 +32,7 @@ ALLOWED_TOOLS = {
     "query_qr_batch_inbound_completion",
     "resolve_production_entities",
     "query_boiling_batches",
+    "query_production_daily_reports",
     "query_production_order_progress",
     "run_registered_report",
     "query_boiling_batch_trace",

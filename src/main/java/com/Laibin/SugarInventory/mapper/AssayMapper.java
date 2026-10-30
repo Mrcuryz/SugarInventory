@@ -19,6 +19,15 @@ import java.util.List;
  */
 @Mapper
 public interface AssayMapper extends BaseMapper<Assay> {
+    @Select("SELECT * FROM assay WHERE product_id = #{productId} AND sample_date = #{date} " +
+            "ORDER BY version DESC, id DESC LIMIT 1 FOR UPDATE")
+    Assay selectHighestVersionForUpdate(@Param("productId") Integer productId,
+                                        @Param("date") LocalDate date);
+
+    @Select("SELECT MAX(version) FROM assay WHERE product_id = #{productId} AND sample_date = #{date}")
+    Integer selectMaxVersionByProductIdAndDate(@Param("productId") Integer productId,
+                                              @Param("date") LocalDate date);
+
     @Select("SELECT * FROM assay " +
             "WHERE product_id = #{productId} AND sample_date = #{date} " +
             "ORDER BY created_at DESC, version DESC LIMIT 1")

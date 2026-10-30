@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from app.agents import AgentHandoffRouter
+from app.knowledge import classify_knowledge_query
 from app.graph.state import InMemoryCheckpointer
 from app.model import BasicModelClient, ExpertLoopRequest, MainAgentRouteRequest
 from app.rag.contracts import KnowledgeDomain, RetrievalStatus
@@ -33,6 +34,38 @@ class StubKnowledgeService:
     ) -> KnowledgeSearchResponse:
         self.calls.append({"payload": dict(payload), "context": context})
         return self.response
+
+
+@pytest.mark.parametrize("question", [
+    "成品入库操作流程是什么？只讲系统操作，不查询库存也不执行入库",
+    "软件操作流程怎么走？",
+    "页面操作里的入库按钮在哪里？",
+    "扫码操作的流程是什么？",
+])
+def test_software_help_is_not_forced_into_manufacturing_knowledge(question):
+    assert classify_knowledge_query(question) is None
+    decision = MainAgentDecisionV1(
+        action="ASK_CLARIFICATION", clarificationPrompt="请问你需要了解哪个页面的操作？",
+        semanticReason="MISSING_INFORMATION", confidence=0.95,
+    )
+    model = ScriptedKnowledgeModel([decision], [])
+    tools = MockToolClient()
+    knowledge = StubKnowledgeService(evidence_response())
+    runtime = WarehouseAgentRuntime(
+        tool_client=tools, argument_builder=ToolArgumentBuilder(model_client=model),
+        model_client=model, planning_mode="llm", llm_allowed_experts=("knowledge_expert",),
+        knowledge_service=knowledge,
+    )
+    response = runtime.chat(chat_request(question))
+    assert response.error is None
+    assert "哪个页面" in response.answer
+    assert model.expert_requests == []
+    assert knowledge.calls == []
+    assert tools.calls == []
+
+
+def test_actual_manufacturing_process_still_has_bounded_knowledge_scope():
+    assert classify_knowledge_query("白砂糖分装工艺的流程是什么？") == "knowledge_process"
 
 
 class AdminOnlyKnowledgeService(StubKnowledgeService):

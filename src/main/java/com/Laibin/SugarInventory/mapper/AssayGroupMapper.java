@@ -21,6 +21,9 @@ import java.util.List;
 @Mapper
 public interface AssayGroupMapper extends BaseMapper<AssayGroup> {
 
+    @Select("SELECT * FROM assay_group WHERE id=#{id} FOR UPDATE")
+    AssayGroup selectForAssayEntryUpdate(@Param("id") Integer id);
+
     @Select("<script>" +
             "SELECT a.*, u.name AS createName, up.name AS updateName " +
             "FROM assay_group a " +

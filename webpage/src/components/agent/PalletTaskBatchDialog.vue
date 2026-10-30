@@ -13,7 +13,6 @@ import {
 } from '@/api/palletCode'
 import {
   BIZ_SCENE_MAP,
-  SIDE_OPTIONS,
   TASK_STATUS_MAP,
   UNIT_OPTIONS,
   getDictLabel
@@ -37,10 +36,6 @@ const props = defineProps({
     default: () => []
   },
   defaultWarehouseName: {
-    type: String,
-    default: ''
-  },
-  defaultSide: {
     type: String,
     default: ''
   },
@@ -148,7 +143,6 @@ const toInboundRow = row => {
     productName: row.productName,
     warehouseName: String(props.defaultWarehouseName || '').trim() || row.targetWarehouseName || '',
     entryDate: row.productionDate || dayjs().format('YYYY-MM-DD'),
-    side: ['左', '右'].includes(props.defaultSide) ? props.defaultSide : (row.targetSide || '左'),
     quantity: quantityLocked ? productionOutputQuantity(row) : 1,
     unit: quantityLocked ? productionOutputUnit(row) : '0',
     quantityLocked,
@@ -271,7 +265,6 @@ const submit = async () => {
           code: row.code,
           warehouseName: row.warehouseName,
           entryDate: row.entryDate,
-          side: row.side,
           quantity: row.quantity,
           unit: row.unit,
           remark: row.remark
@@ -299,12 +292,11 @@ const requestExactPreview = () => {
   if (!canGenerateExactPreview.value || !rows.value.length) return
   if (!validateInboundRows()) return
   emit('preview-requested', {
-    previewVersion: 1,
+    previewVersion: 2,
     items: rows.value.map(row => ({
       code: row.code,
       warehouseName: row.warehouseName,
       entryDate: row.entryDate,
-      side: row.side,
       quantity: row.quantity,
       unit: row.unit,
       ...(String(row.remark || '').trim() ? { remark: String(row.remark).trim() } : {})
@@ -351,13 +343,6 @@ watch(() => props.modelValue, opened => {
             <el-date-picker v-model="row.entryDate" value-format="YYYY-MM-DD" type="date" style="width: 100%"/>
           </template>
         </el-table-column>
-        <el-table-column label="侧" width="95">
-          <template #default="{ row }">
-            <el-select v-model="row.side">
-              <el-option v-for="item in SIDE_OPTIONS" :key="item.value" :label="item.label" :value="item.value"/>
-            </el-select>
-          </template>
-        </el-table-column>
         <el-table-column label="单位" width="95">
           <template #default="{ row }">
             <el-select v-model="row.unit" :disabled="row.quantityLocked" @change="normalizeQuantityByUnit(row)">
@@ -395,7 +380,6 @@ watch(() => props.modelValue, opened => {
             <template #default="{ row }">{{ getDictLabel(BIZ_SCENE_MAP, row.bizScene) }}</template>
           </el-table-column>
           <el-table-column v-if="isTransfer" prop="targetWarehouseName" label="目标库位" min-width="150"/>
-          <el-table-column v-if="isTransfer" prop="targetSide" label="目标侧" width="100"/>
           <el-table-column prop="taskStatus" label="任务状态" width="120">
             <template #default="{ row }">{{ getDictLabel(TASK_STATUS_MAP, row.taskStatus) }}</template>
           </el-table-column>

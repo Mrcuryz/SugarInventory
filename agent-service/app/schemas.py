@@ -15,6 +15,7 @@ EntityTypeV1 = Literal[
     "PALLET",
     "PALLET_TASK",
     "ASSAY_RECORD",
+    "ASSAY_GROUP",
 ]
 
 
@@ -133,7 +134,10 @@ class MainAgentDecisionV1(BaseModel):
     ]
     expertAgent: LlmExpertAgentV1 | None = None
     goalType: CoreGoalTypeV1 | None = None
-    recipeId: Literal["warehouse_inventory_latest_assay"] | None = None
+    dailyReportItems: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
+        default_factory=list, max_length=3,
+        description="仅PRODUCTION_DAILY_REPORT_RECORDS使用；其他goal（包括PRODUCTION_DAILY_REPORT_ANALYSIS）必须为空数组。")
+    recipeId: Literal["warehouse_inventory_latest_assay", "today_daily_operations"] | None = None
     answer: str | None = Field(default=None, max_length=1500)
     clarificationPrompt: str | None = Field(default=None, max_length=500)
     semanticReason: Literal[
@@ -162,6 +166,12 @@ class MainAgentDecisionV1(BaseModel):
 
     @model_validator(mode="after")
     def validate_action_fields(self) -> "MainAgentDecisionV1":
+        if self.dailyReportItems:
+            if self.action != "DELEGATE" or self.goalType != "PRODUCTION_DAILY_REPORT_RECORDS":
+                raise ValueError("dailyReportItems is only allowed for the daily report goal")
+            self.dailyReportItems = [item.strip() for item in self.dailyReportItems]
+            if not all(self.dailyReportItems) or len(set(self.dailyReportItems)) != len(self.dailyReportItems):
+                raise ValueError("dailyReportItems must contain distinct nonblank query fragments")
         if self.action == "DELEGATE" and self.expertAgent is None:
             raise ValueError("DELEGATE requires expertAgent")
         if self.action != "DELEGATE" and self.expertAgent is not None:
@@ -596,7 +606,6 @@ class SafeFinishInboundExecutionPreviewItem(BaseModel):
     productionDate: str | None = None
     warehouseLabel: str
     entryDate: str
-    sideLabel: str
     quantityText: str
     remark: str | None = None
     quantityRuleLabel: str

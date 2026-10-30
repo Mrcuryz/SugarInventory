@@ -42,7 +42,7 @@ public class ProductionDailyReportXlsxImporter {
     private static final int MAX_ROWS = 500;
     private static final int MAX_COLUMNS = 50;
     private static final int[] REGION_START_COLUMNS = {0, 10};
-    private static final Pattern REPORT_DATE_PATTERN = Pattern.compile("来冰公司(\\d{8})生产日报表");
+    private static final Pattern REPORT_DATE_PATTERN = Pattern.compile("(?:来冰公司|示例企业)(\\d{8})生产日报表");
     private static final Pattern PREPARED_BY_PATTERN = Pattern.compile(
             "制表人\\s*[:：]\\s*(.*?)(?=\\s*制表日期\\s*[:：]|$)");
     private static final Pattern PREPARED_DATE_PATTERN = Pattern.compile(
@@ -96,7 +96,7 @@ public class ProductionDailyReportXlsxImporter {
                 }
             }
         }
-        throw invalid("未找到“来冰公司yyyyMMdd生产日报表”标题");
+        throw invalid("未找到包含yyyyMMdd日期的生产日报表标题");
     }
 
     private HeaderData parseHeader(Sheet sheet, DataFormatter formatter, FormulaEvaluator evaluator) {

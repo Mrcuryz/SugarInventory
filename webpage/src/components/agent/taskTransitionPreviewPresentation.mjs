@@ -37,9 +37,6 @@ export const taskTransitionPreviewDialogAction = card => {
     ...(String(summary?.defaultWarehouseName || '').trim()
       ? { defaultWarehouseName: String(summary.defaultWarehouseName).trim() }
       : {}),
-    ...(['左', '右'].includes(summary?.defaultSide)
-      ? { defaultSide: summary.defaultSide }
-      : {}),
     ...(requestedPalletCount > 0 ? { requestedPalletCount } : {}),
     ...(String(summary?.guidedProductLabel || '').trim()
       ? { guidedProductLabel: String(summary.guidedProductLabel).trim() }

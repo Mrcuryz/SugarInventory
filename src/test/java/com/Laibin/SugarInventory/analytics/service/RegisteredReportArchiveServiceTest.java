@@ -328,6 +328,113 @@ class RegisteredReportArchiveServiceTest {
         return captor.getAllValues().get(captor.getAllValues().size() - 1);
     }
 
+    @Test
+    void dailySnapshotRequiresCurrentViewAndSeparateExportPermissionAndPreservesNullZero() throws Exception {
+        var aggregate = new com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO();
+        aggregate.setRequestedDays(2);
+        var series = new com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO.Series();
+        series.setSeriesKey("test-series"); series.setLabel("总产量"); series.setSummaryType("全厂产量");
+        series.setDepartmentName("全厂汇总"); series.setUnit("件"); series.setTonnageApplicable(true);
+        series.setQuantity(java.math.BigDecimal.ZERO); series.setRecordCount(1); series.setQuantityRows(1);
+        var missing = new com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO.Point();
+        missing.setBusinessDate(LocalDate.of(2026, 9, 5));
+        var zero = new com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO.Point();
+        zero.setBusinessDate(LocalDate.of(2026, 9, 6)); zero.setQuantity(java.math.BigDecimal.ZERO); zero.setRecordCount(1);
+        series.setPoints(List.of(missing, zero)); aggregate.setSeries(List.of(series));
+        var report = report().toBuilder().reportDefinitionId(
+                com.Laibin.SugarInventory.analytics.service.impl.ProductionDailyRegisteredReportService.REPORT_ID)
+                .reportName("生产日报分析").dataScope("SAVED_PRODUCTION_DAILY_REPORT")
+                .metrics(null).comparison(null).productionDailyReport(aggregate).build();
+        var stored = stored(report);
+        assertThat(stored.getRequiredPermission()).isEqualTo("production:daily-report:view");
+        when(reportRunMapper.selectOne(any(Wrapper.class))).thenReturn(stored);
+        // Altering live objects after persistence must not change history or export.
+        series.setQuantity(new java.math.BigDecimal("999"));
+        var loaded = service.load(report.getReportRunId(), 7, Set.of("production:daily-report:view"));
+        assertThat(loaded.getProductionDailyReport().getSeries().get(0).getQuantity()).isEqualByComparingTo("0");
+        assertThatThrownBy(() -> service.exportXlsx(report.getReportRunId(), 7, "test", Set.of("production:daily-report:view")))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("没有导出");
+        org.mockito.Mockito.verifyNoInteractions(exportAuditMapper);
+        assertThatThrownBy(() -> service.load(report.getReportRunId(), 7, Set.of("production:daily-report:export")))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.load(report.getReportRunId(), 7, Set.of("production:order:view")))
+                .isInstanceOf(BusinessException.class);
+        var exported = service.exportXlsx(report.getReportRunId(), 7, "test",
+                Set.of("production:daily-report:view", "production:daily-report:export"));
+        try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(exported.content()))) {
+            var summary = workbook.getSheet("日报汇总");
+            assertThat(summary.getRow(1).getCell(4).getNumericCellValue()).isZero();
+            var days = workbook.getSheet("日报按日趋势");
+            assertThat(days.getRow(1).getCell(0).getStringCellValue()).isEqualTo("2026-09-05");
+            assertThat(days.getRow(1).getCell(5).getStringCellValue()).isEmpty();
+            assertThat(days.getRow(2).getCell(5).getNumericCellValue()).isZero();
+            assertThat(days.getRow(2).getCell(6).getStringCellValue()).isEmpty();
+            assertThat(workbook.getSheet("口径与限制")).isNotNull();
+        }
+        verify(exportAuditMapper).insert(any(RegisteredReportExportAuditPO.class));
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void dailyHistoryUsesViewPermissionAndAcceptsItsDefinitionFilter() {
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(new org.apache.ibatis.session.Configuration(), "test"),
+                RegisteredReportRunPO.class);
+        var page = new Page<RegisteredReportRunPO>(1, 10, 0); page.setRecords(List.of());
+        when(reportRunMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+        service.list(7, Set.of("production:daily-report:view"), 1, 10,
+                com.Laibin.SugarInventory.analytics.service.impl.ProductionDailyRegisteredReportService.REPORT_ID);
+        var captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(reportRunMapper).selectPage(any(Page.class), captor.capture());
+        var wrapper = (com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<?>) captor.getValue();
+        wrapper.getSqlSegment();
+        assertThat(wrapper.getParamNameValuePairs().values()).contains("production:daily-report:view", 7,
+                "production_daily_report_analysis_v1").doesNotContain("production:daily-report:export");
+    }
+
+    @Test
+    void dailyComparisonSurvivesSnapshotRoundtripAndExportsAlongsideDailySheets() throws Exception {
+        var aggregate = new com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO();
+        aggregate.setRequestedDays(1);
+        var series = new com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO.Series();
+        series.setLabel("全厂产量"); series.setUnit("件"); series.setQuantity(java.math.BigDecimal.ZERO);
+        var point = new com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO.Point();
+        point.setBusinessDate(LocalDate.of(2026, 9, 8)); point.setQuantity(java.math.BigDecimal.ZERO);
+        series.setPoints(List.of(point)); aggregate.setSeries(List.of(series));
+        var comparison = RegisteredReportComparisonVO.builder().comparisonMode("PREVIOUS_PERIOD")
+                .comparisonLabel("上一等长期间").currentStartDate(LocalDate.of(2026, 9, 8))
+                .currentEndDate(LocalDate.of(2026, 9, 8)).currentDateRangeLabel("2026-09-08")
+                .comparisonStartDate(LocalDate.of(2026, 9, 7)).comparisonEndDate(LocalDate.of(2026, 9, 7))
+                .comparisonDateRangeLabel("2026-09-07").currentPeriodDays(1).comparisonPeriodDays(1)
+                .metrics(List.of(RegisteredReportMetricComparisonVO.builder().metricCode("daily_0")
+                        .metricLabel("全厂产量（数量）").unit("件").currentValue(java.math.BigDecimal.ZERO)
+                        .comparisonValue(new java.math.BigDecimal("20")).absoluteChange(new java.math.BigDecimal("-20"))
+                        .percentChange(null).note("至少一期缺日，仅展示已记录值差额").build()))
+                .notes(List.of("来源为已保存的生产日报，包含草稿")).build();
+        var report = report().toBuilder().reportDefinitionId(
+                com.Laibin.SugarInventory.analytics.service.impl.ProductionDailyRegisteredReportService.REPORT_ID)
+                .reportName("生产日报分析").dataScope("SAVED_PRODUCTION_DAILY_REPORT")
+                .metrics(null).comparison(comparison).productionDailyReport(aggregate).build();
+        var saved = stored(report);
+        when(reportRunMapper.selectOne(any(Wrapper.class))).thenReturn(saved);
+        var restored = service.load(report.getReportRunId(), 7, Set.of("production:daily-report:view"));
+        assertThat(restored.getComparison()).isEqualTo(comparison);
+        var exported = service.exportXlsx(report.getReportRunId(), 7, "test",
+                Set.of("production:daily-report:view", "production:daily-report:export"));
+        try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(exported.content()))) {
+            assertThat(workbook.getSheet("日报汇总")).isNotNull();
+            assertThat(workbook.getSheet("日报按日趋势")).isNotNull();
+            assertThat(workbook.getSheet("比较说明").getRow(1).getCell(0).getStringCellValue()).contains("包含草稿");
+            var table = workbook.getSheet("跨期比较");
+            assertThat(table).isNotNull();
+            assertThat(table.getRow(1).getCell(2).getNumericCellValue()).isZero();
+            assertThat(table.getRow(1).getCell(3).getNumericCellValue()).isEqualTo(20);
+            assertThat(table.getRow(1).getCell(4).getNumericCellValue()).isEqualTo(-20);
+            assertThat(table.getRow(1).getCell(5).getStringCellValue()).isEmpty();
+            assertThat(table.getRow(1).getCell(10).getStringCellValue()).contains("缺日");
+        }
+    }
+
     private static RegisteredReportRunVO report() {
         LocalDate day = LocalDate.of(2026, 7, 27);
         return RegisteredReportRunVO.builder()

@@ -15,6 +15,9 @@ import java.util.List;
 
 @Mapper
 public interface ProductQualityStandardRelationMapper extends BaseMapper<ProductQualityStandardRelation> {
+    @Select("SELECT * FROM product_quality_standard_relation WHERE product_id = #{productId} ORDER BY id FOR UPDATE")
+    List<ProductQualityStandardRelation> selectAllForAssayUpdate(@Param("productId") Integer productId);
+
     @Select("""
             <script>
             SELECT r.*,

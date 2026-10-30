@@ -76,6 +76,7 @@ EXPECTED_EXPERT_TOOLS = {
             "resolve_products",
             "resolve_warehouses",
             "get_assay_status",
+            "preview_assay_entry",
             "query_assay_records",
             "get_assay_report_detail",
             "query_assay_abnormalities",
@@ -108,6 +109,7 @@ EXPECTED_EXPERT_TOOLS = {
         {
             "resolve_production_entities",
             "query_boiling_batches",
+            "query_production_daily_reports",
             "query_production_order_progress",
             "query_boiling_batch_trace",
             "query_material_pick_trace",
@@ -613,7 +615,11 @@ def test_openai_compatible_completed_goal_uses_short_final_analysis_prompt() -> 
                 messages=[],
                 expertAgent="analytics_expert",
                 expertInstructions=["只能根据登记报表事实回答。"],
-                selectedContext={"ACTIVE_GOAL": {"goalType": "DAILY_PRODUCTION_ANALYSIS"}},
+                selectedContext={
+                    "ACTIVE_GOAL": {"goalType": "DAILY_PRODUCTION_ANALYSIS"},
+                    "LAST_DAILY_REPORT_QUERY": {"page": 2},
+                    "LAST_DAILY_REPORT_QUERIES": [{"page": 2}],
+                },
                 toolSchemas={},
                 observations=[
                     {
@@ -639,6 +645,10 @@ def test_openai_compatible_completed_goal_uses_short_final_analysis_prompt() -> 
         model_request = json.loads(model_server.last_body["messages"][1]["content"])
         assert model_request["availableTools"] == {}
         assert model_request["registeredGoalComplete"] is True
+        assert "LAST_DAILY_REPORT_QUERY" not in model_request["selectedContext"]
+        assert "LAST_DAILY_REPORT_QUERIES" not in model_request["selectedContext"]
+        assert model_request["selectedContext"]["ACTIVE_GOAL"]
+        assert "do not advance pagination again" in system_prompt
         assert diagnostics[-1]["inputBytes"] > 0
     finally:
         model_server.stop()
@@ -703,12 +713,16 @@ def test_openai_compatible_expert_recovers_on_third_bounded_format_attempt() -> 
             "VALID",
         ]
         assert "reasoning" in diagnostics[0]["validationPaths"]
+        system_prompt = model_server.last_body["messages"][0]["content"]
+        assert "若 ACTIVE_GOAL 仍缺少其他主题的事实" in system_prompt
+        assert "不得重复相同参数的查询" in system_prompt
+        assert "不得重复调用同一工具" not in system_prompt
         assert "sensitive-model-output" not in json.dumps(diagnostics, ensure_ascii=False)
     finally:
         model_server.stop()
 
 
-def test_openai_compatible_expert_surfaces_typed_failure_after_bounded_format_repairs() -> None:
+def test_openai_compatible_expert_surfaces_typed_failure_after_bounded_format_repairs(caplog) -> None:
     model_server = FakeModelStreamServer(
         [],
         direct_answers=["not-json", "still-not-json", "still-not-json-after-second-repair"],
@@ -744,11 +758,19 @@ def test_openai_compatible_expert_surfaces_typed_failure_after_bounded_format_re
         assert exc_info.value.message == "我暂时没能完成这次查询，请重试一次。本次没有执行任何业务变更。"
         assert "结构化动作" not in exc_info.value.message
         assert model_server.non_stream_request_count == 3
+        repair = json.loads(model_server.last_body["messages"][-1]["content"])
+        assert "clarificationPrompt" in repair["actionRules"]
+        assert "citedObservationIds=[]" in repair["actionRules"]
+        assert "still-not-json" not in json.dumps(repair)
         assert [item["outcome"] for item in diagnostics] == [
             "JSON_INVALID",
             "JSON_INVALID",
             "JSON_INVALID",
         ]
+        assert "outcome=JSON_INVALID" in caplog.text
+        assert "inputBytes=" in caplog.text
+        assert "validationPaths=['$']" in caplog.text
+        assert "still-not-json" not in caplog.text
     finally:
         model_server.stop()
 
@@ -1320,13 +1342,13 @@ def test_expert_agent_tool_scopes_cover_only_current_no_write_allowlist() -> Non
     assert len(business_profiles) == 11
     assert all(tools for tools in business_profiles.values())
     assert expert_tools == ALLOWED_TOOLS | set(INTERNAL_KNOWLEDGE_TOOLS)
-    assert len(expert_tools) == 55
+    assert len(expert_tools) == 57
     assert router.profile(MAIN_AGENT).allowed_tools == frozenset()
     assert not any(
         tool.startswith("execute_")
         or (
             tool.startswith("preview_")
-            and tool not in {"preview_task_transition", "preview_finish_inbound_execution"}
+            and tool not in {"preview_task_transition", "preview_finish_inbound_execution", "preview_assay_entry"}
         )
         for tool in expert_tools
     )
@@ -1405,8 +1427,8 @@ def test_runtime_tool_profiles_match_capability_registry_with_two_l2_previews() 
         )
     )
     assert registered_l1_tools | registered_l2_tools == ALLOWED_TOOLS
-    assert len(registered_l1_tools) == 52
-    assert registered_l2_tools == {"preview_task_transition", "preview_finish_inbound_execution"}
+    assert len(registered_l1_tools) == 53
+    assert registered_l2_tools == {"preview_task_transition", "preview_finish_inbound_execution", "preview_assay_entry"}
 
     for expert_name, expected_tools in EXPECTED_EXPERT_TOOLS.items():
         profile = re.search(
@@ -1524,12 +1546,13 @@ def test_capability_endpoint_returns_registry_hashes_and_counts() -> None:
     body = response.json()
     assert body["runtimeVersion"] == "0.2.0"
     assert body["protocolVersion"] == "1.0"
-    assert body["toolCount"] == 54
-    assert body["recipeCount"] == 1
+    assert body["toolCount"] == 56
+    assert body["recipeCount"] == 2
     assert len(body["toolRegistryHash"]) == 64
     assert len(body["recipeRegistryHash"]) == 64
     assert len(body["agentProfileRegistryHash"]) == 64
     assert body["recipes"][0]["recipeId"] == "warehouse_inventory_latest_assay"
+    assert body["recipes"][1]["recipeId"] == "today_daily_operations"
     profile_counts = {profile["name"]: profile["allowedToolCount"] for profile in body["agentProfiles"]}
     assert profile_counts == {
         MAIN_AGENT: 0,
@@ -3218,6 +3241,17 @@ def test_stream_model_timeout_is_not_mislabeled_as_tool_timeout() -> None:
     assert events[-2]["type"] == "error"
     assert events[-2]["payload"]["category"] == "MODEL_TIMEOUT"
     assert events[-1]["payload"]["finishReason"] == "timeout"
+
+
+@pytest.mark.parametrize("code", ["MODEL_ACTION_INVALID", "MODEL_BAD_REQUEST", "MODEL_NOT_CONFIGURED", "MODEL_UPSTREAM_ERROR", "LLM_PLAN_INVALID"])
+def test_stream_model_failure_is_not_mislabeled_as_tool_error(code) -> None:
+    response = ChatResponse(
+        agentSessionId="agt_test", answer="暂时无法完成查询。",
+        error=AgentError(code=code, message="暂时无法完成查询。", retryable=True),
+    )
+    events = parse_sse_events("".join(sse_for_response(response)))
+    assert events[-2]["payload"]["category"] == "MODEL_ERROR"
+    assert events[-1]["payload"]["finishReason"] == "error"
 
 
 def test_cancel_endpoint_marks_message_and_stream_stops_before_runtime() -> None:

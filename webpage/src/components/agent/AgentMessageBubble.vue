@@ -10,6 +10,7 @@ import {
 } from './knowledgeCardPresentation.mjs'
 
 const props = defineProps({
+  canSaveAssay: { type: Boolean, default: false },
   item: {
     type: Object,
     required: true
@@ -136,6 +137,7 @@ const sendFeedback = (feedbackType) => {
         v-for="(card, cardIndex) in cards"
         :key="`${card.cardType || 'card'}-${card.title || cardIndex}`"
         :card="card"
+        :can-save-assay="canSaveAssay && !sending"
         :can-execute-finish-inbound="canExecuteFinishInbound"
         :can-confirm-tasks="canConfirmTasks"
         @card-action="emit('card-action', $event)"

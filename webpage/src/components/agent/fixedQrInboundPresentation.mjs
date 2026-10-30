@@ -15,7 +15,6 @@ export const fixedQrInboundSummary = card => {
     availablePalletCount: Math.max(0, Number(field.availablePalletCount || 0)),
     productLabel: String(field.productLabel || '所选产品'),
     warehouseName: String(field.warehouseName || '所选库位'),
-    defaultSide: ['左', '右'].includes(field.defaultSide) ? field.defaultSide : '左',
     operationModeLabel: String(field.operationModeLabel || '使用空闲固定二维码新建任务'),
     canSelectRequestedCount: field.canSelectRequestedCount === true,
     creationCompleted: field.creationCompleted === true
@@ -71,7 +70,6 @@ export const fixedQrTaskCreationAction = (card, selectedCodes) => {
     palletCodes: codes,
     productLabel: summary.productLabel,
     defaultWarehouseName: summary.warehouseName,
-    defaultSide: summary.defaultSide,
     requestedPalletCount: summary.requestedPalletCount
   }
 }

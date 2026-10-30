@@ -158,7 +158,6 @@ class FinishInboundExecutionPreviewArchiveServiceTest {
                         .code("BT0019N1")
                         .warehouseName("1号库位")
                         .entryDate(LocalDate.of(2026, 8, 9))
-                        .side("左")
                         .quantity(1)
                         .unit("0")
                         .remark("验收预览")
@@ -179,12 +178,12 @@ class FinishInboundExecutionPreviewArchiveServiceTest {
                         .build();
         FinishInboundExecutionPreviewSnapshot snapshot =
                 FinishInboundExecutionPreviewSnapshot.builder()
-                        .previewVersion(1)
+                        .previewVersion(2)
                         .items(List.of(snapshotItem))
                         .build();
         return FinishInboundExecutionPreviewVO.builder()
                 .dataScope("FINISH_INBOUND_EXECUTION_PREVIEW")
-                .previewVersion(1)
+                .previewVersion(2)
                 .previewStatus("READY")
                 .previewedAt(previewedAt)
                 .expiresAt(previewedAt.plusMinutes(5))
@@ -197,7 +196,6 @@ class FinishInboundExecutionPreviewArchiveServiceTest {
                         .productionDate(LocalDate.of(2026, 8, 8))
                         .warehouseName("1号库位")
                         .entryDate(LocalDate.of(2026, 8, 9))
-                        .side("左")
                         .quantity(1)
                         .unitLabel("板")
                         .remark("验收预览")

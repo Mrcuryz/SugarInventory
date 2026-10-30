@@ -1,11 +1,11 @@
-version: "1.4"
-updated_at: "2026-08-12"
+version: "1.5"
+updated_at: "2026-09-08"
 scope: "第一阶段 L1 只读工具、第二阶段登记报表、三个任务资格预览目标与一个成品入库精确 L2 预览目标、按二维码来源拆分的成品入库受控准备及 RAG-03B L0 进程内知识目标归属"
-current_contract_count: 58
+current_contract_count: 61
 planned_contract_count: 0
-classified_tool_count: 54
-classified_l1_tool_count: 52
-classified_l2_tool_count: 2
+classified_tool_count: 56
+classified_l1_tool_count: 53
+classified_l2_tool_count: 3
 classified_internal_knowledge_tool_count: 1
 
 principles:
@@ -15,9 +15,17 @@ principles:
   - "CURRENT 表示已进入 Runtime GoalContract、FactEnvelope 和 CompletionEvaluator。"
   - "PLANNED 表示工具已经可用但目标合同尚未进入 Runtime；当前 planned_goals 为空。"
   - "同一工具可以在一个目标中作为主查询工具，在另一个目标中作为支撑工具。"
-  - "search_approved_knowledge 是 Python 进程内 L0 能力，不计入 52 个 L1 仓储 MCP/登记报表工具与 2 个 L2 预览工具。"
+  - "search_approved_knowledge 是 Python 进程内 L0 能力，不计入 53 个 L1 仓储 MCP/登记报表工具与 2 个 L2 预览工具。"
 
 current_goals:
+  ASSAY_ENTRY_PREVIEW:
+    owner_expert: assay_expert
+    primary_tools: [preview_assay_entry]
+    supporting_tools: [resolve_products, query_assay_groups]
+  PRODUCTION_DAILY_REPORT_RECORDS:
+    owner_expert: production_expert
+    primary_tools: [query_production_daily_reports]
+    supporting_tools: []
   CURRENT_PRODUCT_INVENTORY:
     owner_expert: inventory_expert
     primary_tools: [get_inventory_overview]
@@ -85,7 +93,7 @@ current_goals:
   PRODUCT_ASSAY_REPORT:
     owner_expert: assay_expert
     primary_tools: [get_assay_status, get_assay_report_detail]
-    supporting_tools: [resolve_products]
+    supporting_tools: [resolve_products, query_assay_records]
   PRODUCT_ASSAY_HISTORY:
     owner_expert: assay_expert
     primary_tools: [query_assay_records]
@@ -220,6 +228,10 @@ current_goals:
     primary_tools: [query_agent_answer_reviews]
     supporting_tools: []
   DAILY_PRODUCTION_ANALYSIS:
+    owner_expert: analytics_expert
+    primary_tools: [run_registered_report]
+    supporting_tools: []
+  PRODUCTION_DAILY_REPORT_ANALYSIS:
     owner_expert: analytics_expert
     primary_tools: [run_registered_report]
     supporting_tools: []

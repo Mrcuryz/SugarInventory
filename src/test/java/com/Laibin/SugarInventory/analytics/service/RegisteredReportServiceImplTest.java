@@ -64,7 +64,8 @@ class RegisteredReportServiceImplTest {
                 inventoryTrendReportService,
                 inventoryDistributionService,
                 logisticsAgentReadService,
-                new RegisteredReportComparisonAssembler());
+                new RegisteredReportComparisonAssembler(),
+                mock(com.Laibin.SugarInventory.analytics.service.impl.ProductionDailyRegisteredReportService.class));
     }
 
     @Test

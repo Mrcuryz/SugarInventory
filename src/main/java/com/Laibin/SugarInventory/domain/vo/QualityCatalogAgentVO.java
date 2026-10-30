@@ -10,7 +10,7 @@ import java.util.List;
 public final class QualityCatalogAgentVO {
     private QualityCatalogAgentVO() { }
     @Value @Builder public static class AssayGroups { String dataScope; long total; int page; int size; List<AssayGroupRow> records; List<String> limitations; }
-    @Value @Builder public static class AssayGroupRow { String groupName; List<String> productNames; LocalDate createdAt; LocalDate updatedAt; String remark; }
+    @Value @Builder public static class AssayGroupRow { String groupName; String groupRef; List<String> productNames; LocalDate createdAt; LocalDate updatedAt; String remark; }
     @Value @Builder public static class Standards { String dataScope; long total; int page; int size; List<StandardRow> records; List<String> limitations; }
     @Value @Builder public static class StandardRow { String standardCode; String standardName; String productType; String standardLevel; Integer version; String status; int metricCount; int relatedProductCount; String remark; }
     @Value @Builder public static class StandardDetail { String dataScope; String standardCode; String standardName; String productType; String standardLevel; Integer version; String status; String remark; List<Metric> metrics; List<String> relatedProductNames; List<String> limitations; }

@@ -1,4 +1,4 @@
-registryVersion: m1.4-production-hardening-1
+registryVersion: daily-operations-c3-2026-09-24
 recipes:
   - recipeId: warehouse_inventory_latest_assay
     planVersion: 1
@@ -24,3 +24,34 @@ recipes:
       - 最新产品化验不能证明当前库存批次均合格。
       - 最多查询五类产品；超出部分不继续扇出。
       - 不允许模型新增、重排或替换步骤和工具。
+  - recipeId: today_daily_operations
+    planVersion: 1
+    status: LOCAL_CODE_VERIFIED_LIVE_ACCEPTANCE_PENDING
+    executionMode: controlled_sequential_model_experts
+    dataScope: DAILY_REPORT_AND_CURRENT_OPERATIONS
+    maxSteps: 3
+    maxToolCalls: 3
+    maxProductFanOut: 1
+    steps:
+      - stepId: daily_production
+        expert: production_expert
+        goalType: PRODUCTION_DAILY_REPORT_RECORDS
+        allowedTools: [query_production_daily_reports]
+      - stepId: nonproduction_operations
+        expert: analytics_expert
+        goalType: TODAY_OPERATIONS_OVERVIEW
+        allowedTools: [run_registered_report]
+        reportDefinition: today_operations_overview_v1@1
+        projection: [assayQuality, currentInventory, todayPalletTasks, currentPendingTaskCount]
+      - stepId: present
+        expert: main_agent
+        allowedTools: []
+        dependsOn: [daily_production, nonproduction_operations]
+    limitations:
+      - 仅支持服务端北京时间今天、全部车间和全部产品；不继承旧筛选。
+      - 主模型选择配方，各专家独立决定工具调用；每步锁定原有Goal，不增加专家工具权限。
+      - 三次工具预算跨步骤共享，不重置；认证失败停止，权限或分项失败不伪装无数据。
+      - 生产仅来自已保存日报（包括草稿），旧运营报表中的订单产出和领用不进入组合观察或卡片。
+      - 旧运营报表仍要求原有五项查看权限，不为组合放宽权限；受限用户可能只得到日报。
+      - 原运营报告及历史快照不变，临时组合不继承其reportRunId，不提供组合导出。
+      - 当前为代码与自动化验证，真实模型和浏览器验收尚未完成，不代表已部署。

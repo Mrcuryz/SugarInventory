@@ -17,11 +17,11 @@ import com.Laibin.SugarInventory.mapper.PalletTaskSemiItemMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.SemiPreparePoolBalanceMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
-import com.Laibin.SugarInventory.mapper.InventoryMapper;
 import com.Laibin.SugarInventory.production.domain.po.ProductionOrderOutputCode;
 import com.Laibin.SugarInventory.production.mapper.ProductionOrderOutputCodeMapper;
 import com.Laibin.SugarInventory.service.PalletCodeService;
 import com.Laibin.SugarInventory.service.model.PalletInventoryOccupancyRule;
+import com.Laibin.SugarInventory.service.model.WarehouseLocationGranularityPolicy;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -44,14 +44,13 @@ import java.util.Set;
 @Transactional(readOnly = true)
 public class FinishInboundExecutionPreviewService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
-    private static final int PREVIEW_VERSION = 1;
+    private static final int PREVIEW_VERSION = 2;
     private static final int PREVIEW_TTL_MINUTES = 5;
 
     private final PalletCodeService palletCodeService;
     private final PalletTaskMapper palletTaskMapper;
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
-    private final InventoryMapper inventoryMapper;
     private final ProductionOrderOutputCodeMapper productionOutputCodeMapper;
     private final PalletTaskSemiItemMapper palletTaskSemiItemMapper;
     private final SemiPreparePoolBalanceMapper semiPreparePoolBalanceMapper;
@@ -59,7 +58,7 @@ public class FinishInboundExecutionPreviewService {
     public FinishInboundExecutionPreviewVO preview(FinishInboundExecutionPreviewDTO request, User user) {
         requireUser(user);
         if (request == null || !Integer.valueOf(PREVIEW_VERSION).equals(request.getPreviewVersion())) {
-            throw new BusinessException(400, "当前仅支持第 1 版成品入库执行预览协议");
+            throw new BusinessException(400, "当前仅支持第 2 版成品入库执行预览协议");
         }
         List<FinishInboundExecutionPreviewItemDTO> rawItems = request.getItems();
         if (rawItems == null || rawItems.isEmpty()) {
@@ -110,7 +109,7 @@ public class FinishInboundExecutionPreviewService {
                         : List.of("本次预览未生成可确认快照，请修正问题后重新预览。"))
                 .limitations(List.of(
                         "本预览只核对已填写的成品入库表单，不执行入库、任务确认或库存变更。",
-                        "排号和层数仍由既有入库规则在最终提交时分配，不能由 Agent 指定。",
+                        "库存只精确到目标库位，不记录库位内部位置。",
                         "本预览不签发执行令牌，也不能作为已经完成入库的证明。"))
                 .serverSnapshot(snapshot)
                 .build();
@@ -188,7 +187,6 @@ public class FinishInboundExecutionPreviewService {
             throw new BusinessException("无法确定入库日期");
         }
 
-        String side = normalizeSide(request.getSide());
         ProductionOrderOutputCode outputCode = productionOutputCodeMapper.selectByTaskId(task.getId());
         String unit = normalizeUnit(outputCode == null ? request.getUnit() : outputCode.getUnit());
         int quantity = normalizeQuantity(outputCode == null ? request.getQuantity() : outputCode.getQuantity());
@@ -199,14 +197,13 @@ public class FinishInboundExecutionPreviewService {
         MaterialSnapshot materialSnapshot = resolveMaterialSnapshot(task);
         WarehouseOccupancy occupancy = occupancyByWarehouse.computeIfAbsent(
                 warehouse.getId(), ignored -> loadWarehouseOccupancy(warehouse));
-        occupancy.reserve(side, Boolean.TRUE.equals(product.getCanStack()));
+        occupancy.reserve();
         FinishInboundExecutionPreviewVO.Item publicItem = FinishInboundExecutionPreviewVO.Item.builder()
                 .palletCode(input.canonicalCode())
                 .productName(product.getProductName())
                 .productionDate(task.getProductionDate())
                 .warehouseName(warehouse.getWarehouseName())
                 .entryDate(entryDate)
-                .side(side)
                 .quantity(quantity)
                 .unitLabel("1".equals(unit) ? "件" : "板")
                 .remark(remark)
@@ -218,7 +215,6 @@ public class FinishInboundExecutionPreviewService {
                         .code(input.canonicalCode())
                         .warehouseName(warehouse.getWarehouseName())
                         .entryDate(entryDate)
-                        .side(side)
                         .quantity(quantity)
                         .unit(unit)
                         .remark(remark)
@@ -239,11 +235,7 @@ public class FinishInboundExecutionPreviewService {
                                 .updatedAt(product.getUpdatedAt()).build())
                         .warehouse(FinishInboundExecutionPreviewSnapshot.WarehouseState.builder()
                                 .id(warehouse.getId()).status(warehouse.getStatus())
-                                .maxRows(warehouse.getMaxRows()).curCapacity(warehouse.getCurCapacity())
-                                .leftUsedRowsLayer1(occupancy.initialRows("左", 1))
-                                .rightUsedRowsLayer1(occupancy.initialRows("右", 1))
-                                .leftUsedRowsLayer2(occupancy.initialRows("左", 2))
-                                .rightUsedRowsLayer2(occupancy.initialRows("右", 2))
+                                .maxCapacity(warehouse.getMaxCapacity()).curCapacity(warehouse.getCurCapacity())
                                 .updatedAt(warehouse.getUpdatedAt()).build())
                         .productionOutput(outputCode == null ? null
                                 : FinishInboundExecutionPreviewSnapshot.ProductionOutputState.builder()
@@ -257,15 +249,9 @@ public class FinishInboundExecutionPreviewService {
     }
 
     private WarehouseOccupancy loadWarehouseOccupancy(Warehouse warehouse) {
-        if (warehouse.getId() == null || warehouse.getMaxRows() == null || warehouse.getMaxRows() <= 0) {
-            throw new BusinessException("目标库位未配置有效排数");
-        }
         return new WarehouseOccupancy(
-                warehouse.getMaxRows(),
-                inventoryMapper.getUsedRowList(warehouse.getId(), "左", 1),
-                inventoryMapper.getUsedRowList(warehouse.getId(), "右", 1),
-                inventoryMapper.getUsedRowList(warehouse.getId(), "左", 2),
-                inventoryMapper.getUsedRowList(warehouse.getId(), "右", 2));
+                WarehouseLocationGranularityPolicy.requireCapacity(warehouse),
+                WarehouseLocationGranularityPolicy.currentCapacity(warehouse));
     }
 
     private MaterialSnapshot resolveMaterialSnapshot(PalletTask task) {
@@ -310,14 +296,6 @@ public class FinishInboundExecutionPreviewService {
         }
         balances.sort(Comparator.comparing(FinishInboundExecutionPreviewSnapshot.MaterialBalanceState::getId));
         return new MaterialSnapshot(List.copyOf(inputs), List.copyOf(balances));
-    }
-
-    private static String normalizeSide(String value) {
-        String normalized = value == null || value.isBlank() ? "左" : value.trim();
-        if (!Set.of("左", "右").contains(normalized)) {
-            throw new BusinessException("存放侧仅支持左或右");
-        }
-        return normalized;
     }
 
     private static String normalizeUnit(String value) {
@@ -379,58 +357,20 @@ public class FinishInboundExecutionPreviewService {
     }
 
     private static final class WarehouseOccupancy {
-        private final int maxRows;
-        private final Map<String, Set<Integer>> initial = new LinkedHashMap<>();
-        private final Map<String, Set<Integer>> reserved = new LinkedHashMap<>();
+        private final int maxCapacity;
+        private final int initialCapacity;
+        private int reservedCount;
 
-        private WarehouseOccupancy(
-                int maxRows,
-                List<Integer> leftLayer1,
-                List<Integer> rightLayer1,
-                List<Integer> leftLayer2,
-                List<Integer> rightLayer2) {
-            this.maxRows = maxRows;
-            register("左", 1, leftLayer1);
-            register("右", 1, rightLayer1);
-            register("左", 2, leftLayer2);
-            register("右", 2, rightLayer2);
+        private WarehouseOccupancy(int maxCapacity, int initialCapacity) {
+            this.maxCapacity = maxCapacity;
+            this.initialCapacity = initialCapacity;
         }
 
-        private void register(String side, int layer, List<Integer> rows) {
-            String key = key(side, layer);
-            Set<Integer> normalized = new LinkedHashSet<>();
-            if (rows != null) {
-                rows.stream()
-                        .filter(row -> row != null && row >= 1 && row <= maxRows)
-                        .sorted()
-                        .forEach(normalized::add);
+        private void reserve() {
+            if (initialCapacity + reservedCount >= maxCapacity) {
+                throw new BusinessException("目标库位当前没有可用容量");
             }
-            initial.put(key, Set.copyOf(normalized));
-            reserved.put(key, new LinkedHashSet<>(normalized));
-        }
-
-        private void reserve(String preferredSide, boolean canStack) {
-            List<String> sides = "右".equals(preferredSide) ? List.of("右", "左") : List.of("左", "右");
-            int maxLayer = canStack ? 2 : 1;
-            for (int layer = 1; layer <= maxLayer; layer++) {
-                for (String side : sides) {
-                    Set<Integer> used = reserved.get(key(side, layer));
-                    for (int row = 1; row <= maxRows; row++) {
-                        if (used.add(row)) {
-                            return;
-                        }
-                    }
-                }
-            }
-            throw new BusinessException("目标库位当前没有可分配位置");
-        }
-
-        private List<Integer> initialRows(String side, int layer) {
-            return initial.get(key(side, layer)).stream().sorted().toList();
-        }
-
-        private static String key(String side, int layer) {
-            return side + ":" + layer;
+            reservedCount++;
         }
     }
 }

@@ -98,7 +98,6 @@ test('guided finish-inbound preview carries only validated form defaults', () =>
       palletCodes: ['BT001A', 'BT001B'],
       requestedPalletCount: 2,
       defaultWarehouseName: '3号库位',
-      defaultSide: '左',
       guidedProductLabel: '黄冰糖（袋）25kg/件 40件/板'
     }]
   }
@@ -108,7 +107,6 @@ test('guided finish-inbound preview carries only validated form defaults', () =>
     taskGroupLabel: '成品入库',
     palletCodes: ['BT001A', 'BT001B'],
     defaultWarehouseName: '3号库位',
-    defaultSide: '左',
     requestedPalletCount: 2,
     guidedProductLabel: '黄冰糖（袋）25kg/件 40件/板'
   })

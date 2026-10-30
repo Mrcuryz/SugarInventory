@@ -14,6 +14,9 @@ from typing import Any
 from app.cancellation import current_cancellation_token
 from app.agents import MAIN_AGENT, AgentHandoffRouter, ExpertBoundaryError
 from app.business_time import BusinessClock
+from app.daily_operations import (
+    DAILY_OPERATIONS_RECIPE, DailyOperationsScope, project_nonproduction, nonproduction_card,
+)
 from app.knowledge import classify_knowledge_query, is_static_realtime_mixed_query
 from app.execution import (
     AgentExecutionContext,
@@ -139,6 +142,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "query_fixed_product_qr_pool": "固定产品二维码池查询",
     "resolve_production_entities": "生产对象识别",
     "query_boiling_batches": "煮糖批次查询",
+    "query_production_daily_reports": "生产日报填报查询",
     "query_production_order_progress": "生产订单进度查询",
     "run_registered_report": "登记报表查询",
     "query_boiling_batch_trace": "煮糖批次流转查询",
@@ -149,6 +153,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "query_pallet_tasks": "托盘任务查询",
     "preview_task_transition": "托盘任务处理预览",
     "preview_finish_inbound_execution": "成品入库精确执行预览",
+    "preview_assay_entry": "化验录入预览",
     "query_stock_documents": "库存单据查询",
     "query_auto_inbound_batches": "自动报数入库批次查询",
     "get_auto_inbound_batch_detail": "自动报数入库批次详情查询",
@@ -584,6 +589,19 @@ class WarehouseAgentRuntime:
                 response = self._resume_llm_tool_loop(request, state, pending, "BOILING_BATCH")
             else:
                 response = self._answer_selected_boiling_batch(request, state, batch_ref)
+        elif pending.kind == "assay_group":
+            from app.assay_entry_preview import valid_group_ref
+            group_ref = (option.get("_internal") or {}).get("groupRef")
+            if not valid_group_ref(group_ref):
+                response = ChatResponse(agentSessionId=request.agentSessionId,
+                                        answer="所选化验组引用已失效，请重新查询后选择。", needsUserSelection=True)
+            else:
+                label = self._safe_display_label(str(option.get("displayLabel") or "所选化验组"))
+                state.selected_assay_group = SelectedEntity(internal_id=None, display_label=label, source="user_selection",
+                    metadata={"groupRef": group_ref}, entity_type="ASSAY_GROUP", entity_ref="CURRENT_ASSAY_GROUP",
+                    canonical_name=label, resolved_by="USER_SELECTION", resolved_at=datetime.now(timezone.utc))
+                state.pending_clarification = None
+                response = self._resume_llm_tool_loop(request, state, pending, "ASSAY_GROUP")
         else:
             response = ChatResponse(agentSessionId=request.agentSessionId, answer="已记录你的选择。")
 
@@ -682,6 +700,7 @@ class WarehouseAgentRuntime:
         state.goal_contract_locked = goal_type is not None
         state.fact_envelopes = []
         state.last_goal_completion = None
+        state.goal_query_items = []
         if goal_type is not None and goal_type not in {
             "FINISH_INBOUND_GUIDED_PREPARATION",
             "FINISH_INBOUND_PENDING_TASK_PREPARATION",
@@ -707,7 +726,6 @@ class WarehouseAgentRuntime:
             "requestedPalletCount": requested_count,
             "productResolved": False,
             "warehouseResolved": False,
-            "defaultSide": "左",
         }
         operation_mode = self._finish_inbound_operation_mode(user_message)
         if operation_mode is not None:
@@ -794,6 +812,8 @@ class WarehouseAgentRuntime:
                     state.selected_product.metadata.get("productName")
                 )
             contexts["PRODUCT"] = state.selected_product
+        if state.selected_assay_group is not None:
+            contexts["ASSAY_GROUP"] = state.selected_assay_group
         if state.selected_warehouse is not None:
             state.selected_warehouse.entity_type = state.selected_warehouse.entity_type or "WAREHOUSE"
             state.selected_warehouse.entity_ref = state.selected_warehouse.entity_ref or "CURRENT_WAREHOUSE"
@@ -904,6 +924,7 @@ class WarehouseAgentRuntime:
             facts=facts,
             needs_clarification=needs_clarification,
             unsupported=unsupported,
+            required_query_items=state.goal_query_items,
         )
         snapshot = completion.model_dump(mode="json")
         state.last_goal_completion = snapshot
@@ -1036,6 +1057,8 @@ class WarehouseAgentRuntime:
             report_business_progress("routing")
             selected_context = self._llm_selected_context(state)
             registered_recipes = [CompoundIntentPlanner.WAREHOUSE_INVENTORY_ASSAY]
+            if {"production_expert", "analytics_expert"} <= set(self.llm_allowed_experts):
+                registered_recipes.append(DAILY_OPERATIONS_RECIPE)
             if route_correction is not None:
                 selected_context["RUNTIME_ROUTE_CORRECTION"] = route_correction
             if route_correction and route_correction.get("rejectedAction") == "RUN_REGISTERED_RECIPE":
@@ -1089,6 +1112,9 @@ class WarehouseAgentRuntime:
                     continue
             if decision.action != "RUN_REGISTERED_RECIPE":
                 break
+            if decision.recipeId == DAILY_OPERATIONS_RECIPE and decision.recipeId in registered_recipes:
+                registered_recipe_plan = CompoundIntentPlanner(self.agent_router).daily_operations_plan()
+                break
             matched_recipe = CompoundIntentPlanner(self.agent_router).plan(text)
             if matched_recipe is not None and matched_recipe.recipe == decision.recipeId:
                 registered_recipe_plan = self.argument_builder.plan(user_message=text, state=state)
@@ -1111,6 +1137,35 @@ class WarehouseAgentRuntime:
             }
         if decision is None:
             return self._llm_model_error(request.agentSessionId, "主模型没有生成路由决策。", trace)
+        bounded_assay_goal = self._llm_bounded_assay_goal(text)
+        if (
+            bounded_assay_goal is not None
+            and decision.action != "RUN_REGISTERED_RECIPE"
+            # The old read-only recovery must not override a registered entry-preview goal
+            # merely because the user calls the new entry a "化验记录".
+            and decision.goalType != "ASSAY_ENTRY_PREVIEW"
+            and not (
+            decision.action == "DELEGATE"
+            and decision.expertAgent == "assay_expert"
+            and decision.goalType == bounded_assay_goal
+            )
+        ):
+            trace["mainRouteGuard"] = {
+                "status": "RECOVERED_AS_ASSAY_DELEGATE",
+                "rejectedAction": decision.action,
+                "rejectedExpertAgent": decision.expertAgent,
+                "rejectedGoalType": decision.goalType,
+                "expertAgent": "assay_expert",
+                "goalType": bounded_assay_goal,
+                "reason": "BOUNDED_ASSAY_QUERY",
+            }
+            decision = MainAgentDecisionV1(
+                action="DELEGATE",
+                expertAgent="assay_expert",
+                goalType=bounded_assay_goal,
+                semanticReason="READ_QUERY",
+                confidence=1.0,
+            )
         bounded_knowledge_subtype = classify_knowledge_query(text)
         if bounded_knowledge_subtype is not None:
             bounded_knowledge_goal = (
@@ -1213,6 +1268,7 @@ class WarehouseAgentRuntime:
                     "主模型提出的目标与专家权限边界不一致。",
                 )
             self._begin_registered_goal(state, decision.goalType)
+            state.goal_query_items = list(decision.dailyReportItems)
             if decision.goalType in {
                 "FINISH_INBOUND_GUIDED_PREPARATION",
                 "FINISH_INBOUND_PENDING_TASK_PREPARATION",
@@ -1274,6 +1330,8 @@ class WarehouseAgentRuntime:
         trace: dict[str, Any],
         deterministic_plan: Any,
     ) -> ChatResponse:
+        if decision.recipeId == DAILY_OPERATIONS_RECIPE:
+            return self._execute_daily_operations_recipe(request, state, trace, deterministic_plan)
         if decision.recipeId != CompoundIntentPlanner.WAREHOUSE_INVENTORY_ASSAY:
             return self._llm_boundary_rejection(request.agentSessionId, trace, "跨域配方未登记。")
         recipe = ((deterministic_plan.routeSnapshot or {}).get("orchestrationState") or {}).get("recipeId")
@@ -1294,6 +1352,138 @@ class WarehouseAgentRuntime:
             response.debug = {"llmToolLoop": trace}
         return response
 
+    def _execute_daily_operations_recipe(
+        self, request: ChatRequest, state: WarehouseAgentState,
+        trace: dict[str, Any], plan: Any,
+    ) -> ChatResponse:
+        from app.orchestration import new_orchestration_state
+        today = self.business_clock.today().isoformat()
+        requested_range = self.business_clock.resolve(request.message.content)
+        if requested_range is not None and (requested_range.start.isoformat() != today or requested_range.end.isoformat() != today):
+            return self._finish_llm_response(ChatResponse(
+                agentSessionId=request.agentSessionId,
+                answer="整体运营概况目前只支持今天；历史产量、化验或库存趋势可以分别查询。请确认要查看哪一项。",
+                needsUserSelection=True,
+            ), trace, request)
+        plan.validate(self.agent_router)
+        orchestration = new_orchestration_state(plan)
+        state.orchestration_plan = deepcopy(orchestration)
+        trace["registeredRecipe"] = DAILY_OPERATIONS_RECIPE
+        trace["orchestration"] = orchestration
+        observations, cards, step_traces = [], [], {}
+        tool_count = 0
+        for step in plan.steps[:2]:
+            self._raise_if_cancelled()
+            scope = DailyOperationsScope(today, step.step_id)
+            child = WarehouseAgentState(orchestration_plan=deepcopy(orchestration))
+            self._begin_registered_goal(child, scope.goal)
+            child.active_agent = step.expert_agent
+            child_trace = {}
+            child_observations = []
+            mark_step_started(orchestration, step.step_id)
+            execution = AgentExecutionContext(
+                agent_name=step.expert_agent, allowed_tools=frozenset(step.tools),
+                business_domain=step.business_domain, handoff_mode="llm_registered_recipe",
+                plan_id=plan.plan_id, step_id=step.step_id,
+            )
+            self._store_immutable_execution_context(child, execution, step.step_id)
+            with bind_execution_context(execution):
+                response = self._run_llm_expert_loop(
+                    request=request, state=child, user_message=request.message.content,
+                    expert_agent=step.expert_agent, observations=child_observations,
+                    tool_call_count=tool_count, retry_count=0, trace=child_trace, recipe_scope=scope,
+                )
+            events = child_trace.get("expertLoop", {}).get("events", [])
+            tool_count += sum(event.get("action") == "TOOL_RESULT" for event in events)
+            orchestration["steps"][step.step_id]["executedTools"] = [
+                event["toolName"] for event in events if event.get("action") == "TOOL_RESULT"
+            ]
+            step_traces[step.step_id] = child_trace
+            trace.setdefault("modelDecisions", []).extend(deepcopy(child_trace.get("modelDecisions", [])))
+            evidence = next((item for item in reversed(child_observations)
+                             if item.get("status") in {"AVAILABLE", "NO_DATA"} and item.get("tool") == scope.tool), None)
+            complete = self._evaluate_registered_goal(child)
+            success = response.error is None and not response.needsUserSelection and evidence is not None and complete is not None and complete.get("status") == "COMPLETE"
+            if success:
+                data = deepcopy(evidence["data"])
+                observations.append({"observationId": step.step_id, "status": evidence["status"], "tool": scope.tool, "data": data})
+                cards.extend(response.cards)
+                if step.step_id == "daily_production":
+                    state.last_daily_report_query = deepcopy(child.last_daily_report_query)
+                    state.last_daily_report_queries = []
+                mark_step_finished(orchestration, step.step_id, status="SUCCESS")
+            else:
+                error_code = response.error.code if response.error else "STEP_INCOMPLETE"
+                observations.append({"observationId": step.step_id, "status": "TOOL_ERROR", "tool": scope.tool,
+                                     "message": "该分项未完成，不能解释为无数据或0。", "errorCode": error_code})
+                mark_step_finished(orchestration, step.step_id, status="FAILED", error_code=error_code)
+                cards.append(BusinessCard(cardType="daily_operations_unavailable", title="生产日报" if step.step_id == "daily_production" else "库存、化验与任务",
+                                          fields=[{"label": "查询未完成", "value": response.answer}]))
+                if error_code == "UPSTREAM_AUTHENTICATION_FAILED":
+                    orchestration["orchestrationStatus"] = "FAILED"
+                    orchestration["finishedAt"] = datetime.now(timezone.utc).isoformat()
+                    orchestration["toolCallCount"] = tool_count
+                    state.last_orchestration = deepcopy(orchestration)
+                    trace["recipeSteps"] = step_traces
+                    return self._finish_llm_response(response, trace, request)
+        trace["recipeSteps"] = step_traces
+        orchestration["toolCallCount"] = tool_count
+        orchestration["toolBudgetRemaining"] = max(0, min(plan.max_tool_calls, self.llm_max_tool_calls) - tool_count)
+        failed = bool(orchestration["failedSteps"])
+        has_evidence = any(item["status"] in {"AVAILABLE", "NO_DATA"} for item in observations)
+        partial_data = any(item.get("data", {}).get("partial") is True for item in observations)
+        state.last_report_context = None  # The composition is NOT a legacy report snapshot.
+        self._begin_registered_goal(state, None)
+        state.active_agent = MAIN_AGENT
+        mark_step_started(orchestration, "present")
+        answer = "分项查询结果见下方卡片。生产产量以已保存日报为准；库存、化验和任务来自各自业务记录。"
+        if failed:
+            answer = "部分查询未完成，不能把失败项当作无数据或0。已取得的结果见下方卡片。"
+        reset_model_decision_diagnostics()
+        try:
+            final = self.model_client.decide_expert_action(ExpertLoopRequest(
+                userMessage=request.message.content, messages=[], expertAgent=MAIN_AGENT,
+                expertInstructions=[
+                    "根据分项权威观察回答整体运营概况，先给日报产量，再给化验、库存、任务。",
+                    "生产只使用日报概况，包括已保存草稿；缺值不是0，不加总分类或分页明细，不使用订单产出。",
+                    "引用所有分项观察，包括明确无数据的观察。失败分项必须明确未完成；存在失败只能PARTIAL_ANSWER。不得预测、计算损耗或编造原因。",
+                    "当前库存不是今日库存变化。组合不是归档报表，不声称可以整体导出。",
+                ],
+                selectedContext={"BUSINESS_TIME": self.business_clock.context(), "COMPOSITION_COMPLETION": {
+                    "requiredObservationIds": [item["observationId"] for item in observations],
+                    "allowedActions": ["PARTIAL_ANSWER"] if failed or partial_data else ["FINAL_ANSWER", "PARTIAL_ANSWER"],
+                }}, toolSchemas={},
+                observations=observations, toolCallCount=tool_count, maxToolCalls=self.llm_max_tool_calls,
+                decisionStage="RESULT_ANALYSIS", registeredGoalComplete=not (failed or partial_data),
+            )) if self.model_client else None
+            from app.daily_report_records import daily_report_answer_error
+            allowed_actions = {"PARTIAL_ANSWER"} if failed or partial_data else {"FINAL_ANSWER", "PARTIAL_ANSWER"}
+            trace["recipeSummaryDecision"] = self._safe_expert_decision_trace(final) if final else {"action": "MISSING"}
+            trace["recipeSummaryCitationsComplete"] = bool(final and set(final.citedObservationIds) == {item["observationId"] for item in observations})
+            if (final is not None and final.action in allowed_actions
+                    and set(final.citedObservationIds) == {item["observationId"] for item in observations}
+                    and not daily_report_answer_error(final.answer or "")):
+                answer = self._sanitize_llm_answer(final.answer or "")
+                if failed:
+                    answer = "部分查询未完成：\n" + answer
+                trace["recipeSummaryMode"] = "MODEL_ANALYSIS"
+            else:
+                trace["recipeSummaryMode"] = "SAFE_CARD_FALLBACK"
+        except ModelDecisionError:
+            trace["recipeSummaryMode"] = "SAFE_CARD_FALLBACK"
+        self._append_llm_model_diagnostics(trace, decision_stage="recipe_result_analysis")
+        mark_step_finished(orchestration, "present", status="SUCCESS")
+        orchestration["orchestrationStatus"] = "FAILED" if not has_evidence else "PARTIAL_SUCCESS" if failed or partial_data else "SUCCESS"
+        orchestration["finishedAt"] = datetime.now(timezone.utc).isoformat()
+        state.last_orchestration = {**deepcopy(orchestration), "businessDate": today, "observations": deepcopy(observations)}
+        all_denied = not has_evidence and all(item.get("errorCode") == "PERMISSION_DENIED" for item in observations)
+        return self._finish_llm_response(ChatResponse(
+            agentSessionId=request.agentSessionId, answer=answer, cards=cards,
+            error=None if has_evidence else AgentError(
+                code="UPSTREAM_PERMISSION_DENIED" if all_denied else "OPERATIONS_COMPOSITION_FAILED",
+                message="当前用户没有执行该只读查询的权限。" if all_denied else "本次分项查询均未完成。", retryable=False),
+        ), trace, request)
+
     def _run_llm_expert_loop(
         self,
         *,
@@ -1305,6 +1495,7 @@ class WarehouseAgentRuntime:
         tool_call_count: int,
         retry_count: int,
         trace: dict[str, Any],
+        recipe_scope: DailyOperationsScope | None = None,
     ) -> ChatResponse:
         profile = self.agent_router.profile(expert_agent)
         handoff = self.agent_router.handoff_for_agent(expert_agent, mode="llm_delegate")
@@ -1355,8 +1546,8 @@ class WarehouseAgentRuntime:
                         userMessage=user_message,
                         messages=self._llm_safe_messages(state),
                         expertAgent=expert_agent,
-                        expertInstructions=list(profile.instructions),
-                        selectedContext=self._llm_selected_context(state),
+                        expertInstructions=list(profile.instructions) + ([str(recipe_scope.context())] if recipe_scope else []),
+                        selectedContext={**self._llm_selected_context(state), **({"REGISTERED_RECIPE_STEP": recipe_scope.context()} if recipe_scope else {})},
                         toolSchemas={} if registered_goal_complete else visible_schemas,
                         observations=self._llm_model_observations(observations),
                         toolCallCount=tool_call_count,
@@ -1413,8 +1604,24 @@ class WarehouseAgentRuntime:
             if decision.action in {"FINAL_ANSWER", "PARTIAL_ANSWER"}:
                 validation_error = self._validate_llm_completion(decision, observations, state)
                 if validation_error:
+                    if state.active_goal_type == "ASSAY_ENTRY_PREVIEW":
+                        import logging
+                        logging.getLogger(__name__).warning("Assay preview completion rejected: %s", validation_error)
                     planning_rejections += 1
                     if planning_rejections > 1:
+                        if state.active_goal_type == "ASSAY_ENTRY_PREVIEW":
+                            preview_observation = next((item for item in reversed(observations)
+                                if item.get("tool") == "preview_assay_entry" and item.get("status") == "AVAILABLE"), None)
+                            if (preview_observation and latest_cards
+                                    and all(card.cardType == "assay_entry_preview" for card in latest_cards)
+                                    and registered_goal_complete):
+                                # Keep the verified server card, never the rejected model prose.
+                                loop_trace["completionMode"] = "SAFE_ASSAY_PREVIEW_CARD_FALLBACK"
+                                return self._finish_llm_response(ChatResponse(
+                                    agentSessionId=request.agentSessionId,
+                                    answer="化验预览已生成，尚未保存。请核对下方卡片中的产品、采样日期、检测值和预判提示；需要调整时可直接告诉我。",
+                                    cards=latest_cards,
+                                ), trace, request)
                         no_data_fallback = self._llm_authoritative_no_data_fallback(
                             request.agentSessionId,
                             state,
@@ -1619,7 +1826,20 @@ class WarehouseAgentRuntime:
                     state=state,
                     user_message=user_message,
                 )
+                if recipe_scope is not None:
+                    recipe_scope.validate_arguments(decision.toolName, arguments)
             except (ExpertBoundaryError, TypeError, ValueError) as exc:
+                from app.assay_entry_grounding import AssayInputClarification, ProductQualifierClarification
+                if isinstance(exc, (AssayInputClarification, ProductQualifierClarification)):
+                    planning_rejections += 1
+                    if planning_rejections > 1:
+                        prompt = str(exc) if isinstance(exc, AssayInputClarification) else "你说的包装要求还没有对应到具体产品，请再确认一下产品名称和包装。"
+                        return self._finish_llm_response(ChatResponse(
+                            agentSessionId=request.agentSessionId, answer=prompt, needsUserSelection=True,
+                        ), trace, request)
+                    observations.append({"observationId": f"obs_{len(observations) + 1}",
+                                         "status": "PLAN_REJECTED", "message": str(exc)})
+                    continue
                 validation_answer = self._tool_argument_validation_answer(
                     decision.toolName,
                     exc,
@@ -1649,7 +1869,17 @@ class WarehouseAgentRuntime:
                     {
                         "observationId": f"obs_{len(observations) + 1}",
                         "status": "PLAN_REJECTED",
-                        "message": "Runtime 拒绝了工具或参数；请使用当前专家 schema 和受控实体引用修正一次。",
+                        # Give a bounded, static correction for this known semantic boundary.
+                        # Never expose arbitrary exception text or substitute a tool ourselves.
+                        "message": (
+                            "单个已确认产品和明确单日的化验情况应调用 get_assay_status，使用 productRef=CURRENT_PRODUCT 和 productionDate；"
+                            "不要重复 query_assay_records。仍须由专家按当前目标和工具 schema 决定动作。"
+                            if str(exc) == "single-product exact-date assay query must use get_assay_status"
+                            else "当前产品名称组范围尚未确认。请先使用 resolve_products 解析用户原话中的完整产品名称，不要删减名称或直接假定同名全部规格；"
+                            "唯一产品使用 CURRENT_PRODUCT，有多个候选时由用户选择。解析后仍由专家根据日期和当前目标决定查询工具。"
+                            if str(exc) == "assay exact-name group requires confirmed scope or explicit all-specification request"
+                            else "Runtime 拒绝了工具或参数；请使用当前专家 schema 和受控实体引用修正一次。"
+                        ),
                     }
                 )
                 continue
@@ -1786,11 +2016,26 @@ class WarehouseAgentRuntime:
                 loop_trace["events"].append(
                     {"action": "TOOL_RESULT", "toolName": decision.toolName, "status": status}
                 )
+                if decision.toolName == "preview_assay_entry":
+                    from app.assay_entry_preview import PREVIEW_ERRORS
+                    if exc.code in PREVIEW_ERRORS:
+                        # A rejected preview has no business result to analyze or retry unchanged.
+                        # Return only a fixed public explanation, never upstream exception details.
+                        return self._finish_llm_response(ChatResponse(
+                            agentSessionId=request.agentSessionId,
+                            answer=PREVIEW_ERRORS[exc.code],
+                            needsUserSelection=exc.code == "ASSAY_ENTRY_INPUT_INVALID",
+                        ), trace, request)
                 if status == "PERMISSION_DENIED":
+                    permission_message = (
+                        "当前账号没有化验录入权限，请联系管理员确认权限。本次未保存化验记录。"
+                        if decision.toolName == "preview_assay_entry"
+                        else "当前查询被权限边界拒绝。"
+                    )
                     response = ChatResponse(
                         agentSessionId=request.agentSessionId,
-                        answer="当前用户没有执行该只读查询的权限。",
-                        error=AgentError(code="PERMISSION_DENIED", message="当前查询被权限边界拒绝。", retryable=False),
+                        answer=permission_message if decision.toolName == "preview_assay_entry" else "当前用户没有执行该只读查询的权限。",
+                        error=AgentError(code="PERMISSION_DENIED", message=permission_message, retryable=False),
                     )
                     return self._finish_llm_response(response, trace, request)
                 if status == "AUTHENTICATION_FAILED":
@@ -1832,6 +2077,19 @@ class WarehouseAgentRuntime:
 
             if previous_error is not None:
                 previous_error["resolved"] = True
+            projected = None
+            if recipe_scope is not None:
+                try:
+                    if recipe_scope.step_id == "nonproduction_operations":
+                        projected = project_nonproduction(result, recipe_scope.business_date)
+                    else:
+                        recipe_scope.validate_daily_evidence(result)
+                except ValueError:
+                    loop_trace["events"].append({"action": "TOOL_RESULT", "toolName": decision.toolName, "status": "INVALID_EVIDENCE"})
+                    return self._finish_llm_response(ChatResponse(
+                        agentSessionId=request.agentSessionId, answer="运营数据不完整或日期不匹配，本次未将缺失数据当作0。",
+                        error=AgentError(code="INVALID_RECIPE_EVIDENCE", message="运营数据未通过范围校验。", retryable=False),
+                    ), trace, request)
             report_business_progress("analyzing")
             pending = self._llm_resolver_interrupt(
                 request=request,
@@ -1856,6 +2114,10 @@ class WarehouseAgentRuntime:
                 observation_id=f"obs_{len(observations) + 1}",
                 call_signature=call_signature,
             )
+            if projected is not None:
+                observation["data"] = projected
+                observation["status"] = "AVAILABLE"
+                cards = [nonproduction_card(projected)]
             observations.append(observation)
             if cards:
                 if (
@@ -1865,8 +2127,11 @@ class WarehouseAgentRuntime:
                     latest_cards[:] = [
                         card for card in latest_cards if card.cardType != "pallet_flow_history"
                     ]
-                existing_card_types = {card.cardType for card in latest_cards}
-                latest_cards.extend(card for card in cards if card.cardType not in existing_card_types)
+                if decision.toolName == "query_production_daily_reports" and state.goal_query_items:
+                    latest_cards.extend(cards)
+                else:
+                    existing_card_types = {card.cardType for card in latest_cards}
+                    latest_cards.extend(card for card in cards if card.cardType not in existing_card_types)
             self._record_tool_message(state, decision.toolName, observation)
             loop_trace["events"].append(
                 {"action": "TOOL_RESULT", "toolName": decision.toolName, "status": observation["status"]}
@@ -1895,6 +2160,11 @@ class WarehouseAgentRuntime:
         trace: dict[str, Any],
     ) -> ChatResponse | None:
         data = observation.get("data")
+        if (
+            tool_name == "query_assay_records"
+            and state.active_goal_type == "PRODUCT_ASSAY_REPORT"
+        ):
+            return None
         if tool_name == KNOWLEDGE_TOOL_NAME:
             completion = self._evaluate_registered_goal(state)
             if completion is None or completion.get("status") != "COMPLETE":
@@ -2073,6 +2343,15 @@ class WarehouseAgentRuntime:
         response.reviewTrace = trace
         if request.client.debug:
             response.debug = {"llmToolLoop": trace}
+            if trace.get("registeredRecipe") == DAILY_OPERATIONS_RECIPE:
+                # Java deliberately forwards only safe scalar debug values.
+                response.debug.update({
+                    "registeredRecipe": DAILY_OPERATIONS_RECIPE,
+                    "recipeSummaryMode": trace.get("recipeSummaryMode", "NOT_RUN"),
+                    "recipeSummaryAction": trace.get("recipeSummaryDecision", {}).get("action", "NOT_RUN"),
+                    "recipeSummaryCitationsComplete": trace.get("recipeSummaryCitationsComplete", False),
+                    "recipeStatus": trace.get("orchestration", {}).get("orchestrationStatus", "UNKNOWN"),
+                })
         return response
 
     def _attach_performance_debug(
@@ -2089,6 +2368,7 @@ class WarehouseAgentRuntime:
             "main_route": 0,
             "expert_initial": 0,
             "expert_result_analysis": 0,
+            "recipe_result_analysis": 0,
         }
         stage_input_bytes = {stage: 0 for stage in stages}
         stage_counts = {stage: 0 for stage in stages}
@@ -2124,6 +2404,8 @@ class WarehouseAgentRuntime:
                 "expertResultAnalysisMs": stages["expert_result_analysis"],
                 "expertResultAnalysisDecisionCount": stage_counts["expert_result_analysis"],
                 "expertResultAnalysisInputBytes": stage_input_bytes["expert_result_analysis"],
+                "recipeResultAnalysisMs": stages["recipe_result_analysis"],
+                "recipeResultAnalysisDecisionCount": stage_counts["recipe_result_analysis"],
                 "modelDecisionCount": decision_count,
                 "toolDurationMs": max(0, round(sum(tool_durations) * 1000)),
                 "toolCallCount": len(tool_durations),
@@ -2158,6 +2440,8 @@ class WarehouseAgentRuntime:
         observations = continuation.get("observations")
         safe_observations = list(observations) if isinstance(observations, list) else []
         selected: dict[str, Any] = {"entityType": entity_type}
+        if entity_type == "ASSAY_GROUP" and state.selected_assay_group is not None:
+            selected.update(stateRef="CURRENT_ASSAY_GROUP", canonicalName=state.selected_assay_group.display_label)
         if entity_type == "PRODUCT" and state.selected_product is not None:
             selected.update(
                 {
@@ -2530,6 +2814,31 @@ class WarehouseAgentRuntime:
             return active_expert
         return None
 
+    def _llm_bounded_assay_goal(self, user_message: str) -> str | None:
+        text = re.sub(r"\s+", "", user_message or "")
+        if "化验" not in text:
+            return None
+        if any(marker in text for marker in ("趋势", "合格率", "变化", "走势", "对比")):
+            return None
+        if any(marker in text for marker in ("最近一次", "最新一条", "最新化验", "最近化验")):
+            return "PRODUCT_ASSAY_REPORT"
+        explicit_range = bool(
+            re.search(r"(?:最近|近)\d+(?:天|日|个月|月|年)", text)
+            or any(marker in text for marker in ("近半年", "最近半年", "近一年", "最近一年"))
+        )
+        if explicit_range or any(marker in text for marker in ("历史化验", "化验历史", "记录列表", "全部版本", "所有版本", "历史版本", "版本列表")):
+            return "PRODUCT_ASSAY_HISTORY"
+        resolved = self.business_clock.resolve(text)
+        if "化验记录" in text:
+            # A single-day "record" may mean its report or a version list. Keep the
+            # main model's registered read goal; the noun alone must not override it.
+            return None if resolved is not None and resolved.is_exact else "PRODUCT_ASSAY_HISTORY"
+        if resolved is not None and resolved.is_exact and any(
+            marker in text for marker in ("情况", "结果", "详情", "报告")
+        ):
+            return "PRODUCT_ASSAY_REPORT"
+        return None
+
     def _llm_boundary_rejection(
         self,
         agent_session_id: str,
@@ -2559,6 +2868,13 @@ class WarehouseAgentRuntime:
 
     def _llm_selected_context(self, state: WarehouseAgentState) -> dict[str, Any]:
         context: dict[str, Any] = {"BUSINESS_TIME": self.business_clock.context()}
+        if (state.last_orchestration or {}).get("recipeId") == DAILY_OPERATIONS_RECIPE:
+            context["LAST_OPERATIONS_COMPOSITION"] = {
+                "businessDate": state.last_orchestration.get("businessDate"),
+                "status": state.last_orchestration.get("orchestrationStatus"),
+                "productionSource": "已保存生产日报", "archivedReport": False,
+                "scope": "综合查询仅支持今天全部范围；历史或筛选范围请分项查询。",
+            }
         active_goal = GOAL_CONTRACTS.get(state.active_goal_type)
         if active_goal is not None:
             context["ACTIVE_GOAL"] = {
@@ -2570,6 +2886,8 @@ class WarehouseAgentRuntime:
                 "allowedTools": list(active_goal.allowedTools),
                 "evidenceTools": list(active_goal.evidenceTools),
                 "limitations": list(active_goal.limitations),
+                "requiredQueryItems": list(state.goal_query_items),
+                "queryCoverage": self._evaluate_registered_goal(state) if state.goal_query_items else None,
             }
         if isinstance(state.finish_inbound_guided_context, dict):
             guided = state.finish_inbound_guided_context
@@ -2579,9 +2897,11 @@ class WarehouseAgentRuntime:
                 ),
                 "productLabel": self._safe_display_label(guided.get("productLabel")),
                 "warehouseName": self._safe_display_label(guided.get("warehouseName")),
-                "defaultSide": self._safe_text(guided.get("defaultSide")) or "左",
                 "operationMode": self._safe_text(guided.get("operationMode")),
             }
+        if state.selected_assay_group is not None:
+            context["ASSAY_GROUP"] = {"stateRef": "CURRENT_ASSAY_GROUP",
+                                      "canonicalName": self._safe_display_label(state.selected_assay_group.display_label)}
         if state.selected_product is not None:
             canonical_name = self._safe_text(state.selected_product.metadata.get("productName"))
             context["PRODUCT"] = {
@@ -2621,6 +2941,14 @@ class WarehouseAgentRuntime:
                     report_context.get("productScopeLabel")
                 ),
                 "dataAsOf": self._safe_text(report_context.get("dataAsOf")),
+                "reportDefinitionId": report_context.get("reportDefinitionId"),
+                "startDate": report_context.get("startDate"),
+                "endDate": report_context.get("endDate"),
+                "departmentName": report_context.get("departmentName"),
+                "productQuery": report_context.get("productQuery"),
+                "comparisonMode": report_context.get("comparisonMode"),
+                "comparisonStartDate": report_context.get("comparisonStartDate"),
+                "comparisonEndDate": report_context.get("comparisonEndDate"),
             }
         if state.last_assay_records:
             records = state.last_assay_records.get("records")
@@ -2673,6 +3001,10 @@ class WarehouseAgentRuntime:
                 "filterLabels": list(state.last_pallet_tasks.get("filterLabels") or [])[:8],
                 "records": safe_records,
             }
+        if state.last_daily_report_query:
+            context["LAST_DAILY_REPORT_QUERY"] = dict(state.last_daily_report_query)
+        if len(state.last_daily_report_queries) > 1:
+            context["LAST_DAILY_REPORT_QUERIES"] = list(state.last_daily_report_queries)
         if state.last_boiling_batch_trace:
             usages = state.last_boiling_batch_trace.get("usages")
             context["LAST_BOILING_BATCH_TRACE"] = {
@@ -2738,6 +3070,13 @@ class WarehouseAgentRuntime:
             "inventoryTrendProductBreakdowns",
         }
         for key, item in source.items():
+            if key == "productionDailyReport" and isinstance(item, dict):
+                compact[key] = {**item, "series": [
+                    {**row, "pointsTotalCount": len(row.get("points", [])),
+                     "points": self._representative_report_rows(row.get("points", []), limit=6)}
+                    for row in item.get("series", [])
+                ]}
+                continue
             if key not in sampled_list_keys or not isinstance(item, list):
                 compact[key] = item
                 continue
@@ -2746,11 +3085,24 @@ class WarehouseAgentRuntime:
                 self._non_empty_report_series_rows(key, item),
                 limit=6,
             )
+            compact[f"{key}ShownCount"] = len(compact[key])
+            compact[f"{key}Sampled"] = len(compact[key]) < len(item)
         compact["modelObservationNote"] = (
             "报表指标、数据质量和限制为完整事实；明细序列过长时仅提供前后代表行，"
             "完整受控明细保留在卡片和报表导出中。"
+            "TotalCount为完整行数，ShownCount为模型可见行数，Sampled为摘要抽样标记；"
+            "抽样未展示的日期不表示源报表缺行、缺日或未登记，禁止据此推断数据缺失。"
         )
+        # This allowlisted report has one more nesting level than legacy reports.
+        # Sanitize each bounded series independently, without raising global depth limits.
+        daily = compact.pop("productionDailyReport", None)
         safe_value = self._llm_safe_tool_data(compact)
+        if isinstance(daily, dict) and isinstance(safe_value, dict):
+            safe_value["productionDailyReport"] = {
+                "sourceLabel": "生产日报", "requestedDays": daily.get("requestedDays"),
+                "truncated": daily.get("truncated"),
+                "series": [self._llm_safe_tool_data(row) for row in daily.get("series", [])[:10]],
+            }
         return safe_value if isinstance(safe_value, dict) else {}
 
     def _non_empty_report_series_rows(self, key: str, values: list[Any]) -> list[Any]:
@@ -2799,6 +3151,7 @@ class WarehouseAgentRuntime:
             "recipeId": decision.recipeId,
             "semanticReason": decision.semanticReason,
             "confidence": decision.confidence,
+            "dailyReportItemCount": len(decision.dailyReportItems),
         }
 
     def _safe_expert_decision_trace(self, decision: ExpertLoopDecisionV1) -> dict[str, Any]:
@@ -2826,6 +3179,11 @@ class WarehouseAgentRuntime:
             return "模型回答包含不应向用户展示的内部工具信息，本次回答已被 Runtime 拦截。"
         value = re.sub(r"\b[a-z_]+_expert\b", "业务专家", value)
         value = value.replace("INVALID_INPUT", "输入不符合要求")
+        for code, label in {
+            "UPSTREAM_PERMISSION_DENIED": "权限不足", "PERMISSION_DENIED": "权限不足",
+            "TOOL_ERROR": "查询失败", "NO_DATA": "未查到记录",
+        }.items():
+            value = re.sub(r"\b" + code + r"\b", label, value)
         value = re.sub(
             r"[（(]\s*(?:数据)?来源\s*[：:]\s*obs_\d+(?:\s*[,，、]\s*obs_\d+)*\s*[）)]",
             "",
@@ -2996,6 +3354,8 @@ class WarehouseAgentRuntime:
         return None
 
     def _no_data_answer(self, tool_name: str) -> str:
+        if tool_name == "query_production_daily_reports":
+            return "该日期范围没有已保存的生产日报。这不代表现场产量为0。"
         if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
             return "未找到该托盘，请核对托盘码后重试。"
         if tool_name == "query_employee_roster":
@@ -3018,6 +3378,9 @@ class WarehouseAgentRuntime:
             break
         if not selected_type:
             return None
+
+        if selected_type == "ASSAY_GROUP" and tool_name == "query_assay_groups":
+            return "用户已经选择化验组；请使用 CURRENT_ASSAY_GROUP 调用 preview_assay_entry，缺少日期或指标时补问，不要重复要求选择组。"
 
         entity_type = str((arguments or {}).get("entityType") or "").upper()
         if selected_type == "BOILING_BATCH" and (
@@ -3302,8 +3665,22 @@ class WarehouseAgentRuntime:
         if any(observation_id not in by_id for observation_id in decision.citedObservationIds):
             return "模型引用了不存在的工具观察，Runtime 未接受完成结论。"
         cited = [by_id[observation_id] for observation_id in decision.citedObservationIds]
+        if state.active_goal_type == "ASSAY_ENTRY_PREVIEW":
+            from app.assay_entry_preview import preview_answer_error
+            preview = next((item.get("data") for item in reversed(cited)
+                            if item.get("tool") == "preview_assay_entry"), None)
+            if preview is None:
+                return "本轮没有有效化验预览。旧确认入口已经失效，不能让用户点击旧卡片。请根据已明确的输入重新调用 preview_assay_entry，再引导人工核对并保存；缺信息则 ASK_CLARIFICATION，不得猜测。"
+            error = preview_answer_error(decision.answer or "", preview)
+            if error:
+                return error
         if not any(item.get("status") in {"AVAILABLE", "NO_DATA", "INVALID_INPUT"} for item in cited):
             return "模型没有引用可用或明确无数据的权威观察，不能形成业务结论。"
+        if any(item.get("tool") == "query_production_daily_reports" for item in cited) or state.active_goal_type == "PRODUCTION_DAILY_REPORT_ANALYSIS":
+            from app.daily_report_records import daily_report_answer_error
+            policy_error = daily_report_answer_error(decision.answer or "")
+            if policy_error is not None:
+                return policy_error
         unresolved_errors = [
             item for item in observations
             if item.get("status") == "TOOL_ERROR" and not item.get("resolved")
@@ -3317,6 +3694,12 @@ class WarehouseAgentRuntime:
             if not any(word in answer for word in ("失败", "暂时无法", "查询异常", "未完成")):
                 return "部分回答必须明确说明工具失败，不能把失败表述成无数据。"
         completion = self._evaluate_registered_goal(state)
+        if completion and completion.get("missingQueries") and not unresolved_errors:
+            return "日报请求尚有未覆盖项目：" + "、".join(completion["missingQueries"]) + "。请在原工具预算内继续查询，不能用第一项的结果结束其他项目。"
+        if state.goal_query_items and completion and completion.get("status") == "COMPLETE":
+            covered = {item.get("queryItem") for item in cited if item.get("tool") == "query_production_daily_reports"}
+            if any(item not in covered for item in state.goal_query_items):
+                return "多项日报结论必须分别引用每个已查询项目的权威观察。"
         cited_terminal_empty = any(item.get("status") in {"NO_DATA", "INVALID_INPUT"} for item in cited)
         if (
             completion is not None
@@ -3385,6 +3768,41 @@ class WarehouseAgentRuntime:
         retry_count: int,
         trace: dict[str, Any],
     ) -> ChatResponse | None:
+        if tool_name == "query_assay_groups" and state.active_goal_type == "ASSAY_ENTRY_PREVIEW":
+            from app.assay_entry_preview import valid_group_ref
+            records = result.get("records")
+            records = records if isinstance(records, list) else []
+            if not records:
+                return None
+            options = []
+            for index, row in enumerate(records[:50], 1):
+                if not isinstance(row, dict):
+                    continue
+                reference = row.get("groupRef")
+                supported = valid_group_ref(reference)
+                names = row.get("productNames") if isinstance(row.get("productNames"), list) else []
+                options.append({"optionId": f"opt_{index:03d}", "optionType": "ASSAY_GROUP",
+                    "displayLabel": self._safe_display_label(str(row.get("groupName") or "化验组")),
+                    "description": self._safe_display_label("、".join(str(name) for name in names)),
+                    "supported": supported, "disabledReason": None if supported else "该组暂不可选择，请重新查询。",
+                    "_internal": {"groupRef": reference}})
+            token = self._new_resume_token()
+            total = self._bounded_int(result.get("total"), default=len(options), minimum=0, maximum=1_000_000)
+            page = self._bounded_int(result.get("page"), default=1, minimum=1, maximum=1_000_000)
+            prompt = f"找到 {total} 个化验组，当前第 {page} 页显示 {len(options)} 个。请选择本次要录入的组；同一组检测值将用于组内全部产品。"
+            observations.append({"observationId": f"obs_{len(observations) + 1}", "status": "AVAILABLE",
+                                 "tool": tool_name, "candidateCount": len(options), "total": total})
+            pending = PendingClarification(kind="assay_group", intent="llm_tool_loop", prompt=prompt,
+                options=options, interrupt_id=self._new_interrupt_id(), resume_token_hash=self._hash_resume_token(token),
+                resume_token=token, expires_at=self._expires_at(), **self._pending_agent_binding(),
+                user_id=request.user.userId if request.user else None,
+                continuation={"planningMode": "llm", "userMessage": user_message, "expertAgent": expert_agent,
+                              "observations": observations, "toolCallCount": tool_call_count,
+                              "retryCount": retry_count, "trace": trace})
+            state.pending_clarification = pending
+            state.interrupt_status[pending.interrupt_id] = pending.status
+            return ChatResponse(agentSessionId=request.agentSessionId, answer=prompt, needsUserSelection=True,
+                                cards=[self._clarification_card(pending)])
         if tool_name == "query_boiling_batches":
             candidates = result.get("candidates") if isinstance(result.get("candidates"), list) else []
             candidates = [item for item in candidates if isinstance(item, dict)]
@@ -3478,7 +3896,8 @@ class WarehouseAgentRuntime:
         }
         observations.append(ambiguous_observation)
         if tool_name == "resolve_products":
-            pending = self._product_clarification(result, "llm_tool_loop", request)
+            pending = self._product_clarification(result, "llm_tool_loop", request,
+                                                   entry_mode=state.active_goal_type == "ASSAY_ENTRY_PREVIEW")
         elif tool_name == "resolve_warehouses":
             pending = self._warehouse_clarification(result, request, intent="llm_tool_loop")
         else:
@@ -3491,6 +3910,7 @@ class WarehouseAgentRuntime:
             "toolCallCount": tool_call_count,
             "retryCount": retry_count,
             "trace": trace,
+            "assayEntry": state.active_goal_type == "ASSAY_ENTRY_PREVIEW",
         }
         state.pending_clarification = pending
         state.interrupt_status[pending.interrupt_id] = pending.status
@@ -3588,15 +4008,62 @@ class WarehouseAgentRuntime:
             safe_data = adapted_preview.model_dump(exclude_none=True)
             state.last_finish_inbound_execution_preview = dict(safe_data)
             cards = [self._finish_inbound_execution_preview_card(adapted_preview)]
+        elif tool_name == "preview_assay_entry":
+            from app.assay_entry_preview import adapt_preview, adapt_group_preview, preview_card
+            if "groupRef" in arguments:
+                adapted = adapt_group_preview(result, arguments)
+                safe_data = self._llm_safe_tool_data({key: value for key, value in adapted.items() if key != "products"})
+                # Keep the entire validated group on the confirmation card, including groups larger than 50.
+                safe_data["products"] = [self._llm_safe_tool_data(product) for product in adapted["products"]]
+                cards = [preview_card(safe_data, arguments if result.get("confirmationAvailable") is True else None,
+                                      group_ref=result.get("groupRef"))]
+            else:
+                safe_data = self._llm_safe_tool_data(adapt_preview(result, arguments))
+                cards = [preview_card(safe_data, arguments if result.get("confirmationAvailable") is True else None, result.get("productRef"))]
         elif tool_name == "query_production_order_progress":
             adapted_progress = self._adapt_production_order_progress(result)
             safe_data = adapted_progress.model_dump(exclude_none=True)
             state.last_production_order_progress = dict(safe_data)
             cards = [self._production_order_progress_card(adapted_progress)]
+        elif tool_name == "query_production_daily_reports":
+            from app.daily_report_records import adapt_daily_report_records, daily_report_card
+            safe_data = self._llm_safe_tool_data(adapt_daily_report_records(result))
+            state.last_daily_report_query = {**arguments, "hasMore": safe_data.get("hasMore"),
+                                            "total": safe_data.get("total")}
+            if len(state.goal_query_items) > 1:
+                # Retain per-item contexts; a bare next-page question must not silently use the last item.
+                prior = [fact for fact in state.fact_envelopes if fact.get("sourceTool") == tool_name]
+                if not prior:
+                    state.last_daily_report_queries = []
+                state.last_daily_report_queries = [q for q in state.last_daily_report_queries
+                    if q.get("itemQuery") != arguments.get("itemQuery")]
+                state.last_daily_report_queries.append(dict(state.last_daily_report_query))
+                state.last_daily_report_query = None
+            else:
+                state.last_daily_report_queries = []
+            cards = [daily_report_card(safe_data)]
         elif tool_name == "run_registered_report":
             safe_data = self._adapt_registered_report(result)
+            if safe_data.get("reportDefinitionId") == "production_daily_report_analysis_v1":
+                comparison = safe_data.get("comparison") or {}
+                if comparison.get("comparisonMode") != arguments.get("comparisonMode"):
+                    raise ValueError("daily report comparison does not match the requested mode")
+                for key in ("startDate", "endDate"):
+                    if safe_data.get(key) != arguments.get(key):
+                        raise ValueError("daily report dates do not match the requested period")
+                if arguments.get("comparisonMode") == "CUSTOM" and any(
+                    comparison.get(key) != arguments.get(key) for key in ("comparisonStartDate", "comparisonEndDate")
+                ):
+                    raise ValueError("daily report comparison does not match requested dates")
             state.last_report_context = {
                 "reportRunId": self._safe_text(result.get("reportRunId")),
+                "startDate": arguments.get("startDate"),
+                "endDate": arguments.get("endDate"),
+                "departmentName": arguments.get("departmentName"),
+                "productQuery": arguments.get("productQuery"),
+                "comparisonMode": arguments.get("comparisonMode"),
+                "comparisonStartDate": arguments.get("comparisonStartDate"),
+                "comparisonEndDate": arguments.get("comparisonEndDate"),
                 "reportDefinitionId": safe_data.get("reportDefinitionId"),
                 "reportVersion": safe_data.get("reportVersion"),
                 "reportName": safe_data.get("reportName"),
@@ -3659,6 +4126,7 @@ class WarehouseAgentRuntime:
         model_data = (
             self._compact_registered_report_model_data(safe_data)
             if tool_name == "run_registered_report"
+            else safe_data if tool_name == "preview_assay_entry" and safe_data.get("entryKind") == "GROUP_V1"
             else self._llm_safe_tool_data(safe_data)
         )
         return (
@@ -3667,12 +4135,15 @@ class WarehouseAgentRuntime:
                 "status": status,
                 "tool": tool_name,
                 "callSignature": call_signature,
+                **({"queryItem": arguments.get("itemQuery")} if tool_name == "query_production_daily_reports" else {}),
                 "data": model_data,
             },
             cards,
         )
 
     def _llm_result_status(self, tool_name: str, data: dict[str, Any]) -> str:
+        if tool_name == "query_production_daily_reports":
+            return "NO_DATA" if data.get("isEmpty") is True else "AVAILABLE"
         if tool_name == KNOWLEDGE_TOOL_NAME:
             status = str(data.get("status") or "").upper()
             if status == RetrievalStatus.NO_DATA.value:
@@ -3704,6 +4175,7 @@ class WarehouseAgentRuntime:
                 lowered = key_text.lower()
                 if (
                     key_text == "id"
+                    or key_text == "groupRef"
                     or key_text.endswith("Id")
                     or key_text.endswith("_id")
                     or any(secret in lowered for secret in ("authorization", "password", "secret", "token", "rawjson", "stacktrace"))
@@ -3734,7 +4206,7 @@ class WarehouseAgentRuntime:
         return {
             key: self._redact_control_refs(item)
             for key, item in value.items()
-            if key not in {"recordRef", "reportRef"}
+            if key not in {"recordRef", "reportRef", "groupRef"}
         }
 
     def _execute_plan(self, request: ChatRequest, state: WarehouseAgentState, plan: Any) -> ChatResponse:
@@ -5870,9 +6342,15 @@ class WarehouseAgentRuntime:
         result: dict[str, Any],
         intent: str,
         request: ChatRequest | ResumeRequest,
+        *,
+        entry_mode: bool = False,
     ) -> PendingClarification:
         self.metrics.increment("hitl_created_total", kind="product")
         raw_options = result.get("options") or result.get("candidates") or []
+        if entry_mode:
+            raw_options = [item for item in raw_options
+                           if item.get("optionType", "SINGLE_PRODUCT") == "SINGLE_PRODUCT"
+                           and (self._int_value(item, "productId") or self._int_value(item, "id"))]
         options = []
         for idx, option in enumerate(raw_options[:10], start=1):
             label = self._safe_display_label(
@@ -5901,6 +6379,8 @@ class WarehouseAgentRuntime:
                 }
             )
         prompt = str(result.get("clarificationPrompt") or "该产品名称存在多个匹配项，请选择要查询的具体产品。")
+        if entry_mode:
+            prompt = "要给哪个产品录化验？请选择具体包装和规格；已经说过的日期和检测值不用重复填写。"
         token = self._new_resume_token()
         return PendingClarification(
             kind="product",
@@ -6184,7 +6664,9 @@ class WarehouseAgentRuntime:
     def _clarification_card(self, pending: PendingClarification) -> BusinessCard:
         return BusinessCard(
             cardType="candidate_selection",
-            title=("请选择本次入库方式" if pending.kind == "finish_inbound_mode" else "请选择查询范围"),
+            title=("请选择本次入库方式" if pending.kind == "finish_inbound_mode" else
+                   "请选择本次录入的化验组" if pending.kind == "assay_group" else
+                   "请选择本次化验的产品" if (pending.continuation or {}).get("assayEntry") else "请选择查询范围"),
             prompt=pending.prompt,
             interruptId=pending.interrupt_id,
             interruptKind="CLARIFICATION",
@@ -6989,6 +7471,8 @@ class WarehouseAgentRuntime:
             return "当前产品未匹配到启用中的化验标准，因此不能判定合格或不合格。"
         if canonical == "MULTIPLE_CANDIDATES":
             return "当前匹配到多个候选标准，需要人工确认采用标准后再判定。"
+        if canonical == "FAIL" and fallback == "未命中任何标准，已按默认标准/优先级选择参考标准":
+            return "本次检测未满足适用标准的全部要求，已按默认标准或优先级选取参考标准；具体未通过项见下方。"
         return self._sanitize_assay_business_text(fallback)
 
     def _normalize_assay_metric_code(self, value: str) -> str:
@@ -8318,6 +8802,9 @@ class WarehouseAgentRuntime:
 
     def _adapt_registered_report(self, result: dict[str, Any]) -> dict[str, Any]:
         source = result if isinstance(result, dict) else {}
+        if source.get("reportDefinitionId") == "production_daily_report_analysis_v1":
+            from app.daily_report_analysis import adapt_daily_report_analysis
+            return adapt_daily_report_analysis(source, self._safe_text)
         if (
             source.get("reportDefinitionId") == "today_operations_overview_v1"
             and self._bounded_int(
@@ -8633,7 +9120,7 @@ class WarehouseAgentRuntime:
                 "judgedRecordCount",
             )
         }
-        quality["passRatePercent"] = self._safe_report_number(
+        quality["passRatePercent"] = self._safe_optional_report_number(
             raw_quality.get("passRatePercent")
         )
         raw_flow = self._dict_value(raw_overview.get("productionFlow"))
@@ -8721,7 +9208,9 @@ class WarehouseAgentRuntime:
                 source.get("dateRangeLabel")
             ),
             "dataAsOf": self._safe_text(source.get("dataAsOf")),
-            "latestRecordAt": self._safe_text(source.get("latestRecordAt")),
+            # Child reports are date-scoped and pending tasks are paginated.
+            # Their maximum timestamp is not a system-wide freshness watermark.
+            "recordTimeScopeLabel": "本概览不提供全系统最新业务记录时间；数据截至时间仅为报表生成时间。",
             "isEmpty": is_empty,
             "operationsOverview": {
                 "businessDate": self._safe_text(raw_overview.get("businessDate")),
@@ -10386,8 +10875,7 @@ class WarehouseAgentRuntime:
             product_label = product_name or product_type or "产品未标明"
 
             warehouse = self._safe_text(item.get("targetWarehouseName"))
-            side = self._controlled_task_label("warehouse_side", item.get("targetSide"), "")
-            target_location = " ".join(value for value in (warehouse, side) if value) or None
+            target_location = self._warehouse_display_name(warehouse) if warehouse else None
 
             weight = self._safe_text(item.get("totalWeight"))
             if weight and not weight.lower().endswith("kg"):
@@ -10499,33 +10987,12 @@ class WarehouseAgentRuntime:
             if weight and not weight.lower().endswith("kg"):
                 weight = f"{weight} kg"
             warehouse = self._safe_text(item.get("presetWarehouseName"))
-            side = self._controlled_task_label("warehouse_side", item.get("presetSide"), "")
             current_warehouse = self._safe_text(item.get("currentWarehouseName"))
-            current_side = self._controlled_task_label("warehouse_side", item.get("currentSide"), "")
-            current_row = self._safe_text(item.get("currentRowNumber"))
-            current_layer = self._safe_text(item.get("currentLayer"))
-            current_location_parts = [
-                value for value in (
-                    f"{current_warehouse}号库位" if current_warehouse else None,
-                    current_side or None,
-                    f"第{current_row}行" if current_row else None,
-                    f"第{current_layer}层" if current_layer else None,
-                ) if value
-            ]
+            current_location = self._warehouse_display_name(current_warehouse) if current_warehouse else None
             current_quantity = self._safe_text(item.get("currentInventoryQuantity"))
             current_unit = self._safe_text(item.get("currentInventoryUnit"))
             target_warehouse = self._safe_text(item.get("targetWarehouseName"))
-            target_side = self._controlled_task_label("warehouse_side", item.get("targetSide"), "")
-            target_row = self._safe_text(item.get("plannedTargetRowNumber"))
-            target_layer = self._safe_text(item.get("plannedTargetLayer"))
-            target_location_parts = [
-                value for value in (
-                    f"{target_warehouse}号库位" if target_warehouse else None,
-                    target_side or None,
-                    f"第{target_row}行" if target_row else None,
-                    f"第{target_layer}层" if target_layer else None,
-                ) if value
-            ]
+            target_location = self._warehouse_display_name(target_warehouse) if target_warehouse else None
             tasks.append(SafeTaskTransitionPreviewTask(
                 palletCode=self._safe_text(item.get("palletCode")) or "托盘未标明",
                 currentTaskStatusLabel=self._controlled_task_label(
@@ -10534,7 +11001,7 @@ class WarehouseAgentRuntime:
                 productLabel=product_name or product_type or "产品未标明",
                 productionDate=self._safe_text(item.get("productionDate")),
                 totalWeightText=weight,
-                presetLocationLabel=" ".join(value for value in (warehouse, side) if value) or None,
+                presetLocationLabel=self._warehouse_display_name(warehouse) if warehouse else None,
                 quantityRuleLabel=(
                     "按生产订单登记数量，业务弹窗中不可修改"
                     if item.get("quantityLockedByProductionOutput") is True
@@ -10542,12 +11009,12 @@ class WarehouseAgentRuntime:
                     if task_group_label == "成品入库"
                     else None
                 ),
-                currentLocationLabel=" ".join(current_location_parts) or None,
+                currentLocationLabel=current_location,
                 currentInventoryQuantityText=(
                     f"{current_quantity} {current_unit or ''}".strip()
                     if current_quantity else None
                 ),
-                targetLocationLabel=" ".join(target_location_parts) or None,
+                targetLocationLabel=target_location,
             ))
         preview_status = self._safe_text(source.get("previewStatus")) or "CONFLICT"
         blocking_issues = self._safe_text_list(source.get("blockingIssues"), limit=20)
@@ -10594,7 +11061,6 @@ class WarehouseAgentRuntime:
                 productionDate=self._safe_text(item.get("productionDate")),
                 warehouseLabel=self._safe_text(item.get("warehouseName")) or "库位未标明",
                 entryDate=self._safe_text(item.get("entryDate")) or "日期未标明",
-                sideLabel=self._controlled_task_label("warehouse_side", item.get("side"), "侧未标明"),
                 quantityText=f"{quantity} {unit_label}",
                 remark=self._safe_text(item.get("remark")),
                 quantityRuleLabel=(
@@ -10615,7 +11081,7 @@ class WarehouseAgentRuntime:
         if preview_status == "READY" and not ready:
             blocking_issues.append("预览范围或状态不完整，请重新生成精确预览。")
         return SafeFinishInboundExecutionPreview(
-            previewVersion=int(self._first_scalar([source], "previewVersion") or 1),
+            previewVersion=int(self._first_scalar([source], "previewVersion") or 2),
             previewStatusLabel="可核对" if ready else "需要修改",
             previewedAt=self._safe_text(source.get("previewedAt")),
             expiresAt=self._safe_text(source.get("expiresAt")),
@@ -10678,7 +11144,6 @@ class WarehouseAgentRuntime:
                 "PREPARE_CONSUMED": "历史生产占用",
                 "FINISH_OUT": "成品出库",
             },
-            "warehouse_side": {"LEFT": "左侧", "RIGHT": "右侧", "左": "左侧", "右": "右侧"},
             "production_status": {
                 "PENDING": "待处理", "WAIT_MATERIAL": "待领料", "IN_PROGRESS": "进行中",
                 "PRODUCING": "生产中", "WAIT_INBOUND": "待入库", "COMPLETED": "已完成",
@@ -10697,6 +11162,9 @@ class WarehouseAgentRuntime:
         return actor_label or time_label
 
     def _registered_report_card(self, result: dict[str, Any]) -> BusinessCard:
+        if result.get("reportDefinitionId") == "production_daily_report_analysis_v1":
+            from app.daily_report_analysis import daily_report_analysis_card
+            return daily_report_analysis_card(result)
         if result.get("reportDefinitionId") == "today_operations_overview_v1":
             return self._today_operations_overview_card(result)
         if result.get("reportDefinitionId") == "inventory_level_trend_v1":
@@ -11486,7 +11954,6 @@ class WarehouseAgentRuntime:
                     self._warehouse_display_name(state.selected_warehouse.display_label)
                     if state.selected_warehouse is not None else "目标库位已确认"
                 ),
-                "defaultSide": guided.get("defaultSide") or "左",
                 "taskGroupKey": "finish_in",
                 "canSelectRequestedCount": len(result.records) >= requested_count > 0,
             })
@@ -11532,7 +11999,6 @@ class WarehouseAgentRuntime:
                 self._warehouse_display_name(state.selected_warehouse.display_label)
                 if state.selected_warehouse is not None else "目标库位已确认"
             ),
-            "defaultSide": guided.get("defaultSide") or "左",
             "canSelectRequestedCount": len(result.records) >= requested_count > 0,
             "operationModeLabel": "使用空闲固定二维码新建任务",
         }]
@@ -11584,7 +12050,6 @@ class WarehouseAgentRuntime:
                     guided.get("requestedPalletCount"), default=len(pallet_codes), minimum=1, maximum=20
                 ),
                 "defaultWarehouseName": guided.get("warehouseName"),
-                "defaultSide": guided.get("defaultSide") or "左",
                 "guidedProductLabel": guided.get("productLabel"),
             })
         for index, task in enumerate(result.tasks, start=1):

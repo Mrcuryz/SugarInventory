@@ -46,7 +46,7 @@ import java.util.regex.Pattern;
 @Service
 public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
     private static final Logger log = LoggerFactory.getLogger(RuntimeRoutingAgentGatewayService.class);
-    private static final String UNAVAILABLE_MESSAGE = "Agent 服务暂不可用，本次未执行任何业务查询或变更。";
+    private static final String UNAVAILABLE_MESSAGE = "暂时无法完成本次查询，请稍后重试。本次没有修改业务数据。";
     private static final Set<String> SAFE_PAGE_CONTEXT_KEYS = Set.of("path", "routeName", "pageTitle");
     private static final Set<String> STREAM_EVENT_TYPES = Set.of(
             "message_start", "progress", "clarification", "text_delta", "card", "error", "message_end",
@@ -1204,8 +1204,11 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
         }
         return switch (code) {
             case "UPSTREAM_UNAUTHORIZED" -> "当前登录会话无法完成该查询，请重新登录后重试。";
-            case "UPSTREAM_PERMISSION_DENIED" -> "当前用户没有执行该只读查询的权限。";
+            case "UPSTREAM_PERMISSION_DENIED", "PERMISSION_DENIED" -> "当前账号没有执行该查询或预览的权限。本次没有修改业务数据。";
             case "UPSTREAM_TIMEOUT" -> "查询仓储数据超时，请稍后重试。";
+            case "MODEL_TIMEOUT" -> "本次查询的分析响应超时，请稍后重试。本次没有修改业务数据。";
+            case "MODEL_ACTION_INVALID", "LLM_PLAN_INVALID", "MODEL_BAD_REQUEST", "MODEL_UPSTREAM_ERROR" ->
+                    "暂时未能整理出可靠的查询结果，请稍后重试。本次没有修改业务数据。";
             case "RAG_UNAVAILABLE" -> "知识库当前不可用，请稍后重试。实时库存、库位、托盘和化验查询不受影响。";
             case "UPSTREAM_BAD_REQUEST" -> "知识查询条件不符合要求，请换一种更明确的问法。";
             default -> UNAVAILABLE_MESSAGE;
@@ -1337,6 +1340,8 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
                     resultCode = "MODEL_TIMEOUT";
                 } else if ("MODEL_CANCELLED".equals(category)) {
                     resultCode = "MODEL_CANCELLED";
+                } else if ("MODEL_ERROR".equals(category)) {
+                    resultCode = "MODEL_ERROR";
                 } else if ("PYTHON_TIMEOUT".equals(category)) {
                     resultCode = "PYTHON_TIMEOUT";
                 } else if ("UPSTREAM_ERROR".equals(category)) {

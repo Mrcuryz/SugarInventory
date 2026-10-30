@@ -25,10 +25,10 @@ import java.util.function.Consumer;
 public class HttpPythonAgentClient implements PythonAgentClient {
     static final String SERVICE_KEY_HEADER = "X-Agent-Service-Key";
     static final String EXPECTED_PROTOCOL_VERSION = "1.0";
-    static final String EXPECTED_TOOL_REGISTRY_HASH = "908b62b9a490fd94e925d15257ca7682e584e67accb709e8cb40d9ae73653a28";
-    static final String EXPECTED_RECIPE_REGISTRY_HASH = "c5ee0907e4134024138ff5489bd9b58d92c4103663a00f0d0d14fa5a40d12385";
-    static final int EXPECTED_TOOL_COUNT = 54;
-    static final int EXPECTED_RECIPE_COUNT = 1;
+    static final String EXPECTED_TOOL_REGISTRY_HASH = "e5a74703944944488995deecd29ef5711064092c79b4f964ea028372d0e31b0a";
+    static final String EXPECTED_RECIPE_REGISTRY_HASH = "6fa0092f2e012f54035cd6f430e625477c16d7d7ef78fdf31bcccdfb3af2fae6";
+    static final int EXPECTED_TOOL_COUNT = 56;
+    static final int EXPECTED_RECIPE_COUNT = 2;
 
     private final AgentRuntimeProperties properties;
     private final ObjectMapper objectMapper;

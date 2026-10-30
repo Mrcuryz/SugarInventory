@@ -2,6 +2,9 @@
   "version": "1.0",
   "businessDate": "2026-07-27",
   "cases": [
+    {"id": "Q11", "goalType": "ASSAY_ENTRY_PREVIEW", "input": "录入黄冰糖（袋）的化验，采样日期2026-07-27，色值268、还原糖0.15、pH7.52，先给我核对"},
+    {"id": "R10", "goalType": "PRODUCTION_DAILY_REPORT_ANALYSIS", "input": "按生产日报查看最近7天各车间的产量和能耗趋势"},
+    {"id": "P09", "goalType": "PRODUCTION_DAILY_REPORT_RECORDS", "input": "查看今天多晶车间的生产日报填报明细"},
     {"id": "W01", "goalType": "CURRENT_PRODUCT_INVENTORY", "input": "查询黄冰糖（袋）当前库存总览"},
     {"id": "W02", "goalType": "PRODUCT_INVENTORY_DISTRIBUTION", "input": "查询黄冰糖（袋）当前库存分别放在哪些库位"},
     {"id": "W03", "goalType": "WAREHOUSE_INVENTORY_DISTRIBUTION", "input": "查询1号库位当前有哪些库存"},

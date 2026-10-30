@@ -21,7 +21,6 @@ export const taskSelectionRequirement = (card) => {
     availablePalletCount: Math.max(0, Number(field.availablePalletCount || 0)),
     productLabel: String(field.productLabel || '所选产品'),
     warehouseName: String(field.warehouseName || '所选库位'),
-    defaultSide: ['左', '右'].includes(field.defaultSide) ? field.defaultSide : '左',
     taskGroupKey: String(field.taskGroupKey || 'finish_in'),
     canSelectRequestedCount: field.canSelectRequestedCount === true
   }

@@ -108,6 +108,39 @@ class RuntimeRoutingAgentGatewayServiceTest {
     }
 
     @Test
+    void permissionRejectionUsesActionableMessageWithoutRawDetails() throws Exception {
+        var source = answer("internal details");
+        var error = new PythonAgentChatResponseDTO.AgentError();
+        error.setCode("PERMISSION_DENIED");
+        error.setMessage("internal permission details");
+        source.setError(error);
+        when(pythonClient.chat(any())).thenReturn(source);
+        var response = gateway.handleMessage(loginUser, "agt_001", request("预览化验"));
+        assertThat(response.getAnswer()).contains("没有", "权限", "没有修改业务数据")
+                .doesNotContain("internal", "稍后重试");
+    }
+
+    @Test
+    void preservesAllDailyTrendDatesAndZeroWithoutExposingSecrets() {
+        var points = new java.util.ArrayList<Map<String, Object>>();
+        for (int i = 1; i <= 31; i++) {
+            var point = new java.util.LinkedHashMap<String, Object>();
+            point.put("businessDate", "2026-07-" + String.format("%02d", i));
+            point.put("quantity", i == 1 ? null : 0);
+            point.put("recordCount", i == 1 ? 0 : 1);
+            point.put("password", "do-not-expose");
+            points.add(point);
+        }
+        Object safe = ReflectionTestUtils.invokeMethod(gateway, "safeObjectValue", Map.of("points", points));
+        var result = (Map<?, ?>) safe;
+        var dates = (List<?>) result.get("points");
+        assertThat(dates).hasSize(31);
+        assertThat(((Map<?, ?>) dates.get(0)).get("quantity")).isNull();
+        assertThat(((Map<?, ?>) dates.get(1)).get("quantity")).isEqualTo(0);
+        assertThat(safe.toString()).doesNotContain("password", "do-not-expose");
+    }
+
+    @Test
     void adminDebugResponseKeepsOnlyFlatPerformanceScalars() throws Exception {
         User admin = new User();
         admin.setId(2);
@@ -454,7 +487,7 @@ class RuntimeRoutingAgentGatewayServiceTest {
 
         AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request("查黄冰糖库存"));
 
-        assertThat(response.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
+        assertThat(response.getAnswer()).isEqualTo("暂时无法完成本次查询，请稍后重试。本次没有修改业务数据。");
         assertThat(response.getAnswer()).doesNotContain("SUCCESS", "toolName", "productId");
     }
 
@@ -468,8 +501,8 @@ class RuntimeRoutingAgentGatewayServiceTest {
         AgentMessageResponseVO first = gateway.handleMessage(loginUser, "agt_001", request("查黄冰糖库存"));
         AgentMessageResponseVO second = gateway.handleMessage(loginUser, "agt_001", request("这些在哪些库位？"));
 
-        assertThat(first.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
-        assertThat(second.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
+        assertThat(first.getAnswer()).isEqualTo("暂时无法完成本次查询，请稍后重试。本次没有修改业务数据。");
+        assertThat(second.getAnswer()).isEqualTo("暂时无法完成本次查询，请稍后重试。本次没有修改业务数据。");
         verify(pythonClient, org.mockito.Mockito.times(2)).chat(any());
         verify(legacyGateway, org.mockito.Mockito.never()).handleMessage(eq(loginUser), eq("agt_001"), any());
     }
@@ -483,7 +516,7 @@ class RuntimeRoutingAgentGatewayServiceTest {
         gateway.handleMessage(loginUser, "agt_001", request("查黄冰糖库存"));
         AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request("它今天有化验吗？"));
 
-        assertThat(response.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
+        assertThat(response.getAnswer()).isEqualTo("暂时无法完成本次查询，请稍后重试。本次没有修改业务数据。");
         verify(legacyGateway, never()).handleMessage(any(), any(), any());
     }
 
@@ -504,7 +537,7 @@ class RuntimeRoutingAgentGatewayServiceTest {
 
         AgentMessageResponseVO response = gateway.handleMessage(loginUser, "agt_001", request);
 
-        assertThat(response.getAnswer()).isEqualTo("Agent 服务暂不可用，本次未执行任何业务查询或变更。");
+        assertThat(response.getAnswer()).isEqualTo("暂时无法完成本次查询，请稍后重试。本次没有修改业务数据。");
         verify(legacyGateway, never()).handleMessage(any(), any(), any());
     }
 
@@ -685,6 +718,24 @@ class RuntimeRoutingAgentGatewayServiceTest {
         ArgumentCaptor<AgentToolAuditDTO> captor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
         verify(sessionService, timeout(3000)).recordToolAudit(eq("agt_001"), eq(2), captor.capture());
         assertThat(captor.getValue().getResultCode()).isEqualTo("MODEL_TIMEOUT");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void modelInvalidResponseStreamIsNotReportedAsToolFailure() throws Exception {
+        doAnswer(invocation -> {
+            PythonAgentChatRequestDTO forwarded = invocation.getArgument(0);
+            Consumer<PythonAgentStreamEventDTO> consumer = invocation.getArgument(1);
+            consumer.accept(streamEvent(forwarded.getMessageId(), "error", 1,
+                    "{\"message\":\"暂时无法完成查询。\",\"category\":\"MODEL_ERROR\"}"));
+            consumer.accept(streamEvent(forwarded.getMessageId(), "message_end", 2,
+                    "{\"finishReason\":\"error\"}"));
+            return null;
+        }).when(pythonClient).stream(any(), any());
+        gateway.streamMessage(loginUser, "agt_001", request("查看生产概况"));
+        ArgumentCaptor<AgentToolAuditDTO> captor = ArgumentCaptor.forClass(AgentToolAuditDTO.class);
+        verify(sessionService, timeout(3000)).recordToolAudit(eq("agt_001"), eq(2), captor.capture());
+        assertThat(captor.getValue().getResultCode()).isEqualTo("MODEL_ERROR");
     }
 
     @Test

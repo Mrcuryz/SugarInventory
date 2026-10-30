@@ -19,15 +19,22 @@ public class QualityCatalogAgentReadServiceImpl implements QualityCatalogAgentRe
     private final QualityStandardService qualityStandardService;
     private final ProductService productService;
     private final ProductQualityStandardRelationService relationService;
+    private final com.Laibin.SugarInventory.agent.service.AssayEntryReferenceService references;
 
     @Override
     public QualityCatalogAgentVO.AssayGroups queryAssayGroups(QualityCatalogAgentQueries.AssayGroups query) {
+        return queryAssayGroups(query, null);
+    }
+
+    @Override
+    public QualityCatalogAgentVO.AssayGroups queryAssayGroups(QualityCatalogAgentQueries.AssayGroups query, Integer owner) {
         var source = query == null ? new QualityCatalogAgentQueries.AssayGroups() : query; int page = page(source.getPage()); int size = size(source.getSize());
         AssayGroupQueryDTO dto = new AssayGroupQueryDTO(); dto.setStandardName(text(source.getGroupName(), 100, "groupName")); dto.setPage(page); dto.setSize(size);
         var result = assayGroupService.queryAssays(dto); List<AssayGroupVO> rows = result.getRecords() == null ? List.of() : result.getRecords();
         return QualityCatalogAgentVO.AssayGroups.builder().dataScope("CURRENT_ASSAY_GROUP_CATALOG")
                 .total(result.getTotal() == null ? 0 : result.getTotal()).page(page).size(size)
                 .records(rows.stream().map(item -> QualityCatalogAgentVO.AssayGroupRow.builder().groupName(item.getStandardName())
+                        .groupRef(owner == null ? null : references.encodeGroup(item.getId(), owner))
                         .productNames(item.getRelatedProductList() == null ? List.of() : item.getRelatedProductList().stream().map(ProductVO::getProductName).toList())
                         .createdAt(item.getCreatedAt()).updatedAt(item.getUpdatedAt()).remark(item.getRemark()).build()).toList())
                 .limitations(List.of("化验组仅表示当前配置的产品分组，不是化验标准、合格结论或库存批次范围。", "结果不包含组 ID、产品 ID 或维护人，也不执行配置修改。"))

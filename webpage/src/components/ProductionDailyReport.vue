@@ -1,5 +1,7 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { reportCompany } from '@/config/branding'
+import { computed, onActivated, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Delete, Rank } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -15,9 +17,10 @@ import {
   submitProductionDailyReportSection
 } from '@/api/production'
 import ProductionDailyReportMetricRow from '@/components/production/ProductionDailyReportMetricRow.vue'
+import ProductionDailyProductPicker from '@/components/production/ProductionDailyProductPicker.vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/dateTime'
-import { buildProductCascaderOptions, productCascaderProps } from '@/utils/productCascader'
+import { buildProductCreateRoute } from '@/utils/productSelection'
 import {
   PRODUCTION_PRODUCT_UNIT,
   productionDailyCalendarRange,
@@ -26,6 +29,7 @@ import {
 } from '@/utils/productionDailyReport'
 
 const authStore = useAuthStore()
+const router = useRouter()
 const loading = ref(false)
 const savingHeader = ref(false)
 const savingSection = ref(false)
@@ -48,11 +52,15 @@ const historySize = ref(10)
 const productDrag = ref(createEmptyProductDrag())
 let productRowSequence = 0
 let calendarLoadSequence = 0
+let activationCount = 0
 
 const calendarShortcuts = [{ text: '今日', value: () => new Date() }]
 
 const canEdit = computed(() => authStore.hasPermission('production:daily-report:edit'))
 const canExport = computed(() => authStore.hasPermission('production:daily-report:export'))
+const canQuickCreateProduct = computed(() => {
+  return authStore.hasPermission('product:view') && authStore.hasPermission('product:create')
+})
 const activeSection = computed(() => {
   return report.value.sections?.find(item => item.departmentCode === activeSectionCode.value)
     || report.value.sections?.[0]
@@ -65,6 +73,11 @@ onMounted(async () => {
     loadReport(),
     loadCalendarStatuses(parseDate(reportDate.value))
   ])
+})
+
+onActivated(() => {
+  activationCount += 1
+  if (activationCount > 1) loadProductOptions()
 })
 
 function createEmptyReport(date) {
@@ -198,9 +211,9 @@ function productRowKey(row) {
   return row.id ? `saved-${row.id}` : `new-${++productRowSequence}`
 }
 
-function groupProductOptions(group) {
+function groupProducts(group) {
   const statuses = new Set(group.allowedProductStatuses || [])
-  return buildProductCascaderOptions(productOptions.value.filter(item => statuses.has(item.productStatus)))
+  return productOptions.value.filter(item => statuses.has(item.productStatus))
 }
 
 function handleProductChange(row) {
@@ -220,6 +233,10 @@ function handleProductChange(row) {
   row.productType = product.productType
   row.unit = PRODUCTION_PRODUCT_UNIT
   row.importError = ''
+}
+
+function openProductCreate(searchText) {
+  router.push(buildProductCreateRoute(searchText))
 }
 
 function addProduct(group) {
@@ -393,7 +410,7 @@ async function exportReport() {
     const url = URL.createObjectURL(response.data)
     const link = document.createElement('a')
     link.href = url
-    link.download = `来冰公司${reportDate.value.replaceAll('-', '')}生产日报表.xlsx`
+    link.download = `${reportCompany}${reportDate.value.replaceAll('-', '')}生产日报表.xlsx`
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -731,15 +748,16 @@ function parseDate(value) {
             >
               <div class="report-cell report-cell--product">
                 <div class="product-selector" :class="{ 'has-import-error': row.importError }">
-                  <el-cascader
+                  <ProductionDailyProductPicker
                     v-model="row.productId"
-                    :options="groupProductOptions(group)"
-                    :props="productCascaderProps"
+                    :products="groupProducts(group)"
+                    :all-products="productOptions"
                     :disabled="!canEdit"
-                    filterable
-                    clearable
+                    :invalid="!!row.importError"
+                    :can-create="canQuickCreateProduct"
                     :placeholder="row.importedProductName || '请选择产品'"
                     @change="handleProductChange(row)"
+                    @create="openProductCreate"
                   />
                   <div v-if="row.importError" class="product-import-error">{{ row.importError }}</div>
                 </div>

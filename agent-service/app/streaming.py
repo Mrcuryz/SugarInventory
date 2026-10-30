@@ -272,7 +272,10 @@ def events_for_response(
         )
         if response.error.code == "MODEL_TIMEOUT":
             category = "MODEL_TIMEOUT"
-        elif response.error.code in {"LLM_PLAN_INVALID", "MODEL_UPSTREAM_ERROR"}:
+        elif response.error.code in {
+            "LLM_PLAN_INVALID", "MODEL_UPSTREAM_ERROR", "MODEL_ACTION_INVALID",
+            "MODEL_BAD_REQUEST", "MODEL_NOT_CONFIGURED",
+        }:
             category = "MODEL_ERROR"
         elif response.error.code == "UPSTREAM_AUTHENTICATION_FAILED":
             category = "AUTHENTICATION_ERROR"

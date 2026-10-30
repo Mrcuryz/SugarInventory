@@ -41,12 +41,12 @@ test('keeps only controlled task rows and maps status tones', () => {
 test('detail entries omit empty values and never invent fields', () => {
   assert.deepEqual(
     taskDetailEntries({
-      targetLocationLabel: '2号库位 左侧',
+      targetLocationLabel: '2号库位',
       productionDate: '2026-07-20',
       operationBatchLabel: ''
     }),
     [
-      ['目标位置', '2号库位 左侧'],
+      ['目标位置', '2号库位'],
       ['生产日期', '2026-07-20']
     ]
   )
@@ -176,7 +176,6 @@ test('reads a bounded guided finish-inbound QR selection requirement', () => {
       availablePalletCount: 3,
       productLabel: '黄冰糖（袋）25kg/件 40件/板',
       warehouseName: '3号库位',
-      defaultSide: '左',
       taskGroupKey: 'finish_in',
       canSelectRequestedCount: true
     }]
@@ -185,7 +184,6 @@ test('reads a bounded guided finish-inbound QR selection requirement', () => {
     availablePalletCount: 3,
     productLabel: '黄冰糖（袋）25kg/件 40件/板',
     warehouseName: '3号库位',
-    defaultSide: '左',
     taskGroupKey: 'finish_in',
     canSelectRequestedCount: true
   })

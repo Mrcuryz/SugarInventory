@@ -1,6 +1,7 @@
 package com.Laibin.SugarInventory.mcp.config;
 
 import com.Laibin.SugarInventory.mcp.tool.WarehouseTools;
+import com.Laibin.SugarInventory.mcp.tool.AssayEntryPreviewToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AssayAbnormalitiesToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AssayReportDetailToolCallback;
 import com.Laibin.SugarInventory.mcp.tool.AssayRecordsToolCallback;
@@ -41,6 +42,7 @@ public class ToolConfiguration {
     @Bean
     ToolCallbackProvider warehouseToolCallbackProvider(WarehouseTools warehouseTools, ObjectMapper objectMapper) throws NoSuchMethodException {
         return new StaticToolCallbackProvider(List.of(
+                new AssayEntryPreviewToolCallback(warehouseTools, objectMapper),
                 methodTool(warehouseTools, "resolve_products",
                         "Resolve a natural-language product query to unique or ambiguous product candidates without modifying warehouse data.",
                         resolveProductsSchema(),
@@ -80,6 +82,18 @@ public class ToolConfiguration {
                         "Resolve a production order number or boiling batch number to short-lived user-bound entity references.",
                         resolveProductionEntitiesSchema(),
                         WarehouseTools.class.getMethod("resolveProductionEntities", String.class, String.class, Integer.class)),
+                methodTool(warehouseTools, "query_production_daily_reports",
+                        "Read production daily-report overview and paginated details. Overview is server-computed over the full filter, independent of pagination: saved factory/workshop output, energy totals and separate product-stage quantities. Preserve nulls and coverage; never add overview groups, rates, cumulative values or order output together.",
+                        """
+                        {"type":"object","additionalProperties":false,"required":["startDate","endDate"],"properties":{
+                          "startDate":{"type":"string","format":"date"},"endDate":{"type":"string","format":"date"},
+                          "departmentName":{"type":"string","enum":["多晶车间","红糖车间","单晶车间","全厂汇总"]},
+                          "itemQuery":{"type":"string","maxLength":100},
+                          "page":{"type":"integer","minimum":1,"maximum":10000},
+                          "size":{"type":"integer","minimum":1,"maximum":50}}}
+                        """,
+                        WarehouseTools.class.getMethod("queryProductionDailyReports", java.time.LocalDate.class,
+                                java.time.LocalDate.class, String.class, String.class, Integer.class, Integer.class)),
                 methodTool(warehouseTools, "query_boiling_batches",
                         "List registered boiling batches by optional product, Beijing business-date range, and status without modifying production data.",
                         boilingBatchListSchema(),
@@ -94,7 +108,7 @@ public class ToolConfiguration {
                         registeredReportRunSchema(),
                         WarehouseTools.class.getMethod("runRegisteredReport", String.class, Integer.class,
                                 java.time.LocalDate.class, java.time.LocalDate.class, String.class, String.class,
-                                String.class, String.class, java.time.LocalDate.class, java.time.LocalDate.class)),
+                                String.class, String.class, java.time.LocalDate.class, java.time.LocalDate.class, String.class)),
                 methodTool(warehouseTools, "query_boiling_batch_trace",
                         "Read a registered boiling batch trace using a controlled batchRef without inferring missing relationships.",
                         boilingBatchTraceSchema(),
@@ -304,7 +318,7 @@ public class ToolConfiguration {
 
     private static String registeredReportRunSchema() {
         return """
-                {"type":"object","additionalProperties":false,"required":["reportDefinitionId","reportVersion","startDate","endDate"],"properties":{"reportDefinitionId":{"type":"string","enum":["daily_production_overview_v1","quality_assay_result_trend_v1","quality_metric_trend_v1","production_input_output_flow_v1","pallet_task_cycle_time_v1","inventory_level_trend_v1","today_operations_overview_v1"]},"reportVersion":{"type":"integer","const":1},"startDate":{"type":"string","format":"date"},"endDate":{"type":"string","format":"date"},"productQuery":{"type":"string","minLength":1,"maxLength":100,"description":"Optional user-visible product-name fragment. For production_input_output_flow_v1 it scopes orders through stable registered output products; for inventory_level_trend_v1 it scopes product-level inventory balances. today_operations_overview_v1 does not accept productQuery."},"metricKey":{"type":"string","enum":["color_value","reducing_sugar","dry_weight_loss","conductivity_ash","sucrose","insoluble_impurity","ph"],"description":"Required only for quality_metric_trend_v1; identifies one supported assay metric."},"taskType":{"type":"string","enum":["ALL","INBOUND","SEMI_IN","FINISH_IN","OUT","TRANSFER"],"description":"Optional controlled task-type filter used only for pallet_task_cycle_time_v1. INBOUND covers semi-finished and finished inbound tasks."},"comparisonMode":{"type":"string","enum":["PREVIOUS_PERIOD","CUSTOM"],"description":"Optional deterministic cross-period comparison. today_operations_overview_v1 does not support comparison."},"comparisonStartDate":{"type":"string","format":"date"},"comparisonEndDate":{"type":"string","format":"date"}}}
+                {"type":"object","additionalProperties":false,"required":["reportDefinitionId","reportVersion","startDate","endDate"],"properties":{"reportDefinitionId":{"type":"string","enum":["production_daily_report_analysis_v1","daily_production_overview_v1","quality_assay_result_trend_v1","quality_metric_trend_v1","production_input_output_flow_v1","pallet_task_cycle_time_v1","inventory_level_trend_v1","today_operations_overview_v1"]},"reportVersion":{"type":"integer","const":1},"startDate":{"type":"string","format":"date"},"endDate":{"type":"string","format":"date"},"productQuery":{"type":"string","minLength":1,"maxLength":100,"description":"Optional user-visible product-name fragment. For production_input_output_flow_v1 it scopes orders through stable registered output products; for inventory_level_trend_v1 it scopes product-level inventory balances. today_operations_overview_v1 does not accept productQuery."},"metricKey":{"type":"string","enum":["color_value","reducing_sugar","dry_weight_loss","conductivity_ash","sucrose","insoluble_impurity","ph"],"description":"Required only for quality_metric_trend_v1; identifies one supported assay metric."},"taskType":{"type":"string","enum":["ALL","INBOUND","SEMI_IN","FINISH_IN","OUT","TRANSFER"],"description":"Optional controlled task-type filter used only for pallet_task_cycle_time_v1. INBOUND covers semi-finished and finished inbound tasks."},"comparisonMode":{"type":"string","enum":["PREVIOUS_PERIOD","CUSTOM"],"description":"Optional deterministic cross-period comparison. today_operations_overview_v1 does not support comparison."},"comparisonStartDate":{"type":"string","format":"date"},"comparisonEndDate":{"type":"string","format":"date"},"departmentName":{"type":"string","minLength":1,"maxLength":100,"description":"仅生产日报分析支持，填写现有车间名称；省略表示全部车间。"}}}
                 """;
     }
 
@@ -358,7 +372,7 @@ public class ToolConfiguration {
 
     private static String finishInboundExecutionPreviewSchema() {
         return """
-                {"type":"object","additionalProperties":false,"required":["previewVersion","items"],"properties":{"previewVersion":{"type":"integer","const":1},"items":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["code","warehouseName"],"properties":{"code":{"type":"string","minLength":1,"maxLength":100,"pattern":"^[A-Za-z0-9-]+$"},"warehouseName":{"type":"string","minLength":1,"maxLength":100},"entryDate":{"type":"string","format":"date"},"side":{"type":"string","enum":["左","右"],"default":"左"},"quantity":{"type":"integer","minimum":1,"default":1},"unit":{"type":"string","enum":["0","1"],"default":"0"},"remark":{"type":"string","maxLength":255}}}}}}
+                {"type":"object","additionalProperties":false,"required":["previewVersion","items"],"properties":{"previewVersion":{"type":"integer","const":2},"items":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["code","warehouseName"],"properties":{"code":{"type":"string","minLength":1,"maxLength":100,"pattern":"^[A-Za-z0-9-]+$"},"warehouseName":{"type":"string","minLength":1,"maxLength":100},"entryDate":{"type":"string","format":"date"},"quantity":{"type":"integer","minimum":1,"default":1},"unit":{"type":"string","enum":["0","1"],"default":"0"},"remark":{"type":"string","maxLength":255}}}}}}
                 """;
     }
 

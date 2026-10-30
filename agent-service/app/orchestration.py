@@ -90,6 +90,7 @@ class CompoundIntentPlanner:
     """Builds allowlisted multi-expert plans for explicitly supported recipes."""
 
     WAREHOUSE_INVENTORY_ASSAY = "warehouse_inventory_latest_assay"
+    DAILY_OPERATIONS = "today_daily_operations"
 
     def __init__(self, router: AgentHandoffRouter | None = None) -> None:
         self._router = router or AgentHandoffRouter()
@@ -135,6 +136,22 @@ class CompoundIntentPlanner:
             return None
         number = match.group(1).translate(str.maketrans("０１２３４５６７８９", "0123456789"))
         return f"{number}号库位"
+
+    def daily_operations_plan(self) -> CompoundExecutionPlan:
+        # Selected semantically by the main model; no keyword tool dispatch.
+        plan = CompoundExecutionPlan(
+            plan_id=f"orch_{secrets.token_hex(8)}", recipe=self.DAILY_OPERATIONS,
+            steps=(
+                OrchestrationStep("daily_production", "production_expert", "production",
+                                  ("query_production_daily_reports",), output_artifact="saved_daily_production"),
+                OrchestrationStep("nonproduction_operations", "analytics_expert", "analytics",
+                                  ("run_registered_report",), output_artifact="nonproduction_facts"),
+                OrchestrationStep("present", "main_agent", "assistant_experience", (),
+                                  depends_on=("daily_production", "nonproduction_operations")),
+            ), max_tool_calls=3, max_fanout=1,
+        )
+        plan.validate(self._router)
+        return plan
 
     def is_unsupported_batch_qualification(self, user_message: str) -> bool:
         supported_inventory_quality = (
@@ -182,7 +199,13 @@ def capability_snapshot(router: AgentHandoffRouter, allowed_tools: set[str]) -> 
             "maxSteps": MAX_ORCHESTRATION_STEPS,
             "maxToolCalls": MAX_ORCHESTRATION_TOOL_CALLS,
             "maxProductFanOut": MAX_ASSAY_PRODUCT_FANOUT,
-        }
+        },
+        {
+            "recipeId": CompoundIntentPlanner.DAILY_OPERATIONS,
+            "planVersion": PLAN_VERSION,
+            "experts": ["production_expert", "analytics_expert", "main_agent"],
+            "maxSteps": 3, "maxToolCalls": 3, "maxProductFanOut": 1,
+        },
     ]
     # This capability handshake protects the Java-backed warehouse tool boundary.
     # Process-local experts (for example knowledge_expert) do not call the Java
@@ -224,7 +247,8 @@ def new_orchestration_state(plan: CompoundExecutionPlan) -> dict[str, Any]:
             "stepId": step.step_id,
             "expert": step.expert_agent,
             "allowedTools": sorted(
-                AgentHandoffRouter().profile(step.expert_agent).allowed_tools
+                step.tools if plan.recipe == CompoundIntentPlanner.DAILY_OPERATIONS
+                else AgentHandoffRouter().profile(step.expert_agent).allowed_tools
             ),
             "plannedTools": list(step.tools),
             "executedTools": [],
@@ -251,15 +275,18 @@ def new_orchestration_state(plan: CompoundExecutionPlan) -> dict[str, Any]:
         "startedAt": now,
         "finishedAt": None,
         "orchestrationStatus": "RUNNING",
-        "dataScope": DATA_SCOPE_PRODUCT_LATEST_ASSAY,
+        "dataScope": "DAILY_REPORT_AND_CURRENT_OPERATIONS" if plan.recipe == CompoundIntentPlanner.DAILY_OPERATIONS else DATA_SCOPE_PRODUCT_LATEST_ASSAY,
         "inventoryAsOf": None,
         "assayAsOf": None,
         "batchQualificationSupported": False,
         "limitations": [
+            "生产以已保存日报为来源，库存、化验和任务保留各自业务来源。",
+            "分项结果不构成新的已归档报表，不提供组合导出。",
+        ] if plan.recipe == CompoundIntentPlanner.DAILY_OPERATIONS else [
             "化验结果仅表示各产品最新化验记录。",
             "当前不支持把产品最新化验解释为库存批次逐批合格。",
         ],
-        "maxSteps": MAX_ORCHESTRATION_STEPS,
+        "maxSteps": len(plan.steps) if plan.recipe == CompoundIntentPlanner.DAILY_OPERATIONS else MAX_ORCHESTRATION_STEPS,
         "maxToolCalls": plan.max_tool_calls,
         "maxProductFanOut": plan.max_fanout,
         "stepOrder": [step.step_id for step in plan.steps],
@@ -273,7 +300,7 @@ def plan_fingerprint(plan: CompoundExecutionPlan) -> str:
         "recipeId": plan.recipe,
         "planVersion": plan.plan_version,
         "executionMode": "DEPENDENCY_GRAPH",
-        "maxSteps": MAX_ORCHESTRATION_STEPS,
+        "maxSteps": len(plan.steps) if plan.recipe == CompoundIntentPlanner.DAILY_OPERATIONS else MAX_ORCHESTRATION_STEPS,
         "maxToolCalls": plan.max_tool_calls,
         "maxProductFanOut": plan.max_fanout,
         "steps": [
@@ -319,7 +346,8 @@ def mark_step_finished(
 
 def validate_restored_plan(state: dict[str, Any]) -> None:
     planner = CompoundIntentPlanner()
-    plan = planner.plan("当前1号库库存情况如何？它们的化验情况如何？")
+    plan = (planner.daily_operations_plan() if state.get("recipeId") == planner.DAILY_OPERATIONS
+            else planner.plan("当前1号库库存情况如何？它们的化验情况如何？"))
     if plan is None:
         raise ValueError("registered orchestration recipe is unavailable")
     expected = new_orchestration_state(plan)

@@ -327,6 +327,33 @@ class AgentSessionServiceImplTest {
     }
 
     @Test
+    void assayPreviewDelegationDoesNotAuthorizeImportOrExecution() {
+        Claims claims = validClaims();
+        AgentSession session = activeSession();
+        when(sessionMapper.selectById("session-1")).thenReturn(session);
+        assertThat(service.validateDelegation(claims,
+                new MockHttpServletRequest("POST", "/api/assay/entry/preview"), loginUser)).isSameAs(session);
+        assertThat(service.validateDelegation(claims,
+                new MockHttpServletRequest("POST", "/api/assay/entry/group/from-reference/preview"), loginUser)).isSameAs(session);
+        for (String path : List.of("/api/assay/import", "/api/assay/1", "/api/assay/entry/execute",
+                "/api/assay/entry/group/preview", "/api/assay/entry/group/execute",
+                "/api/agent/sessions/test/assay-entry/previews",
+                "/api/agent/sessions/test/assay-entry/previews/group",
+                "/api/agent/sessions/test/assay-entry/previews/test/confirm",
+                "/api/agent/sessions/test/assay-entry/previews/test/execute",
+                "/api/agent/sessions/test/assay-entry/previews/test/result",
+                "/api/agent/sessions/test/assay-entry/previews/test/recover",
+                "/api/agent/sessions/test/assay-entry/previews/from-product",
+                "/api/agent/sessions/test/assay-entry/previews/from-group",
+                "/api/assay/entry/group/from-reference/preview/execute",
+                "/api/assay/entry/preview/execute")) {
+            assertThatThrownBy(() -> service.validateDelegation(claims,
+                    new MockHttpServletRequest("POST", path), loginUser))
+                    .isInstanceOf(AgentSessionAuthenticationException.class).extracting("status").isEqualTo(403);
+        }
+    }
+
+    @Test
     void validateDelegationRejectsRetiredPreparePoolAgentPath() {
         Claims claims = validClaims();
         when(sessionMapper.selectById("session-1")).thenReturn(activeSession());

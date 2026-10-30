@@ -10,7 +10,7 @@ principles:
 agent_v1_reaudit:
   status: "IMPLEMENTED_AND_CONTRACT_LOCKED"
   source: "Python Runtime + Java Gateway + warehouse-mcp ToolCallback + 后端 Controller/OpenAPI + 前端菜单/API。"
-  finding: "当前 52 个 L1 只读/登记报表工具与 2 个无写入 L2 预览工具已完成已登记专家的运行时规划集；run_registered_report 目前受控运行七个版本化确定性报表定义，不接受模型创建任意报表。"
+  finding: "当前53个L1只读/登记报表工具与3个无写入L2预览工具；61个GoalContract。run_registered_report支持8个版本化定义（含生产日报分析）；日报阶段已本地验收，化验录入已接入单产品只读预览，受控保存尚未实现。模型不能创建任意报表。"
   target_expert_domains:
     - inventory
     - warehouse
@@ -34,7 +34,7 @@ expert_tool_roadmap:
   recipe_roadmap: "docs/agent/cross-expert-recipe-roadmap-registry.yaml"
   data_semantic_roadmap: "docs/agent/data-semantic-roadmap-registry.yaml"
   business_rule_roadmap: "docs/agent/business-rule-roadmap-registry.yaml"
-  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 52 个 L1 只读/登记报表工具、2 个 L2 预览工具、专家白名单或配方注册表。"
+  runtime_rule: "roadmap 中除 CURRENT 外的工具均不是当前能力；不得据此扩大现有 53 个 L1 只读/登记报表工具、2 个 L2 预览工具、专家白名单或配方注册表。"
 
 agent_architecture:
   main_agent:
@@ -82,7 +82,7 @@ agent_architecture:
       model_policy_key: "warehouse"
     assay_expert:
       domains: ["assay", "quality"]
-      allowed_tools: ["resolve_products", "resolve_warehouses", "get_assay_status", "query_assay_records", "get_assay_report_detail", "query_assay_abnormalities", "query_products_without_recent_assay", "query_assay_standard_coverage", "query_unqualified_inventory", "query_inventory_by_quality_standard", "query_inventory_by_assay_metrics", "query_assay_groups", "query_quality_standard_catalog", "get_quality_standard_detail", "query_product_standard_relations", "query_product_quality_configuration"]
+      allowed_tools: ["resolve_products", "resolve_warehouses", "get_assay_status", "preview_assay_entry", "query_assay_records", "get_assay_report_detail", "query_assay_abnormalities", "query_products_without_recent_assay", "query_assay_standard_coverage", "query_unqualified_inventory", "query_inventory_by_quality_standard", "query_inventory_by_assay_metrics", "query_assay_groups", "query_quality_standard_catalog", "get_quality_standard_detail", "query_product_standard_relations", "query_product_quality_configuration"]
       model_policy_key: "assay"
     pallet_expert:
       domains: ["pallet", "qr_code"]
@@ -90,7 +90,7 @@ agent_architecture:
       model_policy_key: "pallet"
     production_expert:
       domains: ["production"]
-      allowed_tools: ["resolve_production_entities", "query_boiling_batches", "query_production_order_progress", "query_boiling_batch_trace", "query_material_pick_trace", "query_production_label_completion", "query_in_process_materials", "query_material_candidates"]
+      allowed_tools: ["resolve_production_entities", "query_boiling_batches", "query_production_daily_reports", "query_production_order_progress", "query_boiling_batch_trace", "query_material_pick_trace", "query_production_label_completion", "query_in_process_materials", "query_material_candidates"]
       model_policy_key: "production"
     analytics_expert:
       domains: ["analytics", "report"]
@@ -119,7 +119,7 @@ agent_architecture:
       tool_plane: "agent_process_local"
       risk_level: "L0"
       permission: "ADMIN"
-      boundary: "不进入 Java Gateway/MCP 的 52 个 L1 工具注册表；仅检索已审核、已激活的本地知识库版本。"
+      boundary: "不进入 Java Gateway/MCP 的 53 个 L1 工具注册表；仅检索已审核、已激活的本地知识库版本。"
 
 tools:
   query_fixed_product_qr_pool:
@@ -316,6 +316,21 @@ tools:
       - "entityType 仅支持 PRODUCTION_ORDER、BOILING_BATCH；候选最多 10 个。"
       - "多候选时必须由用户提供完整编号，不得自动选择。"
 
+  query_production_daily_reports:
+    business_name: "生产概况与日报明细"
+    risk_level: "L1"
+    owner_expert: "production_expert"
+    can_answer:
+      - "按最多31天日期范围、车间、产品或指标名称查询生产概况及明细；概况由后端按完整筛选范围统计，保留草稿和数据覆盖情况。"
+      - "读取已有全厂/车间产量、全厂能耗指标的当日值；按车间、产品类别、产品状态和单位分别统计产品数量及已保存折吨。"
+    cannot_answer:
+      - "不是订单登记产出，不能叠加两种来源，不能将分页结果求和为总产量。"
+      - "不重新换算折吨、不跨日累加月年累计、不加总或平均产率；能耗只累加白名单当日数量，空值不当成0。"
+    required_slots: ["startDate", "endDate"]
+    constraints:
+      - "明细每页最多50条，概况最多10组且截断有提示；权限 production:daily-report:view，所有业务写入禁止。"
+    data_scope: "SAVED_PRODUCTION_DAILY_REPORTS"
+
   query_boiling_batches:
     business_name: "煮糖批次范围查询"
     risk_level: "L1"
@@ -349,6 +364,7 @@ tools:
     risk_level: "L1"
     owner_expert: "analytics_expert"
     can_answer:
+      - "按已保存生产日报查询最多31天的产量及能耗汇总和每日趋势，可筛选车间/产品，并比较相邻前期或自定义等长非重叠期间。包含草稿，不叠加订单数据；数量与折吨独立覆盖，缺失不补零。使用production_daily_report_analysis_v1，需日报查看权限，导出额外需日报导出权限；差额和比例仅引用后端结果。"
       - "按生产日期查询已登记且未取消的实际产出重量、板数、散件数、折算总件数、订单数和产品构成。"
       - "在最多 31 天的明确日期范围内返回逐日序列，并单独展示二维码绑定和入库进度。"
       - "按化验生产日期查询已登记化验的合格、不合格、无标准、标准多候选、明确判定合格率、产品构成和历史采用标准版本。"
@@ -379,7 +395,7 @@ tools:
       - "pallet_task_cycle_time_v1 只允许受控 taskType；INBOUND 表示半成品和成品入库任务。其他定义不得传 taskType。"
       - "生产日报和库存水平趋势最多 31 天；生产领料—登记产出、托盘任务周期和两类化验趋势最多 366 天；相对日期必须按 Asia/Shanghai 转成明确日期。"
       - "inventory_level_trend_v1 的生产查询范围必须完全落入连续通过守恒对账的可信日终窗口；本地历史回放必须显式开启，且不推进发布门禁。"
-    permission: "生产日报要求 production:order:view；库存水平趋势要求 inventory:view；生产领料—登记产出同时要求 production:order:view 和 production:material:view；化验趋势要求 assay:view；托盘任务周期要求 task:view；今日运营概览同时要求上述五项只读权限；后端按报表定义再次校验。"
+    permission: "生产日报分析要求 production:daily-report:view，导出另需 production:daily-report:export；订单登记产出要求 production:order:view；库存水平趋势要求 inventory:view；生产领料—登记产出同时要求 production:order:view 和 production:material:view；化验趋势要求 assay:view；托盘任务周期要求 task:view；今日运营概览要求订单查看、领料查看、化验查看、库存查看和任务查看五项权限；后端按报表定义再次校验。"
     data_scope: "REGISTERED_PRODUCTION_OUTPUT | TRUSTED_DAILY_CLOSE_SNAPSHOT | HISTORICAL_REPLAY_SIMULATION | REGISTERED_QUALITY_ASSAY | REGISTERED_QUALITY_ASSAY_METRIC | REGISTERED_PRODUCTION_INPUT_OUTPUT_FLOW | REGISTERED_PALLET_TASK_CYCLE_TIME | REGISTERED_TODAY_OPERATIONS_SNAPSHOT"
 
   query_boiling_batch_trace:
@@ -492,6 +508,19 @@ tools:
     required_slots: ["preview_version", "items.code", "items.warehouse_name"]
     permission: "task:view + task:confirm"
     data_scope: "FINISH_INBOUND_EXECUTION_PREVIEW"
+
+  preview_assay_entry:
+    business_name: "产品或化验组录入预览"
+    risk_level: "L2"
+    owner_expert: "assay_expert"
+    can_answer:
+      - "依据已确认产品或已选择化验组、采样日期和实测指标，校验数值与版本并展示现有标准服务的预判；化验组必须完整返回全部产品。"
+    cannot_answer:
+      - "不能保存、覆盖或删除化验，不能修改标准、生成执行令牌或自动补全检测值。"
+      - "不能把产品大类或化验组当成单个产品。"
+    required_slots: ["confirmed_product_or_assay_group", "sample_date", "measurements"]
+    permission: "assay:view AND (assay:create OR quality:test)"
+    data_scope: "ASSAY_ENTRY_PREVIEW"
 
   query_stock_documents:
     business_name: "库存单据查询"

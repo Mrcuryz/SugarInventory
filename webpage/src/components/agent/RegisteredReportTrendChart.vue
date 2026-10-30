@@ -9,6 +9,7 @@ import { registeredReportTrendChart } from './registeredReportTrendChart.mjs'
 echarts.use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, AriaComponent, CanvasRenderer])
 
 const props = defineProps({
+  spec: { type: Object, default: null },
   card: {
     type: Object,
     required: true
@@ -16,7 +17,7 @@ const props = defineProps({
 })
 
 const chartElement = ref(null)
-const chartSpec = computed(() => registeredReportTrendChart(props.card))
+const chartSpec = computed(() => props.spec || registeredReportTrendChart(props.card))
 let chartInstance = null
 let resizeObserver = null
 
@@ -24,6 +25,10 @@ const valueText = (value, unit) => {
   if (value === null || value === undefined || value === '') return '暂无数据'
   return `${value}${unit ? ` ${unit}` : ''}`
 }
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[char])
 
 const renderChart = async () => {
   await nextTick()
@@ -49,9 +54,9 @@ const renderChart = async () => {
       formatter: params => {
         const rows = Array.isArray(params) ? params : [params]
         const heading = rows[0]?.axisValueLabel || ''
-        return [heading, ...rows.map(item => {
+        return [escapeHtml(heading), ...rows.map(item => {
           const series = spec.series[item.seriesIndex]
-          return `${item.marker}${item.seriesName}：${valueText(item.value, series?.unit)}`
+          return `${item.marker}${escapeHtml(item.seriesName)}：${escapeHtml(valueText(item.value, series?.unit))}`
         })].join('<br/>')
       }
     },
@@ -61,7 +66,7 @@ const renderChart = async () => {
       data: spec.categories,
       axisTick: { show: false },
       axisLine: { lineStyle: { color: '#cbd5e1' } },
-      axisLabel: { color: '#64748b', fontSize: 10, hideOverlap: true }
+      axisLabel: { color: '#64748b', fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' }
     },
     yAxis: spec.axes.map((axis, index) => ({
       type: 'value',

@@ -175,6 +175,9 @@ public class WarehouseApiClient {
         return switch (code) {
             case 400, 1030 -> "UPSTREAM_BAD_REQUEST";
             case 401 -> "UPSTREAM_UNAUTHORIZED";
+            case 1051 -> "ASSAY_ENTRY_INPUT_INVALID";
+            case 1052 -> "ASSAY_ENTRY_VERSION_CONFLICT";
+            case 1053 -> "ASSAY_ENTRY_JUDGEMENT_UNAVAILABLE";
             case 403 -> "UPSTREAM_PERMISSION_DENIED";
             case 404, 1001, 1010, 1016, 1017, 1020, 1023, 1027, 1028, 1031 -> "UPSTREAM_NOT_FOUND";
             default -> code >= 500 ? "UPSTREAM_SERVER_ERROR" : "UPSTREAM_BUSINESS_ERROR";
@@ -183,6 +186,9 @@ public class WarehouseApiClient {
 
     private static String safeBusinessMessage(int code) {
         return switch (mapBusinessCode(code)) {
+            case "ASSAY_ENTRY_INPUT_INVALID" -> "化验输入未通过校验，请核对数值范围、小数位、采样日期，并至少提供一项实测值。本次未保存。";
+            case "ASSAY_ENTRY_VERSION_CONFLICT" -> "化验版本状态存在冲突，请核对已有记录后重新预览。本次未保存。";
+            case "ASSAY_ENTRY_JUDGEMENT_UNAVAILABLE" -> "暂时无法取得化验预判结果，本次未保存。";
             case "UPSTREAM_BAD_REQUEST" -> "Warehouse backend rejected the read request.";
             case "UPSTREAM_UNAUTHORIZED" -> "Warehouse backend authentication failed.";
             case "UPSTREAM_PERMISSION_DENIED" -> "Warehouse backend denied this read permission.";

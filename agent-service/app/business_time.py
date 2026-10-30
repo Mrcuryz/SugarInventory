@@ -88,7 +88,10 @@ class BusinessClock:
         if any(marker in text for marker in ("昨天", "昨日")):
             target = today - timedelta(days=1)
             return BusinessDateRange("昨天", target, target)
-        if any(marker in text for marker in ("今天", "今日", "当天")):
+        # “当天” refers to a stated/contextual business date, not necessarily today.
+        # Leave a bare reference to the expert's resolved context instead of
+        # overwriting explicit dates or an earlier conversation's date.
+        if any(marker in text for marker in ("今天", "今日")):
             return BusinessDateRange("今天", today, today)
 
         explicit_range = self._resolve_explicit_date_range(text, today)

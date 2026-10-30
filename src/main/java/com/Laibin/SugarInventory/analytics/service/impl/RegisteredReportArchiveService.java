@@ -126,6 +126,10 @@ public class RegisteredReportArchiveService {
             String exporterDisplayName,
             Set<String> currentAuthorities) {
         StoredReport stored = readStored(reportRunId, ownerUserId, currentAuthorities);
+        if (ProductionDailyRegisteredReportService.REPORT_ID.equals(stored.report().getReportDefinitionId())
+                && (currentAuthorities == null || !currentAuthorities.contains("production:daily-report:export"))) {
+            throw new BusinessException(403, "当前用户没有导出生产日报的权限");
+        }
         LocalDateTime exportedAt = LocalDateTime.now(BUSINESS_ZONE);
         String auditRef = "report_export_"
                 + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
@@ -227,7 +231,7 @@ public class RegisteredReportArchiveService {
         String metricName = report.getMetricTrendSummary() == null
                 ? ""
                 : normalizedLabel(report.getMetricTrendSummary().getMetricName());
-        return List.of(metricName, productScope, taskScope).stream()
+        return List.of(metricName, productScope, taskScope, normalizedLabel(filters.get("departmentScope"))).stream()
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .reduce((left, right) -> left + " · " + right)
@@ -240,6 +244,9 @@ public class RegisteredReportArchiveService {
 
     private static Set<String> visiblePermissionSets(Set<String> currentAuthorities) {
         java.util.LinkedHashSet<String> visible = new java.util.LinkedHashSet<>();
+        if (currentAuthorities.contains("production:daily-report:view")) {
+            visible.add("production:daily-report:view");
+        }
         if (currentAuthorities.contains("production:order:view")) {
             visible.add("production:order:view");
             if (currentAuthorities.contains("production:material:view")) {
@@ -272,6 +279,7 @@ public class RegisteredReportArchiveService {
         }
         String normalized = reportDefinitionId.trim();
         if (!Set.of(
+                ProductionDailyRegisteredReportService.REPORT_ID,
                 RegisteredReportServiceImpl.DAILY_PRODUCTION_REPORT_ID,
                 QualityAssayRegisteredReportService.REPORT_ID,
                 QualityMetricRegisteredReportService.REPORT_ID,
@@ -295,6 +303,7 @@ public class RegisteredReportArchiveService {
 
     private static String requiredPermission(String reportDefinitionId) {
         return switch (reportDefinitionId == null ? "" : reportDefinitionId) {
+            case ProductionDailyRegisteredReportService.REPORT_ID -> "production:daily-report:view";
             case RegisteredReportServiceImpl.DAILY_PRODUCTION_REPORT_ID -> "production:order:view";
             case ProductionInputOutputRegisteredReportService.REPORT_ID ->
                     "production:order:view,production:material:view";

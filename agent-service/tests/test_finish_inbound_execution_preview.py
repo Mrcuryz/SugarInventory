@@ -40,7 +40,6 @@ def test_exact_preview_has_one_closed_goal_expert_and_tool_contract() -> None:
         "code",
         "warehouseName",
         "entryDate",
-        "side",
         "quantity",
         "unit",
         "remark",
@@ -58,7 +57,7 @@ def test_exact_preview_has_one_closed_goal_expert_and_tool_contract() -> None:
 def test_visible_form_payload_routes_through_main_agent_and_logistics_expert() -> None:
     message = """请为已填写的成品入库表单生成精确执行预览（只预览，不执行）。
 ```json
-{"previewVersion":1,"items":[{"code":"BT0019N1","warehouseName":"1号库位","entryDate":"2026-08-09","side":"左","quantity":1,"unit":"0","remark":"验收预览"}]}
+{"previewVersion":2,"items":[{"code":"BT0019N1","warehouseName":"1号库位","entryDate":"2026-08-09","quantity":1,"unit":"0","remark":"验收预览"}]}
 ```"""
 
     decision = ToolArgumentBuilder().plan(
@@ -70,13 +69,12 @@ def test_visible_form_payload_routes_through_main_agent_and_logistics_expert() -
     assert decision.toolName == TOOL_NAME
     assert decision.intent == "finish_inbound_execution_preview"
     assert decision.arguments == {
-        "previewVersion": 1,
+        "previewVersion": 2,
         "items": [
             {
                 "code": "BT0019N1",
                 "warehouseName": "1号库位",
                 "entryDate": "2026-08-09",
-                "side": "左",
                 "quantity": 1,
                 "unit": "0",
                 "remark": "验收预览",
@@ -98,7 +96,7 @@ def test_argument_validation_rejects_internal_ids_and_layout_coordinates() -> No
         builder._validate(
             TOOL_NAME,
             {
-                "previewVersion": 1,
+                "previewVersion": 2,
                 "items": [
                     {
                         "code": "BT0019N1",
@@ -120,7 +118,7 @@ def test_safe_adapter_and_card_never_expose_preview_refs_or_server_state() -> No
     adapted = runtime._adapt_finish_inbound_execution_preview(
         {
             "dataScope": "FINISH_INBOUND_EXECUTION_PREVIEW",
-            "previewVersion": 1,
+            "previewVersion": 2,
             "previewStatus": "READY",
             "previewRef": "fip1_internal-reference",
             "stateDigest": "a" * 64,
@@ -135,7 +133,6 @@ def test_safe_adapter_and_card_never_expose_preview_refs_or_server_state() -> No
                     "productName": "黄冰糖（袋）",
                     "warehouseName": "1号库位",
                     "entryDate": "2026-08-09",
-                    "side": "左",
                     "quantity": 1,
                     "unitLabel": "板",
                     "taskId": 21,
@@ -167,5 +164,6 @@ def test_safe_adapter_and_card_never_expose_preview_refs_or_server_state() -> No
     assert "serverSnapshot" not in serialized
     assert "taskId" not in serialized
     assert "warehouseId" not in serialized
+    assert "side" not in serialized
     assert "rowNumber" not in serialized
     assert "layer" not in serialized

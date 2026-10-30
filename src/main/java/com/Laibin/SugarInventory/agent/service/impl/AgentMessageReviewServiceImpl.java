@@ -456,6 +456,23 @@ public class AgentMessageReviewServiceImpl implements AgentMessageReviewService 
             review.setFailureCategory("CLIENT_CANCELLED");
             return;
         }
+        // A successful data tool does not make a failed model response successful.
+        // Only strongly message-matched runtime evidence may override terminal status.
+        String runtimeFailure = evidenceContext.weakMatch() ? null : evidenceContext.runtimeAudits().stream()
+                .map(AgentToolAuditLog::getResultCode)
+                .filter(code -> code != null && Set.of("MODEL_TIMEOUT", "MODEL_ERROR", "MODEL_ACTION_INVALID",
+                        "TOOL_TIMEOUT", "TOOL_ERROR", "PYTHON_TIMEOUT", "UPSTREAM_ERROR").contains(code))
+                .findFirst().orElse(null);
+        String finishReason = normalizeLower(dto.getFinishReason());
+        if (runtimeFailure != null || "timeout".equals(finishReason) || "error".equals(finishReason)) {
+            review.setAnswerStatus("FAILED");
+            review.setConfidenceLevel("UNKNOWN");
+            review.setFailureDomain(runtimeFailure != null && runtimeFailure.startsWith("MODEL_") ? "MODEL" : "SYSTEM");
+            review.setFailureCategory(runtimeFailure != null ? runtimeFailure
+                    : "timeout".equals(finishReason) ? "RESPONSE_TIMEOUT" : "RESPONSE_ERROR");
+            review.setTestCaseStatus("NEEDED");
+            return;
+        }
         if (smallTalkMisrouted) {
             review.setAnswerStatus("NEEDS_REVIEW");
             review.setConfidenceLevel("LOW");

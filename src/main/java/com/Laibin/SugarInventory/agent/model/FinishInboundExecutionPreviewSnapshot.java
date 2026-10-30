@@ -32,7 +32,6 @@ public class FinishInboundExecutionPreviewSnapshot {
         private final String code;
         private final String warehouseName;
         private final LocalDate entryDate;
-        private final String side;
         private final Integer quantity;
         private final String unit;
         private final String remark;
@@ -73,12 +72,8 @@ public class FinishInboundExecutionPreviewSnapshot {
     public static class WarehouseState {
         private final Integer id;
         private final String status;
-        private final Integer maxRows;
+        private final Integer maxCapacity;
         private final Integer curCapacity;
-        private final List<Integer> leftUsedRowsLayer1;
-        private final List<Integer> rightUsedRowsLayer1;
-        private final List<Integer> leftUsedRowsLayer2;
-        private final List<Integer> rightUsedRowsLayer2;
         private final LocalDateTime updatedAt;
     }
 

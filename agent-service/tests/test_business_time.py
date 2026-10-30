@@ -35,6 +35,9 @@ def fixed_clock() -> BusinessClock:
         ("查询2026年7月14日至7月20日的库存趋势", "2026-07-14", "2026-07-20"),
         ("查询7月14日到20日的库存趋势", "2026-07-14", "2026-07-20"),
         ("查询2026-07-14至2026-07-20的库存趋势", "2026-07-14", "2026-07-20"),
+        ("2026-07-05当天的耗电和结晶率", "2026-07-05", "2026-07-05"),
+        ("7月5日当天的产量", "2026-07-05", "2026-07-05"),
+        ("昨天当天的化验", "2026-07-16", "2026-07-16"),
     ],
 )
 def test_resolves_relative_dates_in_beijing_time(
@@ -58,6 +61,28 @@ def test_explicit_date_range_is_not_collapsed_to_its_first_day() -> None:
         "from": "2026-07-14",
         "to": "2026-07-20",
     }
+
+
+def test_contextual_same_day_keeps_expert_resolved_date() -> None:
+    clock = fixed_clock()
+    assert clock.resolve("再看当天的耗电") is None
+    query = {"startDate": "2026-07-05", "endDate": "2026-07-05"}
+    result = ToolArgumentBuilder(business_clock=clock).validate_llm_arguments(
+        tool_name="query_production_daily_reports", arguments=query,
+        state=InMemoryCheckpointer().get("agt_same_day"),
+        user_message="再看当天的耗电",
+    )
+    assert result["startDate"] == result["endDate"] == "2026-07-05"
+
+
+def test_daily_explicit_same_day_is_not_overwritten_by_server_today() -> None:
+    result = ToolArgumentBuilder(business_clock=fixed_clock()).validate_llm_arguments(
+        tool_name="query_production_daily_reports",
+        arguments={"startDate": "2026-07-17", "endDate": "2026-07-17"},
+        state=InMemoryCheckpointer().get("agt_explicit_same_day"),
+        user_message="2026-07-05当天，全部车间的耗电和结晶率分别多少？",
+    )
+    assert result["startDate"] == result["endDate"] == "2026-07-05"
 
 
 def test_business_time_context_is_explicit_and_server_trusted() -> None:

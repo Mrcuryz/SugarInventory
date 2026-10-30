@@ -11,6 +11,8 @@ public class RegisteredReportRunQueryDTO {
     private LocalDate startDate;
     private LocalDate endDate;
     private String productQuery;
+    /** Supported only by production_daily_report_analysis_v1. */
+    private String departmentName;
     private String metricKey;
     private String taskType;
     private String comparisonMode;

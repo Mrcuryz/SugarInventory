@@ -2,6 +2,7 @@ package com.Laibin.SugarInventory.analytics.service.impl;
 
 import com.Laibin.SugarInventory.analytics.domain.dto.RegisteredReportRunQueryDTO;
 import com.Laibin.SugarInventory.analytics.domain.vo.RegisteredReportComparisonVO;
+import com.Laibin.SugarInventory.analytics.domain.vo.RegisteredReportDataQualityVO;
 import com.Laibin.SugarInventory.analytics.domain.vo.RegisteredReportMetricComparisonVO;
 import com.Laibin.SugarInventory.analytics.domain.vo.RegisteredReportRunVO;
 import com.Laibin.SugarInventory.common.BusinessException;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,22 +37,43 @@ public class RegisteredReportComparisonAssembler {
         }
 
         Period comparisonPeriod = comparisonPeriod(query, mode);
+        boolean dailyReport = ProductionDailyRegisteredReportService.REPORT_ID.equals(current.getReportDefinitionId());
+        if (dailyReport) validateDailyComparison(query);
         RegisteredReportRunQueryDTO comparisonQuery = copyForComparison(query, comparisonPeriod);
         RegisteredReportRunVO comparison = reportRunner.apply(comparisonQuery);
         assertCompatible(current, comparison);
 
         int currentDays = periodDays(query.getStartDate(), query.getEndDate());
         int comparisonDays = periodDays(comparisonPeriod.startDate(), comparisonPeriod.endDate());
-        List<RegisteredReportMetricComparisonVO> metrics = metricSpecs(current).stream()
+        List<RegisteredReportMetricComparisonVO> metrics = dailyReport
+                ? ProductionDailyReportComparison.metrics(current, comparison)
+                : metricSpecs(current).stream()
                 .map(spec -> compareMetric(spec, current, comparison, currentDays, comparisonDays))
                 .toList();
         List<String> notes = new ArrayList<>();
         notes.add("两期使用相同报表定义、指标版本和筛选条件。变化只描述登记数值差异，不代表改善、恶化或因果关系。");
+        if (dailyReport) {
+            notes.add("来源为已保存的生产日报，包含草稿；不与订单登记产出相加，不合计不同车间、分类或单位。");
+            notes.add("数量与折吨分别检查覆盖；缺日、空值、系列截断或对比期值不大于0时，不计算变化率。缺失系列不按0处理。");
+            notes.add("分类差异仅反映已记录产品行；已记录值差额不代表全厂实际产量的整体变化。");
+        }
         if (currentDays != comparisonDays) {
             notes.add("两期天数不同；可累加指标同时提供日均值，避免直接用期间总量判断变化。");
         }
 
+        var quality = current.getDataQuality();
+        if (dailyReport && comparison.getDataQuality() != null) {
+            List<String> qualityNotes = new ArrayList<>();
+            if (quality != null && quality.getNotes() != null) qualityNotes.addAll(quality.getNotes());
+            if (comparison.getDataQuality().getNotes() != null) {
+                comparison.getDataQuality().getNotes().forEach(note -> qualityNotes.add("对比期：" + note));
+            }
+            quality = RegisteredReportDataQualityVO.builder()
+                    .partial((quality != null && quality.isPartial()) || comparison.getDataQuality().isPartial())
+                    .notes(List.copyOf(qualityNotes)).build();
+        }
         return current.toBuilder()
+                .dataQuality(quality)
                 .comparison(RegisteredReportComparisonVO.builder()
                         .comparisonMode(mode)
                         .comparisonLabel(PREVIOUS_PERIOD.equals(mode) ? "上一等长期间" : "指定对比期间")
@@ -80,6 +103,23 @@ public class RegisteredReportComparisonAssembler {
             throw new BusinessException(400, "当前跨期比较方式不受支持");
         }
         return normalized;
+    }
+
+    /** Validate the daily-report subset before any aggregate query; legacy report rules stay unchanged. */
+    public static void validateDailyComparison(RegisteredReportRunQueryDTO query) {
+        String mode = normalizeMode(query.getComparisonMode());
+        if (mode == null) {
+            rejectOrphanComparisonDates(query);
+            return;
+        }
+        int days = periodDays(query.getStartDate(), query.getEndDate());
+        Period period = comparisonPeriod(query, mode);
+        if (days > 31 || periodDays(period.startDate(), period.endDate()) != days) {
+            throw new BusinessException(400, "日报比较仅支持不超过31天的两个等长期间");
+        }
+        if (period.endDate().isAfter(LocalDate.now(ZoneId.of("Asia/Shanghai")))) {
+            throw new BusinessException(400, "日报比较不能查询未来日期");
+        }
     }
 
     private static void rejectOrphanComparisonDates(RegisteredReportRunQueryDTO query) {
@@ -123,6 +163,7 @@ public class RegisteredReportComparisonAssembler {
         copy.setStartDate(comparisonPeriod.startDate());
         copy.setEndDate(comparisonPeriod.endDate());
         copy.setProductQuery(source.getProductQuery());
+        copy.setDepartmentName(source.getDepartmentName());
         copy.setMetricKey(source.getMetricKey());
         copy.setTaskType(source.getTaskType());
         return copy;

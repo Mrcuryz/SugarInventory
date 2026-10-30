@@ -34,7 +34,7 @@ from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS
 
 
 def test_priority_readonly_goal_contracts_are_registered() -> None:
-    assert len(GOAL_CONTRACTS) == 58
+    assert len(GOAL_CONTRACTS) == 61
     assert {
         "CURRENT_INVENTORY_LEDGER",
         "WAREHOUSE_STATUS",
@@ -75,10 +75,10 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
     current = registry["current_goals"]
     planned = registry["planned_goals"]
 
-    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 58
-    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 54
-    assert registry["classified_l1_tool_count"] == 52
-    assert registry["classified_l2_tool_count"] == 2
+    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 61
+    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 56
+    assert registry["classified_l1_tool_count"] == 53
+    assert registry["classified_l2_tool_count"] == 3
     assert registry["classified_internal_knowledge_tool_count"] == len(INTERNAL_KNOWLEDGE_TOOLS) == 1
     assert set(current) == set(GOAL_CONTRACTS)
     for goal_type, contract in GOAL_CONTRACTS.items():
@@ -123,8 +123,8 @@ def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:
     corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
     cases = corpus["cases"]
 
-    assert len(cases) == len(GOAL_CONTRACTS) == 58
-    assert len({case["id"] for case in cases}) == 58
+    assert len(cases) == len(GOAL_CONTRACTS) == 61
+    assert len({case["id"] for case in cases}) == 61
     assert {case["goalType"] for case in cases} == set(GOAL_CONTRACTS)
     assert all(str(case["input"]).strip() for case in cases)
 
@@ -723,6 +723,10 @@ def test_quality_goal_rejects_single_product_scope_without_matching_entity() -> 
 
 
 def test_assay_history_and_boiling_list_no_data_are_authoritative_completion() -> None:
+    report_contract = GOAL_CONTRACTS["PRODUCT_ASSAY_REPORT"]
+    assert "query_assay_records" in report_contract.allowedTools
+    assert "query_assay_records" not in report_contract.evidenceTools
+
     assay_fact = build_fact_envelope(
         goal_type="PRODUCT_ASSAY_HISTORY",
         tool_name="query_assay_records",

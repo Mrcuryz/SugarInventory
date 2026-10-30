@@ -36,7 +36,6 @@ public class FinishInboundExecutionPendingService {
                     .productName(text(item, "productName"))
                     .warehouseName(text(item, "warehouseName"))
                     .entryDate(date(item, "entryDate"))
-                    .side(text(item, "side"))
                     .quantity(item.path("quantity").isNumber()
                             ? item.path("quantity").asInt() : null)
                     .unitLabel(text(item, "unitLabel"))

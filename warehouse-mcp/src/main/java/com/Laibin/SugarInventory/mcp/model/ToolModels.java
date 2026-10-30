@@ -1034,7 +1034,8 @@ public final class ToolModels {
             String taskType,
             String comparisonMode,
             String comparisonStartDate,
-            String comparisonEndDate
+            String comparisonEndDate,
+            String departmentName
     ) {
     }
 
@@ -1074,6 +1075,7 @@ public final class ToolModels {
             List<JsonNode> inventoryTrendDailySeries,
             List<JsonNode> inventoryTrendProductBreakdowns,
             JsonNode operationsOverview,
+            JsonNode productionDailyReport,
             JsonNode comparison,
             JsonNode dataQuality,
             List<String> limitations,
@@ -1092,11 +1094,36 @@ public final class ToolModels {
                     List.of(), List.of(),
                     null,
                     List.of(), List.of(), List.of(),
-                    null, List.of(), List.of(), null,
+                    null, List.of(), List.of(), null, null,
                     null, null,
                     List.of(), error);
         }
     }
+
+    public record ProductionDailyReportsRequest(String startDate, String endDate, String departmentName,
+                                                String itemQuery, Integer page, Integer size) {}
+
+    public record ProductionDailyReportsResponse(String sourceLabel, String dateRangeLabel, String scopeLabel,
+            boolean isEmpty, int page, int size, long total, boolean hasMore,
+            List<ProductionDailyReportHeader> reports, List<ProductionDailyReportRow> records,
+            List<String> limitations, List<ProductionDailyReportOverview> overview,
+            boolean overviewTruncated, int requestedDays, ToolError error) {
+        public static ProductionDailyReportsResponse error(ToolError error) {
+            return new ProductionDailyReportsResponse(null, null, null, false, 1, 20, 0, false,
+                    List.of(), List.of(), List.of(), List.of(), false, 0, error);
+        }
+    }
+
+    public record ProductionDailyReportHeader(String reportDate, String statusLabel) {}
+
+    public record ProductionDailyReportOverview(String summaryType, String departmentName, String label,
+            String unit, BigDecimal quantity, BigDecimal convertedTons, long recordCount,
+            long quantityRows, long tonnageRows, long observedDays, long draftRows, String coverageLabel) {}
+
+    public record ProductionDailyReportRow(String reportDate, String departmentName, String sectionStatusLabel,
+            String groupName, String itemName, String itemKindLabel, String unit,
+            BigDecimal dailyActual, BigDecimal convertedTons, BigDecimal monthQuantity,
+            BigDecimal monthTons, BigDecimal yearTons) {}
 
     public record ProductionBoilingBatchListRequest(
             String productQuery,
@@ -1284,6 +1311,51 @@ public final class ToolModels {
         }
     }
 
+    public record AssayEntryPreviewRequest(
+            Integer productId, LocalDate sampleDate, BigDecimal colorValue, BigDecimal reducingSugar,
+            BigDecimal dryWeight, BigDecimal conductivityAsh, BigDecimal sucrose,
+            BigDecimal insolubleImpurity, BigDecimal phValue
+    ) {
+    }
+
+    public record AssayEntryMetric(String field, String name, BigDecimal value, boolean provided, String unit) {
+    }
+
+    public record AssayGroupEntryPreviewRequest(
+            String groupRef, LocalDate sampleDate, BigDecimal colorValue, BigDecimal reducingSugar,
+            BigDecimal dryWeight, BigDecimal conductivityAsh, BigDecimal sucrose,
+            BigDecimal insolubleImpurity, BigDecimal phValue
+    ) {
+    }
+
+    public record AssayGroupEntryPreviewResponse(
+            boolean previewOnly, boolean confirmationAvailable, Integer groupId, String groupName,
+            LocalDate sampleDate, int productCount, List<AssayEntryPreviewResponse> products,
+            List<String> warnings, String groupRef, ToolError error
+    ) {
+        public static AssayGroupEntryPreviewResponse error(ToolError error) {
+            return new AssayGroupEntryPreviewResponse(true, false, null, null, null, 0,
+                    List.of(), List.of(), null, error);
+        }
+    }
+
+    public record AssayEntryFailedMetric(String name, BigDecimal value, String unit, String reason) {
+    }
+
+    public record AssayEntryPreviewResponse(
+            boolean previewOnly, boolean confirmationAvailable, String productRef, String previewedAt, Integer productId, String productName,
+            BigDecimal weightPerPiece, Integer piecesPerPallet, LocalDate sampleDate,
+            Integer existingVersion, Integer proposedVersion, List<AssayEntryMetric> metrics,
+            String judgementLabel, String judgementMessage, String appliedStandardName,
+            Integer appliedStandardVersion, List<AssayEntryFailedMetric> failedMetrics,
+            List<String> warnings, ToolError error
+    ) {
+        public static AssayEntryPreviewResponse error(ToolError error) {
+            return new AssayEntryPreviewResponse(true, false, null, null, null, null, null, null, null,
+                    null, null, List.of(), null, null, null, null, List.of(), List.of(), error);
+        }
+    }
+
     public record TaskTransitionPreviewRequest(
             Integer previewVersion, String transition, List<String> palletCodes
     ) {
@@ -1305,7 +1377,7 @@ public final class ToolModels {
     }
 
     public record FinishInboundExecutionPreviewItem(
-            String code, String warehouseName, String entryDate, String side,
+            String code, String warehouseName, String entryDate,
             Integer quantity, String unit, String remark
     ) {
     }

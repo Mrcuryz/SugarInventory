@@ -4,6 +4,7 @@ import lombok.Getter;
 
 @Getter
 public enum ErrorCode {
+    PRODUCTION_DAILY_REPORT_QUERY_INVALID(1040, "日报查询条件无效，请选择不超过31天的日期范围、有效车间及分页条件"),
     PRODUCT_NOT_FOUND(1001, "产品不存在"),
     INVALID_PRODUCT_TYPE(1002, "无效的产品类型"),
     INVALID_PRODUCT_STATUS(1003, "无效的产品状态"),
@@ -49,7 +50,16 @@ public enum ErrorCode {
     EQUIPMENT_BASIC_DATA_NOT_FOUND(1047, "设备基础资料不存在"),
     EQUIPMENT_DUPLICATE_DATA(1048, "设备基础资料已存在"),
     EQUIPMENT_REPAIR_NOT_FOUND(1049, "设备修理记录不存在"),
-    EQUIPMENT_CODE_RULE_AMBIGUOUS(1050, "同一设备单位和类别存在多条启用的编号规则");
+    EQUIPMENT_CODE_RULE_AMBIGUOUS(1050, "同一设备单位和类别存在多条启用的编号规则"),
+    ASSAY_ENTRY_INPUT_INVALID(1051, "化验录入信息无效，请核对产品、采样日期和实测值"),
+    ASSAY_ENTRY_VERSION_CONFLICT(1052, "该产品日期的化验版本状态异常，请核对已有记录后重新预览"),
+    ASSAY_ENTRY_JUDGEMENT_UNAVAILABLE(1053, "暂时无法获得化验判定，请稍后重新预览"),
+    ASSAY_ENTRY_PREVIEW_INVALID(1054, "化验预览不存在或已经失效，请重新预览"),
+    ASSAY_ENTRY_STATE_CHANGED(1055, "产品、化验版本或标准已变化，请重新预览"),
+    ASSAY_ENTRY_PERMISSION_DENIED(1056, "当前账号没有化验查看和录入权限"),
+    ASSAY_ENTRY_SESSION_INVALID(1057, "当前会话已失效，请重新打开助手"),
+    ASSAY_ENTRY_CONFIRMATION_INVALID(1058, "本次化验确认无效或已过期，请重新预览"),
+    ASSAY_ENTRY_EXECUTION_DISABLED(1059, "化验保存暂未开放，请联系管理员");
 
     private final int code;
     private final String message;

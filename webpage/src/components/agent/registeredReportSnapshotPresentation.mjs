@@ -1,3 +1,4 @@
+import { dailyAnalysisSnapshotCard } from './dailyReportAnalysisPresentation.mjs'
 const list = value => (Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [])
 const object = value => (value && typeof value === 'object' && !Array.isArray(value) ? value : {})
 const text = value => String(value ?? '').trim()
@@ -316,6 +317,7 @@ const palletTaskCard = report => {
 }
 
 const builders = {
+  production_daily_report_analysis_v1: dailyAnalysisSnapshotCard,
   today_operations_overview_v1: todayOperationsCard,
   daily_production_overview_v1: dailyProductionCard,
   inventory_level_trend_v1: inventoryLevelTrendCard,

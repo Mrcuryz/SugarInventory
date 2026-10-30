@@ -18,7 +18,6 @@ const card = {
       availablePalletCount: 3,
       productLabel: '黄冰糖（袋）',
       warehouseName: '3号库位',
-      defaultSide: '右',
       canSelectRequestedCount: true
     },
     { kind: 'fixed_qr_inbound_candidate', code: 'qr001', fixedProductName: '黄冰糖（袋）', statusLabel: '空闲', selectable: true },
@@ -34,7 +33,6 @@ test('reads the fixed QR inbound selection without exposing raw status', () => {
     availablePalletCount: 3,
     productLabel: '黄冰糖（袋）',
     warehouseName: '3号库位',
-    defaultSide: '右',
     operationModeLabel: '使用空闲固定二维码新建任务',
     canSelectRequestedCount: true,
     creationCompleted: false
@@ -62,7 +60,6 @@ test('creates a task-creation action only for the exact requested QR count', () 
     palletCodes: ['QR001', 'QR002'],
     productLabel: '黄冰糖（袋）',
     defaultWarehouseName: '3号库位',
-    defaultSide: '右',
     requestedPalletCount: 2
   })
   assert.equal(fixedQrTaskCreationAction(card, ['QR001']), null)

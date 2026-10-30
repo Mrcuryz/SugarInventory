@@ -2,7 +2,10 @@
 
 日期：2026-07-16
 
-结论：`READY_FOR_LOCAL_MODEL_UAT`，生产 `NO_GO`
+历史结论：`READY_FOR_LOCAL_MODEL_UAT`，当时生产 `NO_GO`
+
+> 这是 2026-07-16 的实验实施记录，不是当前生产部署说明。当前受控生产化结论见
+> `docs/agent/controlled-llm-production-rollout-2026-08-29.md`。
 
 ## 修改范围
 

@@ -113,7 +113,6 @@ watch(() => props.modelValue, opened => {
           <el-table-column prop="productName" label="产品" min-width="150" />
           <el-table-column prop="warehouseName" label="目标库位" min-width="120" />
           <el-table-column prop="entryDate" label="入库日期" width="120" />
-          <el-table-column prop="side" label="侧" width="70" />
           <el-table-column label="数量" width="110">
             <template #default="{ row }">{{ row.quantity }} {{ row.unitLabel }}</template>
           </el-table-column>

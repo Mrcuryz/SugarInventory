@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>生产日报卡片 · 隔离展示验收</title></head>
+<body style="margin:0;background:#f3f6fb;font-family:Arial,'Microsoft YaHei',sans-serif">
+<main style="max-width:520px;margin:24px auto;background:white;border:1px solid #e3eaf5;border-radius:12px">
+  <h2 style="font-size:18px;margin:18px">生产日报 · 2026-09-08</h2>
+  <p style="margin:18px;font-size:12px;color:#875c13">展示验收数据，不是生产业务记录</p>
+  <div id="app"></div>
+</main>
+<script type="module">
+import { createApp, h } from 'vue'
+import Card from '/src/components/agent/ProductionDailyRecordsCard.vue'
+const card = {cardType:'production_daily_records',fields:[
+  {kind:'daily_records_summary',sourceLabel:'生产日报填报记录',scopeLabel:'多晶车间',isEmpty:false,page:1,total:21,hasMore:true},
+  {kind:'daily_records_header',reportDate:'2026-09-08',statusLabel:'草稿'},
+  {kind:'daily_records_row',itemKindLabel:'产品',reportDate:'2026-09-08',departmentName:'多晶车间',sectionStatusLabel:'已提交',groupName:'半成品',itemName:'黄冰糖（袋）',unit:'件',dailyActual:0,convertedTons:null,monthQuantity:123,monthTons:null,yearTons:80},
+  {kind:'daily_records_row',itemKindLabel:'指标',reportDate:'2026-09-08',departmentName:'多晶车间',sectionStatusLabel:'草稿',groupName:'综合指标',itemName:'冰糖结晶率',unit:'%',dailyActual:83.5,convertedTons:null,monthQuantity:null,monthTons:null,yearTons:null},
+  {kind:'daily_records_note',value:'来源为生产日报填报记录，不是生产订单登记产出；两种来源不得相加。'},
+  {kind:'daily_records_note',value:'空值表示未填报，不等于0；月/年累计为已保存填报值，不跨日累加。'}
+]}
+createApp({render:()=>h(Card,{card})}).mount('#app')
+</script>
+</body></html>

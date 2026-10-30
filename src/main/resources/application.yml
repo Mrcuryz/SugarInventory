@@ -75,6 +75,8 @@ analytics:
   inventory-trend:
     simulation-enabled: ${INVENTORY_TREND_SIMULATION_ENABLED:false}
 agent:
+  assay-entry:
+    execute-enabled: ${AGENT_ASSAY_ENTRY_EXECUTE_ENABLED:false}
   reports:
     retention:
       cleanup-enabled: ${AGENT_REPORT_CLEANUP_ENABLED:true}

@@ -45,8 +45,8 @@ class FinishInboundL3ReadinessContractTest {
                 .containsExactlyInAnyOrder("previewVersion", "items");
         assertThat(fieldNames(FinishInboundExecutionPreviewItemDTO.class))
                 .containsExactlyInAnyOrder(
-                        "code", "warehouseName", "entryDate", "side", "quantity", "unit", "remark")
-                .doesNotContain("rowNumber", "layer", "productId", "warehouseId", "taskId", "inventoryId");
+                        "code", "warehouseName", "entryDate", "quantity", "unit", "remark")
+                .doesNotContain("side", "rowNumber", "layer", "productId", "warehouseId", "taskId", "inventoryId");
 
         assertThat(fieldNames(ConfirmPalletInItemDTO.class)).contains(
                 "code", "warehouseName", "entryDate", "side",

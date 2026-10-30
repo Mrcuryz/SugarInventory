@@ -23,6 +23,7 @@ public class RegisteredReportRunVO {
     LocalDateTime dataAsOf;
     LocalDateTime latestRecordAt;
     Map<String, String> filtersApplied;
+    com.Laibin.SugarInventory.production.domain.vo.ProductionDailyAggregateVO productionDailyReport;
     RegisteredReportMetricsVO metrics;
     List<RegisteredReportDailyPointVO> dailySeries;
     List<RegisteredReportProductBreakdownVO> productBreakdowns;

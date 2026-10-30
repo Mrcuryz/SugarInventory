@@ -19,6 +19,10 @@ import com.Laibin.SugarInventory.production.domain.vo.ProductionLabelCompletionV
 import com.Laibin.SugarInventory.production.domain.vo.ProductionInProcessMaterialsVO;
 import com.Laibin.SugarInventory.production.domain.vo.ProductionMaterialCandidatesVO;
 import com.Laibin.SugarInventory.production.service.ProductionAgentReadService;
+import com.Laibin.SugarInventory.production.service.ProductionDailyReportAgentReadService;
+import com.Laibin.SugarInventory.production.domain.dto.ProductionDailyReportAgentQueryDTO;
+import com.Laibin.SugarInventory.production.domain.vo.ProductionDailyReportAgentVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -32,6 +36,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ProductionAgentReadController {
     private final ProductionAgentReadService service;
+    private final ProductionDailyReportAgentReadService dailyReportService;
+
+    @PostMapping("/daily-reports/query")
+    @PreAuthorize("hasAuthority('production:daily-report:view')")
+    public Result<ProductionDailyReportAgentVO> queryDailyReports(
+            @Valid @RequestBody ProductionDailyReportAgentQueryDTO query) {
+        return Result.success(dailyReportService.query(query));
+    }
 
     @PostMapping("/entities/resolve")
     @PreAuthorize("hasAnyAuthority('production:order:view','production:boiling:view')")

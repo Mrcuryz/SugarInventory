@@ -47,6 +47,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionOrderProgressRes
 import com.Laibin.SugarInventory.mcp.model.ToolModels.RegisteredReportRunRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.RegisteredReportRunResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionDailyReportsRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionDailyReportsResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchListResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductionBoilingBatchTraceResponse;
@@ -162,11 +164,21 @@ public class WarehouseReadService {
             }
         }
         Map<String, Object> query = new LinkedHashMap<>();
-        query.put("name", productQuery);
+        // Packaging is represented inconsistently in legacy names: （箱）, （9.6箱装）,
+        // 14.5（箱装）. Search the base name, then preserve the requested packaging.
+        // Do not strip explicit weights or suffixes from an already specific name.
+        var packaging = java.util.regex.Pattern.compile("^(.+?)(?:[（(]([袋箱桶])(?:装)?[）)]|([袋箱桶])装)$")
+                .matcher(productQuery);
+        String packagingToken = packaging.matches() ? (packaging.group(2) != null ? packaging.group(2) : packaging.group(3)) : null;
+        query.put("name", packagingToken == null ? productQuery : packaging.group(1).trim());
         query.put("type", blankToNull(request.productType()));
         query.put("status", blankToNull(request.productStatus()));
         JsonNode data = apiClient.getData("/api/products/product", query);
         for (JsonNode item : asArray(data)) {
+            String productName = text(item, "productName");
+            if (packagingToken != null && (productName == null || !productName.contains(packagingToken))) {
+                continue;
+            }
             ProductCandidate candidate = productCandidate(item, matchType(productQuery, text(item, "productName"), false),
                     matchScore(productQuery, text(item, "productName"), false));
             if (candidates.stream().noneMatch(existing -> sameId(existing.productId(), candidate.productId()))) {
@@ -510,11 +522,30 @@ public class WarehouseReadService {
                 trimToNull(request.taskType()),
                 trimToNull(request.comparisonMode()),
                 trimToNull(request.comparisonStartDate()),
-                trimToNull(request.comparisonEndDate()));
+                trimToNull(request.comparisonEndDate()),
+                trimToNull(request.departmentName()));
         return apiClient.postData(
                 "/api/analytics/agent-read/reports/run",
                 normalized,
                 RegisteredReportRunResponse.class);
+    }
+
+    public ProductionDailyReportsResponse queryProductionDailyReports(ProductionDailyReportsRequest request) {
+        if (request == null || request.startDate() == null || request.endDate() == null) {
+            throw new IllegalArgumentException("startDate and endDate are required");
+        }
+        java.time.LocalDate start = java.time.LocalDate.parse(request.startDate());
+        java.time.LocalDate end = java.time.LocalDate.parse(request.endDate());
+        int page = request.page() == null ? 1 : request.page();
+        int size = request.size() == null ? 20 : request.size();
+        if (end.isBefore(start) || java.time.temporal.ChronoUnit.DAYS.between(start, end) >= 31
+                || page < 1 || page > 10000 || size < 1 || size > 50) {
+            throw new IllegalArgumentException("invalid daily report query range or pagination");
+        }
+        return apiClient.postData("/api/production/agent-read/daily-reports/query",
+                new ProductionDailyReportsRequest(start.toString(), end.toString(),
+                        trimToNull(request.departmentName()), trimToNull(request.itemQuery()), page, size),
+                ProductionDailyReportsResponse.class);
     }
 
     public ProductionBoilingBatchListResponse queryBoilingBatches(ProductionBoilingBatchListRequest request) {
@@ -598,6 +629,58 @@ public class WarehouseReadService {
                         source.productionDateStart(), source.productionDateEnd(), page, size), PalletTasksResponse.class);
     }
 
+    public ToolModels.AssayEntryPreviewResponse previewAssayEntry(ToolModels.AssayEntryPreviewRequest request) {
+        if (request == null || request.productId() == null || request.productId() <= 0
+                || request.sampleDate() == null) {
+            throw new IllegalArgumentException("A resolved product and explicit sample date are required");
+        }
+        // Scientific ranges, database precision and version checks belong to the existing backend validator.
+        // Do not normalize, round or fill measurements in the transport layer.
+        ToolModels.AssayEntryPreviewResponse response = apiClient.postData(
+                "/api/assay/entry/preview", request, ToolModels.AssayEntryPreviewResponse.class);
+        if (response == null || !response.previewOnly() || response.productId() == null
+                || !response.productId().equals(request.productId())
+                || !request.sampleDate().equals(response.sampleDate())) {
+            throw new WarehouseApiException("UPSTREAM_INVALID_RESPONSE",
+                    "化验预览返回的产品、日期或操作类型不一致，请重新预览。", null, false);
+        }
+        return response;
+    }
+
+    public ToolModels.AssayGroupEntryPreviewResponse previewAssayGroupEntry(ToolModels.AssayGroupEntryPreviewRequest request) {
+        if (request == null || request.groupRef() == null || request.groupRef().length() > 500
+                || !request.groupRef().matches("aer_[A-Za-z0-9_-]+[.][A-Za-z0-9_-]+") || request.sampleDate() == null) {
+            throw new IllegalArgumentException("A selected group reference and explicit sample date are required");
+        }
+        var values = new ToolModels.AssayEntryPreviewRequest(null, request.sampleDate(), request.colorValue(),
+                request.reducingSugar(), request.dryWeight(), request.conductivityAsh(), request.sucrose(),
+                request.insolubleImpurity(), request.phValue());
+        var response = apiClient.postData("/api/assay/entry/group/from-reference/preview",
+                java.util.Map.of("groupRef", request.groupRef(), "values", values), ToolModels.AssayGroupEntryPreviewResponse.class);
+        if (response == null || !response.previewOnly() || response.error() != null
+                || !request.groupRef().equals(response.groupRef()) || !request.sampleDate().equals(response.sampleDate())
+                || response.groupId() == null || response.groupId() <= 0
+                || response.products() == null || response.productCount() < 1 || response.productCount() > 200
+                || response.productCount() != response.products().size()) {
+            throw invalidAssayGroupPreview();
+        }
+        Set<Integer> products = new java.util.HashSet<>();
+        for (var product : response.products()) {
+            if (product == null || !product.previewOnly() || product.error() != null
+                    || product.productId() == null || product.productId() <= 0 || !products.add(product.productId())
+                    || !request.sampleDate().equals(product.sampleDate())
+                    || product.proposedVersion() == null || product.proposedVersion() < 1) {
+                throw invalidAssayGroupPreview();
+            }
+        }
+        return response;
+    }
+
+    private WarehouseApiException invalidAssayGroupPreview() {
+        return new WarehouseApiException("UPSTREAM_INVALID_RESPONSE",
+                "化验组预览的范围、日期或产品明细不完整，请重新预览。", null, false);
+    }
+
     public TaskTransitionPreviewResponse previewTaskTransition(TaskTransitionPreviewRequest request) {
         if (request == null || request.previewVersion() == null || request.transition() == null
                 || request.palletCodes() == null || request.palletCodes().isEmpty()) {
@@ -616,9 +699,9 @@ public class WarehouseReadService {
 
     public FinishInboundExecutionPreviewResponse previewFinishInboundExecution(
             FinishInboundExecutionPreviewRequest request) {
-        if (request == null || request.previewVersion() == null || request.previewVersion() != 1
+        if (request == null || request.previewVersion() == null || request.previewVersion() != 2
                 || request.items() == null || request.items().isEmpty() || request.items().size() > 20) {
-            throw new IllegalArgumentException("previewVersion=1 and 1-20 items are required");
+            throw new IllegalArgumentException("previewVersion=2 and 1-20 items are required");
         }
         Set<String> codes = new java.util.LinkedHashSet<>();
         for (FinishInboundExecutionPreviewItem item : request.items()) {
@@ -630,10 +713,6 @@ public class WarehouseReadService {
             String normalizedCode = item.code().trim().toUpperCase(java.util.Locale.ROOT);
             if (!normalizedCode.matches("[A-Z0-9-]+") || !codes.add(normalizedCode)) {
                 throw new IllegalArgumentException("pallet codes must be unique and controlled");
-            }
-            if (item.side() != null && !item.side().isBlank()
-                    && !Set.of("左", "右").contains(item.side().trim())) {
-                throw new IllegalArgumentException("unsupported side");
             }
             if (item.unit() != null && !item.unit().isBlank()
                     && !Set.of("0", "1").contains(item.unit().trim())) {

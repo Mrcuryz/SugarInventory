@@ -1,5 +1,10 @@
 <script setup>
 import { computed, defineAsyncComponent, ref } from 'vue'
+import ProductionDailyRecordsCard from './ProductionDailyRecordsCard.vue'
+import AssayEntryPreviewCard from './AssayEntryPreviewCard.vue'
+import ProductionDailyAnalysisCard from './ProductionDailyAnalysisCard.vue'
+import { dailyAnalysisSummary } from './dailyReportAnalysisPresentation.mjs'
+import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/dateTime'
 import { distributionRiskSummary, distributionRows, isDistributionCard } from './agentDisplay'
 import {
@@ -155,6 +160,7 @@ const RegisteredReportTrendChart = defineAsyncComponent(
 )
 
 const props = defineProps({
+  canSaveAssay: { type: Boolean, default: false },
   card: {
     type: Object,
     required: true
@@ -257,7 +263,11 @@ const todayOverviewSummary = computed(() => todayOperationsOverviewSummary(props
 const todayOverviewSections = computed(() => todayOperationsOverviewSections(props.card))
 const todayOverviewNotes = computed(() => todayOperationsOverviewNotes(props.card))
 const todayOverviewScopeNote = computed(() => todayOperationsOverviewScopeNote(props.card))
+const authStore = useAuthStore()
+const isDailyAnalysis = computed(() => props.card.cardType === 'production_daily_report_analysis')
+const canExportReport = computed(() => !isDailyAnalysis.value || authStore.hasPermission('production:daily-report:export'))
 const isRegisteredReport = computed(() => (
+  isDailyAnalysis.value ||
   isTodayOperationsOverview.value
   || isDailyProductionReport.value
   || isInventoryLevelTrend.value
@@ -269,6 +279,7 @@ const isRegisteredReport = computed(() => (
 const reportComparison = computed(() => registeredReportComparison(props.card))
 const reportRunId = computed(() => (
   todayOverviewSummary.value?.reportRunId
+  || dailyAnalysisSummary(props.card).reportRunId
   || dailyReportSummary.value?.reportRunId
   || inventoryTrendSummary.value?.reportRunId
   || qualityTrendSummary.value?.reportRunId
@@ -404,7 +415,6 @@ const openTaskBatch = (group) => {
       ? {
           requestedPalletCount: requirement.requestedPalletCount,
           defaultWarehouseName: requirement.warehouseName,
-          defaultSide: requirement.defaultSide,
           guidedProductLabel: requirement.productLabel
         }
       : {})
@@ -465,7 +475,7 @@ const exportRegisteredReport = () => {
         <span v-if="taskSummary.otherCount" class="task-summary-other">其他 {{ taskSummary.otherCount }}</span>
       </div>
       <button
-        v-if="isRegisteredReport && reportRunId"
+        v-if="isRegisteredReport && reportRunId && canExportReport"
         type="button"
         class="business-card-export"
         aria-label="导出这份报表"
@@ -475,7 +485,7 @@ const exportRegisteredReport = () => {
         导出
       </button>
       <button
-        v-if="isAssay || isTask || isTaskTransitionPreview || isFinishInboundExecutionPreview || isFixedQrInboundSelection || isProduction || isTodayOperationsOverview || isDailyProductionReport || isInventoryLevelTrend || isQualityAssayTrend || isQualityMetricTrend || isProductionInputOutputFlow || isPalletTaskCycleReport || isPallet || isInventoryQuality"
+        v-if="isDailyAnalysis || isAssay || isTask || isTaskTransitionPreview || isFinishInboundExecutionPreview || isFixedQrInboundSelection || isProduction || isTodayOperationsOverview || isDailyProductionReport || isInventoryLevelTrend || isQualityAssayTrend || isQualityMetricTrend || isProductionInputOutputFlow || isPalletTaskCycleReport || isPallet || isInventoryQuality"
         type="button"
         class="business-card-toggle"
         :aria-expanded="expanded"
@@ -486,7 +496,10 @@ const exportRegisteredReport = () => {
         <el-icon><ArrowUp v-if="expanded" /><ArrowDown v-else /></el-icon>
       </button>
     </div>
-    <div v-if="isTodayOperationsOverview" class="today-operations-body">
+    <ProductionDailyRecordsCard v-if="card.cardType === 'production_daily_records'" v-show="expanded" :card="card" />
+    <AssayEntryPreviewCard v-else-if="card.cardType === 'assay_entry_preview'" v-show="expanded" :card="card" :can-save="canSaveAssay" @card-action="emit('card-action', $event)" />
+    <ProductionDailyAnalysisCard v-else-if="isDailyAnalysis" v-show="expanded" :card="card" />
+    <div v-else-if="isTodayOperationsOverview" class="today-operations-body">
       <template v-if="expanded">
         <div v-if="todayOverviewSummary" class="today-operations-summary">
           <strong>{{ todayOverviewSummary.value }}</strong>
@@ -611,7 +624,6 @@ const exportRegisteredReport = () => {
               <div class="task-meta">
                 <span>目标库位：{{ item.warehouseLabel }}</span>
                 <span>入库日期：{{ item.entryDate }}</span>
-                <span>存放侧：{{ item.sideLabel }}</span>
                 <span v-if="item.executionCompleted">数量：{{ item.quantityText }}</span>
                 <span v-if="item.productionDate">生产日期：{{ item.productionDate }}</span>
                 <span>{{ item.quantityRuleLabel }}</span>
@@ -1864,6 +1876,11 @@ const exportRegisteredReport = () => {
         <small v-if="metric.note">{{ metric.note }}</small>
       </article>
       <p v-if="reportComparison.differentPeriodLengths">两期天数不同，可累加指标请优先查看日均变化。</p>
+      <p v-if="!reportComparison.metrics.length">两期均没有可比较的统计项目，不表示产量为 0。</p>
+      <details v-if="reportComparison.notes.length">
+        <summary>比较说明</summary>
+        <p v-for="note in reportComparison.notes" :key="note">{{ note }}</p>
+      </details>
     </section>
   </div>
 </template>

@@ -39,7 +39,7 @@ class AgentReadPermissionMatrixTest {
             assertPermission(
                     AnalyticsAgentReadController.class,
                     method,
-                    "hasAnyAuthority('production:order:view', 'assay:view', 'task:view', 'inventory:view')");
+                    "hasAnyAuthority('production:daily-report:view', 'production:order:view', 'assay:view', 'task:view', 'inventory:view')");
         }
     }
 

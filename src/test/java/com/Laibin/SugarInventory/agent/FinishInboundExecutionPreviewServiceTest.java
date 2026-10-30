@@ -16,7 +16,6 @@ import com.Laibin.SugarInventory.mapper.PalletTaskSemiItemMapper;
 import com.Laibin.SugarInventory.mapper.ProductMapper;
 import com.Laibin.SugarInventory.mapper.SemiPreparePoolBalanceMapper;
 import com.Laibin.SugarInventory.mapper.WarehouseMapper;
-import com.Laibin.SugarInventory.mapper.InventoryMapper;
 import com.Laibin.SugarInventory.production.domain.po.ProductionOrderOutputCode;
 import com.Laibin.SugarInventory.production.mapper.ProductionOrderOutputCodeMapper;
 import com.Laibin.SugarInventory.service.PalletCodeService;
@@ -36,7 +35,6 @@ class FinishInboundExecutionPreviewServiceTest {
     private PalletTaskMapper palletTaskMapper;
     private ProductMapper productMapper;
     private WarehouseMapper warehouseMapper;
-    private InventoryMapper inventoryMapper;
     private ProductionOrderOutputCodeMapper outputCodeMapper;
     private PalletTaskSemiItemMapper semiItemMapper;
     private SemiPreparePoolBalanceMapper balanceMapper;
@@ -48,7 +46,6 @@ class FinishInboundExecutionPreviewServiceTest {
         palletTaskMapper = mock(PalletTaskMapper.class);
         productMapper = mock(ProductMapper.class);
         warehouseMapper = mock(WarehouseMapper.class);
-        inventoryMapper = mock(InventoryMapper.class);
         outputCodeMapper = mock(ProductionOrderOutputCodeMapper.class);
         semiItemMapper = mock(PalletTaskSemiItemMapper.class);
         balanceMapper = mock(SemiPreparePoolBalanceMapper.class);
@@ -57,7 +54,6 @@ class FinishInboundExecutionPreviewServiceTest {
                 palletTaskMapper,
                 productMapper,
                 warehouseMapper,
-                inventoryMapper,
                 outputCodeMapper,
                 semiItemMapper,
                 balanceMapper);
@@ -100,8 +96,8 @@ class FinishInboundExecutionPreviewServiceTest {
             assertThat(item.getPallet().getId()).isEqualTo(11);
             assertThat(item.getProduct().getId()).isEqualTo(31);
             assertThat(item.getWarehouse().getId()).isEqualTo(41);
-            assertThat(item.getWarehouse().getMaxRows()).isEqualTo(20);
-            assertThat(item.getWarehouse().getLeftUsedRowsLayer1()).isEmpty();
+            assertThat(item.getWarehouse().getMaxCapacity()).isEqualTo(20);
+            assertThat(item.getWarehouse().getCurCapacity()).isZero();
             assertThat(item.getNormalizedInput().getQuantity()).isEqualTo(30);
             assertThat(item.getNormalizedInput().getUnit()).isEqualTo("1");
         });
@@ -157,33 +153,29 @@ class FinishInboundExecutionPreviewServiceTest {
     }
 
     @Test
-    void rejectsPreviewWhenExistingAllocationRulesHaveNoAvailablePosition() {
+    void rejectsPreviewWhenWarehouseHasNoAvailableCapacity() {
         PalletCode pallet = pendingPallet();
         PalletTask task = finishInboundTask();
         Product product = product();
-        product.setCanStack(false);
         Warehouse warehouse = warehouse();
-        warehouse.setMaxRows(1);
+        warehouse.setMaxCapacity(1);
+        warehouse.setCurCapacity(1);
         when(palletCodeService.parseAndFind("BT0019N1")).thenReturn(pallet);
         when(palletTaskMapper.selectPendingByCycle(11, 2)).thenReturn(task);
         when(productMapper.selectById(31)).thenReturn(product);
         when(warehouseMapper.selectByWarehouseName("1号库位")).thenReturn(warehouse);
         when(outputCodeMapper.selectByTaskId(21)).thenReturn(null);
-        when(inventoryMapper.getUsedRowList(41, "左", 1)).thenReturn(List.of(1));
-        when(inventoryMapper.getUsedRowList(41, "右", 1)).thenReturn(List.of(1));
-        when(inventoryMapper.getUsedRowList(41, "左", 2)).thenReturn(List.of());
-        when(inventoryMapper.getUsedRowList(41, "右", 2)).thenReturn(List.of());
 
         FinishInboundExecutionPreviewVO result = service.preview(request(1, "0"), user());
 
         assertThat(result.getPreviewStatus()).isEqualTo("CONFLICT");
         assertThat(result.isReadyForUserConfirmation()).isFalse();
         assertThat(result.getServerSnapshot()).isNull();
-        assertThat(result.getBlockingIssues()).singleElement().asString().contains("没有可分配位置");
+        assertThat(result.getBlockingIssues()).singleElement().asString().contains("没有可用容量");
     }
 
     @Test
-    void reservesPositionsAcrossTheWholePreviewBatch() {
+    void reservesCapacityAcrossTheWholePreviewBatch() {
         PalletCode firstPallet = pendingPallet();
         PalletCode secondPallet = pendingPallet();
         secondPallet.setId(12);
@@ -193,9 +185,9 @@ class FinishInboundExecutionPreviewServiceTest {
         secondTask.setId(22);
         secondTask.setPalletCodeId(12);
         Product product = product();
-        product.setCanStack(false);
         Warehouse warehouse = warehouse();
-        warehouse.setMaxRows(1);
+        warehouse.setMaxCapacity(1);
+        warehouse.setCurCapacity(0);
         when(palletCodeService.parseAndFind("BT0019N1")).thenReturn(firstPallet);
         when(palletCodeService.parseAndFind("BT0019N2")).thenReturn(secondPallet);
         when(palletTaskMapper.selectPendingByCycle(11, 2)).thenReturn(firstTask);
@@ -204,13 +196,9 @@ class FinishInboundExecutionPreviewServiceTest {
         when(warehouseMapper.selectByWarehouseName("1号库位")).thenReturn(warehouse);
         when(outputCodeMapper.selectByTaskId(any())).thenReturn(null);
         when(semiItemMapper.selectList(any())).thenReturn(List.of());
-        when(inventoryMapper.getUsedRowList(41, "左", 1)).thenReturn(List.of());
-        when(inventoryMapper.getUsedRowList(41, "右", 1)).thenReturn(List.of(1));
-        when(inventoryMapper.getUsedRowList(41, "左", 2)).thenReturn(List.of());
-        when(inventoryMapper.getUsedRowList(41, "右", 2)).thenReturn(List.of());
 
         FinishInboundExecutionPreviewDTO request = new FinishInboundExecutionPreviewDTO();
-        request.setPreviewVersion(1);
+        request.setPreviewVersion(2);
         FinishInboundExecutionPreviewItemDTO first = request(1, "0").getItems().get(0);
         FinishInboundExecutionPreviewItemDTO second = request(1, "0").getItems().get(0);
         second.setCode("BT0019N2");
@@ -221,7 +209,7 @@ class FinishInboundExecutionPreviewServiceTest {
         assertThat(result.getPreviewStatus()).isEqualTo("CONFLICT");
         assertThat(result.getEligibleItemCount()).isEqualTo(1);
         assertThat(result.getServerSnapshot()).isNull();
-        assertThat(result.getBlockingIssues()).singleElement().asString().contains("BT0019N2", "没有可分配位置");
+        assertThat(result.getBlockingIssues()).singleElement().asString().contains("BT0019N2", "没有可用容量");
     }
 
     private static FinishInboundExecutionPreviewDTO request(int quantity, String unit) {
@@ -229,12 +217,11 @@ class FinishInboundExecutionPreviewServiceTest {
         item.setCode("bt0019n1");
         item.setWarehouseName("1号库位");
         item.setEntryDate(LocalDate.of(2026, 8, 9));
-        item.setSide("左");
         item.setQuantity(quantity);
         item.setUnit(unit);
         item.setRemark("验收预览");
         FinishInboundExecutionPreviewDTO request = new FinishInboundExecutionPreviewDTO();
-        request.setPreviewVersion(1);
+        request.setPreviewVersion(2);
         request.setItems(List.of(item));
         return request;
     }
@@ -276,7 +263,7 @@ class FinishInboundExecutionPreviewServiceTest {
         warehouse.setId(41);
         warehouse.setWarehouseName("1号库位");
         warehouse.setStatus("EMPTY");
-        warehouse.setMaxRows(20);
+        warehouse.setMaxCapacity(20);
         warehouse.setCurCapacity(0);
         return warehouse;
     }

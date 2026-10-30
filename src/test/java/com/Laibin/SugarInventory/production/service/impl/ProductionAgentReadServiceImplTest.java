@@ -265,7 +265,8 @@ class ProductionAgentReadServiceImplTest {
 
         assertThat(result.getRecords()).singleElement().satisfies(record -> {
             assertThat(record.getPalletCode()).isEqualTo("P001");
-            assertThat(record.getPositionText()).isEqualTo("左侧2排1层");
+            assertThat(record.getWarehouseName()).isEqualTo("1号库位");
+            assertThat(record.getPositionText()).isNull();
         });
         assertThat(result.getLimitations()).anyMatch(value -> value.contains("不计算计划差异"));
     }
