@@ -36,6 +36,7 @@ mysql_cmd() {
     --database="$database" \
     --default-character-set=utf8mb4 \
     --batch \
+    --raw \
     --skip-column-names \
     --binary-mode=1 \
     "$@"

@@ -16,7 +16,15 @@ mkdir -p cert
 ./update.sh
 ```
 
-`init-env.sh` 会自动生成 JWT、两个 Agent 内部密钥和 Redis 密码，因此不需要手工填写每个环境变量。
+`init-env.sh` 会自动生成 JWT、两个 Agent 内部密钥和 Redis 密码，因此不需要手工填写每个环境变量。Web 演示登录口令默认为 `lbsp88888888`，不参与随机生成；该口令同时满足后端至少 12 位的启动安全校验。正式上线时应根据安全要求在服务器 `.env` 中单独修改。
+
+Python Agent 的生产配置必须使用 `AGENT_PYTHON_MODEL_MODE=openai_compatible` 和
+`AGENT_PLANNING_MODE=llm`，完整执行“主模型理解 → 专家模型决策 → 工具调用 → 模型结果分析”。
+`deterministic` 只保留为开发和回归对照基线，生产配置为该模式时 Agent 必须拒绝启动，禁止以
+旧关键词 Router 静默提供缩水能力。生产启动还会校验 Java Gateway、Redis 会话状态、模型地址和
+密钥、内部服务密钥、工具调用预算以及完整的受控专家白名单。模型地址、密钥和分阶段模型名通过
+`.env` 注入，不写入镜像、仓库或部署日志。完整门禁和验收要求见
+`docs/agent/controlled-llm-production-rollout-2026-08-29.md`。
 
 以后更新分两步：开发机执行 `scripts/prepare-simple-deployment.ps1`，把生成的 `deploy/simple/artifacts/` 上传覆盖服务器同目录；服务器只执行：
 
