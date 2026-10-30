@@ -76,6 +76,7 @@ nbdist/
 /.playwright-mcp/
 /output/
 /outputs/
+/dt50-app/.signing/
 /webpage/output/
 /.codex/config.toml
 /warehouse-mcp.log*.gz

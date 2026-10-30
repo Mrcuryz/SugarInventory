@@ -1,0 +1,44 @@
+apply plugin: "com.android.application"
+
+def configuredServerBaseUrl = project.findProperty("serverBaseUrl") ?: "https://ccgl.site"
+
+android {
+    namespace "com.laibin.sugarinventory.dt50"
+    compileSdk 35
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    defaultConfig {
+        applicationId "com.laibin.sugarinventory.dt50"
+        minSdk 23
+        targetSdk 35
+        versionCode 7
+        versionName "0.2.5"
+
+        buildConfigField "String", "SERVER_BASE_URL", "\"${configuredServerBaseUrl}\""
+
+        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    testImplementation "junit:junit:4.13.2"
+}

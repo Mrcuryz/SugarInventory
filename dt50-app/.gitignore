@@ -1,0 +1,6 @@
+.gradle/
+**/build/
+local.properties
+
+# Gradle Wrapper 属于源码构建入口，需要随项目保留。
+!gradle/wrapper/gradle-wrapper.jar
