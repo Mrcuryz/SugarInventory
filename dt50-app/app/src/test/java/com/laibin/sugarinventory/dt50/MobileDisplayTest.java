@@ -26,6 +26,24 @@ public class MobileDisplayTest {
     }
 
     @Test
+    public void technicalErrorsNeverReachTheUser() {
+        assertEquals("登录状态已失效，请重新登录",
+                MobileDisplay.errorMessage("Value JWT of type java.lang.String cannot be converted to JSONObject", 0));
+        assertEquals("登录状态已失效，请重新登录",
+                MobileDisplay.errorMessage("JWT Token已过期", 401));
+        assertEquals("当前账号无权使用此功能",
+                MobileDisplay.errorMessage("Forbidden", 403));
+        assertEquals("网络连接异常，请检查网络后重试",
+                MobileDisplay.errorMessage("Connection timed out", 0));
+        assertEquals("服务暂时不可用，请稍后重试",
+                MobileDisplay.errorMessage("SQLException: internal details", 500));
+        assertEquals("操作未完成，请稍后重试或联系管理员",
+                MobileDisplay.errorMessage("org.json.JSONException: invalid response", 0));
+        assertEquals("二维码不存在",
+                MobileDisplay.errorMessage("托盘码不存在", 404));
+    }
+
+    @Test
     public void formatsNumbersAndIsoTimeWithoutNoise() {
         assertEquals("12", MobileDisplay.number(12.0));
         assertEquals("12.5", MobileDisplay.number(12.5));

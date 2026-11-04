@@ -1,6 +1,7 @@
 package com.laibin.sugarinventory.dt50;
 
 import java.math.BigDecimal;
+import java.util.Locale;
 
 final class MobileDisplay {
     private MobileDisplay() {
@@ -41,6 +42,37 @@ final class MobileDisplay {
                 .replace("PENDING", "待处理")
                 .replace("托盘码", "二维码")
                 .replace("托盘", "二维码");
+    }
+
+    static String errorMessage(String value, int httpStatus) {
+        if (httpStatus == 401) return "登录状态已失效，请重新登录";
+        if (httpStatus == 403) return "当前账号无权使用此功能";
+        if (httpStatus == 409 || httpStatus == 1032) return "数据已被其他人更新，请核对后重试";
+        if (httpStatus == 429) return "操作过于频繁，请稍后重试";
+        if (httpStatus >= 500) return "服务暂时不可用，请稍后重试";
+        if (blankish(value)) return "操作未完成，请稍后重试";
+
+        String message = value.trim();
+        String lower = message.toLowerCase(Locale.ROOT);
+        if (lower.contains("jwt") || lower.contains("token") || lower.contains("unauthorized")) {
+            return "登录状态已失效，请重新登录";
+        }
+        if (lower.contains("timeout") || lower.contains("timed out")
+                || lower.contains("connection") || lower.contains("unable to resolve host")) {
+            return "网络连接异常，请检查网络后重试";
+        }
+        if (message.length() > 160 || message.contains("\n") || message.contains("\r")
+                || lower.contains("json") || lower.contains("exception")
+                || lower.contains("java.") || lower.contains("org.")
+                || lower.contains("sql") || lower.contains("http")
+                || lower.contains("stack trace") || lower.contains("traceback")
+                || lower.contains("cannot be converted")) {
+            return "操作未完成，请稍后重试或联系管理员";
+        }
+        if (!message.matches("(?s).*[\\u4E00-\\u9FFF].*")) {
+            return "操作未完成，请稍后重试或联系管理员";
+        }
+        return userMessage(message);
     }
 
     static String operation(String value) {
