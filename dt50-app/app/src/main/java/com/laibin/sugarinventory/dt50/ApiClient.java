@@ -438,14 +438,14 @@ final class ApiClient {
                 T result = supplier.get();
                 mainHandler.post(() -> callback.onSuccess(result));
             } catch (ApiFailure failure) {
-                String message = MobileDisplay.userMessage(failure.getMessage());
+                String message = MobileDisplay.errorMessage(failure.getMessage(), failure.httpStatus);
                 mainHandler.post(() -> callback.onError(message, failure.httpStatus));
             } catch (Exception exception) {
                 String message = exception.getMessage();
                 if (message == null || message.trim().isEmpty()) {
                     message = "无法连接仓储系统，请检查网络或联系管理员";
                 }
-                String finalMessage = MobileDisplay.userMessage(message);
+                String finalMessage = MobileDisplay.errorMessage(message, 0);
                 mainHandler.post(() -> callback.onError(finalMessage, 0));
             }
         });
@@ -505,7 +505,12 @@ final class ApiClient {
     }
 
     private Object decodeEnvelope(String response, int status) throws JSONException, ApiFailure {
-        JSONObject envelope = new JSONObject(response);
+        JSONObject envelope;
+        try {
+            envelope = new JSONObject(response);
+        } catch (JSONException exception) {
+            throw nonJsonResponseFailure(status);
+        }
         int businessCode = envelope.optInt("code", status);
         if (status < 200 || status >= 300 || businessCode != 200) {
             int failureCode = status >= 200 && status < 300 ? businessCode : status;
@@ -513,6 +518,19 @@ final class ApiClient {
         }
         Object data = envelope.opt("data");
         return data == null ? JSONObject.NULL : data;
+    }
+
+    static ApiFailure nonJsonResponseFailure(int status) {
+        if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+            return new ApiFailure("登录状态已失效，请重新登录", status);
+        }
+        if (status == HttpURLConnection.HTTP_FORBIDDEN) {
+            return new ApiFailure("当前账号无权使用此功能", status);
+        }
+        if (status >= 400) {
+            return new ApiFailure("请求失败（" + status + "）", status);
+        }
+        return new ApiFailure("服务器返回的数据格式不正确", status);
     }
 
     private byte[] requestBinary(String path) throws IOException, JSONException, ApiFailure {
@@ -643,7 +661,7 @@ final class ApiClient {
         T get() throws Exception;
     }
 
-    private static final class ApiFailure extends Exception {
+    static final class ApiFailure extends Exception {
         final int httpStatus;
 
         ApiFailure(String message, int httpStatus) {

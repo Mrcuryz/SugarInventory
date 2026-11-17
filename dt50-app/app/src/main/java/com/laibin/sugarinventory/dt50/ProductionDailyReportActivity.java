@@ -362,7 +362,9 @@ public class ProductionDailyReportActivity extends Activity {
     }
 
     private void handleApiError(String message, int httpStatus) {
+        if (isFinishing() || isDestroyed()) return;
         if (httpStatus == 401) {
+            persistDraft();
             preferences.clearToken();
             returnToLogin();
             return;
@@ -1890,7 +1892,7 @@ public class ProductionDailyReportActivity extends Activity {
                         output.write(bytes);
                         handler.post(() -> toast("Excel 已保存"));
                     } catch (IOException exception) {
-                        handler.post(() -> showMessage("Excel 保存失败：" + exception.getMessage(), true));
+                        handler.post(() -> showMessage("Excel 保存失败，请检查保存位置后重试", true));
                     }
                 }).start();
             }
@@ -1946,7 +1948,7 @@ public class ProductionDailyReportActivity extends Activity {
             } catch (IOException exception) {
                 handler.post(() -> {
                     busy = false;
-                    showMessage("读取 Excel 失败：" + exception.getMessage(), true);
+                    showMessage("读取 Excel 失败，请检查文件后重试", true);
                     renderActions();
                 });
             }
