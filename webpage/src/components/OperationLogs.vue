@@ -66,7 +66,7 @@
         v-loading="loading"
       >
         <el-table-column prop="operationTimeText" label="时间" width="180" sortable />
-        <el-table-column prop="tableName" label="操作业务" min-width="180" />
+        <el-table-column prop="tableNameText" label="操作业务" min-width="180" />
         <el-table-column prop="operationType" label="操作类型" width="120">
           <template #default="{ row }">
             <el-tag :type="getTagType(row.operationType)">
@@ -112,7 +112,7 @@
             </div>
             <div class="info-card">
               <span>操作业务</span>
-              <strong>{{ detailLog.tableName || '-' }}</strong>
+              <strong>{{ detailLog.tableNameText }}</strong>
             </div>
             <div class="info-card">
               <span>操作类型</span>
@@ -131,22 +131,30 @@
           <template v-if="detailMode === 'UPDATE'">
             <el-table :data="detailRows" border>
               <el-table-column prop="fieldLabel" label="字段" min-width="180" />
-              <el-table-column prop="oldValue" label="修改前" min-width="220" />
-              <el-table-column prop="newValue" label="修改后" min-width="220" />
+              <el-table-column prop="oldValue" label="修改前" min-width="220">
+                <template #default="{ row }"><div class="detail-value">{{ row.oldValue }}</div></template>
+              </el-table-column>
+              <el-table-column prop="newValue" label="修改后" min-width="220">
+                <template #default="{ row }"><div class="detail-value">{{ row.newValue }}</div></template>
+              </el-table-column>
             </el-table>
           </template>
 
           <template v-else-if="detailMode === 'INSERT'">
             <el-table :data="detailRows" border>
               <el-table-column prop="fieldLabel" label="字段" min-width="180" />
-              <el-table-column prop="newValue" label="操作内容" min-width="320" />
+              <el-table-column prop="newValue" label="操作内容" min-width="320">
+                <template #default="{ row }"><div class="detail-value">{{ row.newValue }}</div></template>
+              </el-table-column>
             </el-table>
           </template>
 
           <template v-else-if="detailMode === 'DELETE'">
             <el-table :data="detailRows" border>
               <el-table-column prop="fieldLabel" label="字段" min-width="180" />
-              <el-table-column prop="oldValue" label="原数据" min-width="320" />
+              <el-table-column prop="oldValue" label="原数据" min-width="320">
+                <template #default="{ row }"><div class="detail-value">{{ row.oldValue }}</div></template>
+              </el-table-column>
             </el-table>
           </template>
 
@@ -163,6 +171,12 @@ import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { useI18n } from 'vue-i18n'
 import { getOperationLogs } from '@/api/operationlogs'
+import {
+  formatOperationFieldValue,
+  getOperationBusinessLabel,
+  getOperationFieldLabel,
+  isOperationFieldVisible
+} from '@/utils/operationLogPresentation.mjs'
 
 const { t, te } = useI18n()
 
@@ -258,8 +272,10 @@ function tryParseStructuredValue(value) {
   }
 }
 
-function formatValue(value) {
+function formatValue(value, tableName, fieldName) {
   value = tryParseStructuredValue(value)
+  const operationValue = formatOperationFieldValue(tableName, fieldName, value)
+  if (operationValue !== undefined) return operationValue
   if (value === null || value === undefined || value === '') return '-'
   if (value === 'ADMIN') return '管理员'
   if (value === 'QC') return '化验员'
@@ -275,18 +291,20 @@ function formatValue(value) {
   return String(value)
 }
 
-function getFieldLabel(key) {
+function getFieldLabel(key, tableName) {
+  const operationLabel = getOperationFieldLabel(tableName, key)
+  if (operationLabel) return operationLabel
   return te(`fields.${key}`) ? t(`fields.${key}`) : key
 }
 
-function sanitizeDetailMap(data) {
+function sanitizeDetailMap(data, tableName) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return {}
   }
 
   const sanitized = {}
   Object.entries(data).forEach(([key, value]) => {
-    if (hiddenDetailFields.has(key)) {
+    if (hiddenDetailFields.has(key) || !isOperationFieldVisible(tableName, key)) {
       return
     }
     sanitized[key] = value
@@ -295,11 +313,12 @@ function sanitizeDetailMap(data) {
 }
 
 function normalizeLog(log) {
-  const changedFields = sanitizeDetailMap(parseJsonField(log.changedFields))
-  const oldData = sanitizeDetailMap(parseJsonField(log.oldData))
+  const changedFields = sanitizeDetailMap(parseJsonField(log.changedFields), log.tableName)
+  const oldData = sanitizeDetailMap(parseJsonField(log.oldData), log.tableName)
 
   return {
     ...log,
+    tableNameText: getOperationBusinessLabel(log.tableName),
     operationTimeText: formatDateTime(log.operationTime),
     changedFields,
     oldData
@@ -312,25 +331,25 @@ function buildDetailRows(log) {
   if (log.operationType === 'INSERT') {
     return Object.entries(log.changedFields || {}).map(([key, value]) => ({
       key,
-      fieldLabel: getFieldLabel(key),
-      newValue: formatValue(value)
+      fieldLabel: getFieldLabel(key, log.tableName),
+      newValue: formatValue(value, log.tableName, key)
     }))
   }
 
   if (log.operationType === 'DELETE') {
     return Object.entries(log.oldData || {}).map(([key, value]) => ({
       key,
-      fieldLabel: getFieldLabel(key),
-      oldValue: formatValue(value)
+      fieldLabel: getFieldLabel(key, log.tableName),
+      oldValue: formatValue(value, log.tableName, key)
     }))
   }
 
   if (log.operationType === 'UPDATE') {
     return Object.entries(log.changedFields || {}).map(([key, value]) => ({
       key,
-      fieldLabel: getFieldLabel(key),
-      oldValue: formatValue(log.oldData?.[key]),
-      newValue: formatValue(value)
+      fieldLabel: getFieldLabel(key, log.tableName),
+      oldValue: formatValue(log.oldData?.[key], log.tableName, key),
+      newValue: formatValue(value, log.tableName, key)
     }))
   }
 
@@ -450,7 +469,7 @@ async function exportExcel() {
 
       return {
         时间: log.operationTimeText,
-        操作业务: log.tableName,
+        操作业务: log.tableNameText,
         操作类型: getOperationTypeLabel(log.operationType),
         操作人: log.operator,
         详情: detailText || '无'
@@ -506,6 +525,12 @@ onMounted(() => {
   flex-direction: column;
   gap: 20px;
   min-height: 100%;
+}
+
+.detail-value {
+  line-height: 1.7;
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 .drawer-section {
