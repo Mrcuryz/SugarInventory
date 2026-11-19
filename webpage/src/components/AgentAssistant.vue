@@ -1,5 +1,6 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from 'vue'
+import { reviewBookKey } from './agent/productImportSelection.mjs'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -15,6 +16,10 @@ import {
 } from '@/api/agent'
 import { exportRegisteredReportRunXlsx } from '@/api/analyticsReport'
 import { useAuthStore } from '@/stores/auth'
+import { DocumentAdd } from '@element-plus/icons-vue'
+import { getProductImportCapabilities } from '@/api/productImport'
+import ProductImportDialog from '@/components/agent/ProductImportDialog.vue'
+import { canImportProducts } from '@/components/agent/productImportFlow.mjs'
 import AgentMessageBubble from '@/components/agent/AgentMessageBubble.vue'
 import RegisteredReportHistoryDialog from '@/components/agent/RegisteredReportHistoryDialog.vue'
 import { canUseAgent } from '@/components/agent/agentAccess.mjs'
@@ -67,6 +72,27 @@ const assayEntryDialog = reactive({ visible: false, card: null })
 const preparingAssayEntry = ref(false)
 const assayRecoveryPending = ref(false)
 const canSaveAssay = computed(() => hasAssayEntryPermission(authStore.permissionCodes))
+const productImportVisible = ref(false)
+const productImportEnabled = ref(false)
+const productMatchingEnabled = ref(false)
+const productAttachmentCount = ref(0)
+const reviewEntries = ref([])
+const forgetReview = reference => { reviewEntries.value = reviewEntries.value.filter(e => e.reference !== reference) }
+provide(reviewBookKey, {
+  entries: reviewEntries,
+  reviewBatchRow: async item => {
+    const valid = () => productImportVisible.value && productMatchingEnabled.value && !sessionNeedsRestart.value &&
+      item.sessionId === session.value?.agentSessionId && item.expiresAt > Date.now()
+    const alreadyReviewed = () => reviewEntries.value.some(e => e.sessionId === item.sessionId &&
+      e.reference === item.reference && e.rowNumber === item.rowNumber)
+    if (!valid() || sending.value) return false
+    if (!alreadyReviewed()) await send({ message: `核对产品表格第${item.rowNumber}行，与现有产品比较。`,
+      productImport: item, inReviewDialog: valid })
+    return valid() && alreadyReviewed()
+  },
+  forCard: card => productMatchingEnabled.value && reviewEntries.value.find(e => e.card === card && e.expiresAt > sessionClock.value)
+})
+let productCapabilityRequest = 0
 const fixedQrTaskCreationDialog = reactive({
   visible: false,
   palletCodes: [],
@@ -87,6 +113,25 @@ watch(visible, (isVisible) => {
 onBeforeUnmount(() => clearInterval(sessionClockTimer))
 const sessionStatus = computed(() => effectiveAgentSessionStatus(session.value, sessionClock.value))
 const sessionNeedsRestart = computed(() => Boolean(session.value?.agentSessionId) && sessionStatus.value !== 'ACTIVE')
+watch([() => session.value?.agentSessionId, sessionStatus, () => canImportProducts(authStore.permissionCodes)],
+  () => { reviewEntries.value = [] }, { flush: 'sync' })
+watch([visible, () => session.value?.agentSessionId, sessionStatus, () => canImportProducts(authStore.permissionCodes)],
+  async ([opened, id, status, permitted]) => {
+    const request = ++productCapabilityRequest
+    productImportEnabled.value = false
+    productMatchingEnabled.value = false
+    productImportVisible.value = false
+    productAttachmentCount.value = 0
+    if (!opened || !id || status !== 'ACTIVE' || !permitted) return
+    try {
+      const response = await getProductImportCapabilities(id)
+      if (request === productCapabilityRequest) {
+        productImportEnabled.value = response.data?.uploadEnabled === true
+        productMatchingEnabled.value = productImportEnabled.value && response.data?.matchingEnabled === true
+      }
+    } catch { /* Fail closed: uploading is optional and must not interrupt ordinary conversation. */ }
+  })
+onBeforeUnmount(() => { productCapabilityRequest++ })
 const sessionStatusLabel = computed(() => {
   const labels = {
     ACTIVE: '已连接',
@@ -198,7 +243,14 @@ watch(sessionStatus, (status) => {
   fixedQrTaskCreationDialog.visible = false
 })
 
+const reviewProductRow = (item) => {
+  if (!productMatchingEnabled.value || item.sessionId !== session.value?.agentSessionId || sending.value) return
+  productImportVisible.value = false
+  return send({ message: `核对产品表格第${item.rowNumber}行，与现有产品比较。`, productImport: item })
+}
 const send = async (options = {}) => {
+  const batch = typeof options.inReviewDialog === 'function'
+  if (batch ? !options.inReviewDialog() : productImportVisible.value) return
   if (assayRecoveryPending.value) { ElMessage.warning('请先核实上一份化验的保存结果，避免重复录入。'); return }
   if (assayEntryDialog.visible || preparingAssayEntry.value) return
   const text = (options.message || input.value).trim()
@@ -218,13 +270,14 @@ const send = async (options = {}) => {
     ElMessage.warning('请先核实上一份化验的保存结果，再继续对话。')
     return
   } finally { preparingAssayEntry.value = false }
-  await markPreviousAssistantIfCorrection(text, options)
+  if (!batch) await markPreviousAssistantIfCorrection(text, options)
+  if (batch && !options.inReviewDialog()) return
   if (!requireActiveSession()) return 'session_expired'
   const selectedOption = options.selectedOption || null
-  if (options.showUserMessage !== false) {
+  if (!batch && options.showUserMessage !== false) {
     messages.value.push({ role: 'user', content: text })
   }
-  input.value = ''
+  if (!batch) input.value = ''
   sending.value = true
   const assistantMessage = reactive({
     role: 'assistant',
@@ -245,13 +298,20 @@ const send = async (options = {}) => {
     intentTrace: null
   })
   activeAssistantMessage = assistantMessage
-  messages.value.push(assistantMessage)
-  await scrollToBottom()
+  let batchDeadline
+  if (!batch) {
+    messages.value.push(assistantMessage)
+    await scrollToBottom()
+  }
   try {
     activeStreamController = new AbortController()
+    if (batch) {
+      const controller = activeStreamController
+      batchDeadline = setTimeout(() => controller.abort(), 180000)
+    }
     const onEvent = (event) => {
       applyStreamEvent(assistantMessage, event)
-      scrollToBottom()
+      if (!batch) scrollToBottom()
     }
     if (selectedOption?.interruptId) {
       await streamAgentInterruptResume(session.value.agentSessionId, selectedOption.interruptId, {
@@ -269,6 +329,9 @@ const send = async (options = {}) => {
         message: text,
         pageContext: {
           path: window.location.pathname,
+          ...(options.productImport && session.value.agentSessionId === options.productImport.sessionId ? {
+            productImportAttachment: options.productImport.reference, productImportRow: options.productImport.rowNumber
+          } : {}),
           debug: debugMode.value || shadowCompareMode,
           selectedOption,
           recentMessages: messages.value
@@ -297,12 +360,20 @@ const send = async (options = {}) => {
       assistantMessage.finishReason = 'error'
     }
   } finally {
+    clearTimeout(batchDeadline)
+    const item = options.productImport
+    if (item && productMatchingEnabled.value && session.value?.agentSessionId === item.sessionId &&
+        assistantMessage.finishReason === 'completed' && item.expiresAt > Date.now()) {
+      const card = assistantMessage.cards.find(c => c.cardType === 'product_import_review' && c.title?.startsWith(`第${item.rowNumber}行 · `))
+      if (card?.fields?.[0]?.sourceValues && (!batch || options.inReviewDialog())) reviewEntries.value = [...reviewEntries.value.filter(e => e.reference !== item.reference || e.rowNumber !== item.rowNumber),
+        { ...item, card, choice: null, ack: false, included: false }]
+    }
     pendingSelection.value = null
     sending.value = false
     activeStreamController = null
     activeAssistantMessage = null
     await scrollToBottom()
-    recordAssistantReview(text, assistantMessage, selectedOption)
+    if (!batch || item?.sessionId === session.value?.agentSessionId) recordAssistantReview(text, assistantMessage, selectedOption)
   }
   return assistantMessage.finishReason
 }
@@ -957,6 +1028,8 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
         />
         <div class="composer-actions">
           <span class="composer-count">{{ input.length }} / 500</span>
+          <button v-if="productImportEnabled" type="button" class="plain-action" :disabled="sending || preparingAssayEntry || assayEntryDialog.visible || assayRecoveryPending || loadingSession || sessionNeedsRestart"
+            @click="productImportVisible = true"><el-icon><DocumentAdd /></el-icon> 产品表格{{ productAttachmentCount ? `（${productAttachmentCount}）` : '' }}</button>
           <button type="button" class="plain-action" @click="suspendAssistant">收起</button>
           <button type="button" class="plain-action danger-action" @click="closeSession">结束会话</button>
           <button v-if="sending" type="button" class="plain-action" :disabled="cancelling" @click="cancelStream">
@@ -989,6 +1062,8 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
   <AssayEntryConfirmDialog v-model="assayEntryDialog.visible" :agent-session-id="session?.agentSessionId || ''"
     :recovery-owner="String(authStore.employeeId || '')"
     :card="assayEntryDialog.card" @completed="handleAssayEntryCompleted" />
+  <ProductImportDialog v-model="productImportVisible" :agent-session-id="session?.agentSessionId || ''"
+    :available="productImportEnabled && !sessionNeedsRestart" :matching-enabled="productMatchingEnabled" @review-row="reviewProductRow" @removed="forgetReview" @attachments-changed="items => productAttachmentCount = items.length" />
   <FixedQrTaskCreationDialog
     v-model="fixedQrTaskCreationDialog.visible"
     :pallet-codes="fixedQrTaskCreationDialog.palletCodes"
@@ -1331,6 +1406,7 @@ const handleHistoricalReportOpened = ({ item, card } = {}) => {
 
 .composer-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;

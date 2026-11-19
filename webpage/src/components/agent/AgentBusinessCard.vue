@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, ref } from 'vue'
 import ProductionDailyRecordsCard from './ProductionDailyRecordsCard.vue'
 import AssayEntryPreviewCard from './AssayEntryPreviewCard.vue'
+import ProductImportReviewCard from './ProductImportReviewCard.vue'
 import ProductionDailyAnalysisCard from './ProductionDailyAnalysisCard.vue'
 import { dailyAnalysisSummary } from './dailyReportAnalysisPresentation.mjs'
 import { useAuthStore } from '@/stores/auth'
@@ -496,7 +497,8 @@ const exportRegisteredReport = () => {
         <el-icon><ArrowUp v-if="expanded" /><ArrowDown v-else /></el-icon>
       </button>
     </div>
-    <ProductionDailyRecordsCard v-if="card.cardType === 'production_daily_records'" v-show="expanded" :card="card" />
+    <ProductImportReviewCard v-if="card.cardType === 'product_import_review'" :card="card" />
+    <ProductionDailyRecordsCard v-else-if="card.cardType === 'production_daily_records'" v-show="expanded" :card="card" />
     <AssayEntryPreviewCard v-else-if="card.cardType === 'assay_entry_preview'" v-show="expanded" :card="card" :can-save="canSaveAssay" @card-action="emit('card-action', $event)" />
     <ProductionDailyAnalysisCard v-else-if="isDailyAnalysis" v-show="expanded" :card="card" />
     <div v-else-if="isTodayOperationsOverview" class="today-operations-body">

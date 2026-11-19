@@ -49,6 +49,7 @@
     {"id": "R08", "goalType": "MATERIAL_CANDIDATES", "input": "查询生产订单PO202606300002当前可选择哪些领料候选"},
     {"id": "M01", "goalType": "PRODUCT_MASTER_DATA", "input": "查询当前产品目录"},
     {"id": "M02", "goalType": "SCREEN_MESH_CATALOG", "input": "查询当前筛网目录"},
+    {"id": "M03", "goalType": "PRODUCT_IMPORT_REVIEW", "input": "请核对所选产品表格第5行，看看和产品目录有哪些不同", "requiresSelectedImportRow": true},
     {"id": "A01", "goalType": "EMPLOYEE_ROSTER", "input": "查询当前仓管员名单"},
     {"id": "A02", "goalType": "ROLE_PERMISSION_CATALOG", "input": "查询管理员角色当前有哪些权限"},
     {"id": "G01", "goalType": "BUSINESS_OPERATION_LOGS", "input": "查询今天的业务操作日志"},

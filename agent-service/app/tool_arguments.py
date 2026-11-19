@@ -674,6 +674,9 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "get_product_detail": {"type": "object", "additionalProperties": False, "required": ["productName"],
                            "properties": {"productName": {"type": "string", "minLength": 1, "maxLength": 100}}},
+    "review_product_import_row": {"type": "object", "additionalProperties": False, "required": ["attachment", "rowNumber"],
+                                  "properties": {"attachment": {"type": "string", "format": "uuid"},
+                                                 "rowNumber": {"type": "integer", "minimum": 2, "maximum": 501}}},
     "query_screen_mesh_catalog": {"type": "object", "additionalProperties": False,
                                   "properties": {"meshName": {"type": "string", "minLength": 1, "maxLength": 100},
                                                  "page": {"type": "integer", "minimum": 1},
@@ -845,6 +848,9 @@ class ToolArgumentBuilder:
         result: dict[str, dict[str, Any]] = {}
         for tool_name, schema in visible.items():
             model_schema = self._llm_visible_schema(schema)
+            if tool_name == "review_product_import_row":
+                model_schema = {"type": "object", "additionalProperties": False, "properties": {},
+                                "description": "核对当前选择的产品表格行，不保存。参数必须为空。"}
             if tool_name in {"get_pallet_status", "query_qr_code_lifecycle", "query_pallet_flow_records"}:
                 properties = model_schema.get("properties")
                 if isinstance(properties, dict) and "code" in properties:
@@ -920,6 +926,10 @@ class ToolArgumentBuilder:
             and tool_name not in active_goal.allowedTools
         ):
             raise ValueError("tool is outside the active GoalContract")
+        if tool_name == "review_product_import_row":
+            if arguments or state.active_goal_type != "PRODUCT_IMPORT_REVIEW" or not state.goal_contract_locked:
+                raise ValueError("仅允许核对用户在表格中选择的行")
+            return {}
         if tool_name == KNOWLEDGE_TOOL_NAME:
             if state.active_goal_type == "PROCESS_KNOWLEDGE_QUERY":
                 fixed_domains = ["PROCESS"]

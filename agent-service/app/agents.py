@@ -189,11 +189,12 @@ def _profiles() -> dict[str, ExpertAgentProfile]:
             name="master_data_expert",
             business_name="系统基础资料专家 Agent",
             domains=frozenset({"master_data", "product_catalog", "screen_mesh"}),
-            allowed_tools=frozenset({"resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog"}),
+            allowed_tools=frozenset({"resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog", "review_product_import_row"}),
             instructions=(
                 "只查询产品与筛网当前主数据配置，不回答库存、质量合格或生产可用性。",
                 "不得暴露产品、筛网、创建人或更新人的内部数据库 ID。",
                 "不得创建、更新或删除产品与筛网配置。",
+                "核对表格时调用所选行的核对工具，参数为空；根据实际差异说明结果，不得声称已保存。",
             ),
             model_policy_key="master_data",
             model_parameters={"temperature": 0.0},

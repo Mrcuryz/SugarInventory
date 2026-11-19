@@ -245,6 +245,7 @@ class InternalAgentToolGatewayServiceTest {
                 "query_warehouse_mixed_storage_facts",
                 "query_product_catalog",
                 "get_product_detail",
+                "review_product_import_row",
                 "query_screen_mesh_catalog",
                 "query_assay_groups",
                 "query_quality_standard_catalog",

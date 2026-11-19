@@ -82,6 +82,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
             "query_product_catalog",
             "get_product_detail",
             "query_screen_mesh_catalog",
+            "review_product_import_row",
             "query_assay_groups",
             "query_quality_standard_catalog",
             "get_quality_standard_detail",
@@ -131,7 +132,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
                     "query_stock_documents", "query_auto_inbound_batches",
                     "get_auto_inbound_batch_detail")),
             Map.entry("master_data_expert", Set.of(
-                    "resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog")),
+                    "resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog", "review_product_import_row")),
             Map.entry("administration_expert", Set.of(
                     "query_employee_roster", "query_roles", "get_role_permission_summary")),
             Map.entry("audit_expert", Set.of(
@@ -191,6 +192,7 @@ public class McpInternalAgentToolGatewayService implements InternalAgentToolGate
             entry("query_product_catalog", "/api/master-data/agent-read/products/query"),
             entry("get_product_detail", "/api/master-data/agent-read/products/detail/query"),
             entry("query_screen_mesh_catalog", "/api/master-data/agent-read/screen-meshes/query"),
+            entry("review_product_import_row", "/api/master-data/agent-read/product-import/candidates"),
             entry("query_assay_groups", "/api/quality/agent-read/assay-groups/query"),
             entry("query_quality_standard_catalog", "/api/quality/agent-read/standards/query"),
             entry("get_quality_standard_detail", "/api/quality/agent-read/standards/detail/query"),

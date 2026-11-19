@@ -88,6 +88,7 @@ class WarehouseMcpApplicationTest {
                 "resolve_production_entities",
                 "resolve_products",
                 "resolve_warehouses",
+                "review_product_import_row",
                 "run_registered_report",
                 "search_operation_logs"
         );
@@ -314,6 +315,7 @@ class WarehouseMcpApplicationTest {
                 Map.entry("query_warehouse_mixed_storage_facts", "{}"),
                 Map.entry("query_product_catalog", "{}"),
                 Map.entry("get_product_detail", "{\"productName\":\"验收产品\"}"),
+                Map.entry("review_product_import_row", "{\"attachment\":\"00000000-0000-0000-0000-000000000001\",\"rowNumber\":2}"),
                 Map.entry("query_screen_mesh_catalog", "{}"),
                 Map.entry("query_assay_groups", "{}"),
                 Map.entry("query_quality_standard_catalog", "{}"),

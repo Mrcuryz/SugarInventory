@@ -207,6 +207,19 @@ class RuntimeRoutingAgentGatewayServiceTest {
     }
 
     @Test
+    void importContextForwardsOnlyAttachmentAndPhysicalRowNotBrowserProductValues() {
+        when(pythonClient.chat(any())).thenReturn(answer("未保存产品。"));
+        var req = request("核对表格");
+        var ref = "11111111-1111-1111-1111-111111111111";
+        req.setPageContext(Map.of("productImportAttachment",ref,"productImportRow",5,
+                "sourceValues",Map.of("productName","伪造产品"),"candidates",List.of("未知")));
+        gateway.handleMessage(loginUser,"agt_001",req);
+        var captor = ArgumentCaptor.forClass(PythonAgentChatRequestDTO.class);
+        verify(pythonClient).chat(captor.capture());
+        assertThat(captor.getValue().getPageContext()).isEqualTo(Map.of("productImportAttachment",ref,"productImportRow",5));
+    }
+
+    @Test
     void knowledgeResponseUsesExplicitCardWhitelistAndSafeAuditSummary() throws Exception {
         PythonAgentChatResponseDTO source = answer("现行生产流程包括收料、化糖、煮制和入库。引用现行资料。 ");
         PythonAgentChatResponseDTO.BusinessCard card = new PythonAgentChatResponseDTO.BusinessCard();

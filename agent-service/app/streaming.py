@@ -252,7 +252,7 @@ def events_for_response(
                     )
                 )
             else:
-                yield _event(builder.next("card", card.model_dump(exclude_none=True)))
+                yield _event(builder.next("card", card.model_dump(mode="json", exclude_none=True)))
         yield _event(
             builder.next(
                 "message_end",
@@ -301,7 +301,7 @@ def events_for_response(
         for card in response.cards:
             if card.cardType == "candidate_selection":
                 continue
-            yield _event(builder.next("card", card.model_dump(exclude_none=True)))
+            yield _event(builder.next("card", card.model_dump(mode="json", exclude_none=True)))
         if response.answer:
             for delta in _answer_deltas(response.answer, answer_delta_streamer):
                 yield _event(builder.next("text_delta", {"text": delta}))

@@ -59,6 +59,7 @@ CoreGoalTypeV1 = Literal[
     "MATERIAL_CANDIDATES",
     "PRODUCT_MASTER_DATA",
     "SCREEN_MESH_CATALOG",
+    "PRODUCT_IMPORT_REVIEW",
     "EMPLOYEE_ROSTER",
     "ROLE_PERMISSION_CATALOG",
     "BUSINESS_OPERATION_LOGS",
@@ -122,6 +123,7 @@ CoreFactTypeV1 = Literal[
     "MATERIAL_CANDIDATES",
     "PRODUCT_MASTER_DATA",
     "SCREEN_MESH_CATALOG",
+    "PRODUCT_IMPORT_REVIEW",
     "EMPLOYEE_ROSTER",
     "ROLE_PERMISSION_CATALOG",
     "BUSINESS_OPERATION_LOGS",
@@ -984,6 +986,13 @@ GOAL_CONTRACTS: dict[CoreGoalTypeV1, GoalContractV1] = {
         ),
         limitations=("产品主数据只描述当前配置，不代表库存、化验或可生产状态。",),
     ),
+    "PRODUCT_IMPORT_REVIEW": GoalContractV1(
+        goalType="PRODUCT_IMPORT_REVIEW", ownerExpert="master_data_expert", requiredEntityTypes=(),
+        requiredFactTypes=("PRODUCT_IMPORT_REVIEW",), allowedTools=("review_product_import_row",),
+        evidenceTools=("review_product_import_row",), factValidation=FactValidationRuleV1(
+            factLabel="产品表格核对", requiredFields=("rowNumber", "reviewStatus", "productName")),
+        limitations=("只核对选定的表格行，不保存产品。",),
+    ),
     "SCREEN_MESH_CATALOG": GoalContractV1(
         goalType="SCREEN_MESH_CATALOG",
         ownerExpert="master_data_expert",
@@ -1395,6 +1404,7 @@ DIRECT_PRIMARY_TOOL_GOALS: dict[str, CoreGoalTypeV1] = {
     "query_material_candidates": "MATERIAL_CANDIDATES",
     "query_product_catalog": "PRODUCT_MASTER_DATA",
     "get_product_detail": "PRODUCT_MASTER_DATA",
+    "review_product_import_row": "PRODUCT_IMPORT_REVIEW",
     "query_screen_mesh_catalog": "SCREEN_MESH_CATALOG",
     "query_employee_roster": "EMPLOYEE_ROSTER",
     "query_roles": "ROLE_PERMISSION_CATALOG",

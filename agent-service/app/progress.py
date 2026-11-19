@@ -79,6 +79,7 @@ _TOOL_PROGRESS_STAGE = {
     "get_auto_inbound_batch_detail": "logistics_query",
     "query_product_catalog": "master_data_query",
     "get_product_detail": "master_data_query",
+    "review_product_import_row": "master_data_query",
     "query_screen_mesh_catalog": "master_data_query",
     "query_employee_roster": "administration_query",
     "query_roles": "administration_query",

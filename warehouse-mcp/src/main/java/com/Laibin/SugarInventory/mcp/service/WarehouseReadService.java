@@ -85,6 +85,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ImportRowRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ImportRowEvidence;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayGroupsCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardCatalogResponse;
@@ -809,6 +811,10 @@ public class WarehouseReadService {
         if (request == null || request.productName() == null || request.productName().isBlank()) throw new IllegalArgumentException("productName is required");
         return apiClient.postData("/api/master-data/agent-read/products/detail/query", request, ProductDetailResponse.class);
     }
+    public ImportRowEvidence reviewProductImportRow(ImportRowRequest request) {
+        return apiClient.postData("/api/master-data/agent-read/product-import/candidates", request, ImportRowEvidence.class);
+    }
+
     public ScreenMeshCatalogResponse queryScreenMeshCatalog(ScreenMeshCatalogRequest request) {
         ScreenMeshCatalogRequest source = request == null ? new ScreenMeshCatalogRequest(null, 1, 20) : request;
         int page = source.page() == null ? 1 : source.page(); int size = source.size() == null ? 20 : source.size();

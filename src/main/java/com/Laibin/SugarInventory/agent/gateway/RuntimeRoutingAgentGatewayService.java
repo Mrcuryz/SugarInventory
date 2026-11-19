@@ -622,6 +622,12 @@ public class RuntimeRoutingAgentGatewayService implements AgentGatewayService {
                 safe.put(key, value);
             }
         }
+        if (pageContext.get("productImportAttachment") instanceof String ref &&
+                ref.matches("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}") &&
+                pageContext.get("productImportRow") instanceof Integer row && row >= 2 && row <= 501) {
+            safe.put("productImportAttachment", ref);
+            safe.put("productImportRow", row);
+        }
         return safe;
     }
 

@@ -237,6 +237,7 @@ class StdioMcpSessionManagerTest {
                 {"name":"query_warehouse_mixed_storage_facts"},
                 {"name":"query_product_catalog"},
                 {"name":"get_product_detail"},
+                {"name":"review_product_import_row"},
                 {"name":"query_screen_mesh_catalog"},
                 {"name":"query_assay_groups"},
                 {"name":"query_quality_standard_catalog"},

@@ -85,6 +85,8 @@ import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailRequest;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ProductDetailResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ImportRowRequest;
+import com.Laibin.SugarInventory.mcp.model.ToolModels.ImportRowEvidence;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.ScreenMeshCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.AssayGroupsCatalogResponse;
 import com.Laibin.SugarInventory.mcp.model.ToolModels.QualityStandardCatalogResponse;
@@ -710,6 +712,13 @@ public class WarehouseTools {
         catch (WarehouseApiException e) { return ProductDetailResponse.error(ErrorMapper.upstream(e)); }
         catch (RuntimeException e) { return ProductDetailResponse.error(ErrorMapper.unexpected()); }
     }
+    public ImportRowEvidence reviewProductImportRow(String attachment, Integer rowNumber) {
+        try { return WarehouseToolCallContext.withToolName("review_product_import_row",
+                () -> readService.reviewProductImportRow(new ImportRowRequest(attachment, rowNumber))); }
+        catch (WarehouseApiException e) { return ImportRowEvidence.error(ErrorMapper.upstream(e)); }
+        catch (RuntimeException e) { return ImportRowEvidence.error(ErrorMapper.unexpected()); }
+    }
+
     public ScreenMeshCatalogResponse queryScreenMeshCatalog(String meshName, Integer page, Integer size) {
         try { return WarehouseToolCallContext.withToolName("query_screen_mesh_catalog", () -> readService.queryScreenMeshCatalog(new ScreenMeshCatalogRequest(meshName, page, size))); }
         catch (WarehouseApiException e) { return ScreenMeshCatalogResponse.error(ErrorMapper.upstream(e)); }

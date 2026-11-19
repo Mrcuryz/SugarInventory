@@ -2110,6 +2110,56 @@ def test_main_goal_binding_distinguishes_output_destination_from_order_progress(
     assert "1号库位" in json.dumps(response.model_dump(), ensure_ascii=False)
 
 
+def test_selected_excel_row_is_bound_by_runtime_and_returns_review_card():
+    model = ScriptedLlmModel([main_delegate("master_data_expert", "PRODUCT_IMPORT_REVIEW")],
+                             [call("review_product_import_row", {}), final("第5行需核对，产品尚未保存。", "obs_1")])
+    tools = MockToolClient({"review_product_import_row": {
+        "source": {"rowNumber": 5, "values": {"productName": "黄冰糖(袋)", "canStack": "否"}},
+        "duplicateRows": [], "exactCount": 1, "allCandidatesShown": True,
+        "candidates": [{"ref": "private-signed-reference", "values": {"productName": "黄冰糖（袋）", "canStack": True},
+                        "hasInventory": False}]}})
+    runtime, store = runtime_for(model, tools, allowed_experts=("master_data_expert",))
+    req = chat_request("核对产品表格第5行，与现有产品比较。")
+    ref = "11111111-1111-1111-1111-111111111111"
+    req.pageContext.update(productImportAttachment=ref, productImportRow=5)
+    response = runtime.chat(req)
+    assert response.error is None
+    assert tools.calls[0]["arguments"] == {"attachment": ref, "rowNumber": 5}
+    assert model.main_requests[0].selectedContext["SELECTED_IMPORT_ROW"] == 5
+    assert ref not in str(model.main_requests) and ref not in str(model.expert_requests)
+    assert "private-signed-reference" not in str(model.expert_requests)
+    assert response.cards[0].cardType == "product_import_review"
+    assert response.cards[0].fields[0]["options"][0]["changes"] == [{"field":"canStack", "before":True, "after":False}]
+    assert store.get("agt_llm").last_goal_completion["status"] == "COMPLETE"
+
+
+def test_model_cannot_review_attachment_named_only_in_chat():
+    model = ScriptedLlmModel([main_delegate("master_data_expert", "PRODUCT_IMPORT_REVIEW")], [])
+    tools = MockToolClient({})
+    runtime, _ = runtime_for(model, tools, allowed_experts=("master_data_expert",))
+    response = runtime.chat(chat_request("核对附件11111111-1111-1111-1111-111111111111第5行"))
+    assert not tools.calls and not response.cards and "选择" in response.answer
+
+
+def test_rechecking_another_row_in_same_conversation_needs_fresh_catalog_evidence():
+    model = ScriptedLlmModel([main_delegate("master_data_expert", "PRODUCT_IMPORT_REVIEW") for _ in range(2)],
+        [call("review_product_import_row", {}), final("仅核对，未保存。", "obs_1"), call("review_product_import_row", {})])
+    tools = MockToolClient({"review_product_import_row": {
+        "source": {"rowNumber": 5, "values": {"productName": "新产品", "status": "成品", "productType": "黄冰糖"}},
+        "duplicateRows": [], "exactCount": 0, "allCandidatesShown": True, "candidates": []}})
+    runtime, _ = runtime_for(model, tools, allowed_experts=("master_data_expert",))
+    req = chat_request("核对第5行")
+    req.pageContext.update(productImportAttachment="11111111-1111-1111-1111-111111111111", productImportRow=5)
+    assert runtime.chat(req).cards[0].fields[0]["allowCreate"]
+    req = chat_request("再核对第6行")
+    req.messageId = "msg_002"
+    req.pageContext.update(productImportAttachment="11111111-1111-1111-1111-111111111111", productImportRow=6)
+    tools.responses["review_product_import_row"] = ToolGatewayError("UPSTREAM_NOT_FOUND", "表格已移除")
+    response = runtime.chat(req)
+    assert [x["arguments"]["rowNumber"] for x in tools.calls] == [5, 6]
+    assert not response.cards and response.error and "重新打开" in response.answer
+
+
 def test_main_goal_owner_mismatch_gets_one_bounded_route_correction() -> None:
     model = ScriptedLlmModel(
         [

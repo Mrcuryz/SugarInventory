@@ -49,6 +49,7 @@ public class StdioMcpSessionManager implements McpSessionManager {
             "query_product_catalog",
             "get_product_detail",
             "query_screen_mesh_catalog",
+            "review_product_import_row",
             "query_assay_groups",
             "query_quality_standard_catalog",
             "get_quality_standard_detail",

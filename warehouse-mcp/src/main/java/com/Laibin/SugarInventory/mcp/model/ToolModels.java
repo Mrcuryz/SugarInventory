@@ -1498,6 +1498,13 @@ public final class ToolModels {
         public static ProductDetailResponse error(ToolError error) { return new ProductDetailResponse(null, null, null, null, null, null, null, null, null, null, List.of(), error); }
     }
     public record ScreenMeshCatalogRequest(String meshName, Integer page, Integer size) { }
+    public record ImportRowRequest(String attachment, Integer rowNumber) {}
+    public record ImportRowEvidence(JsonNode source, List<Integer> duplicateRows, List<JsonNode> candidates,
+                                    Boolean allCandidatesShown, Integer exactCount, ToolError error) {
+        public static ImportRowEvidence error(ToolError error) {
+            return new ImportRowEvidence(null, List.of(), List.of(), null, null, error);
+        }
+    }
     public record ScreenMeshCatalogResponse(
             String dataScope, long total, int page, int size, List<JsonNode> records, List<String> limitations, ToolError error
     ) {

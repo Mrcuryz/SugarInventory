@@ -6,6 +6,7 @@ from copy import deepcopy
 import hashlib
 import json
 import re
+from app.product_import import import_row_context, import_row_card
 import secrets
 import time
 from collections.abc import Iterator
@@ -159,6 +160,7 @@ AUDIT_CAPABILITY_LABELS: dict[str, str] = {
     "get_auto_inbound_batch_detail": "自动报数入库批次详情查询",
     "query_product_catalog": "产品目录查询",
     "get_product_detail": "产品详情查询",
+    "review_product_import_row": "核对表格产品",
     "query_screen_mesh_catalog": "筛网目录查询",
     "query_employee_roster": "员工名册查询",
     "query_roles": "角色目录查询",
@@ -1035,7 +1037,7 @@ class WarehouseAgentRuntime:
             and "成品入库" in text
         )
         fast_followup_expert = (
-            None if guided_transition_message else self._llm_context_followup_expert(state, text)
+            None if guided_transition_message or import_row_context(request.pageContext) else self._llm_context_followup_expert(state, text)
         )
         decision: MainAgentDecisionV1 | None = None
         if fast_followup_expert is not None:
@@ -1056,6 +1058,8 @@ class WarehouseAgentRuntime:
         for route_attempt in (range(2) if decision is None else ()):
             report_business_progress("routing")
             selected_context = self._llm_selected_context(state)
+            if binding := import_row_context(request.pageContext):
+                selected_context["SELECTED_IMPORT_ROW"] = binding["rowNumber"]
             registered_recipes = [CompoundIntentPlanner.WAREHOUSE_INVENTORY_ASSAY]
             if {"production_expert", "analytics_expert"} <= set(self.llm_allowed_experts):
                 registered_recipes.append(DAILY_OPERATIONS_RECIPE)
@@ -1087,6 +1091,17 @@ class WarehouseAgentRuntime:
             trace["mainDecision" if route_attempt == 0 else "mainDecisionCorrection"] = (
                 self._safe_main_decision_trace(decision)
             )
+            if import_row_context(request.pageContext) and not (
+                decision.action == "DELEGATE" and decision.expertAgent == "master_data_expert"
+                and decision.goalType == "PRODUCT_IMPORT_REVIEW"
+            ):
+                if route_attempt == 0:
+                    route_correction = {"reason": "SELECTED_IMPORT_ROW", "expectedGoalType": "PRODUCT_IMPORT_REVIEW",
+                                        "expectedExpertAgent": "master_data_expert"}
+                    continue
+                return self._llm_boundary_rejection(request.agentSessionId, trace, "本次未完成表格核对，请重新选择该行。")
+            if decision.goalType == "PRODUCT_IMPORT_REVIEW" and not import_row_context(request.pageContext):
+                return ChatResponse(agentSessionId=request.agentSessionId, answer="请打开“产品表格”，选择要核对的表格行。")
             if decision.action == "DELEGATE" and decision.expertAgent and decision.goalType:
                 expected_expert = GOAL_CONTRACTS[decision.goalType].ownerExpert
                 if expected_expert != decision.expertAgent:
@@ -1513,6 +1528,8 @@ class WarehouseAgentRuntime:
             handoff,
             allowed_tools=goal_tool_scope,
         )
+        if not import_row_context(getattr(request, "pageContext", {})) or state.active_goal_type != "PRODUCT_IMPORT_REVIEW":
+            visible_schemas.pop("review_product_import_row", None)
         trace.setdefault("expertLoop", {"expertAgent": expert_agent, "events": []})
         loop_trace = trace["expertLoop"]
         planning_rejections = 0
@@ -1828,6 +1845,11 @@ class WarehouseAgentRuntime:
                 )
                 if recipe_scope is not None:
                     recipe_scope.validate_arguments(decision.toolName, arguments)
+                if decision.toolName == "review_product_import_row":
+                    binding = import_row_context(getattr(request, "pageContext", {}))
+                    if binding is None or state.active_goal_type != "PRODUCT_IMPORT_REVIEW":
+                        raise ValueError("请在产品表格中重新选择需要核对的行")
+                    arguments = binding
             except (ExpertBoundaryError, TypeError, ValueError) as exc:
                 from app.assay_entry_grounding import AssayInputClarification, ProductQualifierClarification
                 if isinstance(exc, (AssayInputClarification, ProductQualifierClarification)):
@@ -1993,6 +2015,15 @@ class WarehouseAgentRuntime:
                     )
                 self._raise_if_tool_error_payload(result)
             except ToolGatewayError as exc:
+                if decision.toolName == "review_product_import_row":
+                    # Missing draft or a disabled endpoint is not an empty product catalog.
+                    message = {
+                        "UPSTREAM_NOT_FOUND": "表格已过期、已移除或当前服务未开放核对，请重新打开产品表格。",
+                        "UPSTREAM_PERMISSION_DENIED": "当前账号没有核对这份产品表格的权限。",
+                        "UPSTREAM_UNAUTHORIZED": "会话已失效，请重新打开助手。",
+                    }.get(exc.code, "未能读取本行及产品目录，请重新核对。本次没有保存产品。")
+                    return self._finish_llm_response(ChatResponse(agentSessionId=request.agentSessionId, answer=message,
+                        error=AgentError(code=exc.code, message=message, retryable=exc.retryable)), trace, request)
                 if exc.code in {"UPSTREAM_UNAUTHORIZED", "SERVICE_AUTHENTICATION_FAILED"}:
                     status = "AUTHENTICATION_FAILED"
                 elif exc.code in {"UPSTREAM_PERMISSION_DENIED", "AGENT_SCOPE_DENIED"}:
@@ -3933,7 +3964,10 @@ class WarehouseAgentRuntime:
     ) -> tuple[dict[str, Any], list[BusinessCard]]:
         cards: list[BusinessCard] = []
         safe_data: dict[str, Any]
-        if tool_name == KNOWLEDGE_TOOL_NAME:
+        if tool_name == "review_product_import_row":
+            safe_data, card = import_row_card(result, arguments, getattr(self.model_client, "propose_product_match", lambda _: None))
+            cards = [card]
+        elif tool_name == KNOWLEDGE_TOOL_NAME:
             safe_data = self._knowledge_safe_data(result)
             state.last_knowledge_result = dict(safe_data)
             cards = self._knowledge_cards(safe_data)

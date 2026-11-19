@@ -34,7 +34,7 @@ from app.rag.runtime.contracts import INTERNAL_KNOWLEDGE_TOOLS
 
 
 def test_priority_readonly_goal_contracts_are_registered() -> None:
-    assert len(GOAL_CONTRACTS) == 61
+    assert len(GOAL_CONTRACTS) == 62
     assert {
         "CURRENT_INVENTORY_LEDGER",
         "WAREHOUSE_STATUS",
@@ -75,10 +75,10 @@ def test_readonly_goal_registry_covers_every_allowed_tool_and_matches_current_co
     current = registry["current_goals"]
     planned = registry["planned_goals"]
 
-    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 61
-    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 56
+    assert registry["current_contract_count"] == len(GOAL_CONTRACTS) == 62
+    assert registry["classified_tool_count"] == len(ALLOWED_TOOLS) == 57
     assert registry["classified_l1_tool_count"] == 53
-    assert registry["classified_l2_tool_count"] == 3
+    assert registry["classified_l2_tool_count"] == 4
     assert registry["classified_internal_knowledge_tool_count"] == len(INTERNAL_KNOWLEDGE_TOOLS) == 1
     assert set(current) == set(GOAL_CONTRACTS)
     for goal_type, contract in GOAL_CONTRACTS.items():
@@ -123,8 +123,8 @@ def test_readonly_goal_stability_corpus_covers_every_contract_once() -> None:
     corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
     cases = corpus["cases"]
 
-    assert len(cases) == len(GOAL_CONTRACTS) == 61
-    assert len({case["id"] for case in cases}) == 61
+    assert len(cases) == len(GOAL_CONTRACTS) == 62
+    assert len({case["id"] for case in cases}) == 62
     assert {case["goalType"] for case in cases} == set(GOAL_CONTRACTS)
     assert all(str(case["input"]).strip() for case in cases)
 
@@ -381,6 +381,7 @@ def test_remaining_readonly_goal_fact_shapes_accept_safe_results() -> None:
             "get_product_detail",
             {"dataScope": "CURRENT", "productName": "黄冰糖（袋）"},
         ),
+        "PRODUCT_IMPORT_REVIEW": ("review_product_import_row", {"rowNumber": 2, "reviewStatus": "没有差异", "productName": "黄冰糖"}),
         "SCREEN_MESH_CATALOG": (
             "query_screen_mesh_catalog",
             {"dataScope": "CURRENT", "total": 1, "records": [{}]},

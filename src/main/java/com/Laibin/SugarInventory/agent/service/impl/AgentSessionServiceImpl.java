@@ -81,6 +81,7 @@ public class AgentSessionServiceImpl implements AgentSessionService {
             "/api/master-data/agent-read/products/query",
             "/api/master-data/agent-read/products/detail/query",
             "/api/master-data/agent-read/screen-meshes/query",
+            "/api/master-data/agent-read/product-import/candidates",
             "/api/quality/agent-read/assay-groups/query",
             "/api/quality/agent-read/standards/query",
             "/api/quality/agent-read/standards/detail/query",

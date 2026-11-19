@@ -98,7 +98,7 @@ agent_architecture:
       model_policy_key: "analytics"
     master_data_expert:
       domains: ["master_data", "product_catalog", "screen_mesh"]
-      allowed_tools: ["resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog"]
+      allowed_tools: ["resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog", "review_product_import_row"]
       model_policy_key: "master_data"
     logistics_expert:
       domains: ["logistics", "task", "document", "auto_inbound"]
@@ -509,6 +509,14 @@ tools:
     permission: "task:view + task:confirm"
     data_scope: "FINISH_INBOUND_EXECUTION_PREVIEW"
 
+  review_product_import_row:
+    business_name: "核对已上传产品表格中的一行"
+    risk_level: "L2"
+    owner_expert: "master_data_expert"
+    can_answer: ["与现有产品的名称、规格和可更新字段有何差异"]
+    cannot_answer: ["保存产品或确认批量执行"]
+    permission: "agent:use + product:view + (product:create 或 product:update)"
+    data_scope: "本会话附件中由用户选中的工作表行"
   preview_assay_entry:
     business_name: "产品或化验组录入预览"
     risk_level: "L2"

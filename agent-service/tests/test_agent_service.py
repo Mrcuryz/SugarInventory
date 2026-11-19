@@ -133,7 +133,7 @@ EXPECTED_EXPERT_TOOLS = {
         }
     ),
     "master_data_expert": frozenset(
-        {"resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog"}
+        {"resolve_products", "query_product_catalog", "get_product_detail", "query_screen_mesh_catalog", "review_product_import_row"}
     ),
     "administration_expert": frozenset(
         {"query_employee_roster", "query_roles", "get_role_permission_summary"}
@@ -1342,7 +1342,7 @@ def test_expert_agent_tool_scopes_cover_only_current_no_write_allowlist() -> Non
     assert len(business_profiles) == 11
     assert all(tools for tools in business_profiles.values())
     assert expert_tools == ALLOWED_TOOLS | set(INTERNAL_KNOWLEDGE_TOOLS)
-    assert len(expert_tools) == 57
+    assert len(expert_tools) == 58
     assert router.profile(MAIN_AGENT).allowed_tools == frozenset()
     assert not any(
         tool.startswith("execute_")
@@ -1428,7 +1428,7 @@ def test_runtime_tool_profiles_match_capability_registry_with_two_l2_previews() 
     )
     assert registered_l1_tools | registered_l2_tools == ALLOWED_TOOLS
     assert len(registered_l1_tools) == 53
-    assert registered_l2_tools == {"preview_task_transition", "preview_finish_inbound_execution", "preview_assay_entry"}
+    assert registered_l2_tools == {"preview_task_transition", "preview_finish_inbound_execution", "preview_assay_entry", "review_product_import_row"}
 
     for expert_name, expected_tools in EXPECTED_EXPERT_TOOLS.items():
         profile = re.search(
@@ -1546,7 +1546,7 @@ def test_capability_endpoint_returns_registry_hashes_and_counts() -> None:
     body = response.json()
     assert body["runtimeVersion"] == "0.2.0"
     assert body["protocolVersion"] == "1.0"
-    assert body["toolCount"] == 56
+    assert body["toolCount"] == 57
     assert body["recipeCount"] == 2
     assert len(body["toolRegistryHash"]) == 64
     assert len(body["recipeRegistryHash"]) == 64

@@ -146,6 +146,11 @@ public class ToolConfiguration {
                         productDetailSchema(), WarehouseTools.class.getMethod("getProductDetail", String.class)),
                 methodTool(warehouseTools, "query_screen_mesh_catalog", "Read the current screen-mesh master-data catalog without modifying configuration.",
                         screenMeshCatalogSchema(), WarehouseTools.class.getMethod("queryScreenMeshCatalog", String.class, Integer.class, Integer.class)),
+                methodTool(warehouseTools, "review_product_import_row", "Read an uploaded product row and actual catalog candidates; never write.",
+                        """
+                        {"type":"object","additionalProperties":false,"required":["attachment","rowNumber"],
+                         "properties":{"attachment":{"type":"string","format":"uuid"},"rowNumber":{"type":"integer","minimum":2,"maximum":501}}}
+                        """, WarehouseTools.class.getMethod("reviewProductImportRow", String.class, Integer.class)),
                 methodTool(warehouseTools, "query_assay_groups", "Read current assay product-group configuration without quality conclusions.",
                         assayGroupsSchema(), WarehouseTools.class.getMethod("queryAssayGroups", String.class, Integer.class, Integer.class)),
                 methodTool(warehouseTools, "query_quality_standard_catalog", "Read current quality-standard catalog and versions without claiming report usage.",
