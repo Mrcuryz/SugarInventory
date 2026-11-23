@@ -667,10 +667,6 @@ function parseDate(value) {
             clearable
           />
         </div>
-        <div class="header-field">
-          <label>制表人</label>
-          <el-input v-model="report.preparedByName" :disabled="!canEdit" maxlength="100" />
-        </div>
         <div class="header-field header-field--status">
           <label>当前状态</label>
           <div class="status-line">
@@ -802,13 +798,13 @@ function parseDate(value) {
           </template>
         </div>
       </div>
+      <div class="section-preparer">制表人：{{ activeSection.preparedByName || '未记录' }}</div>
     </el-card>
 
     <el-dialog v-model="historyVisible" title="历史日报" width="760px">
       <el-table v-loading="historyLoading" :data="historyRows" border stripe @row-dblclick="chooseHistory">
         <el-table-column prop="reportDate" label="日报日期" width="120" />
         <el-table-column prop="preparedDate" label="制表日期" width="120" />
-        <el-table-column prop="preparedByName" label="制表人" min-width="120" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag :type="sectionStatusType(row.status)">{{ statusText(row.status) }}</el-tag></template>
         </el-table-column>
@@ -833,6 +829,12 @@ function parseDate(value) {
 </template>
 
 <style scoped>
+.section-preparer {
+  margin-top: 16px;
+  text-align: right;
+  color: #606266;
+}
+
 .daily-report-page {
   min-width: 0;
 }

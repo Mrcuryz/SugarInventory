@@ -113,7 +113,6 @@ public class ProductionDailyReportXlsxExporter {
                 styles.title);
 
         Row metaRow = row(sheet, 1, 24);
-        mergedText(sheet, metaRow, 12, 15, "制表人：" + text(report.getPreparedByName()), styles.footer);
         mergedText(sheet, metaRow, 16, 19, "制表日期：" +
                 (report.getPreparedDate() == null ? "" : DATE_FORMAT.format(report.getPreparedDate())), styles.footer);
     }
@@ -173,6 +172,10 @@ public class ProductionDailyReportXlsxExporter {
         Cell sectionCell = sheet.getRow(sectionStart).getCell(startColumn);
         sectionCell.setCellValue(section.getDepartmentName());
         sectionCell.setCellStyle(styles.section);
+        Row footer = row(sheet, rowIndex++, 24);
+        mergedText(sheet, footer, startColumn + 6, startColumn + 9,
+                "制表人：" + (section.getPreparedByName() == null ? "未记录" : section.getPreparedByName()),
+                styles.footer);
         return rowIndex;
     }
 
@@ -353,7 +356,7 @@ public class ProductionDailyReportXlsxExporter {
             note = bordered(workbook, bodyFont, HorizontalAlignment.LEFT);
             whiteFill(note);
             note.setWrapText(true);
-            footer = bordered(workbook, bodyFont, HorizontalAlignment.LEFT);
+            footer = bordered(workbook, bodyFont, HorizontalAlignment.RIGHT);
             whiteFill(footer);
         }
 

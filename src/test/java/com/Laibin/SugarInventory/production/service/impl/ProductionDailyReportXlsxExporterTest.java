@@ -64,8 +64,8 @@ class ProductionDailyReportXlsxExporterTest {
                     "车间", "多晶车间", "红糖车间", "单晶车间", "全厂汇总",
                     "测试冰糖产品", "件", "冰糖结晶率", "总用糖量（折白糖）",
                     "月累计(件)", "月累计(吨)", "年累计(吨)",
-                    "制表人：测试制表人", "制表日期：2026-08-26");
-            assertThat(cellTexts(sheet)).doesNotContain("部门", "多晶部门", "红糖部门", "单晶部门");
+                    "制表人：多晶车间填写人", "制表人：红糖车间填写人", "制表日期：2026-08-26");
+            assertThat(cellTexts(sheet)).doesNotContain("制表人：测试制表人", "部门", "多晶部门", "红糖部门", "单晶部门");
             assertThat(cellTexts(sheet)).doesNotContain("袋");
             assertThat(sheet.getPrintSetup().getLandscape()).isTrue();
             assertThat(sheet.getPrintSetup().getFitWidth()).isEqualTo((short) 1);
@@ -88,6 +88,7 @@ class ProductionDailyReportXlsxExporterTest {
             ProductionDailyReportSectionVO section = new ProductionDailyReportSectionVO();
             section.setDepartmentCode(definition.code());
             section.setDepartmentName(definition.name());
+            section.setPreparedByName(definition.name() + "填写人");
             section.setStatus(ProductionDailyReportCatalog.STATUS_DRAFT);
             for (ProductionDailyReportCatalog.GroupDefinition groupDefinition : definition.groups()) {
                 ProductionDailyReportGroupVO group = new ProductionDailyReportGroupVO();

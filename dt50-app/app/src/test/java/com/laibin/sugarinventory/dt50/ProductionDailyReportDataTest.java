@@ -70,6 +70,7 @@ public class ProductionDailyReportDataTest {
         ProductionDailyReportData.Section serverSection = new ProductionDailyReportData.Section();
         serverSection.code = "POLYCRYSTAL";
         serverSection.version = 3;
+        serverSection.preparedBy = "服务端本车间填写人";
         server.sections.add(serverSection);
 
         ProductionDailyReportData.Report local = new ProductionDailyReportData.Report();
@@ -79,6 +80,7 @@ public class ProductionDailyReportDataTest {
         ProductionDailyReportData.Section localSection = new ProductionDailyReportData.Section();
         localSection.code = "POLYCRYSTAL";
         localSection.version = 2;
+        localSection.preparedBy = "旧草稿姓名";
         localSection.dirty = true;
         ProductionDailyReportData.Group localGroup = new ProductionDailyReportData.Group();
         localSection.groups.add(localGroup);
@@ -89,6 +91,7 @@ public class ProductionDailyReportDataTest {
         assertEquals("本机填写", merged.preparedBy);
         assertTrue(merged.headerConflict);
         assertTrue(merged.section("POLYCRYSTAL").conflict);
+        assertEquals("服务端本车间填写人", merged.section("POLYCRYSTAL").preparedBy);
         assertSame(localGroup, merged.section("POLYCRYSTAL").groups.get(0));
         assertFalse(localSection.conflict);
     }

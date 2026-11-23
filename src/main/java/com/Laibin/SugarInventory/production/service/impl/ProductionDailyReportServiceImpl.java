@@ -476,6 +476,7 @@ public class ProductionDailyReportServiceImpl implements ProductionDailyReportSe
         vo.setStatus(section == null ? ProductionDailyReportCatalog.STATUS_DRAFT : section.getStatus());
         vo.setVersion(section == null ? 0 : section.getVersion());
         if (section != null) {
+            vo.setPreparedByName(section.getPreparedByName());
             vo.setUpdatedByName(section.getUpdatedByName());
             vo.setUpdatedAt(section.getUpdatedAt());
             vo.setSubmittedByName(section.getSubmittedByName());

@@ -21,6 +21,7 @@ public interface ProductionDailyReportSectionMapper extends BaseMapper<Productio
                                                               @Param("departmentCode") String departmentCode);
 
     @Update("UPDATE production_daily_report_section SET status = 'DRAFT', version = version + 1, " +
+            "prepared_by_name = #{operatorName}, " +
             "updated_by = #{operatorId}, updated_by_name = #{operatorName}, updated_at = #{updatedAt} " +
             "WHERE id = #{id} AND version = #{version}")
     int updateForSave(@Param("id") Long id,

@@ -12,6 +12,7 @@ public class ProductionDailyReportSectionVO {
     private String departmentName;
     private String status;
     private Integer version;
+    private String preparedByName;
     private String updatedByName;
     private LocalDateTime updatedAt;
     private String submittedByName;

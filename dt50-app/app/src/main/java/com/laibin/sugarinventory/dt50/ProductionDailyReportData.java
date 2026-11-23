@@ -43,6 +43,7 @@ final class ProductionDailyReportData {
                 section.name = string(source, "departmentName");
                 section.status = string(source, "status");
                 section.version = source.optInt("version", 0);
+                section.preparedBy = string(source, "preparedByName");
                 section.updatedBy = string(source, "updatedByName");
                 section.updatedAt = string(source, "updatedAt");
                 section.dirty = source.optBoolean("_dirty", false);
@@ -250,6 +251,7 @@ final class ProductionDailyReportData {
             sectionObject.put("departmentName", section.name);
             sectionObject.put("status", section.status);
             sectionObject.put("version", section.version);
+            sectionObject.put("preparedByName", section.preparedBy);
             sectionObject.put("updatedByName", section.updatedBy);
             sectionObject.put("updatedAt", section.updatedAt);
             sectionObject.put("_dirty", section.dirty);
@@ -342,6 +344,7 @@ final class ProductionDailyReportData {
     }
 
     static final class Section {
+        String preparedBy = "";
         String code = "";
         String name = "";
         String status = "DRAFT";

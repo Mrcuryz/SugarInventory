@@ -128,6 +128,35 @@ class ProductionDailyReportServiceImplTest {
     }
 
     @Test
+    void reportKeepsWorkshopPreparersSeparateFromHeaderAndSubmissionAudit() {
+        LocalDate date = LocalDate.of(2026, 11, 18);
+        ProductionDailyReport report = new ProductionDailyReport();
+        report.setId(10L);
+        report.setReportDate(date);
+        report.setPreparedByName("旧整表姓名");
+        when(reportMapper.selectByReportDate(date)).thenReturn(report);
+        ProductionDailyReportSection poly = new ProductionDailyReportSection();
+        poly.setId(20L);
+        poly.setVersion(1);
+        poly.setDepartmentCode("POLYCRYSTAL");
+        poly.setPreparedByName("多晶填写人");
+        poly.setUpdatedByName("整表提交人");
+        ProductionDailyReportSection brown = new ProductionDailyReportSection();
+        brown.setId(21L);
+        brown.setVersion(1);
+        brown.setDepartmentCode("BROWN_SUGAR");
+        brown.setPreparedByName("红糖填写人");
+        brown.setUpdatedByName("整表提交人");
+        when(sectionMapper.selectByReportId(10L)).thenReturn(List.of(poly, brown));
+        when(metricValueMapper.selectBySectionId(anyLong())).thenReturn(List.of());
+        when(productLineMapper.selectBySectionId(anyLong())).thenReturn(List.of());
+
+        assertThat(service.getReport(date).getSections())
+                .extracting(item -> item.getPreparedByName())
+                .containsExactly("多晶填写人", "红糖填写人", null, null);
+    }
+
+    @Test
     void importReturnsUnmatchedProductsAsAnUnpersistedPreview() {
         LocalDate date = LocalDate.of(2026, 8, 27);
         ProductionDailyReportXlsxImporter.ParsedProductLine product =

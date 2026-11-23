@@ -36,7 +36,7 @@ class ProductionDailyReportXlsxImporterTest {
 
         assertThat(result.reportDate()).isEqualTo(LocalDate.of(2026, 8, 27));
         assertThat(result.preparedDate()).isEqualTo(LocalDate.of(2026, 8, 28));
-        assertThat(result.preparedByName()).isEqualTo("导入测试制表人");
+        assertThat(result.preparedByName()).isNull();
         assertThat(result.sections()).extracting(ProductionDailyReportXlsxImporter.ParsedSection::departmentCode)
                 .containsExactly("POLYCRYSTAL", "BROWN_SUGAR", "MONOCRYSTAL", "FACTORY_SUMMARY");
 

@@ -17,6 +17,7 @@ public class ProductionDailyReportSection {
     private String departmentNameSnapshot;
     private String status;
     private Integer version;
+    private String preparedByName;
     private Integer updatedBy;
     private String updatedByName;
     private LocalDateTime updatedAt;

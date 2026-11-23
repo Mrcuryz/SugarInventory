@@ -570,9 +570,8 @@ public class ProductionDailyReportActivity extends Activity {
         LinearLayout headerCard = card(15);
         LinearLayout headerRow = row();
         LinearLayout headerText = column();
-        headerText.addView(text("制表日期 · 制表人", 11, getColor(R.color.text_muted), true));
-        append(headerText, text((report.preparedDate.isEmpty() ? "待填写" : report.preparedDate)
-                + " · " + (report.preparedBy.isEmpty() ? "待填写" : report.preparedBy),
+        headerText.addView(text("制表日期", 11, getColor(R.color.text_muted), true));
+        append(headerText, text(report.preparedDate.isEmpty() ? "待填写" : report.preparedDate,
                 14, getColor(R.color.text_primary), true), 4);
         headerRow.addView(headerText, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -760,6 +759,14 @@ public class ProductionDailyReportActivity extends Activity {
             });
             append(contentView, groupCard, 9);
         }
+        renderSectionPreparer(section);
+    }
+
+    private void renderSectionPreparer(ProductionDailyReportData.Section section) {
+        TextView preparer = text("制表人：" + MobileDisplay.fallback(section.preparedBy, "未记录"),
+                12, getColor(R.color.text_secondary), false);
+        preparer.setGravity(Gravity.END);
+        append(contentView, preparer, 16);
     }
 
     private String productPreview(ProductionDailyReportData.Group group) {
@@ -829,6 +836,7 @@ public class ProductionDailyReportActivity extends Activity {
             addProduct.setOnClickListener(view -> chooseProduct(group, null));
             append(contentView, addProduct, 10);
         }
+        renderSectionPreparer(section);
     }
 
     private void renderFieldTabs() {
@@ -958,12 +966,6 @@ public class ProductionDailyReportActivity extends Activity {
 
     private void saveHeaderIfDirty(Runnable after) {
         if (!report.headerDirty) { after.run(); return; }
-        if (report.preparedBy.length() > 100) {
-            busy = false;
-            showMessage("制表人不能超过 100 字", true);
-            render(false);
-            return;
-        }
         try {
             api.saveProductionDailyHeader(date, ProductionDailyReportData.headerPayload(report),
                     new ApiClient.Callback<>() {
@@ -1457,18 +1459,6 @@ public class ProductionDailyReportActivity extends Activity {
                     chosen.get(Calendar.DAY_OF_MONTH)).show();
         });
         append(body, dateRow, 7);
-        append(body, detailLabel("制表人"), 16);
-        EditText name = detailInput(report.preparedBy, false, false);
-        name.setFilters(new InputFilter[]{new InputFilter.LengthFilter(100)});
-        append(body, name, 7);
-        name.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                report.preparedBy = s.toString();
-                markDirty(true);
-            }
-            @Override public void afterTextChanged(Editable s) { }
-        });
         Button save = actionButton("保存制表信息", true);
         Dialog dialog = bottomSheet("制表信息", ProductionDailyDates.display(date), body, save, false);
         save.setOnClickListener(view -> {
@@ -1789,7 +1779,7 @@ public class ProductionDailyReportActivity extends Activity {
         for (ProductionDailyReportData.History history : calendarHistory.values()) {
             if (history.date.startsWith(month)) histories.add(history);
         }
-        histories.sort((a, b) -> b.date.compareTo(a.date));
+        java.util.Collections.sort(histories, (a, b) -> b.date.compareTo(a.date));
         if (histories.isEmpty()) {
             append(body, text("本月暂无已保存的日报，可选择日期开始填写。", 11,
                     getColor(R.color.text_muted), false), 11);

@@ -52,6 +52,7 @@ public class DatabaseSchemaReadinessVerifier implements ApplicationRunner {
             "operation_log",
             "schema_migration");
     static final Set<String> CRITICAL_COLUMNS = Set.of(
+            "production_daily_report_section.prepared_by_name",
             "pallet_task_semi_item.semi_pallet_code_id",
             "pallet_task_semi_item.prepare_balance_id",
             "pallet_task_semi_item.board_count",
