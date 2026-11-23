@@ -78,6 +78,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./artifacts/dist:/usr/share/nginx/html:ro
       - ./cert:/etc/nginx/cert:ro
+      - ./artifacts/app-updates:/srv/app-updates:ro
     depends_on:
       - backend
 

@@ -12,6 +12,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 public class LoginActivity extends Activity {
+    private AppUpdateController updates;
     private AppPreferences preferences;
     private EditText nameInput;
     private EditText passwordInput;
@@ -29,6 +30,7 @@ public class LoginActivity extends Activity {
             return;
         }
         setContentView(R.layout.activity_login);
+        updates = new AppUpdateController(this, findViewById(R.id.checkUpdateButton));
         nameInput = findViewById(R.id.nameInput);
         passwordInput = findViewById(R.id.passwordInput);
         rememberMeCheckBox = findViewById(R.id.rememberMeCheckBox);
@@ -49,6 +51,24 @@ public class LoginActivity extends Activity {
             }
             return false;
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (updates != null) updates.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        if (updates != null) updates.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (updates != null) updates.close();
+        super.onDestroy();
     }
 
     private void login() {

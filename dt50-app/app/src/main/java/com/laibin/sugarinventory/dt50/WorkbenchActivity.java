@@ -8,6 +8,7 @@ import android.view.View;
 import android.widget.TextView;
 
 public class WorkbenchActivity extends Activity {
+    private AppUpdateController updates;
     private AppPreferences preferences;
     private TextView operatorText;
     private TextView sessionStatusText;
@@ -29,6 +30,7 @@ public class WorkbenchActivity extends Activity {
             return;
         }
         setContentView(R.layout.activity_workbench);
+        updates = new AppUpdateController(this, findViewById(R.id.checkUpdateButton));
         operatorText = findViewById(R.id.workbenchOperatorText);
         sessionStatusText = findViewById(R.id.sessionStatusText);
         inboundButton = findViewById(R.id.inboundButton);
@@ -52,6 +54,24 @@ public class WorkbenchActivity extends Activity {
 
         renderPermissions();
         refreshIdentity();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (updates != null) updates.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        if (updates != null) updates.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (updates != null) updates.close();
+        super.onDestroy();
     }
 
     private void refreshIdentity() {

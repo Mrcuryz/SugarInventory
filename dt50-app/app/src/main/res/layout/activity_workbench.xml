@@ -29,6 +29,17 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/checkUpdateButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:gravity="center"
+            android:text="检查更新"
+            android:textColor="@color/primary"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/logoutButton"
             android:layout_width="64dp"
             android:layout_height="38dp"
